@@ -1,0 +1,30 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "Segment",
+      "id": "target",
+      "width": 200,
+      "height": "wrapContent",
+      "items": [
+        "One",
+        "Two"
+      ],
+      "background": "#FFD54F",
+      "borderColor": "#1E88E5",
+      "borderWidth": 2,
+      "shadow": "#000000|0|2|0.5|4"
+    }
+  ]
+}

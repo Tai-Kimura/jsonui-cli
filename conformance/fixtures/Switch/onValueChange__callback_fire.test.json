@@ -1,0 +1,43 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/onValueChange__callback_fire.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.onValueChange (callback_fire)",
+    "description": "Interactive conformance fixture for 'onValueChange' on Switch (section: Switch, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "onValueChange__callback_fire",
+      "description": "Interactive conformance fixture for 'onValueChange' on Switch (section: Switch, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "ready"
+        },
+        {
+          "action": "tap",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

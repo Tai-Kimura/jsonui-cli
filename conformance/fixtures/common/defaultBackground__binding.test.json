@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/defaultBackground__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.defaultBackground (binding)",
+    "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: declaration-only). Value under test: \"@{boundDefaultBackground}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "defaultBackground__binding",
+      "description": "Conformance fixture for 'defaultBackground' on Button (section: common, class: declaration-only). Value under test: \"@{boundDefaultBackground}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

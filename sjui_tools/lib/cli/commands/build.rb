@@ -1,0 +1,1052 @@
+# frozen_string_literal: true
+
+require 'optparse'
+require 'fileutils'
+require_relative '../../core/config_manager'
+require_relative '../../swiftui/drawn_types'
+require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/resources_manager'
+require_relative '../../core/plural_validator'
+require_relative '../../core/attribute_validator'
+require_relative '../../core/type_synonyms'
+require_relative '../../core/normalization'
+require_relative '../../core/binding_validator'
+require_relative '../../core/layout_variant'
+require_relative '../../core/screen_index'
+require_relative '../../core/generated_orphans'
+
+module SjuiTools
+  module CLI
+    module Commands
+      class Build
+        def run(args)
+          options = parse_options(args)
+
+          # Detect mode
+          mode = options[:mode] || Core::ConfigManager.detect_mode
+
+          # The app's own converter spellings, before anything reads a layout:
+          # the validators and the data model classify a node by the type it
+          # is drawn as, and a registered spelling is drawn as written
+          # (shared/core/type_synonyms.rb, TypeSynonyms.app_types).
+          require_relative '../../swiftui/converter_factory'
+          JsonUIShared::TypeSynonyms.app_types = SwiftUI::ConverterFactory.custom_types
+
+          # What Debug (SwiftJsonUI Dynamic) draws for the app's own
+          # components, against what this build draws: named, not changed.
+          require_relative '../../swiftui/app_component_dynamic_check'
+          require_relative '../../swiftui/generators/adapter_generator'
+          SwiftUI::AppComponentDynamicCheck.warnings(
+            SwiftUI::Generators::AdapterGenerator.allocate.send(:get_adapter_directory),
+            mappings: SwiftUI::ConverterFactory.custom_types
+          ).each { |line| Core::Logger.warn line }
+
+          # Store validation results
+          @validation_warnings = []
+          @outside_infos = []
+          @binding_infos = []
+          @validation_errors = 0
+          @binding_errors = []
+
+          # A Layouts directory that is not there is a named failure, before
+          # anything runs: the resource stage below writes
+          # <layouts>/Resources/strings.json and so CREATED the directory,
+          # and the UIKit build then reported success with nothing in it
+          # (measured on 0f7140a3, 2026-09-26: exit 0, "✓ Build completed
+          # successfully!"). rjui has always refused it this way. An empty
+          # directory is not this: that is a project with no layouts yet.
+          require_layouts_directory!
+
+          # Process all JSON files for string extraction
+          begin
+            process_strings_extraction
+          rescue JsonUIShared::PluralValidator::ValidationError => e
+            Core::Logger.error e.message
+            exit 1
+          end
+
+          case mode
+          when 'uikit', 'all'
+            build_uikit(options)
+          end
+
+          if mode == 'swiftui' || mode == 'all'
+            build_swiftui(options)
+          end
+
+          # Print validation summary if there were warnings
+          print_validation_summary if options[:validate] != false && @validation_warnings.any?
+          print_outside_infos
+
+          # Error-severity canonical binding rules (binding_semantics.json
+          # validatorRules) always fail the build, strict or not
+          if @binding_errors.any?
+            Core::Logger.error "Build failed: #{@binding_errors.size} binding error(s) (canonical severity: error)"
+            exit 1
+          end
+
+          # Exit with error code if strict mode and there were validation errors
+          if options[:strict] && @validation_errors > 0
+            Core::Logger.error "Build failed: #{@validation_errors} validation error(s)"
+            exit 1
+          end
+        end
+
+        private
+
+        def require_layouts_directory!
+          return unless Core::ProjectFinder.setup_paths # the project-file error comes later, as before
+
+          config = Core::ConfigManager.load_config
+          source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          layouts_dir = File.join(source_path, config['layouts_directory'] || 'Layouts')
+          return if Dir.exist?(layouts_dir)
+
+          Core::Logger.error "Layouts directory not found: #{layouts_dir}"
+          Core::Logger.error "Nothing was built. Check layouts_directory in sjui.config.json, or run 'sjui init'."
+          exit 1
+        end
+
+        def parse_options(args)
+          options = {}
+
+          OptionParser.new do |opts|
+            opts.banner = "Usage: sjui build [options]"
+
+            opts.on('--mode MODE', ['all', 'uikit', 'swiftui'],
+                    'Build mode (all, uikit, swiftui)') do |mode|
+              options[:mode] = mode
+            end
+
+            opts.on('--clean', 'Clean cache before building') do
+              options[:clean] = true
+            end
+
+            opts.on('--no-validate', 'Skip JSON attribute validation') do
+              options[:validate] = false
+            end
+
+            opts.on('--strict',
+                    'Fail build on validation findings (attribute and binding warnings; ' \
+                    'canonical binding errors fail with or without it)') do
+              options[:strict] = true
+            end
+
+            opts.on('-h', '--help', 'Show this help message') do
+              puts opts
+              exit
+            end
+          end.parse!(args)
+
+          # Validation is enabled by default
+          options[:validate] = true if options[:validate].nil?
+
+          options
+        end
+
+        # The attributes this build left out as another mode's or platform's
+        # (AttributeValidatorCore#take_outside_infos), named with their file.
+        def collect_outside_infos(validator, relative_path)
+          validator.take_outside_infos.each do |info|
+            (@outside_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
+          # and the bound values with a limitation declared on this face
+          # (AttributeValidatorCore#take_binding_infos), printed the same way
+          validator.take_binding_infos.each do |info|
+            (@binding_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
+        end
+
+        # Printed only in a verbose build (`sjui --verbose build`,
+        # `--log-level debug`, or DEBUG in the environment — `DEBUG=1 jui
+        # build`): a default build prints what it printed before.
+        def print_outside_infos
+          return unless Core::Logger.level == :debug || Core::AttributeValidator.verbose_build?
+
+          unless @outside_infos.nil? || @outside_infos.empty?
+            Core::Logger.info "Not built here (another mode or platform): #{@outside_infos.length} attribute(s)"
+            @outside_infos.each { |line| puts line }
+          end
+          return if @binding_infos.nil? || @binding_infos.empty?
+
+          Core::Logger.info "Bound with a limitation on this platform: #{@binding_infos.length} attribute(s)"
+          @binding_infos.each { |line| puts line }
+        end
+
+        def print_validation_summary
+          Core::Logger.info "-" * 60
+          Core::Logger.warn "Validation Summary: #{@validation_warnings.length} warning(s) found"
+          @validation_warnings.each do |warning|
+            puts "  \e[33m#{warning}\e[0m"
+          end
+        end
+
+        # Validate a JSON component and all its children recursively
+        # @param json_data [Hash] The JSON component to validate
+        # @param validator [AttributeValidator] The validator instance
+        # @param file_name [String] The file name for error messages
+        # @param parent_orientation [String, nil] The parent's orientation ('horizontal' or 'vertical')
+        # @param hierarchy [String, nil] The hierarchy path (e.g., "child[0].child[1]")
+        # Validate the layouts codegen will skip this run.
+        #
+        # Same three checks the conversion loop performs — attributes,
+        # bindings, and the shared layout rules — so a finding does not
+        # depend on whether that file happened to be dirty. The shared
+        # `:error` is recorded in the stage ledger here too: a layout the
+        # generators cannot accept must be named on every run, not only on
+        # the run that tried to convert it.
+        # The layouts refused while converting: each mark is a layout and
+        # where its conversion began in the stage ledger, so its stretch runs
+        # to the next mark (or the end).
+        # The bindings of every layout this run writes, and of its variants,
+        # before any writer runs — counted as the conversion loop counted
+        # them (warnings into the summary and, for --strict, the error
+        # count). A layout with an ERROR is blocked and refused (not cached).
+        def prevalidate_bindings(files, variants_by_base, layouts_dir, binding_validator)
+          files.each do |json_file|
+            [json_file, *(variants_by_base[json_file] || {}).values].each do |file|
+              rel = Pathname.new(file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              begin
+                json = JSON.parse(File.read(file))
+              rescue StandardError
+                next # the conversion loop reports a layout it cannot read
+              end
+              warnings = binding_validator.validate(json, rel, layouts_dir)
+              errors = binding_validator.errors
+              @binding_errors.concat(errors)
+              if warnings.any?
+                @validation_warnings.concat(warnings)
+                @validation_errors += warnings.length
+                Core::Logger.warn "  #{warnings.length} binding warning(s) in #{rel}"
+              end
+              next if errors.empty?
+
+              JsonUI::StageFailures.block_layout(file, "#{errors.length} binding error(s)")
+              (@refused_layouts ||= []) << json_file
+            end
+          end
+        end
+
+        def refused_in(marks)
+          entries = JsonUI::StageFailures.entries
+          marks.each_with_index.map do |(file, start), i|
+            stop = marks[i + 1] ? marks[i + 1][1] : entries.size
+            file if entries[start...stop].any? { |e| e[:stage] == 'layout' }
+          end.compact
+        end
+
+        # A layout as it is drawn: styles merged, includes expanded — what
+        # the conversion path (JsonToSwiftUIConverter) validates and converts.
+        # A copy: the expander rewrites the tree it is given.
+        def drawn_tree(json_data, json_file)
+          merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(JSON.parse(JSON.generate(json_data)))
+          SjuiTools::SwiftUI::IncludeExpander.process_includes(merged, File.dirname(json_file))
+        end
+
+        # Partial layouts are never converted as screens — a screen that
+        # includes one draws it, and a Collection draws its cell layouts —
+        # so the shared checks run on each here, on every build, as they do
+        # on rjui (which converts partials as components). A cell layout's
+        # leaf given children was drawn with them dropped and nothing named
+        # until 1.9.0 (measured 2026-09-26). The shared checks only: the
+        # attribute and binding checks never ran on partials here, and
+        # adding them is not this fix.
+        def validate_partial_layouts(files)
+          files.each do |file|
+            data = begin
+              JSON.parse(File.read(file))
+            rescue JSON::ParserError
+              next
+            end
+            shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+              drawn_tree(data, file), source_path: File.basename(file),
+              extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
+            )
+            next if shared_warnings.empty?
+
+            JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+            next unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+            reason = shared_warnings.select { |w| w[:level] == :error }.map { |w| w[:message] }.join('; ')
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{file} (a partial, drawn by the layouts that include it) is refused: #{reason}"
+            )
+          end
+        end
+
+        def validate_cached_layouts(files, layouts_dir, validator, binding_validator)
+          return if files.nil? || files.empty?
+
+          files.each do |json_file|
+            # A cached screen's variant files are cached with it, and are
+            # checked with it, as the conversion loop checks them. Until
+            # 1.9.0 only the base was: a variant that a component change
+            # made invalid (a Box made a leaf, the layout files untouched)
+            # was neither refused nor named on a cached run — sjui printed
+            # "all cached" and exited 0 (measured 2026-09-26).
+            [json_file, *JsonUIShared::LayoutVariant.variants_for(json_file).values].each do |file|
+              validate_cached_layout(file, json_file, layouts_dir, validator, binding_validator)
+            end
+          end
+        end
+
+        # One cached layout file (a base or one of its variants): the three
+        # checks the conversion loop performs. A refusal is recorded against
+        # the base, which is what the next build converts.
+        def validate_cached_layout(json_file, base_file, layouts_dir, validator, binding_validator)
+          relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+          file_name = File.basename(json_file, '.json')
+
+          begin
+            json_data = JSON.parse(File.read(json_file))
+          rescue JSON::ParserError => e
+            Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            # Refused like a layout the checks refuse, so the next build
+            # converts it (and meets the same JSON) — until 1.9.0 it was
+            # an ERROR above "SwiftUI build completed!" (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            (@refused_layouts ||= []) << base_file
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record('layout', "#{json_file} could not be read: #{e.message}")
+            return
+          end
+
+          if validator
+            validator.normalized = Core::Normalization.canonicalized?(json_data)
+            warnings = validate_json(json_data, validator, file_name)
+            collect_outside_infos(validator, relative_path)
+            if warnings.any?
+              @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+              @validation_errors += warnings.length
+              Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
+            end
+          end
+
+          if binding_validator
+            binding_warnings = binding_validator.validate(json_data, relative_path, layouts_dir)
+            @binding_errors.concat(binding_validator.errors)
+            if binding_warnings.any?
+              @validation_warnings.concat(binding_warnings)
+              @validation_errors += binding_warnings.length
+              Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
+            end
+          end
+
+          # The tree the layout draws, as the conversion path reads it:
+          # styles merged, includes expanded (until 1.9.0 the includes were
+          # not, so a violation inside one was never seen here).
+          shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+            drawn_tree(json_data, json_file), source_path: File.basename(json_file),
+            extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
+          )
+          return if shared_warnings.empty?
+
+          JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+          return unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+          reason = shared_warnings.select { |w| w[:level] == :error }
+                                  .map { |w| w[:message] }.join('; ')
+          (@refused_layouts ||= []) << base_file
+          begin
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{json_file} was not generated: #{reason}"
+            )
+          rescue LoadError
+            nil
+          end
+        end
+
+        def validate_json(json_data, validator, file_name, parent_orientation = nil, hierarchy = nil)
+          return [] unless json_data.is_a?(Hash)
+
+          # Skip data definition objects (they have 'data' array but no 'type')
+          return [] if json_data.key?('data') && !json_data.key?('type')
+
+          warnings = validator.validate(json_data, nil, parent_orientation,
+                                         file_name: file_name,
+                                         view_id: json_data['id'],
+                                         hierarchy: hierarchy)
+
+          # Warn if Collection has items binding but no sections defined
+          if JsonUIShared::TypeSynonyms.section(json_data['type']) == 'Collection' && json_data['items'] && (!json_data['sections'] || json_data['sections'].empty?)
+            loc = hierarchy || 'root'
+            warnings << "⚠️  [#{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering."
+          end
+
+          # No warning for an include without an id: it is a defined form
+          # (shared/core/include_ids_fixture.json, design U8 — it adds no prefix,
+          # so the partial's data names are the screen's), kjui and rjui accept
+          # it, and the code generated for it is right. Until jsonui-cli 1.9.6
+          # every one warned "Include '<path>' is missing 'id'" (ticket
+          # sjui-include-without-id-warns-unconditionally).
+
+          # Warn if ScrollView has multiple child views (should wrap in a single View container)
+          if SwiftUI::DrawnTypes.scroll_view?(json_data['type'])
+            child_data = json_data['child'] || json_data['children'] || []
+            child_data = [child_data] unless child_data.is_a?(Array)
+            ui_children = child_data.select { |c| c.is_a?(Hash) && (c['type'] || c['include']) }
+            if ui_children.length > 1
+              loc = hierarchy || 'root'
+              warnings << "⚠️  [#{loc}] ScrollView has #{ui_children.length} child views. Wrap them in a single View container."
+            end
+          end
+
+          # Determine current orientation for passing to children
+          current_orientation = json_data['orientation'] || parent_orientation
+
+          # Validate children recursively
+          children = json_data['child'] || json_data['children'] || []
+          children = [children] unless children.is_a?(Array)
+
+          children.each_with_index do |child, index|
+            next unless child.is_a?(Hash)
+            child_hierarchy = hierarchy ? "#{hierarchy}.child[#{index}]" : "child[#{index}]"
+            warnings.concat(validate_json(child, validator, file_name, current_orientation, child_hierarchy))
+          end
+
+          # Validate sections (for Collection/Table)
+          if json_data['sections'].is_a?(Array)
+            json_data['sections'].each_with_index do |section, section_index|
+              if section.is_a?(Hash)
+                ['header', 'footer', 'cell'].each do |key|
+                  next unless section[key].is_a?(Hash)
+                  section_hierarchy = hierarchy ? "#{hierarchy}.sections[#{section_index}].#{key}" : "sections[#{section_index}].#{key}"
+                  warnings.concat(validate_json(section[key], validator, file_name, current_orientation, section_hierarchy))
+                end
+              end
+            end
+          end
+
+          warnings
+        end
+
+        # Canonical screen id for a layout, or nil when it is not a
+        # screen. Returning nil is the whole gate: cells, partials and
+        # variant structs must emit nothing.
+        #
+        # The bare ID is what travels: the `__screen_` prefix is the runtime
+        # layer's business (SwiftJsonUI's modifier forms the identifier), so
+        # passing an already-prefixed marker would double it.
+        def screen_id_for(screen_index, json_file)
+          return nil unless screen_index
+
+          screen_id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+          screen_index.screen?(screen_id) ? screen_id : nil
+        end
+
+        def build_uikit(options = {})
+          Core::Logger.info "Building UIKit files..."
+
+          # Setup project paths
+          unless Core::ProjectFinder.setup_paths
+            Core::Logger.error "Could not find project file (.xcodeproj or Package.swift)"
+            exit 1
+          end
+
+          # Load custom view types from config
+          config = Core::ConfigManager.load_config
+          custom_view_types = config['custom_view_types'] || {}
+
+          # Setup custom view types
+          if custom_view_types.any?
+            require_relative '../../uikit/json_loader'
+            require_relative '../../uikit/import_module_manager'
+
+            view_type_mappings = {}
+            import_mappings = {}
+
+            custom_view_types.each do |view_type, type_config|
+              if type_config['class_name']
+                view_type_mappings[view_type.to_sym] = type_config['class_name']
+              end
+              if type_config['import_module']
+                import_mappings[view_type] = type_config['import_module']
+              end
+            end
+
+            # Extend view type set
+            UIKit::JsonLoader.view_type_set.merge!(view_type_mappings) unless view_type_mappings.empty?
+
+            # Add import mappings
+            import_mappings.each do |type, module_name|
+              UIKit::ImportModuleManager.add_type_import_mapping(type, module_name)
+            end
+          end
+
+          # Run JsonLoader
+          require_relative '../../uikit/json_loader'
+          loader = UIKit::JsonLoader.new
+          loader.start_analyze
+          # Error-severity canonical binding violations found during load
+          # (||= keeps direct build_uikit calls, e.g. from specs, working)
+          (@binding_errors ||= []).concat(loader.binding_errors)
+        end
+
+        def build_swiftui(options = {})
+          Core::Logger.info "Building SwiftUI files..."
+
+          # Setup project paths
+          unless Core::ProjectFinder.setup_paths
+            Core::Logger.error "Could not find project file (.xcodeproj or Package.swift)"
+            exit 1
+          end
+
+          require_relative '../../swiftui/json_to_swiftui_converter'
+          require_relative '../../swiftui/view_updater'
+          require_relative '../../swiftui/data_model_updater'
+          require_relative '../../swiftui/build_cache_manager'
+
+          config = Core::ConfigManager.load_config
+          source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          layouts_dir = File.join(source_path, config['layouts_directory'] || 'Layouts')
+          view_dir = File.join(source_path, config['view_directory'] || 'View')
+          # Every include path resolves from the layouts root (U8) — this
+          # build's, for this build only: the `ensure` below puts back the one
+          # it found.
+          require_relative '../../swiftui/include_expander'
+          previous_layouts_root = SjuiTools::SwiftUI::IncludeExpander.layouts_root
+          layouts_root_set = true
+          SjuiTools::SwiftUI::IncludeExpander.layouts_root = layouts_dir
+
+          # Initialize cache manager
+          cache_manager = SjuiTools::SwiftUI::BuildCacheManager.new(source_path)
+
+          # Clean cache if --clean option is specified
+          if options[:clean]
+            Core::Logger.info "Cleaning build cache..."
+            cache_manager.clean_cache
+          end
+          last_updated = cache_manager.load_last_updated
+          # The tool, a component (definition / converter) or the config
+          # changed since the last build: nothing it generated can be kept.
+          inputs = cache_manager.inputs_digest(config)
+          if cache_manager.inputs_changed?(inputs) && last_updated
+            Core::Logger.info "The tool, a component or the config changed since the last build — every layout is converted"
+            last_updated = nil
+          end
+          last_including_files = cache_manager.load_last_including_files
+          style_dependencies = cache_manager.load_style_dependencies
+          refused_before = cache_manager.load_refused_layouts
+          @refused_layouts = []
+
+          # Process all JSON files in Layouts directory
+          partial_files = []
+          json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
+            # Resources / Styles hold no layout (ScreenIndex.layout_path?)
+            next true unless JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
+            # Skip responsive variant files (home@regular.json) — they are
+            # converted alongside their base screen, never as standalone
+            # screens (jui build's variant gate enforces the contract)
+            next true if JsonUIShared::LayoutVariant.variant?(file)
+            # Skip files with "mode": "uikit" (only process swiftui or unspecified)
+            begin
+              json_content = JSON.parse(File.read(file))
+              # Skip partials (cell layouts included via Collection) — they
+              # are not screens; their shared checks run below
+              # (validate_partial_layouts).
+              if json_content['partial'] == true
+                partial_files << file
+                next true
+              end
+              file_mode = json_content['mode']
+              file_mode && file_mode.downcase == 'uikit'
+            rescue JSON::ParserError
+              false
+            end
+          end
+
+          # Map base screen → { size_class => variant file }
+          variants_by_base = json_files.each_with_object({}) do |file, map|
+            found = JsonUIShared::LayoutVariant.variants_for(file)
+            map[file] = found if found.any?
+          end
+
+          if json_files.empty?
+            Core::Logger.warn "No JSON files found in #{layouts_dir}"
+            # Nothing to build is not a failure — but what the stages before
+            # this one could not do still is: it was recorded and then never
+            # written, so the ledger came back empty (measured on 0f7140a3:
+            # SwiftUI, colors.json unparseable, no layouts yet — exit 0, 0
+            # entries). Ticket uikit-build-reports-success-after-a-binding-error.
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.report!(Core::Logger)
+            JsonUI::StageFailures.conclude(Core::Logger, nil) if JsonUI::StageFailures.any?
+            return
+          end
+
+          # Track new includes and style dependencies
+          new_including_files = {}
+          new_style_dependencies = {}
+
+          # Filter files that need update
+          files_to_update = []
+          json_files.each do |json_file|
+            # Use relative path as cache key to avoid collision for same-named files in different directories
+            rel = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+            cache_key = rel.sub(/\.json$/, '')
+
+            # Check if file needs update. A dirty variant file re-converts
+            # its base screen (the dispatch + variant view live there).
+            variant_dirty = (variants_by_base[json_file] || {}).values.any? do |vf|
+              vrel = Pathname.new(vf).relative_path_from(Pathname.new(layouts_dir)).to_s
+              cache_manager.needs_update?(vf, last_updated, layouts_dir, last_including_files, style_dependencies, vrel.sub(/\.json$/, ''))
+            end
+            if variant_dirty || refused_before.include?(cache_key) ||
+               cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies, cache_key)
+              files_to_update << json_file
+            else
+              # Keep existing includes and style dependencies for unchanged files
+              new_including_files[cache_key] = last_including_files[cache_key] if last_including_files[cache_key]
+              new_style_dependencies[cache_key] = style_dependencies[cache_key] if style_dependencies[cache_key]
+            end
+          end
+
+          # Initialize validators if validation is enabled
+          styles_dir = File.join(source_path, config['styles_directory'] || 'Styles')
+          validator = options[:validate] ? Core::AttributeValidator.new(:swiftui, styles_dir) : nil
+          binding_validator = options[:validate] ? Core::BindingValidator.new : nil
+
+          # Validation is a function of the TREE, not of build history.
+          #
+          # The cache used to skip the whole run when nothing changed, and
+          # validation lived inside the codegen loop — so a second `sjui
+          # build --strict` over an unchanged tree printed
+          # "No files need updating (all cached)", found nothing, and exited
+          # 0 where the first run exited 1. The gate answered "when did this
+          # last run" instead of "what does this tree say". Measured on
+          # 1.8.44: runs 4-6 over an untouched tree, exit 0 with zero finding
+          # lines, after a --clean run exited 1 with six.
+          #
+          # Cached layouts are validated here; the rest are validated inside
+          # the loop below as they are converted, so every layout is checked
+          # exactly once per run and nothing is reported twice.
+          cached_files = json_files - files_to_update
+          validate_cached_layouts(cached_files, layouts_dir, validator, binding_validator)
+          validate_partial_layouts(partial_files)
+
+          # Update Data models if any files need updating
+          # Bindings first, for every layout this run writes (variants
+          # included): one whose bindings carry an ERROR is not written by any
+          # writer below — Data, GeneratedView, variants — and is not cached,
+          # so the next build converts it again (StageFailures.block_layout).
+          # Until jsonui-cli 1.9.8 they were checked in the conversion loop,
+          # after the Data models were written.
+          require_relative '../../core/stage_failures'
+          prevalidate_bindings(files_to_update, variants_by_base, layouts_dir, binding_validator) if binding_validator
+
+          if files_to_update.any?
+            Core::Logger.info "Updating #{files_to_update.length} of #{json_files.length} files..."
+            data_updater = SjuiTools::SwiftUI::DataModelUpdater.new
+            data_updater.update_data_models
+          else
+            Core::Logger.info "No files need updating (all cached)"
+            # Deliberately NOT `return`: the codegen below is what the cache
+            # may skip, and the caller still has to see this run's findings,
+            # its stage failures, and a --strict exit that matches the tree.
+          end
+
+          converter = SjuiTools::SwiftUI::JsonToSwiftUIConverter.new
+          converter.unknown_type_validator = validator if validator
+          # Which layouts are cells / headers / footers of a vertically
+          # scrolling Collection — decided over the WHOLE tree, like the
+          # screen index below, so a wrapping flow inside such a cell lets
+          # the host scroll (the in-tree mark cannot see across files).
+          converter.scrolling_cell_ids = SjuiTools::SwiftUI::ScrollingCellIndex.build(layouts_dir)
+          converter.collection_cell_ids = SjuiTools::SwiftUI::CollectionCellIndex.build(layouts_dir)
+          # Which layouts a `userInteractionEnabled` stop in another layout can
+          # reach (a Collection's cell, an Embed's screen, a TabView tab's
+          # view): their views read the stop from the environment.
+          converter.interaction_stoppable_ids = SjuiTools::SwiftUI::InteractionStopIndex.build(layouts_dir)
+          # The elements of cell layouts a reorderable Collection picks its rows up by (reorderHandle; ticket
+          # jui-collection-drag-to-reorder): marked in the cell's own file.
+          converter.reorder_handle_ids = SjuiTools::SwiftUI::ReorderHandleIndex.build(layouts_dir)
+          updater = SjuiTools::SwiftUI::ViewUpdater.new
+          updater.color_mode = !Core::ConfigManager.load_config['resource_manager_directory'].to_s.empty?
+
+          # Screen identity: only screens carry a marker (cells and partials
+          # render inside a host and would each grow a false one). Built once
+          # over the WHOLE layout tree — classification depends on how other
+          # layouts reference this one, so it cannot be decided per file.
+          screen_index = JsonUIShared::ScreenIndex.build(
+            layouts_dir,
+            app_owned_screens: (config.dig('test', 'appOwnedScreens') rescue nil)
+          )
+          screen_index.report_lines.each { |line| Core::Logger.info line }
+
+          # Where each layout's conversion begins in the stage ledger: a
+          # layout is refused when a `layout` entry lands in its stretch
+          # (refusals are recorded deep in the converters, base and variants).
+          require_relative '../../core/stage_failures'
+          conversion_marks = []
+          files_to_update.each do |json_file|
+            conversion_marks << [json_file, JsonUI::StageFailures.entries.size]
+            # Get relative path from layouts directory
+            relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+            base_name = File.basename(relative_path, '.json')
+            file_name = File.basename(json_file, '.json')
+            dir_path = File.dirname(relative_path)
+            cache_key = relative_path.sub(/\.json$/, '')
+
+            # Read and parse JSON to extract includes and styles
+            begin
+              json_content = File.read(json_file)
+              json_data = JSON.parse(json_content)
+
+              # Validate attributes if enabled
+              if validator
+                # L1-normalized layouts (`$jui` marker) take the
+                # canonical-only validation path
+                validator.normalized = Core::Normalization.canonicalized?(json_data)
+                warnings = validate_json(json_data, validator, file_name)
+                collect_outside_infos(validator, relative_path)
+                if warnings.any?
+                  @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+                  @validation_errors += warnings.length
+                  Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
+                end
+              end
+
+              # Bindings were validated before any writer ran
+              # (prevalidate_bindings, which counts their warnings for
+              # --strict as this block did); a layout with an ERROR is not
+              # written and not cached.
+              next if JsonUI::StageFailures.layout_blocked?(json_file)
+
+              # Extract includes and styles for cache tracking
+              includes = cache_manager.extract_includes(json_data)
+              styles = cache_manager.extract_styles(json_data)
+
+              new_including_files[cache_key] = includes if includes.any?
+              new_style_dependencies[cache_key] = styles if styles.any?
+            rescue => ex
+              Core::Logger.warn "Failed to parse #{json_file}: #{ex.message}"
+            end
+
+            # Convert to PascalCase for Swift file
+            view_name = base_name.split(/[_\-]/).map(&:capitalize).join
+
+            # GeneratedView in the view folder, under the layout's directories
+            # in PascalCase (see generated_view_dir)
+            swift_file = File.join(self.class.generated_view_dir(view_dir, relative_path),
+                                   "#{view_name}GeneratedView.swift")
+
+            # Responsive variant files attached to this base screen
+            # (home@regular.json → HomeRegularVariantGeneratedView + a size
+            # class dispatch in the base GeneratedView)
+            variants = variants_by_base[json_file] || {}
+            variant_structs = variants.keys.each_with_object({}) do |cls, map|
+              map[cls] = "#{view_name}#{cls.capitalize}VariantGeneratedView"
+            end
+            variant_kwargs = variants.any? ? { variant_dispatch: variant_structs, force_typed_view_model: true } : {}
+
+            if File.exist?(swift_file)
+              Core::Logger.info "Processing: #{relative_path}"
+
+              # Convert JSON to SwiftUI code
+              swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
+
+              # nil means the layout was refused (a declaration violation the
+              # converters cannot survive) and is already in the stage ledger.
+              # Skip it: destructuring nil yields a nil body, and
+              # `update_generated_body` with a nil body would rewrite the
+              # GeneratedView that is already on disk.
+              next if swiftui_code.nil?
+
+              # Update the existing Swift file's generatedBody
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs, root_visibility: converter.root_visibility)
+
+              Core::Logger.info "  Updated: #{swift_file}"
+            else
+              # Auto-generate GeneratedView.swift for new layout
+              Core::Logger.info "  Generating view for new layout: #{relative_path}"
+
+              # Create directory
+              swift_dir = File.dirname(swift_file)
+              FileUtils.mkdir_p(swift_dir)
+
+              # Determine json reference for DynamicView
+              json_reference = dir_path == '.' ? base_name : "#{dir_path}/#{base_name}"
+
+              # Create minimal GeneratedView.swift stub
+              stub_content = <<~SWIFT
+                import SwiftUI
+                import SwiftJsonUI
+                import Combine
+
+                struct #{view_name}GeneratedView: View {
+                    @SwiftUI.Binding var data: #{view_name}Data
+
+                    var body: some View {
+                        if ViewSwitcher.isDynamicMode {
+                            DynamicView(jsonName: "#{json_reference}", viewId: "#{base_name}_view", data: data.toDictionary())
+                        } else {
+                            // >>> GENERATED_CODE_START
+                            Text("Placeholder")
+                            // >>> GENERATED_CODE_END
+                        }
+                    }
+                }
+              SWIFT
+
+              # Convert BEFORE writing the stub. The stub is a placeholder
+              # body (`Text("Placeholder")`) that exists only so
+              # `update_generated_body` has a file to update — nothing reads
+              # it. Written first, a refused layout left that placeholder on
+              # disk: the build reported an error, generated nothing, and
+              # still shipped a screen saying "Placeholder".
+              swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
+
+              # nil means the layout was refused (a declaration violation the
+              # converters cannot survive) and is already in the stage ledger.
+              # Nothing has been written for it yet, so there is nothing to
+              # undo — skip before the stub exists.
+              next if swiftui_code.nil?
+
+              File.write(swift_file, stub_content)
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs, root_visibility: converter.root_visibility)
+              Core::Logger.info "  Created and updated: #{swift_file}"
+            end
+
+            # Emit one GeneratedView per variant file. Variants share the
+            # base screen's Data type and ViewModel — the dispatch in the
+            # base GeneratedView selects the tree, the wrapper's single VM
+            # instance survives the swap (06a-design.md D4/D5).
+            variants.each do |cls, variant_file|
+              variant_rel = Pathname.new(variant_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              variant_struct = variant_structs[cls]
+              variant_swift_file = File.join(File.dirname(swift_file), "#{variant_struct}.swift")
+              variant_source = variant_rel.sub(/\.json$/, '')
+              # A variant with a binding ERROR is not written (prevalidate_bindings).
+              next if JsonUI::StageFailures.layout_blocked?(variant_file)
+
+              begin
+                variant_json = JSON.parse(File.read(variant_file))
+                if validator
+                  validator.normalized = Core::Normalization.canonicalized?(variant_json)
+                  warnings = validate_json(variant_json, validator, File.basename(variant_file, '.json'))
+                  collect_outside_infos(validator, variant_rel)
+                  if warnings.any?
+                    @validation_warnings.concat(warnings.map { |w| "[#{variant_rel}] #{w}" })
+                    @validation_errors += warnings.length
+                    Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{variant_rel}"
+                  end
+                end
+              rescue => ex
+                Core::Logger.warn "Failed to parse #{variant_file}: #{ex.message}"
+              end
+
+              # Reset per iteration: this is assigned only inside the
+              # `unless` below, and a block local keeps its value across
+              # iterations — a stale stub would be written to the next
+              # variant's file.
+              variant_stub_pending = nil
+              unless File.exist?(variant_swift_file)
+                stub_content = <<~SWIFT
+                  import SwiftUI
+                  import SwiftJsonUI
+                  import Combine
+
+                  struct #{variant_struct}: View {
+                      @SwiftUI.Binding var data: #{view_name}Data
+
+                      var body: some View {
+                          // >>> GENERATED_CODE_START
+                          Text("Placeholder")
+                          // >>> GENERATED_CODE_END
+                      }
+                  }
+                SWIFT
+                variant_stub_pending = stub_content
+              end
+
+              v_code, _, v_state, v_children, v_responsive = converter.convert_json_to_view(variant_file)
+
+              # nil means the layout was refused (a declaration violation the
+              # converters cannot survive) and is already in the stage ledger.
+              # Skip before the stub is written, for the same reason as the
+              # base branch: a refused variant must not leave a placeholder.
+              next if v_code.nil?
+
+              if variant_stub_pending
+                FileUtils.mkdir_p(File.dirname(variant_swift_file))
+                File.write(variant_swift_file, variant_stub_pending)
+              end
+              updater.update_generated_body(variant_swift_file, v_code, state_variables: v_state || [], root_children: v_children, responsive_functions: v_responsive || [], force_typed_view_model: true, view_model_type: "#{view_name}ViewModel", source_name: variant_source, root_visibility: converter.root_visibility)
+              Core::Logger.info "  Updated variant: #{variant_swift_file}"
+            end
+          end
+
+          scaffold_cell_views(source_path, config, layouts_dir, view_dir, json_files)
+
+          prune_layout_orphans(source_path, config, layouts_dir, view_dir)
+
+          # Save cache for next build — and which layouts it did NOT build.
+          cache_manager.save_cache(new_including_files, new_style_dependencies)
+          cache_manager.save_inputs(inputs)
+          refused = (@refused_layouts || []) + refused_in(conversion_marks)
+          cache_manager.save_refused_layouts(refused.map do |f|
+            Pathname.new(f).relative_path_from(Pathname.new(layouts_dir)).to_s.sub(/\.json$/, '')
+          end)
+
+          # Stages that failed while the build carried on. `record` only fills
+          # an in-memory array — the ledger file `jui build` reads is written
+          # by `report!`, and this face never called it, so a refused layout
+          # was recorded, never written, and the orchestrator saw an empty
+          # ledger and exited 0. kjui does this at build.rb:187/:433 and rjui
+          # at build_command.rb:319; iOS was the only face without it.
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
+
+          # The closing line does not say completed when it did not. The exit
+          # code is left alone deliberately, as on the other faces: `jui build`
+          # turns the ledger into the non-zero exit.
+          JsonUI::StageFailures.conclude(Core::Logger, 'SwiftUI build completed!')
+        ensure
+          # The layouts root is a process-wide setting of the include
+          # expander. Until jsonui-cli 1.9.0 a build set it and left it, so
+          # whatever ran next in the same process — another project's build,
+          # a lone `convert`, a spec — resolved its includes from this
+          # project's Layouts ("Include file not found: <this build's
+          # Layouts>/part.json": build_spec before json_to_swiftui_converter_spec,
+          # state_names_are_unique_spec or the layouts-root spec, on a seed
+          # that ordered them so).
+          SjuiTools::SwiftUI::IncludeExpander.layouts_root = previous_layouts_root if layouts_root_set
+        end
+
+        # Where a layout's GeneratedView (and its variants') is written:
+        # View/<the layout's directories in PascalCase>/<Name>/. The orphan
+        # sweep asks this too, so a moved layout's old copy is found by the
+        # path the build writes.
+        def self.generated_view_dir(view_dir, relative_path)
+          view_name = File.basename(relative_path, '.json').split(/[_\-]/).map(&:capitalize).join
+          dir_path = File.dirname(relative_path)
+          return File.join(view_dir, view_name) if dir_path == '.'
+
+          pascal_dir = dir_path.split('/').map { |s| s.split(/[_\-]/).map(&:capitalize).join }.join('/')
+          File.join(view_dir, pascal_dir, view_name)
+        end
+
+        # The cell views the generated code names and no Swift source
+        # defines: scaffolded when their layout is one this build converted
+        # (View and ViewModel, `sjui g collection`'s templates, never over an
+        # existing file), else a warning — the app would not compile. Until
+        # jsonui-cli 1.9.6 a hand-written cell layout built with warning 0
+        # and no `<Cell>View` (ticket
+        # sjui-build-does-not-scaffold-cell-views-for-hand-written-cell-layouts).
+        # A function of the tree, so it runs on a cached build too.
+        def scaffold_cell_views(source_path, config, layouts_dir, view_dir, json_files)
+          require_relative '../../swiftui/cell_view_scaffold'
+          require_relative '../../swiftui/generators/collection_generator'
+          viewmodel_dir = File.join(source_path, config['viewmodel_directory'] || 'ViewModel')
+          generated_view_path = lambda do |layout, view_name|
+            rel = Pathname.new(layout).relative_path_from(Pathname.new(layouts_dir)).to_s
+            File.join(self.class.generated_view_dir(view_dir, rel), "#{view_name}GeneratedView.swift")
+          end
+          scaffolds, missing = SjuiTools::SwiftUI::CellViewScaffold.plan(
+            layouts_dir: layouts_dir, source_path: source_path, json_files: json_files,
+            view_model_dir: viewmodel_dir, generated_view_path: generated_view_path
+          )
+          scaffolds.each do |s|
+            rel = Pathname.new(s.layout).relative_path_from(Pathname.new(layouts_dir)).to_s.sub(/\.json\z/, '')
+            generator = SjuiTools::SwiftUI::Generators::CollectionGenerator.new(rel)
+            if generator.pascal_name != s.view_name
+              missing << SjuiTools::SwiftUI::CellViewScaffold::Missing.new(
+                type: s.type, refs: [rel], reason: "the cell template would name it #{generator.pascal_name}View"
+              )
+              next
+            end
+            [[s.view_path, :cell_view_source], [s.view_model_path, :cell_view_model_source]].each do |path, source|
+              next if path.nil? || File.exist?(path)
+
+              FileUtils.mkdir_p(File.dirname(path))
+              File.write(path, generator.public_send(source))
+              Core::Logger.info "  Scaffolded cell #{File.basename(path, '.swift')}: #{path}"
+            end
+          end
+          missing.each do |m|
+            Core::Logger.warn "Collection cell #{m.refs.join(', ')} is drawn as #{m.type}, which no Swift source defines " \
+                              "and the build cannot scaffold (#{m.reason}) — the generated code will not compile. " \
+                              'Write the layout under the layouts directory, or run `sjui g collection`.'
+            @validation_errors = (@validation_errors || 0) + 1
+          end
+        end
+
+        # A deleted layout's outputs, by the rule the three faces share
+        # (lib/core/generated_orphans.rb): the Data model and the
+        # GeneratedView carry @generated — the build rewrites the whole
+        # GeneratedView — and are deleted; a hand-written View and ViewModel
+        # of the same name are named, not deleted. A GeneratedView is also
+        # found where a MOVED layout left it, by generated_view_dir. The
+        # ViewModel directory is the one `sjui g view` scaffolds into.
+        def prune_layout_orphans(source_path, config, layouts_dir, view_dir)
+          orphans = JsonUIShared::GeneratedOrphans
+          viewmodel_dir = File.join(source_path, config['viewmodel_directory'] || 'ViewModel')
+          kinds = [
+            orphans::Kind.new(dir: SjuiTools::SwiftUI::DataModelUpdater.new.data_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.swift\z/),
+            orphans::Kind.new(dir: view_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.swift\z/,
+                              home_dir: ->(rel) { self.class.generated_view_dir(view_dir, rel) }),
+            orphans::Kind.new(dir: view_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.swift\z/),
+            orphans::Kind.new(dir: viewmodel_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)ViewModel\.swift\z/)
+          ]
+          result = orphans.sweep(layouts_dir: layouts_dir, kinds: kinds)
+          orphans.report_lines(result, base: source_path).each do |level, line|
+            level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
+          end
+        end
+
+        def process_strings_extraction
+          # Setup project paths
+          unless Core::ProjectFinder.setup_paths
+            Core::Logger.error "Could not find project file"
+            return
+          end
+
+          config = Core::ConfigManager.load_config
+          source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          layouts_dir = File.join(source_path, config['layouts_directory'] || 'Layouts')
+
+          # Load cache to check for modified files
+          cache_dir = File.join(source_path, '.sjui_cache')
+
+          # For SwiftUI mode, use swiftui_last_updated.txt
+          if config['mode'] == 'swiftui'
+            last_updated_file = File.join(cache_dir, 'swiftui_last_updated.txt')
+            last_updated = {}
+
+            if File.exist?(last_updated_file)
+              File.readlines(last_updated_file).each do |line|
+                parts = line.strip.split(':', 2)
+                if parts.length == 2
+                  last_updated[parts[0]] = parts[1].to_i
+                end
+              end
+            end
+          else
+            # For UIKit mode, use last_updated.json
+            last_updated_file = File.join(cache_dir, 'last_updated.json')
+            last_updated = {}
+
+            if File.exist?(last_updated_file)
+              begin
+                last_updated = JSON.parse(File.read(last_updated_file))
+              rescue JSON::ParserError
+                Core::Logger.warn "Failed to parse cache file, processing all files"
+              end
+            end
+          end
+
+          # Process all resources through ResourcesManager
+          resources_manager = Core::ResourcesManager.new
+          resources_manager.process_resources(layouts_dir, last_updated)
+        end
+      end
+    end
+  end
+end

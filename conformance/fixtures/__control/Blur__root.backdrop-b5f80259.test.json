@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Blur__root.backdrop-b5f80259.layout.json"
+  },
+  "metadata": {
+    "name": "conformance control Blur",
+    "description": "Control for Blur: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "control"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Blur__root.backdrop-b5f80259",
+      "description": "Control for Blur: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_Blur__root.backdrop-b5f80259"
+        }
+      ]
+    }
+  ]
+}

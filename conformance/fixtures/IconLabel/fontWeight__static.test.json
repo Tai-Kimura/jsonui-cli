@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/fontWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.fontWeight (static)",
+    "description": "Conformance fixture for 'fontWeight' on IconLabel (section: IconLabel, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": [
+    "android",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "fontWeight__static",
+      "description": "Conformance fixture for 'fontWeight' on IconLabel (section: IconLabel, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_fontWeight__static"
+        }
+      ]
+    }
+  ]
+}

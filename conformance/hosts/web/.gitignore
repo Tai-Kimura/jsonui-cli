@@ -1,0 +1,39 @@
+# dependencies / build output
+node_modules/
+dist/
+
+# @generated build artifacts (produced by scripts/generate.mjs + rjui build)
+src/Layouts/
+src/generated/
+src/components/
+src/lib/
+src/hooks/
+src/viewmodels/
+rjui-build.log
+
+# local playwright traces / screenshots
+screenshots/
+
+# screen-marker probe scratch (screen-identity Phase 0)
+.screen-marker-probe/
+
+# userInteractionEnabled probe scratch (scripts/interaction_stop_probe.mjs)
+.interaction-stop-probe/
+
+# Collection scrollTo probe scratch (scripts/collection_scroll_probe.mjs)
+.collection-scroll-probe/
+
+# Label gravity probe scratch (scripts/label_gravity_probe.mjs)
+.label-gravity-probe/
+
+# Collection insets probe scratch (scripts/collection_insets_probe.mjs)
+.collection-insets-probe/
+
+# Collection padding probe scratch (scripts/collection_padding_probe.mjs)
+.collection-padding-probe/
+
+# the reorder probe's work tree (scripts/collection_reorder_probe.mjs)
+.collection-reorder-probe/
+
+# Collection cell root visibility probe scratch (scripts/collection_cell_root_visibility_probe.mjs)
+.cell-root-visibility-probe/

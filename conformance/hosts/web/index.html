@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Fixture routes are nested (/fixture/<Section>/<attr>__<case>);
+         <base> keeps relative asset URLs (e.g. src="conformance_sample")
+         resolving against the server root. -->
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JsonUI Web Conformance Host</title>
+  </head>
+  <body>
+    <!-- NOT id="root": fixtures themselves contain an element with id="root". -->
+    <div id="app-root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

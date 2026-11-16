@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/cornerRadius_on_Segment__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.cornerRadius (static)",
+    "description": "Conformance fixture for 'cornerRadius' on Segment (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cornerRadius_on_Segment__static",
+      "description": "Conformance fixture for 'cornerRadius' on Segment (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_cornerRadius_on_Segment__static"
+        }
+      ]
+    }
+  ]
+}

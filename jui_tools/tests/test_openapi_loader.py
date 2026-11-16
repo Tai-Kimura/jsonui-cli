@@ -1,0 +1,2342 @@
+"""Tests for openapi_loader — schema parsing + ERROR halt rules.
+
+Covers the §3.3 invariants from the plan:
+
+- ``oneOf`` / ``anyOf`` / discriminator halts
+- multi-file ``$ref`` halts
+- direct self-reference halts; collection-mediated cycle OK
+- inline-derived name collision halts
+- ``type: object`` with no shape halts
+- string/integer enums, ``x-enum-varnames``
+- ``allOf`` flattening
+- ``additionalProperties`` typed-map ↔ inline object
+"""
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from jui_cli.core.openapi_loader import (
+    OpenAPILoadError,
+    is_swagger_file,
+    load_swagger,
+    parse_swagger,
+)
+from jui_cli.core.schema_filter import SchemaFilterConfig
+from jui_cli.core.schema_ir import PrimitiveKind
+
+
+def _doc(schemas: dict, info: dict | None = None) -> dict:
+    return {
+        "openapi": "3.0.3",
+        "info": info or {"title": "Test", "version": "1.0.0"},
+        "components": {"schemas": schemas},
+    }
+
+
+class IsSwaggerFileTests(unittest.TestCase):
+    def test_openapi_3(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump({"openapi": "3.0.3", "info": {}}, f)
+            path = Path(f.name)
+        try:
+            self.assertTrue(is_swagger_file(path))
+        finally:
+            path.unlink()
+
+    def test_swagger_2(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump({"swagger": "2.0", "info": {}}, f)
+            path = Path(f.name)
+        try:
+            self.assertTrue(is_swagger_file(path))
+        finally:
+            path.unlink()
+
+    def test_non_swagger_json(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump({"hello": "world"}, f)
+            path = Path(f.name)
+        try:
+            self.assertFalse(is_swagger_file(path))
+        finally:
+            path.unlink()
+
+    def test_malformed_json(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            f.write("not json{{{")
+            path = Path(f.name)
+        try:
+            self.assertFalse(is_swagger_file(path))
+        finally:
+            path.unlink()
+
+
+class PrimitiveFieldsTests(unittest.TestCase):
+    def test_string_int_bool_double(self):
+        doc = parse_swagger(_doc({
+            "User": {
+                "type": "object",
+                "required": ["id", "active"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "age": {"type": "integer"},
+                    "score": {"type": "number"},
+                    "active": {"type": "boolean"},
+                },
+            },
+        }), "test.json")
+        self.assertEqual(len(doc.schemas), 1)
+        user = doc.schemas[0]
+        self.assertEqual(user.name, "User")
+        self.assertEqual([f.wire_name for f in user.fields], ["id", "age", "score", "active"])
+        kinds = [f.type.primitive for f in user.fields]
+        self.assertEqual(kinds, [
+            PrimitiveKind.STRING,
+            PrimitiveKind.INTEGER,
+            PrimitiveKind.DOUBLE,
+            PrimitiveKind.BOOLEAN,
+        ])
+
+    def test_int32_int64_float(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "integer", "format": "int32"},
+                    "b": {"type": "integer", "format": "int64"},
+                    "c": {"type": "number", "format": "float"},
+                },
+            },
+        }), "test.json")
+        kinds = [f.type.primitive for f in doc.schemas[0].fields]
+        self.assertEqual(kinds, [
+            PrimitiveKind.INTEGER_32,
+            PrimitiveKind.INTEGER_64,
+            PrimitiveKind.FLOAT,
+        ])
+
+    def test_format_hint_for_string_is_discarded(self):
+        """date-time / uuid / binary all collapse to STRING (Q9 — v1)."""
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "string", "format": "date-time"},
+                    "b": {"type": "string", "format": "uuid"},
+                    "c": {"type": "string", "format": "binary"},
+                },
+            },
+        }), "test.json")
+        for f in doc.schemas[0].fields:
+            self.assertEqual(f.type.primitive, PrimitiveKind.STRING)
+
+    def test_required_vs_optional(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a"],
+                "properties": {
+                    "a": {"type": "string"},
+                    "b": {"type": "string"},
+                    "c": {"type": "string", "nullable": True},
+                },
+            },
+        }), "test.json")
+        a, b, c = doc.schemas[0].fields
+        self.assertTrue(a.required)
+        self.assertFalse(a.type.nullable)
+        self.assertFalse(b.required)
+        self.assertTrue(b.type.nullable)
+        self.assertTrue(c.type.nullable)
+
+    def test_description_and_deprecated(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {
+                    "a": {
+                        "type": "string",
+                        "description": "user name",
+                        "deprecated": True,
+                    },
+                },
+            },
+        }), "test.json")
+        f = doc.schemas[0].fields[0]
+        self.assertEqual(f.description, "user name")
+        self.assertTrue(f.deprecated)
+
+
+class RefAndArrayTests(unittest.TestCase):
+    def test_object_ref(self):
+        doc = parse_swagger(_doc({
+            "Address": {"type": "object", "properties": {"city": {"type": "string"}}},
+            "User": {
+                "type": "object",
+                "properties": {
+                    "home": {"$ref": "#/components/schemas/Address"},
+                },
+            },
+        }), "test.json")
+        user = next(s for s in doc.schemas if s.name == "User")
+        f = user.fields[0]
+        self.assertTrue(f.type.is_object_ref)
+        self.assertEqual(f.type.ref_name, "Address")
+
+    def test_array_of_primitive(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {"tags": {"type": "array", "items": {"type": "string"}}},
+            },
+        }), "test.json")
+        t = doc.schemas[0].fields[0].type
+        self.assertTrue(t.is_array)
+        self.assertTrue(t.element.is_primitive)
+        self.assertEqual(t.element.primitive, PrimitiveKind.STRING)
+
+    def test_array_of_ref(self):
+        doc = parse_swagger(_doc({
+            "Tag": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "Article": {
+                "type": "object",
+                "properties": {
+                    "tags": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/Tag"},
+                    },
+                },
+            },
+        }), "test.json")
+        art = next(s for s in doc.schemas if s.name == "Article")
+        t = art.fields[0].type
+        self.assertTrue(t.is_array)
+        self.assertTrue(t.element.is_object_ref)
+        self.assertEqual(t.element.ref_name, "Tag")
+
+    def test_typed_additional_properties_is_map(self):
+        doc = parse_swagger(_doc({
+            "Tag": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "M": {
+                "type": "object",
+                "properties": {
+                    "labels": {
+                        "type": "object",
+                        "additionalProperties": {"$ref": "#/components/schemas/Tag"},
+                    },
+                },
+            },
+        }), "test.json")
+        m = next(s for s in doc.schemas if s.name == "M")
+        t = m.fields[0].type
+        self.assertTrue(t.is_map)
+        self.assertTrue(t.element.is_object_ref)
+        self.assertEqual(t.element.ref_name, "Tag")
+
+
+class EnumTests(unittest.TestCase):
+    def test_string_enum(self):
+        doc = parse_swagger(_doc({
+            "AuthProvider": {
+                "type": "string",
+                "enum": ["google", "apple", "email"],
+            },
+        }), "test.json")
+        self.assertEqual(len(doc.enums), 1)
+        e = doc.enums[0]
+        self.assertEqual(e.name, "AuthProvider")
+        self.assertEqual(e.kind, PrimitiveKind.STRING)
+        self.assertEqual(e.case_names, ["google", "apple", "email"])
+        self.assertEqual(e.string_values, ["google", "apple", "email"])
+
+    def test_integer_enum_with_x_enum_varnames(self):
+        doc = parse_swagger(_doc({
+            "Severity": {
+                "type": "integer",
+                "enum": [1, 2, 3],
+                "x-enum-varnames": ["low", "medium", "high"],
+            },
+        }), "test.json")
+        e = doc.enums[0]
+        self.assertEqual(e.kind, PrimitiveKind.INTEGER)
+        self.assertEqual(e.case_names, ["low", "medium", "high"])
+        self.assertEqual(e.integer_values, [1, 2, 3])
+
+    def test_integer_enum_without_varnames_uses_value_n(self):
+        doc = parse_swagger(_doc({
+            "Status": {"type": "integer", "enum": [0, 1, 2]},
+        }), "test.json")
+        e = doc.enums[0]
+        self.assertEqual(e.case_names, ["value_0", "value_1", "value_2"])
+
+
+class ConstFoldingTests(unittest.TestCase):
+    """OpenAPI 3.1 ``const: X`` is the spelling 3.0 writes ``enum: [X]``.
+
+    openapi-diff rules the two spellings canonically equal, so a docs
+    author who writes const gets no drift finding — the IR must derive
+    the same types for both or the checker's ruling and the generated
+    DTOs disagree. Before the fold, a typed const silently became a bare
+    String and a bare 3.1 const halted with an error that never mentioned
+    const.
+    """
+
+    def _doc31(self, schemas: dict) -> dict:
+        return {"openapi": "3.1.0", "components": {"schemas": schemas}}
+
+    def test_typed_const_derives_the_same_inline_enum_as_enum_spelling(self):
+        const_doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"type": "string", "const": "chat"}}},
+        }), "test.json")
+        enum_doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"type": "string", "enum": ["chat"]}}},
+        }), "test.json")
+        # Full-IR equality, not just the field kind: the two spellings must
+        # be indistinguishable downstream (emitters are functions of the IR).
+        self.assertEqual(const_doc.schemas, enum_doc.schemas)
+        self.assertEqual(const_doc.enums, enum_doc.enums)
+        f = const_doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.type.ref_name, "MsgKind")
+        self.assertEqual(const_doc.enums[0].string_values, ["chat"])
+
+    def test_bare_31_const_infers_its_type_instead_of_halting(self):
+        doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"const": "chat"}}},
+        }), "test.json")
+        f = doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.type.ref_name, "MsgKind")
+
+    def test_const_with_default_keeps_the_default(self):
+        doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"type": "string", "const": "chat", "default": "chat"}}},
+        }), "test.json")
+        f = doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.default, "chat")
+
+    def test_standalone_const_schema_becomes_an_enum_def(self):
+        doc = parse_swagger(self._doc31({
+            "Kind": {"type": "string", "const": "chat"},
+        }), "test.json")
+        self.assertEqual([s.name for s in doc.schemas], [])
+        self.assertEqual(len(doc.enums), 1)
+        self.assertEqual(doc.enums[0].name, "Kind")
+        self.assertEqual(doc.enums[0].string_values, ["chat"])
+
+    def test_integer_const_derives_an_integer_enum(self):
+        doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "properties": {"n": {"const": 3}}},
+        }), "test.json")
+        e = next(e for e in doc.enums if e.name == "MsgN")
+        self.assertEqual(e.kind, PrimitiveKind.INTEGER)
+        self.assertEqual(e.integer_values, [3])
+
+    def test_boolean_const_matches_boolean_enum_treatment(self):
+        # Inline enums support string/integer only; a boolean enum is
+        # ignored and the field stays BOOLEAN. Const must land in exactly
+        # the same place — the invariant is spelling-equivalence, not
+        # "const always makes an enum". (bool is checked before int in the
+        # inference map: const true is boolean, never integer 1.)
+        const_doc = parse_swagger(self._doc31({
+            "Ok": {"type": "object", "properties": {"ok": {"const": True}}},
+        }), "test.json")
+        enum_doc = parse_swagger(self._doc31({
+            "Ok": {"type": "object", "properties": {
+                "ok": {"type": "boolean", "enum": [True]}}},
+        }), "test.json")
+        self.assertEqual(const_doc.schemas, enum_doc.schemas)
+        f = const_doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_primitive)
+        self.assertEqual(f.type.primitive, PrimitiveKind.BOOLEAN)
+
+    def test_union_with_const_tags_matches_enum_spelled_union(self):
+        def union(tag_schema):
+            return {
+                "Event": {"oneOf": [
+                    {"$ref": "#/components/schemas/ChatEvent"}],
+                    "discriminator": {"propertyName": "kind",
+                                      "mapping": {"chat": "#/components/schemas/ChatEvent"}}},
+                "ChatEvent": {"type": "object", "required": ["kind"],
+                              "properties": {"kind": dict(tag_schema)}},
+            }
+        const_doc = parse_swagger(self._doc31(union(
+            {"type": "string", "const": "chat"})), "test.json")
+        enum_doc = parse_swagger(self._doc31(union(
+            {"type": "string", "enum": ["chat"]})), "test.json")
+        self.assertEqual(const_doc.unions, enum_doc.unions)
+        self.assertEqual(const_doc.schemas, enum_doc.schemas)
+        self.assertEqual(const_doc.enums, enum_doc.enums)
+        self.assertEqual(const_doc.unions[0].variants[0].discriminator_value,
+                         "chat")
+
+    def test_null_const_is_left_for_the_existing_halt(self):
+        # No scalar type to infer — the fold declines and the field halts
+        # exactly as an untyped field always has.
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(self._doc31({
+                "Msg": {"type": "object", "properties": {"x": {"const": None}}},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "unknown-type")
+
+
+class FieldLevelAllOfWrapperTests(unittest.TestCase):
+    """Common OpenAPI 3 idiom: ``allOf: [{$ref}]`` wraps a $ref to attach
+    ``nullable`` / ``default`` / ``description``. Must unwrap to a plain ref."""
+
+    def test_all_of_single_ref_unwrapped_to_object_ref(self):
+        doc = parse_swagger(_doc({
+            "UserPreference": {
+                "type": "object",
+                "properties": {"score": {"type": "integer"}},
+            },
+            "UserPreferenceResponse": {
+                "type": "object",
+                "properties": {
+                    "profile": {
+                        "nullable": True,
+                        "allOf": [{"$ref": "#/components/schemas/UserPreference"}],
+                        "description": "profile or null",
+                    },
+                },
+            },
+        }), "test.json")
+        resp = next(s for s in doc.schemas if s.name == "UserPreferenceResponse")
+        f = resp.fields[0]
+        self.assertTrue(f.type.is_object_ref)
+        self.assertEqual(f.type.ref_name, "UserPreference")
+
+    def test_all_of_single_ref_with_default(self):
+        """Field carries default + description, allOf wraps a $ref to an enum."""
+        doc = parse_swagger(_doc({
+            "ReactionType": {"type": "string", "enum": ["like", "love"]},
+            "Body": {
+                "type": "object",
+                "required": ["reaction_type"],
+                "properties": {
+                    "reaction_type": {
+                        "allOf": [{"$ref": "#/components/schemas/ReactionType"}],
+                        "default": "like",
+                    },
+                },
+            },
+        }), "test.json")
+        body = next(s for s in doc.schemas if s.name == "Body")
+        f = body.fields[0]
+        self.assertTrue(f.type.is_object_ref)
+        self.assertEqual(f.type.ref_name, "ReactionType")
+
+
+class InlineEnumTests(unittest.TestCase):
+    def test_inline_string_enum_derived(self):
+        doc = parse_swagger(_doc({
+            "User": {
+                "type": "object",
+                "required": ["provider"],
+                "properties": {
+                    "provider": {"type": "string", "enum": ["google", "apple"]},
+                },
+            },
+        }), "test.json")
+        # Inline enum becomes a top-level EnumDef
+        enum_names = {e.name for e in doc.enums}
+        self.assertIn("UserProvider", enum_names)
+        # The field references it
+        user = doc.schemas[0]
+        f = user.fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.type.ref_name, "UserProvider")
+
+    def test_inline_integer_enum_with_varnames(self):
+        doc = parse_swagger(_doc({
+            "Msg": {
+                "type": "object",
+                "required": ["severity"],
+                "properties": {
+                    "severity": {
+                        "type": "integer",
+                        "enum": [1, 2, 3],
+                        "x-enum-varnames": ["low", "mid", "high"],
+                    },
+                },
+            },
+        }), "test.json")
+        e = next(e for e in doc.enums if e.name == "MsgSeverity")
+        self.assertEqual(e.case_names, ["low", "mid", "high"])
+        self.assertEqual(e.integer_values, [1, 2, 3])
+
+    def test_inline_enum_name_collision_with_top_level_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "UserProvider": {"type": "object", "properties": {"a": {"type": "string"}}},
+                "User": {
+                    "type": "object",
+                    "properties": {
+                        "provider": {"type": "string", "enum": ["x"]},
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "inline-name-collision")
+
+    def test_inline_enum_x_jui_name_override(self):
+        doc = parse_swagger(_doc({
+            "User": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "enum": ["x"],
+                        "x-jui-name": "AuthSource",
+                    },
+                },
+            },
+        }), "test.json")
+        names = {e.name for e in doc.enums}
+        self.assertIn("AuthSource", names)
+
+
+class AllOfTests(unittest.TestCase):
+    def test_all_of_merges_properties(self):
+        doc = parse_swagger(_doc({
+            "Base": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {"id": {"type": "string"}},
+            },
+            "User": {
+                "allOf": [
+                    {"$ref": "#/components/schemas/Base"},
+                    {
+                        "type": "object",
+                        "required": ["name"],
+                        "properties": {"name": {"type": "string"}},
+                    },
+                ],
+            },
+        }), "test.json")
+        user = next(s for s in doc.schemas if s.name == "User")
+        names = [f.wire_name for f in user.fields]
+        self.assertEqual(sorted(names), ["id", "name"])
+        for f in user.fields:
+            self.assertTrue(f.required)
+
+
+class InlineObjectTests(unittest.TestCase):
+    def test_inline_object_extracted_as_derived(self):
+        doc = parse_swagger(_doc({
+            "User": {
+                "type": "object",
+                "properties": {
+                    "address": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string"},
+                            "zip": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        }), "test.json")
+        names = sorted(s.name for s in doc.schemas)
+        self.assertEqual(names, ["User", "UserAddress"])
+        user = next(s for s in doc.schemas if s.name == "User")
+        self.assertEqual(user.fields[0].type.ref_name, "UserAddress")
+
+    def test_inline_name_collision_with_top_level_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "UserAddress": {
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                },
+                "User": {
+                    "type": "object",
+                    "properties": {
+                        "address": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                        },
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "inline-name-collision")
+
+    def test_x_jui_name_override_avoids_collision(self):
+        doc = parse_swagger(_doc({
+            "UserAddress": {
+                "type": "object",
+                "properties": {"x": {"type": "string"}},
+            },
+            "User": {
+                "type": "object",
+                "properties": {
+                    "address": {
+                        "type": "object",
+                        "x-jui-name": "UserHome",
+                        "properties": {"city": {"type": "string"}},
+                    },
+                },
+            },
+        }), "test.json")
+        names = sorted(s.name for s in doc.schemas)
+        self.assertIn("UserHome", names)
+        self.assertIn("UserAddress", names)
+
+
+class CycleDetectionTests(unittest.TestCase):
+    def test_collection_mediated_self_ref_ok(self):
+        """``children: [Self]`` is allowed — Array provides indirection."""
+        doc = parse_swagger(_doc({
+            "Tree": {
+                "type": "object",
+                "properties": {
+                    "value": {"type": "string"},
+                    "children": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/Tree"},
+                    },
+                },
+            },
+        }), "test.json")
+        self.assertEqual(len(doc.schemas), 1)
+
+    def test_direct_self_ref_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "LinkedNode": {
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string"},
+                        "next": {"$ref": "#/components/schemas/LinkedNode"},
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "direct-self-reference")
+
+    def test_map_mediated_self_ref_ok(self):
+        doc = parse_swagger(_doc({
+            "Folder": {
+                "type": "object",
+                "properties": {
+                    "children": {
+                        "type": "object",
+                        "additionalProperties": {"$ref": "#/components/schemas/Folder"},
+                    },
+                },
+            },
+        }), "test.json")
+        self.assertEqual(len(doc.schemas), 1)
+
+
+class PolymorphicHaltsTests(unittest.TestCase):
+    def test_one_of_without_discriminator_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "Response": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/Success"},
+                        {"$ref": "#/components/schemas/Error"},
+                    ],
+                },
+                "Success": {"type": "object", "properties": {"ok": {"type": "boolean"}}},
+                "Error": {"type": "object", "properties": {"msg": {"type": "string"}}},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+
+    def test_any_of_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+
+    def test_discriminator_alone_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {
+                    "type": "object",
+                    "discriminator": {"propertyName": "kind"},
+                    "properties": {"kind": {"type": "string"}},
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+
+
+class OneOfDiscriminatorTests(unittest.TestCase):
+    """Field-level ``oneOf`` + ``discriminator`` is now a supported v1
+    construct — it parses into an :class:`OneOfRef` carrying the
+    sibling discriminator property name and the variant tag mapping.
+    """
+
+    def _stream_event_doc(self, extra: dict | None = None):
+        body = {
+            "StreamConvIdContent": {
+                "type": "object",
+                "required": ["cid"],
+                "properties": {"cid": {"type": "string"}},
+            },
+            "StreamThinkingContent": {
+                "type": "object",
+                "required": ["msg"],
+                "properties": {"msg": {"type": "string"}},
+            },
+            "StreamEvent": {
+                "type": "object",
+                "required": ["type", "content"],
+                "properties": {
+                    "type": {"type": "string"},
+                    "content": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/StreamConvIdContent"},
+                            {"$ref": "#/components/schemas/StreamThinkingContent"},
+                        ],
+                        "discriminator": {
+                            "propertyName": "type",
+                            "mapping": {
+                                "conversation_id": "#/components/schemas/StreamConvIdContent",
+                                "thinking": "#/components/schemas/StreamThinkingContent",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        if extra:
+            body.update(extra)
+        return _doc(body)
+
+    def test_oneof_with_discriminator_parses_ir(self):
+        doc = parse_swagger(self._stream_event_doc(), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        content_field = next(f for f in stream.fields if f.wire_name == "content")
+        self.assertTrue(content_field.type.is_one_of_ref)
+        self.assertIsNotNone(content_field.type.one_of)
+        one_of = content_field.type.one_of
+        self.assertEqual(one_of.discriminator_property, "type")
+        self.assertEqual(
+            [(v.discriminator_value, v.ref_name) for v in one_of.variants],
+            [
+                ("conversation_id", "StreamConvIdContent"),
+                ("thinking", "StreamThinkingContent"),
+            ],
+        )
+
+    def test_oneof_preserves_mapping_order(self):
+        """Mapping order is preserved so codegen emits cases deterministically."""
+        doc_dict = self._stream_event_doc()
+        # Reverse the mapping declaration order.
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"] = {
+            "thinking": "#/components/schemas/StreamThinkingContent",
+            "conversation_id": "#/components/schemas/StreamConvIdContent",
+        }
+        doc = parse_swagger(doc_dict, "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        one_of = next(f for f in stream.fields if f.wire_name == "content").type.one_of
+        self.assertEqual(
+            [v.discriminator_value for v in one_of.variants],
+            ["thinking", "conversation_id"],
+        )
+
+    def test_oneof_referenced_schemas_includes_variants(self):
+        """``referenced_schemas`` must include every variant so orphan
+        prune and import emit don't strand them."""
+        doc = parse_swagger(self._stream_event_doc(), "test.json")
+        stream = next(s for s in doc.schemas if s.name == "StreamEvent")
+        refs = stream.referenced_schemas()
+        self.assertIn("StreamConvIdContent", refs)
+        self.assertIn("StreamThinkingContent", refs)
+
+    def test_oneof_variant_not_in_top_level_halts(self):
+        doc_dict = self._stream_event_doc()
+        # Point mapping at a non-existent ref.
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]["thinking"] = "#/components/schemas/DoesNotExist"
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "oneof-variant-not-found")
+
+    def test_oneof_inline_variant_halts(self):
+        doc_dict = self._stream_event_doc()
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"]["oneOf"][0] = {
+            "type": "object",
+            "properties": {"foo": {"type": "string"}},
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-oneof")
+
+    def test_oneof_mapping_referencing_missing_variant_halts(self):
+        doc_dict = self._stream_event_doc()
+        # mapping has an extra variant not in oneOf list.
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]["extra"] = "#/components/schemas/StreamConvIdContent"
+        # Remove StreamConvIdContent from oneOf to force mismatch (extra now
+        # points to a schema not in oneOf).
+        doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"]["oneOf"] = [
+            {"$ref": "#/components/schemas/StreamThinkingContent"},
+        ]
+        del doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]["conversation_id"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "discriminator-mapping-mismatch")
+
+    def test_oneof_missing_mapping_halts(self):
+        doc_dict = self._stream_event_doc()
+        del doc_dict["components"]["schemas"]["StreamEvent"]["properties"]["content"][
+            "discriminator"
+        ]["mapping"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+
+    def test_oneof_discriminator_sibling_missing_halts(self):
+        doc_dict = self._stream_event_doc()
+        # Rename `type` so the sibling no longer matches discriminator.propertyName.
+        props = doc_dict["components"]["schemas"]["StreamEvent"]["properties"]
+        props["kind"] = props.pop("type")
+        doc_dict["components"]["schemas"]["StreamEvent"]["required"] = ["kind", "content"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "oneof-discriminator-sibling-missing")
+
+    def test_field_level_variant_that_is_a_union_halts(self):
+        """A schema-level union cannot appear as a field-level oneOf
+        variant (union-as-variant freeze)."""
+        doc_dict = self._stream_event_doc()
+        # Turn StreamThinkingContent into a (valid, explicit-mapping)
+        # schema-level union; the field-level oneOf on StreamEvent then
+        # references a union as one of its variants → halt.
+        doc_dict["components"]["schemas"]["StreamThinkingContent"] = {
+            "oneOf": [
+                {"$ref": "#/components/schemas/StreamConvIdContent"},
+            ],
+            "discriminator": {
+                "propertyName": "kind",
+                "mapping": {"cid": "#/components/schemas/StreamConvIdContent"},
+            },
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "union-variant-not-supported")
+
+
+def _pet_doc(
+    *,
+    mapping: dict | None = None,
+    dog_tag: dict | None = None,
+    cat_tag: dict | None = None,
+    extra: dict | None = None,
+):
+    """Schema-level union fixture: ``Pet = oneOf(Dog, Cat)``.
+
+    ``dog_tag`` / ``cat_tag`` are the ``pet_type`` property bodies on the
+    variants (pass ``None`` explicitly via sentinel ``OMIT`` to drop the
+    property). Defaults model the inference-friendly shape: single-value
+    string enum on Dog, ``const`` on Cat.
+    """
+    discriminator: dict = {"propertyName": "pet_type"}
+    if mapping is not None:
+        discriminator["mapping"] = mapping
+    dog_props: dict = {"bark_volume": {"type": "integer"}}
+    if dog_tag is not _OMIT:
+        dog_props["pet_type"] = (
+            dog_tag if dog_tag is not None else {"type": "string", "enum": ["dog"]}
+        )
+    cat_props: dict = {"lives_left": {"type": "integer"}}
+    if cat_tag is not _OMIT:
+        cat_props["pet_type"] = (
+            cat_tag if cat_tag is not None else {"type": "string", "const": "cat"}
+        )
+    schemas = {
+        "Pet": {
+            "oneOf": [
+                {"$ref": "#/components/schemas/Dog"},
+                {"$ref": "#/components/schemas/Cat"},
+            ],
+            "discriminator": discriminator,
+        },
+        "Dog": {"type": "object", "required": ["pet_type"], "properties": dog_props},
+        "Cat": {"type": "object", "required": ["pet_type"], "properties": cat_props},
+    }
+    if extra:
+        schemas.update(extra)
+    return _doc(schemas)
+
+
+_OMIT = object()
+
+
+class SchemaLevelUnionTests(unittest.TestCase):
+    """Schema-level ``oneOf`` + ``discriminator`` parses into UnionDef
+    (2026-07 lift, plan 2026-07-24-v1-unsupported/02)."""
+
+    def test_explicit_mapping_parses_union(self):
+        doc = parse_swagger(_pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        }), "test.json")
+        self.assertEqual(len(doc.unions), 1)
+        union = doc.unions[0]
+        self.assertEqual(union.name, "Pet")
+        self.assertEqual(union.discriminator_property, "pet_type")
+        self.assertFalse(union.mapping_inferred)
+        self.assertEqual(
+            [(v.discriminator_value, v.ref_name) for v in union.variants],
+            [("dog", "Dog"), ("cat", "Cat")],
+        )
+        # The union is NOT in doc.schemas — it has its own IR list.
+        self.assertNotIn("Pet", {s.name for s in doc.schemas})
+
+    def test_inferred_mapping_from_variant_tags(self):
+        """No mapping → inferred from the variants' internal tag (enum /
+        const), in oneOf order, with a WARNING on stderr."""
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            doc = parse_swagger(_pet_doc(), "test.json")
+        union = doc.unions[0]
+        self.assertTrue(union.mapping_inferred)
+        self.assertEqual(
+            [(v.discriminator_value, v.ref_name) for v in union.variants],
+            [("dog", "Dog"), ("cat", "Cat")],
+        )
+        self.assertIn("WARNING [api-model]", stderr.getvalue())
+        self.assertIn("dog -> Dog", stderr.getvalue())
+        self.assertIn("cat -> Cat", stderr.getvalue())
+
+    def test_inferred_and_explicit_mapping_yield_same_variants(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            inferred = parse_swagger(_pet_doc(), "test.json").unions[0]
+        explicit = parse_swagger(_pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        }), "test.json").unions[0]
+        self.assertEqual(inferred.variants, explicit.variants)
+        self.assertEqual(
+            inferred.discriminator_property, explicit.discriminator_property
+        )
+
+    def test_inference_tag_via_all_of_base_is_seen(self):
+        """A tag declared on an allOf base schema still counts."""
+        doc_dict = _pet_doc(dog_tag=_OMIT)
+        doc_dict["components"]["schemas"]["Dog"] = {
+            "allOf": [
+                {"$ref": "#/components/schemas/DogBase"},
+                {"type": "object", "properties": {"bark_volume": {"type": "integer"}}},
+            ],
+        }
+        doc_dict["components"]["schemas"]["DogBase"] = {
+            "type": "object",
+            "properties": {"pet_type": {"type": "string", "enum": ["dog"]}},
+        }
+        with contextlib.redirect_stderr(io.StringIO()):
+            doc = parse_swagger(doc_dict, "test.json")
+        self.assertEqual(
+            [v.discriminator_value for v in doc.unions[0].variants],
+            ["dog", "cat"],
+        )
+
+    def test_inference_tagless_variant_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_pet_doc(dog_tag=_OMIT), "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("does not declare", str(ctx.exception))
+
+    def test_inference_non_string_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(
+                _pet_doc(dog_tag={"type": "integer", "enum": [1]}), "test.json"
+            )
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("non-string", str(ctx.exception))
+
+    def test_inference_multi_value_enum_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(
+                _pet_doc(dog_tag={"type": "string", "enum": ["dog", "puppy"]}),
+                "test.json",
+            )
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("exactly one", str(ctx.exception))
+
+    def test_inference_duplicate_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(
+                _pet_doc(cat_tag={"type": "string", "const": "dog"}), "test.json"
+            )
+        self.assertEqual(ctx.exception.code, "invalid-discriminator")
+        self.assertIn("unique", str(ctx.exception))
+
+    def test_explicit_mapping_conflicting_variant_tag_halts(self):
+        """mapping says dog → Dog but Dog.pet_type enum says canine."""
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_pet_doc(
+                mapping={
+                    "dog": "#/components/schemas/Dog",
+                    "cat": "#/components/schemas/Cat",
+                },
+                dog_tag={"type": "string", "enum": ["canine"]},
+            ), "test.json")
+        self.assertEqual(ctx.exception.code, "discriminator-tag-conflict")
+
+    def test_explicit_mapping_non_string_variant_tag_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_pet_doc(
+                mapping={
+                    "dog": "#/components/schemas/Dog",
+                    "cat": "#/components/schemas/Cat",
+                },
+                dog_tag={"type": "integer", "enum": [1]},
+            ), "test.json")
+        self.assertEqual(ctx.exception.code, "discriminator-tag-conflict")
+
+    def test_explicit_mapping_matching_tag_ok(self):
+        doc = parse_swagger(_pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        }), "test.json")
+        self.assertEqual(len(doc.unions), 1)
+
+    def test_tagless_variant_with_explicit_mapping_ok(self):
+        """Variants without an internal tag are fine when mapping is
+        explicit — the union codegen injects the tag on encode."""
+        doc = parse_swagger(_pet_doc(
+            mapping={
+                "dog": "#/components/schemas/Dog",
+                "cat": "#/components/schemas/Cat",
+            },
+            dog_tag=_OMIT,
+            cat_tag=_OMIT,
+        ), "test.json")
+        self.assertEqual(len(doc.unions), 1)
+
+    def test_schema_level_oneof_without_discriminator_halts(self):
+        doc_dict = _pet_doc()
+        del doc_dict["components"]["schemas"]["Pet"]["discriminator"]
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+
+    def test_mixed_oneof_and_properties_halts(self):
+        doc_dict = _pet_doc()
+        doc_dict["components"]["schemas"]["Pet"]["properties"] = {
+            "shared": {"type": "string"},
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-oneof")
+
+    def test_inline_variant_halts(self):
+        doc_dict = _pet_doc()
+        doc_dict["components"]["schemas"]["Pet"]["oneOf"][0] = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+        }
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "invalid-oneof")
+
+    def test_union_as_variant_of_union_halts(self):
+        doc_dict = _pet_doc(extra={
+            "Robot": {
+                "type": "object",
+                "properties": {"pet_type": {"type": "string", "const": "robot"}},
+            },
+            "Creature": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Pet"},
+                    {"$ref": "#/components/schemas/Robot"},
+                ],
+                "discriminator": {"propertyName": "pet_type"},
+            },
+        })
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            with contextlib.redirect_stderr(io.StringIO()):
+                parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "union-variant-not-supported")
+
+    def test_union_reference_positions(self):
+        """Reference matrix: plain property / array items / nullable all
+        resolve to an object ref named after the union."""
+        doc_dict = _pet_doc(extra={
+            "Owner": {
+                "type": "object",
+                "required": ["pet"],
+                "properties": {
+                    "pet": {"$ref": "#/components/schemas/Pet"},
+                    "previous_pet": {"$ref": "#/components/schemas/Pet"},
+                },
+            },
+            "Zoo": {
+                "type": "object",
+                "properties": {
+                    "animals": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/Pet"},
+                    },
+                },
+            },
+        })
+        with contextlib.redirect_stderr(io.StringIO()):
+            doc = parse_swagger(doc_dict, "test.json")
+        owner = next(s for s in doc.schemas if s.name == "Owner")
+        pet = next(f for f in owner.fields if f.wire_name == "pet")
+        self.assertTrue(pet.type.is_object_ref)
+        self.assertEqual(pet.type.ref_name, "Pet")
+        self.assertFalse(pet.type.nullable)
+        prev = next(f for f in owner.fields if f.wire_name == "previous_pet")
+        self.assertTrue(prev.type.nullable)
+        zoo = next(s for s in doc.schemas if s.name == "Zoo")
+        animals = next(f for f in zoo.fields if f.wire_name == "animals")
+        self.assertTrue(animals.type.is_array)
+        self.assertEqual(animals.type.element.ref_name, "Pet")
+
+    def test_union_skip_domain_flag(self):
+        doc_dict = _pet_doc(mapping={
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat",
+        })
+        doc_dict["components"]["schemas"]["Pet"]["x-jui-skip-domain"] = True
+        doc = parse_swagger(doc_dict, "test.json")
+        self.assertTrue(doc.unions[0].skip_domain)
+        self.assertTrue(doc.should_skip_domain(doc.unions[0]))
+
+    def test_no_warning_for_explicit_mapping(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            parse_swagger(_pet_doc(mapping={
+                "dog": "#/components/schemas/Dog",
+                "cat": "#/components/schemas/Cat",
+            }), "test.json")
+        self.assertEqual(stderr.getvalue(), "")
+
+
+class FreezeDeclarationTests(unittest.TestCase):
+    """anyOf / direct self-ref / union-as-variant are permanent halts —
+    messages no longer promise a future version."""
+
+    def test_any_of_message_is_permanent(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "polymorphic-not-supported")
+        self.assertIn("permanently", str(ctx.exception))
+        self.assertNotIn("v2", str(ctx.exception))
+
+    def test_self_ref_message_is_permanent(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "Node": {
+                    "type": "object",
+                    "properties": {
+                        "next": {"$ref": "#/components/schemas/Node"},
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "direct-self-reference")
+        self.assertIn("permanent", str(ctx.exception))
+
+    def test_union_as_variant_message_is_permanent(self):
+        doc_dict = _pet_doc(extra={
+            "Creature": {
+                "oneOf": [{"$ref": "#/components/schemas/Pet"}],
+                "discriminator": {"propertyName": "pet_type"},
+            },
+        })
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            with contextlib.redirect_stderr(io.StringIO()):
+                parse_swagger(doc_dict, "test.json")
+        self.assertEqual(ctx.exception.code, "union-variant-not-supported")
+        self.assertIn("permanent", str(ctx.exception))
+
+
+class WrapperSchemaTests(unittest.TestCase):
+    """Non-object top-level schemas (``type: string`` / ``type: array``)
+    parse into ``SchemaDef(is_wrapper=True)`` with a synthesized single
+    field — used for oneOf variants that wrap a bare value. See bug
+    jui-android-codegen-empty-data-class-for-non-object-schema-types.
+    """
+
+    def test_string_wrapper(self):
+        doc = parse_swagger(_doc({
+            "Thinking": {"type": "string", "description": "LLM text"},
+        }), "test.json")
+        schema = doc.schemas[0]
+        self.assertTrue(schema.is_wrapper)
+        self.assertEqual(schema.wrapper_field_name, "value")
+        self.assertIsNotNone(schema.wrapped_type)
+        self.assertTrue(schema.wrapped_type.is_primitive)
+        self.assertEqual(len(schema.fields), 1)
+        self.assertEqual(schema.fields[0].wire_name, "value")
+
+    def test_array_wrapper(self):
+        doc = parse_swagger(_doc({
+            "Item": {"type": "object", "properties": {"id": {"type": "string"}}},
+            "Results": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Item"},
+            },
+        }), "test.json")
+        results = next(s for s in doc.schemas if s.name == "Results")
+        self.assertTrue(results.is_wrapper)
+        self.assertEqual(results.wrapper_field_name, "items")
+        self.assertTrue(results.wrapped_type.is_array)
+        self.assertEqual(results.wrapped_type.element.ref_name, "Item")
+
+    def test_object_schema_not_wrapper(self):
+        doc = parse_swagger(_doc({
+            "User": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {"id": {"type": "string"}},
+            },
+        }), "test.json")
+        self.assertFalse(doc.schemas[0].is_wrapper)
+        self.assertIsNone(doc.schemas[0].wrapped_type)
+
+    def test_enum_only_schema_not_wrapper(self):
+        """``type: string`` + ``enum: [...]`` is still parsed as an
+        :class:`EnumDef`, not a wrapper schema."""
+        doc = parse_swagger(_doc({
+            "Color": {"type": "string", "enum": ["red", "blue"]},
+        }), "test.json")
+        self.assertEqual(len(doc.schemas), 0)
+        self.assertEqual(len(doc.enums), 1)
+        self.assertEqual(doc.enums[0].name, "Color")
+
+    def test_integer_wrapper(self):
+        doc = parse_swagger(_doc({
+            "Count": {"type": "integer", "format": "int64"},
+        }), "test.json")
+        schema = doc.schemas[0]
+        self.assertTrue(schema.is_wrapper)
+        self.assertEqual(schema.fields[0].wire_name, "value")
+        self.assertEqual(
+            schema.wrapped_type.primitive,
+            schema.fields[0].type.primitive,
+        )
+
+
+class RefHaltsTests(unittest.TestCase):
+    def test_relative_file_ref_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"$ref": "./other.yaml#/components/schemas/Other"},
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "multi-file-ref")
+
+    def test_url_ref_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"$ref": "https://example.com/schemas/Other.json"},
+                    },
+                },
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "multi-file-ref")
+
+
+class ObjectWithoutTypeTests(unittest.TestCase):
+    def test_shapeless_object_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({"M": {"type": "object"}}), "test.json")
+        self.assertEqual(ctx.exception.code, "object-without-type")
+
+    def test_additional_properties_true_without_props_halts(self):
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(_doc({
+                "M": {"type": "object", "additionalProperties": True},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "object-without-type")
+
+
+class SkipDomainTests(unittest.TestCase):
+    def test_x_jui_skip_domain_flag(self):
+        doc = parse_swagger(_doc({
+            "LoginRequest": {
+                "type": "object",
+                "x-jui-skip-domain": True,
+                "properties": {"email": {"type": "string"}},
+            },
+        }), "test.json")
+        self.assertTrue(doc.schemas[0].skip_domain)
+
+
+class ConformanceFlagTests(unittest.TestCase):
+    def test_map_field_drops_hashable(self):
+        doc = parse_swagger(_doc({
+            "Tag": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "M": {
+                "type": "object",
+                "properties": {
+                    "labels": {
+                        "type": "object",
+                        "additionalProperties": {"$ref": "#/components/schemas/Tag"},
+                    },
+                },
+            },
+        }), "test.json")
+        m = next(s for s in doc.schemas if s.name == "M")
+        self.assertFalse(m.is_hashable)
+        self.assertTrue(m.is_equatable)
+        self.assertTrue(m.is_sendable)
+
+    def test_primitive_only_keeps_all(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+            },
+        }), "test.json")
+        m = doc.schemas[0]
+        self.assertTrue(m.is_equatable)
+        self.assertTrue(m.is_hashable)
+        self.assertTrue(m.is_sendable)
+
+
+class LoadSwaggerDirectoryTests(unittest.TestCase):
+    def test_yaml_swagger_loads(self):
+        # Q8 lift (2026-07): YAML swagger is parsed, no longer halts.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "doc.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    User:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        id:\n"
+                "          type: string\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+            self.assertEqual(docs[0].schemas[0].name, "User")
+
+    def test_skips_non_swagger_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "notes.json").write_text(json.dumps({"foo": 1}), encoding="utf-8")
+            docs = load_swagger(tmp)
+            self.assertEqual(docs, [])
+
+    def test_skips_unrelated_yaml_does_not_halt(self):
+        # A YAML artifact that is NOT a swagger doc (another workstream's
+        # notes, a CI config) must be skipped like a non-swagger JSON — not
+        # hard-halt the build. Regression: jui-api-dir-unrelated-yaml-hard-error.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "cs-bot-notes.yaml").write_text(
+                "name: cs-bot\nsteps:\n  - build\n  - deploy\n", encoding="utf-8"
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(docs, [])
+
+    def test_unrelated_yaml_does_not_block_real_json_swagger(self):
+        # The real JSON SSoT must still load even when an unrelated YAML
+        # shares the directory.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "unrelated.yaml").write_text("name: not-a-swagger\n", encoding="utf-8")
+            (tmp / "api.json").write_text(
+                json.dumps(_doc({
+                    "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+                })),
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+
+    def test_swagger_2_authored_in_yml_loads(self):
+        # Swagger 2.0 in a .yml file also parses (definitions container).
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "spec.yml").write_text(
+                "swagger: '2.0'\n"
+                "info:\n  title: X\n  version: '1'\n"
+                "definitions:\n"
+                "  Item:\n"
+                "    type: object\n"
+                "    properties:\n"
+                "      name:\n"
+                "        type: string\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+            self.assertEqual(docs[0].schemas[0].name, "Item")
+
+    def test_loads_valid_swagger(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.json").write_text(
+                json.dumps(_doc({
+                    "User": {
+                        "type": "object",
+                        "properties": {"id": {"type": "string"}},
+                    },
+                })),
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+            self.assertEqual(len(docs[0].schemas), 1)
+
+
+class FilterIntegrationTests(unittest.TestCase):
+    """End-to-end: parse_swagger with an active filter skips parsing of
+    excluded schemas entirely (lenient — their polymorphic/shapeless
+    constructs do NOT raise)."""
+
+    def _api_doc(self, schemas: dict, paths: dict) -> dict:
+        return {
+            "openapi": "3.0.3",
+            "info": {"title": "T", "version": "1"},
+            "paths": paths,
+            "components": {"schemas": schemas},
+        }
+
+    def test_excluded_polymorphic_schema_does_not_halt(self):
+        """oneOf inside a schema would normally halt parse_swagger, but
+        when the schema is filtered out the parser never sees it."""
+        raw = self._api_doc(
+            schemas={
+                "Kept": {"type": "object", "properties": {"x": {"type": "string"}}},
+                "Polymorphic": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/A"},
+                        {"$ref": "#/components/schemas/B"},
+                    ],
+                },
+                "A": {"type": "object", "properties": {"a": {"type": "string"}}},
+                "B": {"type": "object", "properties": {"b": {"type": "string"}}},
+            },
+            paths={
+                "/api/kept": {
+                    "get": {
+                        "responses": {
+                            "200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Kept"}}}}
+                        },
+                    },
+                },
+            },
+        )
+        cfg = SchemaFilterConfig(include_paths=("/api/kept",))
+        # Without filter this would halt on Polymorphic's oneOf;
+        # with the filter it parses cleanly.
+        doc = parse_swagger(raw, "test.json", schema_filter=cfg)
+        names = {s.name for s in doc.schemas}
+        self.assertEqual(names, {"Kept"})
+        self.assertIn("Polymorphic", doc.filtered_out)
+        self.assertIn("A", doc.filtered_out)
+        self.assertIn("B", doc.filtered_out)
+
+    def test_skip_domain_overrides_propagated(self):
+        raw = self._api_doc(
+            schemas={
+                "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+                "Bar": {"type": "object", "properties": {"id": {"type": "string"}}},
+            },
+            paths={},
+        )
+        cfg = SchemaFilterConfig(skip_domain=("Bar",))
+        doc = parse_swagger(raw, "test.json", schema_filter=cfg)
+        self.assertEqual(doc.skip_domain_overrides, frozenset({"Bar"}))
+        # Both schemas still parse (skip_domain alone is_active() is False)
+        self.assertEqual({s.name for s in doc.schemas}, {"User", "Bar"})
+
+    def test_skip_domain_or_evaluation_with_per_schema_flag(self):
+        """SwaggerDocument.should_skip_domain ORs per-app and per-schema flags."""
+        raw = self._api_doc(
+            schemas={
+                "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+                "LoginRequest": {
+                    "type": "object",
+                    "x-jui-skip-domain": True,
+                    "properties": {"email": {"type": "string"}},
+                },
+                "Bar": {"type": "object", "properties": {"id": {"type": "string"}}},
+            },
+            paths={},
+        )
+        cfg = SchemaFilterConfig(skip_domain=("Bar",))
+        doc = parse_swagger(raw, "test.json", schema_filter=cfg)
+        for s in doc.schemas:
+            if s.name == "User":
+                self.assertFalse(doc.should_skip_domain(s))
+            elif s.name == "LoginRequest":
+                self.assertTrue(doc.should_skip_domain(s))  # per-schema
+            elif s.name == "Bar":
+                self.assertTrue(doc.should_skip_domain(s))  # per-app
+
+    def test_filter_disabled_when_no_dimensions(self):
+        """Empty filter keeps all schemas (backwards compat)."""
+        raw = self._api_doc(
+            schemas={
+                "A": {"type": "object", "properties": {"x": {"type": "string"}}},
+                "B": {"type": "object", "properties": {"y": {"type": "string"}}},
+            },
+            paths={},
+        )
+        doc = parse_swagger(raw, "test.json", schema_filter=SchemaFilterConfig())
+        self.assertEqual({s.name for s in doc.schemas}, {"A", "B"})
+        self.assertEqual(doc.filtered_out, frozenset())
+
+
+def _write_json(tmp: Path, name: str, data: dict) -> Path:
+    p = tmp / name
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return p
+
+
+_MONEY = {
+    "type": "object",
+    "properties": {
+        "amount": {"type": "integer"},
+        "currency": {"type": "string"},
+    },
+}
+
+
+def _fragment(schemas: dict) -> dict:
+    """A shared schema file that is NOT itself a swagger doc (no openapi key)."""
+    return {"components": {"schemas": schemas}}
+
+
+class YamlInputTests(unittest.TestCase):
+    """Q8 lift (plan 2026-07-24-v1-unsupported/01): YAML swagger input."""
+
+    def test_yaml_ir_matches_json(self):
+        import yaml as yaml_mod
+
+        schemas = {
+            "User": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "age": {"type": "integer"},
+                    "role": {"type": "string", "enum": ["admin", "member"]},
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as d_json, \
+                tempfile.TemporaryDirectory() as d_yaml:
+            _write_json(Path(d_json), "api.json", _doc(schemas))
+            (Path(d_yaml) / "api.yaml").write_text(
+                yaml_mod.safe_dump(_doc(schemas), sort_keys=False), encoding="utf-8"
+            )
+            doc_j = load_swagger(Path(d_json))[0]
+            doc_y = load_swagger(Path(d_yaml))[0]
+        self.assertEqual(
+            [s.name for s in doc_y.schemas], [s.name for s in doc_j.schemas]
+        )
+        self.assertEqual(doc_y.schemas[0].fields, doc_j.schemas[0].fields)
+        self.assertEqual(doc_y.enums, doc_j.enums)
+
+    def test_broken_yaml_halts_with_parse_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\ninfo: {unclosed\n", encoding="utf-8"
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "yaml-parse-error")
+
+    def test_regex_false_match_without_top_level_key_skips(self):
+        # The cheap text prefilter matches `openapi:` at a line start inside
+        # a multi-line quoted scalar; the parsed document is not a mapping
+        # with a swagger key, so it must be skipped, not halted.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "notes.yaml").write_text(
+                '"text with\nopenapi: 3"\n', encoding="utf-8"
+            )
+            self.assertEqual(load_swagger(tmp), [])
+
+    def test_norway_problem_enum_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    CountryCode:\n"
+                "      type: string\n"
+                "      enum: [NO, SE, DK]\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "yaml-type-coercion")
+            self.assertIn("Quote", str(ctx.exception))
+
+    def test_quoted_norway_enum_loads(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    CountryCode:\n"
+                "      type: string\n"
+                "      enum: ['NO', 'SE']\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(docs[0].enums[0].string_values, ["NO", "SE"])
+
+    def test_date_literal_reads_as_the_string_json_holds(self):
+        """Halted until 2.3.21 (YAML made it a date, unlike JSON). The family's one YAML load keeps it the string the
+        same document's JSON holds, so it is read, as jsonui-test and jsonui-doc read it."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    M:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        since:\n"
+                "          type: string\n"
+                "          default: 2026-07-24\n"
+                "paths:\n  /x:\n    get:\n      responses:\n        200:\n          description: ok\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)   # the unquoted `200:` key reads as "200", as in JSON
+            self.assertEqual(len(docs), 1)
+            since = [f for s in docs[0].schemas if s.name == "M" for f in s.fields if f.wire_name == "since"][0]
+            self.assertEqual(since.default, "2026-07-24")
+
+    def test_duplicate_basename_yaml_and_json_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "api.json", _doc({
+                "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+            }))
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\ninfo:\n  title: T\n  version: '1'\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "duplicate-swagger-basename")
+
+    def test_same_stem_non_swagger_json_does_not_halt(self):
+        # The basename guard only fires between actual swagger docs.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "api.json", {"not": "swagger"})
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    User:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        id:\n"
+                "          type: string\n",
+                encoding="utf-8",
+            )
+            docs = load_swagger(tmp)
+            self.assertEqual(len(docs), 1)
+
+    def test_pyyaml_missing_halts_with_install_guidance(self):
+        from jui_cli.core import openapi_loader as loader_mod
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "api.yaml").write_text(
+                "openapi: 3.0.3\ninfo:\n  title: T\n", encoding="utf-8"
+            )
+            original = loader_mod._import_yaml
+            loader_mod._import_yaml = lambda: None
+            try:
+                with self.assertRaises(OpenAPILoadError) as ctx:
+                    load_swagger(tmp)
+            finally:
+                loader_mod._import_yaml = original
+            self.assertEqual(ctx.exception.code, "pyyaml-missing")
+            self.assertIn("pip3 install pyyaml", str(ctx.exception))
+
+
+class MultiFileRefTests(unittest.TestCase):
+    """Q12 lift (plan 2026-07-24-v1-unsupported/01): cross-file $ref."""
+
+    def test_relative_ref_with_and_without_dot_prefix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "total": {"$ref": "./common.json#/components/schemas/Money"},
+                        "fee": {"$ref": "common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        # The fragment has no openapi key — it is not its own document.
+        self.assertEqual(len(docs), 1)
+        self.assertEqual({s.name for s in docs[0].schemas}, {"Order", "Money"})
+        order = next(s for s in docs[0].schemas if s.name == "Order")
+        for f in order.fields:
+            self.assertTrue(f.type.is_object_ref)
+            self.assertEqual(f.type.ref_name, "Money")
+
+    def test_yaml_doc_refs_json_fragment(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "main.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: T\n  version: '1'\n"
+                "components:\n"
+                "  schemas:\n"
+                "    Order:\n"
+                "      type: object\n"
+                "      properties:\n"
+                "        total:\n"
+                "          $ref: './common.json#/components/schemas/Money'\n",
+                encoding="utf-8",
+            )
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        self.assertEqual({s.name for s in docs[0].schemas}, {"Order", "Money"})
+
+    def test_nested_chain_and_transitive_local_refs(self):
+        # main → a.json#A; A refs b.json#B (cross-file) AND #/…/Helper
+        # (local to a.json). Both must be pulled into main's scope.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Root": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"$ref": "./a.json#/components/schemas/A"},
+                    },
+                },
+            }))
+            _write_json(tmp, "a.json", _fragment({
+                "A": {
+                    "type": "object",
+                    "properties": {
+                        "b": {"$ref": "./b.json#/components/schemas/B"},
+                        "h": {"$ref": "#/components/schemas/Helper"},
+                    },
+                },
+                "Helper": {
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                },
+            }))
+            _write_json(tmp, "b.json", _fragment({
+                "B": {"type": "object", "properties": {"y": {"type": "string"}}},
+            }))
+            docs = load_swagger(tmp)
+        self.assertEqual(
+            {s.name for s in docs[0].schemas}, {"Root", "A", "B", "Helper"}
+        )
+
+    def test_cross_file_cycle_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Root": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"$ref": "./a.json#/components/schemas/A"},
+                    },
+                },
+            }))
+            _write_json(tmp, "a.json", _fragment({
+                "A": {
+                    "type": "object",
+                    "properties": {
+                        "b": {"$ref": "./b.json#/components/schemas/B"},
+                    },
+                },
+            }))
+            _write_json(tmp, "b.json", _fragment({
+                "B": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"$ref": "./a.json#/components/schemas/A"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "cross-file-ref-cycle")
+
+    def test_ref_outside_api_dir_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            api = tmp / "api"
+            api.mkdir()
+            _write_json(tmp, "outside.json", _fragment({"Money": _MONEY}))
+            _write_json(api, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "../outside.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(api)
+            self.assertEqual(ctx.exception.code, "ref-outside-api-dir")
+
+    def test_url_ref_halts_during_directory_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "https://example.com/common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "multi-file-ref")
+
+    def test_non_schema_pointer_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "common.json", {"components": {"parameters": {"Page": {}}}})
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "p": {"$ref": "./common.json#/components/parameters/Page"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "ref-non-schema-pointer")
+
+    def test_whole_file_ref_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {"m": {"$ref": "./common.json"}},
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "ref-non-schema-pointer")
+
+    def test_ref_missing_schema_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            _write_json(tmp, "main.json", _doc({
+                "Order": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "./common.json#/components/schemas/Nope"},
+                    },
+                },
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "ref-not-found")
+
+    def test_swagger2_root_merges_into_definitions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "main.json", {
+                "swagger": "2.0",
+                "info": {"title": "T", "version": "1"},
+                "definitions": {
+                    "Item": {
+                        "type": "object",
+                        "properties": {
+                            "m": {"$ref": "./common.json#/components/schemas/Money"},
+                        },
+                    },
+                },
+            })
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        self.assertEqual({s.name for s in docs[0].schemas}, {"Item", "Money"})
+
+    def test_shared_schema_identical_across_docs_ok(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "a.json", _doc({
+                "OrderA": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "./common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            _write_json(tmp, "b.json", _doc({
+                "OrderB": {
+                    "type": "object",
+                    "properties": {
+                        "m": {"$ref": "common.json#/components/schemas/Money"},
+                    },
+                },
+            }))
+            _write_json(tmp, "common.json", _fragment({"Money": _MONEY}))
+            docs = load_swagger(tmp)
+        self.assertEqual(len(docs), 2)
+        for doc in docs:
+            self.assertIn("Money", {s.name for s in doc.schemas})
+
+    def test_cross_doc_same_name_different_body_halts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "a.json", _doc({
+                "User": {"type": "object", "properties": {"id": {"type": "string"}}},
+            }))
+            _write_json(tmp, "b.json", _doc({
+                "User": {"type": "object", "properties": {"uid": {"type": "integer"}}},
+            }))
+            with self.assertRaises(OpenAPILoadError) as ctx:
+                load_swagger(tmp)
+            self.assertEqual(ctx.exception.code, "cross-doc-schema-conflict")
+
+    def test_cross_doc_same_name_identical_body_ok(self):
+        shared = {"type": "object", "properties": {"id": {"type": "string"}}}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _write_json(tmp, "a.json", _doc({"User": shared}))
+            _write_json(tmp, "b.json", _doc({"User": shared}))
+            docs = load_swagger(tmp)
+        self.assertEqual(len(docs), 2)
+
+
+class FormatRetentionTests(unittest.TestCase):
+    """String format hints are retained on FieldType.format (plan 03).
+
+    The IR carries the hint unconditionally (no flag involved at the
+    loader layer); the primitive kind stays STRING so flag-off consumers
+    of the IR are untouched.
+    """
+
+    def _field(self, doc, schema_name, wire_name):
+        schema = next(s for s in doc.schemas if s.name == schema_name)
+        return next(f for f in schema.fields if f.wire_name == wire_name)
+
+    def test_recognized_formats_retained(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a", "b", "c"],
+                "properties": {
+                    "a": {"type": "string", "format": "date-time"},
+                    "b": {"type": "string", "format": "uuid"},
+                    "c": {"type": "string", "format": "binary"},
+                },
+            },
+        }), "test.json")
+        for wire, fmt in (("a", "date-time"), ("b", "uuid"), ("c", "binary")):
+            f = self._field(doc, "M", wire)
+            self.assertTrue(f.type.is_primitive)
+            self.assertEqual(f.type.primitive, PrimitiveKind.STRING)
+            self.assertEqual(f.type.format, fmt)
+
+    def test_unrecognized_format_discarded(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a", "b"],
+                "properties": {
+                    "a": {"type": "string", "format": "email"},
+                    "b": {"type": "string"},
+                },
+            },
+        }), "test.json")
+        self.assertIsNone(self._field(doc, "M", "a").type.format)
+        self.assertIsNone(self._field(doc, "M", "b").type.format)
+
+    def test_nullable_rebuild_preserves_format(self):
+        """_extract_fields reconstructs FieldType to attach nullable — the
+        format side channel must survive that rebuild (01 handover #3)."""
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "string", "format": "date-time"},
+                },
+            },
+        }), "test.json")
+        f = self._field(doc, "M", "a")
+        self.assertTrue(f.type.nullable)
+        self.assertEqual(f.type.format, "date-time")
+
+    def test_array_and_map_elements_carry_format(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["xs", "m"],
+                "properties": {
+                    "xs": {"type": "array", "items": {"type": "string", "format": "date-time"}},
+                    "m": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string", "format": "uuid"},
+                    },
+                },
+            },
+        }), "test.json")
+        self.assertEqual(self._field(doc, "M", "xs").type.element.format, "date-time")
+        self.assertEqual(self._field(doc, "M", "m").type.element.format, "uuid")
+
+    def test_wrapper_schema_carries_format(self):
+        doc = parse_swagger(_doc({
+            "Stamp": {"type": "string", "format": "date-time"},
+        }), "test.json")
+        wrapper = doc.schemas[0]
+        self.assertTrue(wrapper.is_wrapper)
+        self.assertEqual(wrapper.wrapped_type.format, "date-time")
+
+    def test_integer_formats_untouched(self):
+        doc = parse_swagger(_doc({
+            "M": {
+                "type": "object",
+                "required": ["a"],
+                "properties": {"a": {"type": "integer", "format": "int64"}},
+            },
+        }), "test.json")
+        f = self._field(doc, "M", "a")
+        self.assertEqual(f.type.primitive, PrimitiveKind.INTEGER_64)
+        self.assertIsNone(f.type.format)
+
+
+
+class ElementNullableTests(unittest.TestCase):
+    """``nullable: true`` on ``items`` / ``additionalProperties`` reaches the
+    element type (ticket jui-web-api-model-nullable-array-items-dropped).
+    It was read by no one: every face typed ``[[1, null]]`` as non-null."""
+
+    def _fields(self):
+        doc = parse_swagger(_doc({
+            "Pet": {"type": "object", "properties": {"name": {"type": "string"}}},
+            "M": {
+                "type": "object",
+                "required": ["cells"],
+                "properties": {
+                    "cells": {"type": "array", "items": {"type": "array", "items": {
+                        "type": "integer", "format": "int64", "nullable": True}}},
+                    "tags": {"type": "array", "items": {"type": "string", "nullable": True}},
+                    "scores": {"type": "object", "additionalProperties": {
+                        "type": "number", "nullable": True}},
+                    "pets": {"type": "array", "items": {
+                        "allOf": [{"$ref": "#/components/schemas/Pet"}], "nullable": True}},
+                    "plain": {"type": "array", "items": {"type": "integer"}},
+                },
+            },
+        }), "test.json")
+        return {f.wire_name: f for f in next(s for s in doc.schemas if s.name == "M").fields}
+
+    def test_the_element_carries_the_flag(self):
+        f = self._fields()
+        self.assertFalse(f["cells"].type.element.nullable)       # the inner array is not
+        self.assertTrue(f["cells"].type.element.element.nullable)
+        self.assertTrue(f["tags"].type.element.nullable)
+        self.assertTrue(f["scores"].type.element.nullable)
+        self.assertTrue(f["pets"].type.element.nullable)
+        self.assertTrue(f["pets"].type.element.is_object_ref)
+
+    def test_control_the_field_level_flags_do_not_move(self):
+        f = self._fields()
+        self.assertFalse(f["plain"].type.element.nullable)
+        self.assertEqual(
+            {k: (v.required, v.nullable, v.type.nullable) for k, v in f.items()},
+            {"cells": (True, False, False), "tags": (False, False, True),
+             "scores": (False, False, True), "pets": (False, False, True),
+             "plain": (False, False, True)})
+
+
+
+def _spelled(null31: bool) -> dict:
+    """The same schemas, nullability spelled the 3.1 way or the 3.0 way."""
+    def n(t: str, **extra) -> dict:
+        if null31:
+            return {"type": [t, "null"], **extra}
+        return {"type": t, "nullable": True, **extra}
+    return {
+        "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "M": {"type": "object", "required": ["a", "cells", "kind"], "properties": {
+            "a": n("integer"),                                       # required, nullable
+            "b": n("string", format="date-time"),                    # optional, nullable
+            "cells": {"type": "array", "items": {"type": "array", "items": n(
+                "integer", format="int64")}},                        # element
+            "m": {"type": "object", "additionalProperties": n("number")},  # map value
+            "tags": {**n("array"), "items": {"type": "string"}},     # the array itself
+            "kind": n("string", enum=["x", "y"]),                    # inline enum
+            "plain": {"type": "integer"},                            # control
+        }},
+        "Counts": {"type": "array", "items": n("integer")},          # wrapper element
+        "Note": n("string"),                                         # top-level wrapper
+    }
+
+
+class OpenApi31NullTypeTests(unittest.TestCase):
+    """``type: [T, "null"]`` (3.1) is ``type: T, nullable: true`` (3.0) —
+    ticket jui-api-model-openapi-31-null-type-ignored. It halted with
+    ``unrecognized type ['integer', 'null']``."""
+
+    def _doc(self, null31: bool):
+        return parse_swagger(_doc(_spelled(null31)), "test.json")
+
+    def test_loads(self):
+        m = next(s for s in self._doc(True).schemas if s.name == "M")
+        f = {x.wire_name: x for x in m.fields}
+        self.assertEqual((f["a"].required, f["a"].nullable, f["a"].type.primitive),
+                         (True, True, PrimitiveKind.INTEGER))
+        self.assertTrue(f["cells"].type.element.element.nullable)
+        self.assertEqual(f["cells"].type.element.element.primitive, PrimitiveKind.INTEGER_64)
+        self.assertTrue(f["m"].type.element.nullable)
+        self.assertTrue(f["tags"].nullable and f["tags"].type.is_array)
+        self.assertEqual(f["b"].type.format, "date-time")
+        self.assertFalse(f["plain"].nullable)
+        note = next(s for s in self._doc(True).schemas if s.name == "Note")
+        self.assertTrue(note.is_wrapper and note.wrapped_type.primitive is PrimitiveKind.STRING)
+
+    def test_the_two_spellings_are_the_same_ir(self):
+        self.assertEqual(self._doc(True), self._doc(False))
+
+    def test_the_two_spellings_generate_the_same_bytes_on_every_face(self):
+        from jui_cli.generators.android_api_model_generator import (
+            AndroidApiModelGenerator, AndroidApiPlatformConfig)
+        from jui_cli.generators.ios_api_model_generator import (
+            IosApiModelGenerator, IosApiPlatformConfig)
+        from jui_cli.generators.web_api_model_generator import (
+            WebApiModelGenerator, WebApiPlatformConfig)
+
+        def sources(doc):
+            with tempfile.TemporaryDirectory() as tmp:
+                t = Path(tmp)
+                gens = [WebApiModelGenerator(WebApiPlatformConfig(
+                            sources_root=t, model_dir="m", dto_subdir="g",
+                            case_convention="camelCase", format_mapping=True)),
+                        IosApiModelGenerator(IosApiPlatformConfig(sources_root=t, format_mapping=True)),
+                        AndroidApiModelGenerator(AndroidApiPlatformConfig(
+                            sources_root=t, format_mapping=True, serializer="kotlinx"))]
+                return [g.generate_dto_source(s, doc) for g in gens for s in doc.schemas] + \
+                       [g.generate_enum_source(e, doc) for g in gens for e in doc.enums]
+
+        got = sources(self._doc(True))
+        self.assertEqual(got, sources(self._doc(False)))
+        self.assertTrue(any("(number | null)[][]" in src for src in got))  # the shape is there
+
+    def test_control_more_than_one_non_null_type_still_halts(self):
+        for types in (["string", "integer"], ["string", "integer", "null"], ["null"]):
+            with self.subTest(types=types), self.assertRaises(OpenAPILoadError) as cm:
+                parse_swagger(_doc({"M": {"type": "object", "properties": {
+                    "a": {"type": types}}}}), "test.json")
+            self.assertEqual(cm.exception.code, "unknown-type")
+
+
+
+_NULL = {"type": "null"}
+_REF = {"$ref": "#/components/schemas/Pet"}
+
+
+def _null_union_schemas(spelling: str) -> dict:
+    """The same nullable shapes in five spellings: the null union (``anyOf``
+    / ``oneOf``, the null member first or last) and 3.0's two ``$ref``
+    spellings (``$ref`` + ``nullable`` / ``allOf: [$ref]`` + ``nullable``)."""
+    def n(member: dict, **extra) -> dict:
+        if spelling == "3.0-ref":
+            return {**member, "nullable": True, **extra}
+        if spelling == "3.0-allof":
+            if "$ref" in member:
+                return {"allOf": [member], "nullable": True, **extra}
+            return {**member, "nullable": True, **extra}
+        comb, null_first = {"anyOf-last": ("anyOf", False), "anyOf-first": ("anyOf", True),
+                            "oneOf-last": ("oneOf", False)}[spelling]
+        return {comb: [_NULL, member] if null_first else [member, _NULL], **extra}
+    return {
+        "Pet": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "Status": {"type": "string", "enum": ["on", "off"]},
+        "M": {"type": "object", "required": ["owner", "count"], "properties": {
+            "owner": n(_REF, description="who"),                      # required, nullable ref
+            "spare": n(_REF),                                         # optional, nullable ref
+            "status": n({"$ref": "#/components/schemas/Status"}),    # enum ref
+            "count": n({"type": "integer", "format": "int64"}),
+            "at": n({"type": "string", "format": "date-time"}),
+            "pets": {"type": "array", "items": n(_REF)},              # element
+            "by_key": {"type": "object", "additionalProperties": n({"type": "number"})},
+            "plain": {"type": "integer"},                             # control
+        }},
+        "Note": n({"type": "string"}),                                # top-level wrapper
+    }
+
+
+class AnyOfNullOptionalTests(unittest.TestCase):
+    """``anyOf`` / ``oneOf`` of one member and ``{"type": "null"}`` is that
+    member, nullable (ticket jui-api-model-anyof-null-optional-stops-build).
+    It stopped the build as an untagged union."""
+
+    SPELLINGS = ("anyOf-last", "anyOf-first", "oneOf-last", "3.0-ref", "3.0-allof")
+
+    def _doc(self, spelling: str):
+        return parse_swagger(_doc(_null_union_schemas(spelling)), "test.json")
+
+    def test_loads_nullable(self):
+        m = next(s for s in self._doc("anyOf-last").schemas if s.name == "M")
+        f = {x.wire_name: x for x in m.fields}
+        self.assertEqual((f["owner"].required, f["owner"].nullable, f["owner"].type.ref_name,
+                          f["owner"].description), (True, True, "Pet", "who"))
+        self.assertTrue(f["pets"].type.element.nullable and f["pets"].type.element.is_object_ref)
+        self.assertTrue(f["by_key"].type.element.nullable)
+        self.assertFalse(f["plain"].nullable)
+
+    def test_every_spelling_is_the_same_ir(self):
+        want = self._doc("3.0-ref")
+        for spelling in self.SPELLINGS:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(self._doc(spelling), want)
+
+    def test_every_spelling_generates_the_same_bytes_on_every_face(self):
+        from jui_cli.generators.android_api_model_generator import (
+            AndroidApiModelGenerator, AndroidApiPlatformConfig)
+        from jui_cli.generators.ios_api_model_generator import (
+            IosApiModelGenerator, IosApiPlatformConfig)
+        from jui_cli.generators.web_api_model_generator import (
+            WebApiModelGenerator, WebApiPlatformConfig)
+
+        def sources(doc):
+            with tempfile.TemporaryDirectory() as tmp:
+                t = Path(tmp)
+                gens = [WebApiModelGenerator(WebApiPlatformConfig(
+                            sources_root=t, model_dir="m", dto_subdir="g",
+                            case_convention="camelCase", format_mapping=True)),
+                        IosApiModelGenerator(IosApiPlatformConfig(sources_root=t, format_mapping=True)),
+                        AndroidApiModelGenerator(AndroidApiPlatformConfig(
+                            sources_root=t, format_mapping=True, serializer="kotlinx"))]
+                return [g.generate_dto_source(s, doc) for g in gens for s in doc.schemas]
+
+        want = sources(self._doc("3.0-ref"))
+        self.assertTrue(any("owner: PetDto | null;" in src for src in want))  # the shape is there
+        for spelling in self.SPELLINGS:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(sources(self._doc(spelling)), want)
+
+    def test_control_every_other_union_still_stops(self):
+        other = {"type": "object", "properties": {"x": {"type": "integer"}}}
+        for comb in ("anyOf", "oneOf"):
+            for members in ([_REF, other], [_REF, other, _NULL], [_NULL], [_NULL, _NULL]):
+                with self.subTest(comb=comb, members=members), self.assertRaises(OpenAPILoadError):
+                    parse_swagger(_doc({"Pet": _null_union_schemas("3.0-ref")["Pet"],
+                                        "M": {"type": "object", "properties": {
+                                            "a": {comb: members}}}}), "test.json")
+        with self.assertRaises(OpenAPILoadError):   # anyOf of one member and no null
+            parse_swagger(_doc({"Pet": _null_union_schemas("3.0-ref")["Pet"],
+                                "M": {"type": "object", "properties": {"a": {"anyOf": [_REF]}}}}),
+                          "test.json")
+
+
+def _load_normalizer():
+    """document_tools' normalizer from THIS checkout, by file — an installed
+    jsonui_doc_cli (``~/.jsonui-cli``) would be another release's copy."""
+    import importlib.util
+    import sys
+    path = Path(__file__).resolve().parents[2] / "document_tools/jsonui_doc_cli/check/openapi_normalize.py"
+    spec = importlib.util.spec_from_file_location("_openapi_normalize_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module   # dataclasses resolve their module by name
+    spec.loader.exec_module(module)
+    return module
+
+
+class NullUnionsAgreeWithTheNormalizerTests(unittest.TestCase):
+    """openapi-diff (document_tools) and the build read a null union the same
+    way: over every combination of up to three members from {a ref, a string,
+    an object, null, null with a description}, under ``anyOf`` and
+    ``oneOf``, the build folds it exactly when the normalizer does. The one
+    set apart — ``anyOf`` / ``oneOf`` of a single member and no null, which
+    the normalizer also unwraps — is the user's ruling (every non-null
+    ``anyOf`` keeps the stop) and is pinned here as that set, not as a
+    difference found by accident."""
+
+    MEMBERS = {
+        "ref": _REF,
+        "string": {"type": "string"},
+        "object": {"type": "object", "properties": {"x": {"type": "integer"}}},
+        "null": _NULL,
+        "null+doc": {"type": "null", "description": "absent"},
+    }
+
+    def test_the_two_fold_the_same_null_unions(self):
+        import itertools
+        norm = _load_normalizer()
+        pet = _null_union_schemas("3.0-ref")["Pet"]
+        agreed = apart = folded = 0
+        for comb in ("anyOf", "oneOf"):
+            for size in (1, 2, 3):
+                for names in itertools.product(self.MEMBERS, repeat=size):
+                    members = [self.MEMBERS[x] for x in names]
+                    field = {comb: members}
+                    doc = _doc({"Pet": pet, "M": {"type": "object", "properties": {"a": field}}})
+                    out = norm.normalize_schema(field, norm._Resolver(doc))
+                    normalizer_folds = isinstance(out, dict) and comb not in out
+                    try:
+                        parse_swagger(doc, "test.json")
+                        build_folds = True
+                    except OpenAPILoadError:
+                        build_folds = False
+                    has_null = any(m.get("type") == "null" for m in members)
+                    with self.subTest(comb=comb, members=names):
+                        if has_null:
+                            self.assertEqual(build_folds, normalizer_folds)
+                            if normalizer_folds:
+                                self.assertTrue(out.get("nullable"))
+                                folded += 1
+                            agreed += 1
+                        else:
+                            # the ruling: only the single-member unwrap differs
+                            self.assertFalse(build_folds)
+                            self.assertEqual(normalizer_folds, size == 1)
+                            apart += size == 1
+        print(f"[null-union agreement] {agreed} null unions compared ({folded} folded by both), "
+              f"{apart} non-null single-member unwraps set apart by the ruling")
+        self.assertEqual(apart, 2 * 3)   # 3 non-null members x anyOf / oneOf
+        # both outcomes occur, so agreement is not two calculators that never fold
+        self.assertTrue(0 < folded < agreed, (folded, agreed))
+
+
+if __name__ == "__main__":
+    unittest.main()

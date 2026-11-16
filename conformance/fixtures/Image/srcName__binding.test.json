@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/srcName__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.srcName (binding)",
+    "description": "Conformance fixture for 'srcName' on Image (section: Image, class: visual). Value under test: \"@{boundSrcName}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "srcName__binding",
+      "description": "Conformance fixture for 'srcName' on Image (section: Image, class: visual). Value under test: \"@{boundSrcName}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_srcName__binding"
+        }
+      ]
+    }
+  ]
+}

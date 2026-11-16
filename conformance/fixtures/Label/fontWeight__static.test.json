@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/fontWeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.fontWeight (static)",
+    "description": "Conformance fixture for 'fontWeight' on Label (section: Label, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontWeight__static",
+      "description": "Conformance fixture for 'fontWeight' on Label (section: Label, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_fontWeight__static"
+        }
+      ]
+    }
+  ]
+}

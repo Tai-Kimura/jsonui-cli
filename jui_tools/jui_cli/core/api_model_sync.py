@@ -1,0 +1,650 @@
+"""Shared driver for swagger → DTO + Domain emission across platforms.
+
+Called from:
+
+- ``build_cmd._sync_api_models`` — writes files to disk, prunes orphan DTOs
+- ``verify_cmd`` — in-memory regen for drift detection (writes nothing)
+
+Per platform implementation status (Phase 1):
+
+- iOS: full DTO + enum + Domain scaffold
+- Android / Web: deferred to Phase 2 / 3 — `_sync_api_models` silently skips
+  these platforms until the per-platform generator lands
+
+The split keeps file I/O concerns out of the generators (which stay pure
+string emitters with unit-testable methods) and lets verify_cmd reuse the
+same regen pipeline without touching disk.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Iterable
+
+from .config_manager import ConfigManager
+from .openapi_loader import OpenAPILoadError, load_swagger
+from .schema_filter import SchemaFilterConfig
+from .schema_ir import SchemaDef, SwaggerDocument, doc_string_formats
+
+
+@dataclass(frozen=True)
+class SyncPlan:
+    """In-memory description of what would be written.
+
+    Used by verify_cmd to compare expected output against disk without
+    actually writing. ``build_cmd`` consumes the same plan and persists it.
+
+    ``domain_patchers`` carries optional in-place mutators for Domain
+    scaffold files that already exist on disk — used by the Android
+    kotlinx pipeline to retroactively inject ``@Serializable(with = ...)``
+    + the delegating ``KSerializer`` block onto pre-existing wrappers
+    that were emitted before the kotlinx Serializer feature landed.
+    Each callable returns True iff it actually changed the file.
+    """
+
+    platform: str
+    expected_files: dict[Path, str]  # absolute path → expected source
+    domain_scaffolds: dict[Path, str]  # absolute path → scaffold source (write only if absent)
+    domain_patchers: dict[Path, Callable[[], bool]] = field(default_factory=dict)
+
+
+def _format_mapped_formats(
+    config_mgr: ConfigManager,
+    docs: list[SwaggerDocument],
+) -> set[str]:
+    """String formats used by docs with format-aware mapping in effect.
+
+    Respects the per-doc opt-out — an excluded doc's formats don't force
+    shared support files into the plan. Returns the empty set when the
+    project flag is off.
+    """
+    enabled, excluded = config_mgr.api_format_mapping()
+    if not enabled:
+        return set()
+    used: set[str] = set()
+    for doc in docs:
+        if Path(doc.source_path).name in excluded:
+            continue
+        used |= doc_string_formats(doc)
+    return used
+
+
+def _shadowed_schema_names(config_mgr: ConfigManager) -> set[str]:
+    """Names the user has shadowed in ``.jsonui-type-map.json``.
+
+    Shadow opts the consumer out of the auto Domain wrapper (scaffold +
+    Android kotlinx patcher) — they own the ``{Name}.kt`` file
+    themselves and may not use the canonical
+    ``class {Name}(val dto: {Name}Dto)`` shape at all. DTO emit is
+    unaffected; the hand-written wrapper typically still references
+    ``{Name}Dto`` for wire decode.
+
+    Trailing ``?`` is stripped from each key because spec authors often
+    write ``"ClientAnalysis?"`` in the type map to map the nullable
+    spec type — Kotlin / Swift collapse ``T`` and ``T?`` to the same
+    class, so shadowing one variant means the user owns the type.
+    Non-schema-shaped keys (``Array<$T>`` generics, primitive aliases
+    like ``Int``) survive the strip unchanged but won't match any
+    swagger schema name, so the filter is a no-op for them.
+    """
+    from .type_mapper import TypeMapper
+
+    return {
+        key.rstrip("?")
+        for key in TypeMapper(config_mgr.type_map_file).user_keys()
+    }
+
+
+def plan_android(
+    config_mgr: ConfigManager,
+    pconfig: dict,
+    docs: list[SwaggerDocument],
+) -> SyncPlan:
+    """Build the Android write plan without touching disk.
+
+    Resolves ``kjui.config.json#source_directory`` + ``package_name`` so
+    DTO + Domain files land in the package layout the existing kjui
+    ViewModel / Repository / data classes already use.
+
+    Resolution rules (fixes bug ``jui-android-api-model-generator-wrong-
+    source-dir-and-base-package``):
+
+    - Kotlin files live under ``<source_directory>/kotlin/`` (or
+      ``/java/`` fallback) — kjui's ``source_directory`` points at the
+      source-set root, not the language sub-source-set
+    - The consumer's ``package_name`` (e.g. ``com.acme.mobile``)
+      is read from ``kjui.config.json`` and used as the FQN base
+    - ``api.platforms.android.model_package`` is treated as either:
+        * a full FQN (contains a ``.``) — used verbatim
+        * a bare subpackage name — prefixed with ``package_name``
+    - ``dto_subpackage`` is always appended to ``model_package`` to form
+      the DTO package
+    """
+    from ..generators.android_api_model_generator import (
+        AndroidApiModelGenerator,
+        AndroidApiPlatformConfig,
+        _patch_kotlinx_domain,
+    )
+
+    platform_root = config_mgr.project_root / pconfig["root"]
+    sources_root, base_package = _resolve_android_sources_and_package(platform_root)
+    api_cfg = config_mgr.api_platform_config("android")
+
+    raw_model_pkg = api_cfg["model_package"]
+    if "." in raw_model_pkg:
+        domain_package = raw_model_pkg
+    else:
+        domain_package = f"{base_package}.{raw_model_pkg}"
+    dto_package = f"{domain_package}.{api_cfg['dto_subpackage']}"
+
+    fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
+    gen = AndroidApiModelGenerator(
+        AndroidApiPlatformConfig(
+            sources_root=sources_root,
+            domain_package=domain_package,
+            dto_package=dto_package,
+            serializer=api_cfg["serializer"],
+            format_mapping=fmt_enabled,
+            format_excluded_docs=fmt_excluded,
+            enum_unknown_case=config_mgr.api_enum_unknown_case(),
+        )
+    )
+
+    expected: dict[Path, str] = {}
+    scaffolds: dict[Path, str] = {}
+    patchers: dict[Path, Callable[[], bool]] = {}
+    is_kotlinx = api_cfg["serializer"] == "kotlinx"
+    shadowed = _shadowed_schema_names(config_mgr)
+    for doc in docs:
+        for schema in doc.schemas:
+            dto_path = gen.dto_path(schema.name)
+            if dto_path in expected:
+                # Cross-doc duplicate of a shared schema (the loader halts
+                # when same-name bodies differ) — first doc in sorted order
+                # wins so the generated header's source comment is stable.
+                continue
+            # DTO is always emitted regardless of shadow status: it carries
+            # the wire format and the Domain wrapper that the user
+            # hand-writes still references it as ``val dto: {Name}Dto``.
+            # Dropping the DTO would orphan-prune it and leave the
+            # consumer's hand-written wrapper with an unresolved type.
+            expected[dto_path] = gen.generate_dto_source(schema, doc)
+            if schema.name in shadowed:
+                # Shadow opts the consumer out of the auto Domain wrapper
+                # (scaffold + kotlinx patcher) — they own the file at
+                # ``{Name}.kt`` themselves and may not use the wrapper
+                # shape at all.
+                continue
+            if not doc.should_skip_domain(schema):
+                dpath = gen.domain_path(schema.name)
+                scaffolds[dpath] = gen.generate_domain_source(schema)
+                # kotlinx Domain wrappers need the @Serializable annotation
+                # and a delegating KSerializer block. Hand a patcher to
+                # ``apply_plan`` so existing scaffolds (emitted before
+                # this feature landed) get retroactively patched on the
+                # next ``jui build``.
+                if is_kotlinx:
+                    patchers[dpath] = (
+                        lambda p=dpath, n=schema.name, a=schema.is_map_alias: _patch_kotlinx_domain(p, n, map_alias=a)
+                    )
+        for union in doc.unions:
+            dto_path = gen.dto_path(union.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[dto_path] = gen.generate_union_source(union, doc)
+            if union.name in shadowed:
+                continue
+            if not doc.should_skip_domain(union):
+                # No kotlinx patcher: union Domain scaffolds are new files
+                # (nothing pre-dating the feature to retrofit) and they
+                # already carry the serializer block on first emit.
+                scaffolds[gen.domain_path(union.name)] = (
+                    gen.generate_union_domain_source(union)
+                )
+        for enum in doc.enums:
+            # Enums live in the DTO subpackage and are treated as wire
+            # types — emit unconditionally, mirroring DTO behavior.
+            enum_path = gen.enum_path(enum.name)
+            if enum_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[enum_path] = gen.generate_enum_source(enum, doc)
+    # Shared format support files (plan 03). Added only when a mapped doc
+    # actually uses the format; unused ones fall out of ``expected`` and
+    # get orphan-pruned like any other stale generated file.
+    used_formats = _format_mapped_formats(config_mgr, docs)
+    if "uuid" in used_formats:
+        expected[gen.support_path("Uuid.kt")] = gen.generate_uuid_alias_source()
+    if "binary" in used_formats:
+        expected[gen.support_path("Base64ByteArraySerializer.kt")] = (
+            gen.generate_base64_serializer_source()
+        )
+    return SyncPlan(
+        platform="android",
+        expected_files=expected,
+        domain_scaffolds=scaffolds,
+        domain_patchers=patchers,
+    )
+
+
+def plan_web(
+    config_mgr: ConfigManager,
+    pconfig: dict,
+    docs: list[SwaggerDocument],
+) -> SyncPlan:
+    """Build the Web write plan without touching disk."""
+    from ..generators.web_api_model_generator import (
+        WebApiModelGenerator,
+        WebApiPlatformConfig,
+    )
+
+    platform_root = config_mgr.project_root / pconfig["root"]
+    sources_root = _resolve_web_sources_root(platform_root)
+    api_cfg = config_mgr.api_platform_config("web")
+    fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
+    gen = WebApiModelGenerator(
+        WebApiPlatformConfig(
+            sources_root=sources_root,
+            model_dir=api_cfg["model_dir"],
+            dto_subdir=api_cfg["dto_subdir"],
+            case_convention=api_cfg["case_convention"],
+            format_mapping=fmt_enabled,
+            format_excluded_docs=fmt_excluded,
+        )
+    )
+
+    expected: dict[Path, str] = {}
+    scaffolds: dict[Path, str] = {}
+    shadowed = _shadowed_schema_names(config_mgr)
+    for doc in docs:
+        for schema in doc.schemas:
+            dto_path = gen.dto_path(schema.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins (see plan_android)
+            # DTO emit is unconditional — the hand-written Domain wrapper
+            # for a shadowed schema still consumes ``XxxDto``.
+            expected[dto_path] = gen.generate_dto_source(schema, doc)
+            if schema.name in shadowed:
+                continue
+            if not doc.should_skip_domain(schema):
+                scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+        for union in doc.unions:
+            dto_path = gen.dto_path(union.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[dto_path] = gen.generate_union_source(union, doc)
+            if union.name in shadowed:
+                continue
+            if not doc.should_skip_domain(union):
+                scaffolds[gen.domain_path(union.name)] = (
+                    gen.generate_union_domain_source(union)
+                )
+        for enum in doc.enums:
+            enum_path = gen.enum_path(enum.name)
+            if enum_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[enum_path] = gen.generate_enum_source(enum, doc)
+    # Shared format support files (plan 03) — see plan_android.
+    used_formats = _format_mapped_formats(config_mgr, docs)
+    if "uuid" in used_formats:
+        expected[gen.support_path("Uuid.ts")] = gen.generate_uuid_alias_source()
+    if "binary" in used_formats:
+        expected[gen.support_path("Base64Data.ts")] = (
+            gen.generate_base64_alias_source()
+        )
+    return SyncPlan(platform="web", expected_files=expected, domain_scaffolds=scaffolds)
+
+
+def plan_ios(
+    config_mgr: ConfigManager,
+    pconfig: dict,
+    docs: list[SwaggerDocument],
+) -> SyncPlan:
+    """Build the iOS write plan without touching disk.
+
+    Resolves ``sjui.config.json#source_directory`` so the output lands in
+    the same root the existing IosGenerator uses for ViewModel/Repository.
+
+    ``api.platforms.ios.modules`` (see :mod:`ios_api_modules`) sends some
+    schemas to a Swift module of their own: their DTO files go to that
+    module's directory (``public`` by default) and not to the app's, an app
+    file that names one imports the module, and their Domain scaffolds stay
+    in the app's model directory. Without the key the plan is what it was.
+    """
+    from ..generators.ios_api_model_generator import (
+        IosApiModelGenerator,
+        IosApiPlatformConfig,
+    )
+    from . import ios_api_modules
+
+    platform_root = config_mgr.project_root / pconfig["root"]
+    sources_root = _resolve_ios_sources_root(platform_root)
+    api_cfg = config_mgr.api_platform_config("ios")
+    fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
+
+    def make_gen(
+        model_dir: str, dto_subdir: str, access_level: str = "internal", root: Path | None = None
+    ) -> IosApiModelGenerator:
+        return IosApiModelGenerator(
+            IosApiPlatformConfig(
+                sources_root=sources_root if root is None else root,
+                model_dir=model_dir,
+                dto_subdir=dto_subdir,
+                format_mapping=fmt_enabled,
+                format_excluded_docs=fmt_excluded,
+                enum_unknown_case=config_mgr.api_enum_unknown_case(),
+                access_level=access_level,
+            )
+        )
+
+    gen = make_gen(api_cfg["model_dir"], api_cfg["dto_subdir"])
+    modules = ios_api_modules.modules_from_config(api_cfg.get("modules"))
+    # A module's model_dir usually leaves the app's sources ("../EventCore/Model"): normalized, so its files are
+    # written, compared and pruned under one spelling of the path.
+    module_gens = {
+        m.module: make_gen(".", m.dto_subdir, m.access_level, Path(os.path.normpath(sources_root / m.model_dir)))
+        for m in modules
+    }
+    if modules:
+        ios_api_modules.check_dirs(
+            gen.dto_path("_").parent,
+            sources_root,
+            {m.module: (m, module_gens[m.module].dto_path("_").parent) for m in modules},
+        )
+    placed = ios_api_modules.assign(modules, docs)
+    refs = ios_api_modules.item_refs(docs) if placed else {}
+
+    def gen_for(name: str) -> IosApiModelGenerator:
+        mod = placed.get(name)
+        return gen if mod is None else module_gens[mod.module]
+
+    def imports_for(name: str) -> list[str]:
+        """Modules *name*'s file names a type of, other than its own (only the app can, see assign)."""
+        own = placed.get(name)
+        return sorted({placed[r].module for r in refs.get(name, ()) if r in placed and placed[r] is not own})
+
+    def dto(name: str, source: str) -> str:
+        return IosApiModelGenerator.with_imports(source, imports_for(name))
+
+    def scaffold(name: str, source: str) -> str:
+        mod = placed.get(name)
+        return source if mod is None else IosApiModelGenerator.with_imports(source, [mod.module])
+
+    expected: dict[Path, str] = {}
+    scaffolds: dict[Path, str] = {}
+    shadowed = _shadowed_schema_names(config_mgr)
+    for doc in docs:
+        for schema in doc.schemas:
+            g = gen_for(schema.name)
+            dto_path = g.dto_path(schema.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins (see plan_android)
+            # DTO emit is unconditional — see plan_android for the
+            # rationale (shadowed Domain wrappers still reference the
+            # auto-emitted DTO via ``let dto: XxxDto``).
+            expected[dto_path] = dto(schema.name, g.generate_dto_source(schema, doc))
+            if schema.name in shadowed:
+                continue
+            # OR-evaluate per-schema x-jui-skip-domain (schema.skip_domain)
+            # and per-app api.schemas.skip_domain (doc.skip_domain_overrides).
+            # v2 plan §2.6.
+            if not doc.should_skip_domain(schema):
+                scaffolds[gen.domain_path(schema.name)] = scaffold(
+                    schema.name, gen.generate_domain_source(schema)
+                )
+        for union in doc.unions:
+            g = gen_for(union.name)
+            dto_path = g.dto_path(union.name)
+            if dto_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[dto_path] = dto(union.name, g.generate_union_source(union, doc))
+            if union.name in shadowed:
+                continue
+            if not doc.should_skip_domain(union):
+                scaffolds[gen.domain_path(union.name)] = scaffold(
+                    union.name, gen.generate_union_domain_source(union)
+                )
+        for enum in doc.enums:
+            g = gen_for(enum.name)
+            enum_path = g.enum_path(enum.name)
+            if enum_path in expected:
+                continue  # cross-doc duplicate — first doc wins
+            expected[enum_path] = g.generate_enum_source(enum, doc)
+    if placed:
+        ios_api_modules.warn_scaffolds_without_import(
+            {
+                name: (mod, gen.domain_path(name))
+                for name, mod in placed.items()
+                if gen.domain_path(name) in scaffolds
+            }
+        )
+    return SyncPlan(platform="ios", expected_files=expected, domain_scaffolds=scaffolds)
+
+
+def collect_docs(config_mgr: ConfigManager) -> list[SwaggerDocument]:
+    """Discover and parse all swagger files. Caller handles ``OpenAPILoadError``.
+
+    Applies the ``api.schemas`` filter (v2 Phase 1.5) from the config —
+    when no filter dimension is set, behavior matches v3 Phase 1
+    (every ``components.schemas.*`` entry parsed).
+    """
+    api_dir = config_mgr.api_directory
+    schema_filter = SchemaFilterConfig.from_dict(config_mgr.api_schemas_config())
+    return load_swagger(api_dir, schema_filter=schema_filter)
+
+
+def apply_plan(plan: SyncPlan, *, prune_orphans: bool) -> tuple[int, int, int]:
+    """Persist *plan* to disk. Returns ``(dto_written, scaffold_written, pruned)``.
+
+    Idempotent: ``atomic_write_text`` skips writes when on-disk content
+    matches. Domain scaffold writes are skipped when the file already
+    exists (preserving user edits).
+
+    Orphan prune scans the DTO subdirectory and deletes any ``*.swift``
+    that isn't in ``plan.expected_files``. Domain scaffolds are never
+    pruned (user-owned).
+    """
+    from .impl_updater import atomic_write_text
+
+    dto_written = 0
+    scaffold_written = 0
+
+    for path, source in plan.expected_files.items():
+        if atomic_write_text(path, source):
+            dto_written += 1
+
+    for path, source in plan.domain_scaffolds.items():
+        if path.exists():
+            # Run the per-path patcher (if any) — used by kotlinx Android
+            # to retroactively add ``@Serializable`` + the delegating
+            # ``KSerializer`` block to wrappers emitted before that
+            # feature landed. Patchers are idempotent; subsequent builds
+            # over an already-patched file return False.
+            patcher = plan.domain_patchers.get(path)
+            if patcher is not None and patcher():
+                scaffold_written += 1
+            continue
+        if atomic_write_text(path, source):
+            scaffold_written += 1
+
+    pruned = 0
+    if prune_orphans and plan.expected_files:
+        # Group expected DTOs by directory so we only scan dirs we own.
+        dto_dirs = {p.parent for p in plan.expected_files}
+        expected_set = set(plan.expected_files)
+        for dto_dir in dto_dirs:
+            if not dto_dir.exists():
+                continue
+            for existing in dto_dir.iterdir():
+                if not existing.is_file():
+                    continue
+                if existing.suffix not in {".swift", ".kt", ".ts"}:
+                    continue
+                if existing in expected_set:
+                    continue
+                existing.unlink()
+                pruned += 1
+
+    return dto_written, scaffold_written, pruned
+
+
+def diff_plan(plan: SyncPlan) -> list[str]:
+    """Return human-readable drift descriptions for verify_cmd.
+
+    Each entry is one line describing a file that differs from disk. An
+    empty list means "no drift".
+    """
+    drift: list[str] = []
+    for path, expected in plan.expected_files.items():
+        if not path.exists():
+            drift.append(f"MISSING  {path}")
+            continue
+        try:
+            actual = path.read_text(encoding="utf-8")
+        except OSError as e:
+            drift.append(f"UNREADABLE {path}: {e}")
+            continue
+        if actual != expected:
+            drift.append(f"MODIFIED {path}")
+    return drift
+
+
+# --------------------------------------------------------------------------- #
+# Internal helpers
+# --------------------------------------------------------------------------- #
+
+
+def _resolve_ios_sources_root(platform_root: Path) -> Path:
+    """Mirror ``IosGenerator._resolve_source_base`` so API models land in
+    the same root as ViewModel/Repository.
+
+    Reads ``<platform_root>/sjui.config.json#source_directory``. Falls
+    back to ``platform_root`` itself when the config is missing — matches
+    the behavior of the existing iOS generator.
+    """
+    sjui_config = platform_root / "sjui.config.json"
+    if sjui_config.exists():
+        try:
+            with open(sjui_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source_dir = data.get("source_directory", "")
+            if source_dir:
+                return platform_root / source_dir
+        except (OSError, json.JSONDecodeError):
+            pass
+    return platform_root
+
+
+def _resolve_android_sources_and_package(platform_root: Path) -> tuple[Path, str]:
+    """Mirror ``AndroidGenerator`` for source dir + base package resolution.
+
+    Reads ``<platform_root>/kjui.config.json``:
+
+    - ``source_directory`` — source-set root, default ``app/src/main``
+      (kjui convention; Kotlin files live in the ``kotlin/`` sub-source-set
+      under it, matching ``data_directory: "kotlin/<pkg>/data"`` etc.)
+    - ``package_name`` — base FQN, default ``com.example.app``
+
+    The returned ``sources_root`` is ``<source_directory>/kotlin/`` (with
+    ``java/`` fallback when ``kotlin/`` doesn't exist). The Kotlin sub-
+    source-set must be part of the path because the Kotlin compiler maps
+    file location to package via ``kotlin/<pkg-path>/<File>.kt``; without
+    it, generated DTOs would land outside the source set and not be
+    compiled.
+
+    Bug history: this function previously used ``source_directory``
+    verbatim and hardcoded ``com.example.app``, dropping the
+    ``kotlin/`` sub-source-set and overriding the consumer's
+    ``package_name``. See report
+    ``2026-05-27-jui-android-api-model-generator-wrong-source-dir-and-base-package.md``.
+    """
+    kjui_config = platform_root / "kjui.config.json"
+    source_directory = "app/src/main"
+    base_package = "com.example.app"
+    if kjui_config.exists():
+        try:
+            with open(kjui_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source_directory = data.get("source_directory", source_directory)
+            base_package = (
+                data.get("package_name")
+                or data.get("base_package")
+                or data.get("package")
+                or base_package
+            )
+        except (OSError, json.JSONDecodeError):
+            pass
+    sources_root = platform_root / source_directory / "kotlin"
+    if not sources_root.exists():
+        alt_java = platform_root / source_directory / "java"
+        if alt_java.exists():
+            sources_root = alt_java
+    return sources_root, base_package
+
+
+def _resolve_web_sources_root(platform_root: Path) -> Path:
+    """Web: source root is the directory holding ``src/`` (default the
+    platform_root itself, since ``model_dir`` is already config-controlled).
+
+    Reads ``<platform_root>/rjui.config.json#source_directory`` when present
+    so projects with non-standard layouts (e.g. ``app/src``) still work.
+    """
+    rjui_config = platform_root / "rjui.config.json"
+    if rjui_config.exists():
+        try:
+            with open(rjui_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source_dir = data.get("source_directory", "")
+            if source_dir:
+                return platform_root / source_dir
+        except (OSError, json.JSONDecodeError):
+            pass
+    return platform_root / "src"
+
+
+# --------------------------------------------------------------------------- #
+# Generator dispatch
+# --------------------------------------------------------------------------- #
+
+
+_PLATFORM_PLANNERS = {
+    "ios": plan_ios,
+    "android": plan_android,
+    "web": plan_web,
+}
+
+
+def planners_for(args: argparse.Namespace) -> list[str]:
+    """Return the platforms to plan against, honoring ``--ios-only`` etc.
+
+    Mirrors the gating logic in ``build_cmd._distribute_*`` so the API
+    model sync respects the same flags.
+    """
+    if getattr(args, "ios_only", False):
+        return ["ios"]
+    if getattr(args, "android_only", False):
+        return ["android"]
+    if getattr(args, "web_only", False):
+        return ["web"]
+    return list(_PLATFORM_PLANNERS.keys())
+
+
+def has_planner(platform: str) -> bool:
+    """True if *platform* has a Phase 1-ready planner."""
+    return platform in _PLATFORM_PLANNERS
+
+
+def plan_for(
+    platform: str,
+    config_mgr: ConfigManager,
+    pconfig: dict,
+    docs: list[SwaggerDocument],
+) -> SyncPlan:
+    """Dispatch to the right ``plan_*`` for *platform*.
+
+    Raises ``KeyError`` for unsupported platforms — call :func:`has_planner`
+    first when iterating across multiple platforms.
+    """
+    return _PLATFORM_PLANNERS[platform](config_mgr, pconfig, docs)

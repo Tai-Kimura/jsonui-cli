@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/reorderLockedProperty__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.reorderLockedProperty (static)",
+    "description": "Conformance fixture for 'reorderLockedProperty' on Collection (section: Collection, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "reorderLockedProperty__static",
+      "description": "Conformance fixture for 'reorderLockedProperty' on Collection (section: Collection, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_reorderLockedProperty__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,355 @@
+# frozen_string_literal: true
+
+require 'json'
+require_relative 'config_manager'
+require_relative 'project_finder'
+require_relative 'type_converter_core'
+require_relative 'enum_spelling'
+require_relative 'logger'
+require_relative 'swift_identifier'
+
+module SjuiTools
+  module Core
+    # Converts JSON primitive types to Swift types. iOS profile over the
+    # shared body (lib/core/type_converter_core.rb — byte-identical mirror
+    # of shared/core/type_converter_core.rb, pinned by
+    # spec/core/shared_core_mirror_spec.rb): caches, platform-value
+    # extraction, function-signature parsing and event-handler
+    # introspection live there; the Swift type system and default-value
+    # emitters live here.
+    class TypeConverter < ::JsonUIShared::TypeConverterCore
+      # Language key for this platform
+      LANGUAGE = 'swift'
+
+      # Available modes for this platform
+      MODES = %w[swiftui uikit].freeze
+
+      # JSON type -> Swift type mapping (common types)
+      # NOTE: These are kept for backward compatibility, but type_mapping.json is preferred
+      TYPE_MAPPING = {
+        # Standard types (cross-platform)
+        'String' => 'String',
+        'string' => 'String',
+        'Int' => 'Int',
+        'int' => 'Int',
+        'Integer' => 'Int',
+        'integer' => 'Int',
+        'Double' => 'Double',
+        'double' => 'Double',
+        'Float' => 'Float',
+        'float' => 'Float',
+        'Bool' => 'Bool',
+        'bool' => 'Bool',
+        'Boolean' => 'Bool',
+        'boolean' => 'Bool',
+        # Swift-specific types
+        'CGFloat' => 'CGFloat',
+        'EdgeInsets' => 'EdgeInsets',
+        # Kotlin-specific types mapped to Swift equivalents
+        'Unit' => 'Void',
+        'unit' => 'Void',
+        # JSON container classes. These name a SHAPE, not a Swift type, and
+        # without an entry the declared name was emitted verbatim —
+        # `var profile: Object = ...` does not compile. The web face already
+        # maps the same spellings (Object/object/Hash/hash ->
+        # Record<string, any>).
+        'Object' => '[String: Any]',
+        'object' => '[String: Any]',
+        'Hash' => '[String: Any]',
+        'hash' => '[String: Any]',
+        'Array' => '[Any]',
+        'array' => '[Any]'
+      }.freeze
+
+      # Declared classes naming a JSON container rather than a model type.
+      # Only these are re-spelled for the data model; every other class name is
+      # a type the project declares and is emitted as written.
+      JSON_CONTAINER_CLASSES = %w[Object object Hash hash Array array].freeze
+
+      # Mode-specific type mapping (types that differ between swiftui and uikit)
+      # NOTE: These are kept for backward compatibility, but type_mapping.json is preferred
+      MODE_TYPE_MAPPING = {
+        'Color' => { 'swiftui' => 'Color', 'uikit' => 'UIColor' },
+        'color' => { 'swiftui' => 'Color', 'uikit' => 'UIColor' },
+        'Image' => { 'swiftui' => 'String', 'uikit' => 'UIImage' },
+        'image' => { 'swiftui' => 'String', 'uikit' => 'UIImage' },
+        'Visibility' => { 'swiftui' => 'String', 'uikit' => 'SJUIView.Visibility' },
+        'visibility' => { 'swiftui' => 'String', 'uikit' => 'SJUIView.Visibility' },
+        # Collection types
+        'CollectionDataSource' => { 'swiftui' => 'CollectionDataSource', 'uikit' => 'UIKitCollectionDataSource' }
+      }.freeze
+
+      # Default values for each Swift type
+      # NOTE: These are kept for backward compatibility, but type_mapping.json is preferred
+      DEFAULT_VALUES = {
+        'String' => '""',
+        'Int' => '0',
+        'Double' => '0.0',
+        'Float' => '0.0',
+        'Bool' => 'false',
+        'CGFloat' => '0.0',
+        'Color' => '.clear',
+        'UIColor' => '.clear',
+        'UIImage' => 'nil',
+        'EdgeInsets' => 'EdgeInsets()',
+        'CollectionDataSource' => 'CollectionDataSource()',
+        'UIKitCollectionDataSource' => 'UIKitCollectionDataSource()',
+        'Visibility' => '.visible',
+        'SJUIView.Visibility' => '.visible'
+      }.freeze
+
+      class << self
+        def nil_literal
+          'nil'
+        end
+
+        def type_mapping_dir
+          File.dirname(__FILE__)
+        end
+
+        def default_colors_json_path
+          # Use ConfigManager and ProjectFinder to get correct path
+          config = ConfigManager.load_config
+          ProjectFinder.setup_paths
+          source_path = ProjectFinder.get_full_source_path || Dir.pwd
+          layouts_dir = config['layouts_directory'] || 'Layouts'
+          File.join(source_path, layouts_dir, 'Resources', 'colors.json')
+        end
+
+        def convert_type(raw_class, mode = nil)
+          converted = to_swift_type(raw_class, mode)
+          # A type Swift has no spelling for is said, not written silently.
+          if (why = unportable_reason(converted, 'swift'))
+            report_warning("type '#{raw_class}' comes out as '#{converted}', which is not a Swift type (#{why})")
+          end
+          converted
+        end
+
+        # Convert JSON type to Swift type
+        # @param json_type [String] the type specified in JSON
+        # @param mode [String] the mode (swiftui, uikit) for mode-specific types
+        # @return [String] the corresponding Swift type
+        def to_swift_type(json_type, mode = nil)
+          return json_type if json_type.nil? || json_type.to_s.empty?
+
+          type_str = json_type.to_s.strip
+
+          # Check for optional type suffix
+          is_optional = type_str.end_with?('?')
+          base_type = is_optional ? type_str[0...-1] : type_str
+
+          # A collection in the spec's own shapes (`[T]`, `[K: V]`,
+          # `Array(T)`, `List(T)`, `Dictionary(K, V)`, `Map(K, V)`, nested
+          # to any depth) -> [T] / [K: V]. `List(T)` and `Map(K, V)` were
+          # written as they came, which Swift does not read.
+          if (kind, members = collection_shape(base_type))
+            converted = members.map { |m| to_swift_type(m, mode) }
+            result = kind == :list ? "[#{converted[0]}]" : "[#{converted[0]}: #{converted[1]}]"
+            return is_optional ? "#{result}?" : result
+          end
+
+          # Check for function type: (params) -> ReturnType or ((params) -> ReturnType)?
+          func_result = parse_function_type(type_str, mode)
+          return func_result if func_result
+
+          # Check mode-specific mapping first
+          if mode && MODE_TYPE_MAPPING.key?(base_type)
+            result = MODE_TYPE_MAPPING[base_type][mode] || MODE_TYPE_MAPPING[base_type]['swiftui']
+            return is_optional ? "#{result}?" : result
+          end
+
+          # Then check common mapping, or return as-is if not found
+          result = TYPE_MAPPING[base_type] || base_type
+          is_optional ? "#{result}?" : result
+        end
+
+        # Parse a function type string and convert to Swift.
+        # All function types are converted to optional (for callbacks).
+        # @return [String, nil] the Swift function type or nil
+        def parse_function_type(type_str, mode = nil)
+          sig = parse_function_signature(type_str)
+          return nil unless sig
+
+          params_inner, return_part = sig
+          converted_params = parse_parameter_list_no_optional(params_inner, mode)
+          converted_return = convert_single_type(return_part, mode)
+
+          "((#{converted_params}) -> #{converted_return})?"
+        end
+
+        # Convert a single type without making it optional (for use inside function signatures)
+        def convert_single_type(type_str, mode = nil)
+          return type_str if type_str.nil? || type_str.to_s.empty?
+
+          str = type_str.to_s.strip
+          is_optional = str.end_with?('?')
+          base = is_optional ? str[0...-1] : str
+
+          # A collection here is converted as one outside a function is (`Array(Int)` and, in Kotlin, `[File]`
+          # were written as declared), and a function here in Swift, optional only when declared so.
+          return to_swift_type(str, mode) if collection_shape(base)
+
+          if (sig = parse_function_signature(str))
+            params_inner, return_part = sig
+            result = "(#{parse_parameter_list_no_optional(params_inner, mode)}) -> #{convert_single_type(return_part, mode)}"
+            # The `?` is the function's when the signature parser took it off a wrapper, not off the return.
+            return str.end_with?(return_part) ? result : "(#{result})?"
+          end
+
+          # Check mode-specific mapping first
+          if mode && MODE_TYPE_MAPPING.key?(base)
+            result = MODE_TYPE_MAPPING[base][mode] || MODE_TYPE_MAPPING[base]['swiftui']
+            return is_optional ? "#{result}?" : result
+          end
+
+          result = TYPE_MAPPING[base] || base
+          is_optional ? "#{result}?" : result
+        end
+
+        # Parse parameter list without making types optional
+        def parse_parameter_list_no_optional(params_str, mode = nil)
+          return '' if params_str.nil? || params_str.empty?
+
+          params = split_parameters(params_str)
+          params.map do |p|
+            # A function type takes no argument label but `_`: `id: Int` and `outer id: Int` are written
+            # `_ id: Int` (swiftc refused them as written), and the type after it is converted like any other.
+            _label, name, type = labeled_parameter(p)
+            converted = convert_single_type((type || p).strip, mode)
+            name ? "_ #{name}: #{converted}" : converted
+          end.join(', ')
+        end
+
+        # Parse a comma-separated parameter list, handling nested types
+        def parse_parameter_list(params_str, mode = nil)
+          return '' if params_str.nil? || params_str.empty?
+
+          params = split_parameters(params_str)
+          params.map { |p| to_swift_type(p.strip, mode) }.join(', ')
+        end
+
+        # A build warning from the shared core (a data default with no
+        # value for this platform) goes where the tool's others go.
+        def report_warning(message)
+          Core::Logger.warn(message)
+        end
+
+        # Convert defaultValue based on the type
+        # @param value [Object] the raw default value
+        # @param raw_class [String] the original class type from JSON
+        # @param mode [String] the mode (swiftui, uikit)
+        # @return [Object] the converted default value
+        def convert_default_value(value, raw_class, mode = nil)
+          return value unless value.is_a?(String) && raw_class.is_a?(String)
+
+          base_class = raw_class.end_with?('?') ? raw_class[0...-1] : raw_class
+
+          case base_class.downcase
+          when 'color'
+            convert_color_default_value(value, mode)
+          when 'image'
+            convert_image_default_value(value, mode)
+          when 'visibility'
+            convert_visibility_default_value(value, mode)
+          else
+            # Check MODE_TYPE_MAPPING for type constructor conversion
+            # e.g., "CollectionDataSource()" → "UIKitCollectionDataSource()" in uikit mode
+            convert_type_constructor(value, mode)
+          end
+        end
+
+        # Convert type constructors in default values using MODE_TYPE_MAPPING
+        def convert_type_constructor(value, mode)
+          return value unless mode
+          MODE_TYPE_MAPPING.each do |generic_type, mode_map|
+            mapped_type = mode_map[mode]
+            next unless mapped_type && mapped_type != generic_type
+            # Use word-boundary match so we don't replace within other identifiers
+            # (e.g., don't turn "UIColor.blue" into "UIUIColor.blue" when mapping Color -> UIColor).
+            pattern = /(?<![A-Za-z0-9_])#{Regexp.escape(generic_type)}(?![A-Za-z0-9_])/
+            if value =~ pattern
+              return value.gsub(pattern, mapped_type)
+            end
+          end
+          value
+        end
+
+        # Convert visibility string to platform-specific value
+        # UIKit: .visible / .gone / .invisible (SJUIView.Visibility enum)
+        # SwiftUI: "visible" / "gone" / "invisible" (String for VisibilityWrapper)
+        def convert_visibility_default_value(value, mode = nil)
+          if mode == 'swiftui'
+            # SwiftUI uses String - wrap in quotes
+            "\"#{value}\""
+          else
+            # UIKit uses SJUIView.Visibility enum
+            case JsonUIShared::EnumSpelling.lowered(value, 'common', 'visibility')
+            when 'visible'
+              '.visible'
+            when 'gone'
+              '.gone'
+            when 'invisible'
+              '.invisible'
+            else
+              value.start_with?('.') ? value : ".#{value}"
+            end
+          end
+        end
+
+        # Convert color value (hex or color name) to Swift Color/UIColor
+        def convert_color_default_value(value, mode = nil)
+          # Already formatted as Swift code
+          return value if value.start_with?('.') || value.start_with?('Color') || value.start_with?('UIColor')
+
+          if value.start_with?('#')
+            # Hex color - use UIColor.colorWithHexString
+            if mode == 'uikit'
+              "UIColor.colorWithHexString(\"#{value}\") ?? .clear"
+            else
+              # SwiftUI: convert UIColor to Color
+              "Color(uiColor: UIColor.colorWithHexString(\"#{value}\") ?? .clear)"
+            end
+          else
+            # Color name from colors.json (e.g., "medium_gray", "deep_blue")
+            unless color_exists?(value)
+              report_warning("Color '#{value}' is not defined in colors.json")
+            end
+
+            # ColorManager generates camelCase property names (medium_gray -> mediumGray)
+            property_name = SwiftIdentifier.reference(snake_to_camel(value))
+            if mode == 'uikit'
+              "ColorManager.uikit.#{property_name} ?? .clear"
+            else
+              "ColorManager.swiftui.#{property_name} ?? .clear"
+            end
+          end
+        end
+
+        # Convert snake_case to camelCase
+        def snake_to_camel(snake_case)
+          return snake_case unless snake_case.is_a?(String) && snake_case.include?('_')
+
+          parts = snake_case.split('_')
+          first_part = parts.shift
+          first_part + parts.map(&:capitalize).join
+        end
+
+        # Convert image name to Swift Image/UIImage
+        def convert_image_default_value(value, mode = nil)
+          # Already formatted as Swift code
+          return value if value.start_with?('UIImage') || value.start_with?('Image') || value.start_with?('"')
+
+          if mode == 'uikit'
+            "UIImage(named: \"#{value}\")"
+          else
+            # For SwiftUI, Image type is String (image name)
+            "\"#{value}\""
+          end
+        end
+
+        private
+
+      end
+    end
+  end
+end

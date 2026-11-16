@@ -1,0 +1,18 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PreToolUse",
+ "tool_name": "ToolSearch",
+ "tool_input": {
+  "query": "select:TodoWrite",
+  "max_results": 1
+ },
+ "tool_use_id": "toolu_0126DP8xRAmpePfhcd1m8bY2"
+}

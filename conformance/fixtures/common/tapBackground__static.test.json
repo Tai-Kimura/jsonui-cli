@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/tapBackground__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.tapBackground (static)",
+    "description": "Conformance fixture for 'tapBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tapBackground__static",
+      "description": "Conformance fixture for 'tapBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_tapBackground__static"
+        }
+      ]
+    }
+  ]
+}

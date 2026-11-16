@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/placeholder__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.placeholder (static)",
+    "description": "Conformance fixture for 'placeholder' on TextView (section: TextView, class: visual). Value under test: \"Conformance Hint\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "placeholder__static",
+      "description": "Conformance fixture for 'placeholder' on TextView (section: TextView, class: visual). Value under test: \"Conformance Hint\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_placeholder__static"
+        }
+      ]
+    }
+  ]
+}

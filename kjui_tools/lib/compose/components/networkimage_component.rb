@@ -1,0 +1,282 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/content_scale_helper'
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/resource_resolver'
+require_relative '../helpers/image_accessibility_helper'
+require_relative '../../core/string_literals'
+# The renderingMode -> ColorFilter mapping lives on the Image converter and is
+# called from here. The full suite happened to load it first, so the missing
+# require only showed up running this file alone.
+require_relative 'image_component'
+
+module KjuiTools
+  module Compose
+    module Components
+      class NetworkImageComponent
+        # `headers` — HTTP headers for the image request. A plain String model has
+        # nowhere to put them, so the URL becomes a built ImageRequest instead.
+        #
+        # Coil 3 moved these off the request builder: `addHeader` was Coil 2, and
+        # the current API is `httpHeaders(NetworkHeaders)` from coil3.network.
+        # (The attribute's own description still named the old one; corrected.)
+        def self.image_model(json_data, url, required_imports)
+          headers = json_data['headers']
+          return url unless headers.is_a?(Hash) && headers.any?
+
+          required_imports&.add(:image_request)
+          required_imports&.add(:network_headers)
+          required_imports&.add(:local_context)
+          pairs = headers.map { |key, value| ".add(#{quote(key.to_s)}, #{quote(value.to_s)})" }
+          "ImageRequest.Builder(LocalContext.current).data(#{url})" \
+            ".httpHeaders(NetworkHeaders.Builder()#{pairs.join}.build()).build()"
+        end
+
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # Every NetworkImage is drawn by KotlinJsonUI's KjuiNetworkImage
+          # (2.60.0): with none of the load listener's attributes it is coil's
+          # AsyncImage as before, the state images passed as resource ids
+          # (ticket jui-networkimage-load-listener, A-6).
+          required_imports&.add(:kjui_network_image)
+
+          # NetworkImage uses 'source' or 'url' for image URL. An absent
+          # source must be a NULL model, not "": Coil routes an empty string
+          # through the request/error path (errorImage), while null selects
+          # the fallback (defaultImage) — the canonical no-src state
+          # (networkImage.noSrc; the dynamic component nulls empty URLs too).
+          raw_source = json_data['source'] || json_data['url'] || json_data['src']
+          url = raw_source.nil? ? 'null' : process_data_binding(raw_source)
+          # Support 'hint' (primary), 'placeholder' and the legacy
+          # 'loadingImage' spelling — all name the in-flight image.
+          placeholder = json_data['hint'] || json_data['placeholder'] || json_data['loadingImage']
+          # The alt, or null when decorative (ImageAccessibilityHelper). The
+          # English "Image" is kept only for an image that operates a control
+          # and has no alt, which the build names.
+          content_description = Helpers::ImageAccessibilityHelper.content_description(json_data, 'Image', required_imports)
+
+          code = indent("// Requires KotlinJsonUI >= 2.60.0 (KjuiNetworkImage)", depth) + "\n"
+          code += indent("KjuiNetworkImage(", depth)
+          code += "\n" + indent("model = #{image_model(json_data, url, required_imports)},", depth + 1)
+          code += "\n" + indent("contentDescription = #{content_description},", depth + 1)
+
+          # Content scale (case-insensitive check). Shared vocabulary AND
+          # shared default — see ContentScaleHelper. The two local quirks this
+          # caller used to keep are gone: `attribute_semantics.json#image` puts
+          # the default at `fit` and the positional table at all five modes.
+          if json_data['contentMode']
+            required_imports&.add(:content_scale)
+            scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], section: json_data['type'])
+            code += "\n" + indent("contentScale = #{scale},", depth + 1)
+            alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'], section: json_data['type'])
+            if alignment
+              required_imports&.add(:alignment)
+              code += "\n" + indent("alignment = #{alignment},", depth + 1)
+            end
+          end
+
+          # Placeholder
+          if placeholder
+            code += "\n" + indent("placeholder = #{state_res_id(placeholder, required_imports)},", depth + 1)
+          end
+
+          # renderingMode — declared for swift and kotlin, and only Image read
+          # it. `AsyncImage` takes the same `colorFilter` an `Image` does, so
+          # the mapping from mode + tint to a filter stays in the Image
+          # converter rather than growing a second copy: a private duplicate of
+          # a shared helper is what made Label.fontFamily inert on android
+          # while TextView and TextField worked (KotlinJsonUI f3bdd90).
+          #
+          # The spellings are read HERE and handed over explicitly, rather than
+          # passing the whole node. Two reasons, both found by the coverage
+          # scan refusing to see the first version: a declared attribute that
+          # only a sibling component reads is invisible to a per-component
+          # source scan and reads as unimplemented, and passing the node whole
+          # also carried Image's `iconColor` read — a spelling declared on
+          # neither Image nor common — onto NetworkImage.
+          rendering = {
+            'renderingMode' => json_data['renderingMode'],
+            'tintColor' => json_data['tintColor']
+          }
+          if (filter = ImageComponent.rendering_color_filter(rendering, required_imports))
+            code += "\n" + indent("colorFilter = #{filter},", depth + 1)
+          end
+
+          # Build modifiers
+          # Compose Modifier order (top to bottom = outer to inner):
+          # 1. margins (outer spacing)
+          # 2. size
+          # 3. clip/background
+          # 4. padding (inner spacing)
+          modifiers = []
+
+          # Add testTag and contentDescription for UI testing
+
+          # Margins first (outer spacing, before size)
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+
+          # Size
+          if json_data['size']
+            modifiers << ".size(#{Helpers::BoundValue.dp(json_data['size'])})"
+          else
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          end
+
+          # clip/background (after size, before padding)
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+
+          # Padding (inner spacing)
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          code += Helpers::ModifierBuilder.format(modifiers, depth)
+
+          # Error/fallback per the canonical state chain
+          # (shared/core/attribute_semantics.json#networkImage): with no src
+          # the view shows defaultImage; while loading it shows the first of
+          # hint/placeholder/loadingImage; on error it shows errorImage,
+          # falling back to defaultImage.
+          #
+          # Each Coil slot takes ONLY the images the ruling puts in its own
+          # state. `fallback` is the NO-SRC slot, and it used to end in
+          # `|| errorImage || placeholder`; `error` used to end in
+          # `|| placeholder`. Those tails made a state image appear in a state
+          # it does not belong to — every NetworkImage conformance fixture is
+          # no-src (not one of the 19 declares source/url/src), so the whole
+          # family rendered through `fallback`, and errorImage__static /
+          # loadingImage__static / placeholder__static went visibly active
+          # while hint__static — the only one declaring defaultImage — stayed
+          # inert. Same rule as `semantics.border`: an image that was never
+          # declared for this state does not get summoned into it, and a
+          # no-src view with no defaultImage correctly shows nothing (plan 49
+          # #19, C's verdict, ratified 2026-08-05).
+          default_image = json_data['defaultImage']
+          error_image = json_data['errorImage'] || default_image
+          fallback_image = default_image
+          state_args = []
+          state_args << "error = #{state_res_id(error_image, required_imports)}" if error_image
+          state_args << "fallback = #{state_res_id(fallback_image, required_imports)}" if fallback_image
+          state_args.concat(load_listener_arguments(json_data, required_imports))
+          unless state_args.empty?
+            # With no modifier the last argument line already ends in a
+            # comma (contentDescription, or a placeholder), and a second one
+            # was written after it: `null,,` does not compile.
+            code += (code.end_with?(',') ? "\n" : ",\n") + state_args.map { |arg| indent(arg, depth + 1) }.join(",\n")
+          end
+
+          code += "\n" + indent(")", depth)
+          code
+        end
+
+        private
+
+        # Delay and fade bounds (attribute_definitions.json NetworkImage).
+        LOAD_MILLIS_RANGE = {
+          'loadingDelay' => 0..2000,
+          'transitionDuration' => 0..1000
+        }.freeze
+
+        # A state image as KjuiNetworkImage's resource id: a written name is
+        # its drawable (extension stripped), a bound one is looked up by name
+        # at run time, 0 when no drawable carries it.
+        def self.state_res_id(name, required_imports)
+          if Helpers::BindingExpression.whole_binding?(name)
+            Helpers::ResourceResolver.drawable_res_id(name, required_imports)
+          else
+            Helpers::ResourceResolver.drawable_res_id(drawable_for(name), required_imports)
+          end
+        end
+
+        # The load listener's arguments (ticket jui-networkimage-load-listener),
+        # after the state images, in KjuiNetworkImage's order; [] when the
+        # image writes none of the four.
+        def self.load_listener_arguments(json_data, required_imports)
+          args = []
+          renderer = json_data['loadingRenderer']
+          unless renderer.nil?
+            value = Helpers::BindingExpression.whole_binding?(renderer) ? Helpers::ResourceResolver.bound_string_value(renderer) : quote(renderer.to_s)
+            args << "loadingRenderer = #{value}"
+          end
+          delay = load_millis(json_data, 'loadingDelay', json_data['loadingDelay'])
+          args << "loadingDelayMillis = #{delay}" unless delay.nil?
+          fade = load_millis(json_data, 'transitionDuration', json_data['transitionDuration'])
+          args << "transitionMillis = #{fade}" unless fade.nil?
+          handler = json_data['onLoadStateChange']
+          if handler && Helpers::ModifierBuilder.is_binding?(handler)
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
+            call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'state')
+            # An unused lambda parameter is a warning, an error under
+            # allWarningsAsErrors: a handler that takes no state gets `_`.
+            param = call.match?(/\bstate\b/) ? 'state' : '_'
+            args << "onLoadStateChange = { #{param} -> #{call} }"
+          end
+          args
+        end
+
+        # A written number of milliseconds as an Int literal, held to its
+        # declared range: outside it, WARN and clamp; not a number, WARN and
+        # leave it out (not bindable).
+        def self.load_millis(json_data, key, value)
+          return nil if value.nil?
+
+          range = LOAD_MILLIS_RANGE.fetch(key)
+
+          number = value.is_a?(Numeric) ? value : (Float(value.to_s) rescue nil)
+          if number.nil?
+            KjuiTools::Core::Logger.warn "[kjui] NetworkImage #{json_data['id'].inspect}: '#{key}' is #{value.inspect}, not a number of milliseconds; left out"
+            return nil
+          end
+          millis = number.round
+          unless range.cover?(millis)
+            clamped = millis.clamp(range.min, range.max)
+            KjuiTools::Core::Logger.warn "[kjui] NetworkImage #{json_data['id'].inspect}: '#{key}' #{value} is outside #{range.min}-#{range.max} ms; #{clamped} is used"
+            millis = clamped
+          end
+          millis
+        end
+
+        def self.drawable_for(name)
+          Helpers::ResourceResolver.drawable_name(name.gsub('.png', '').gsub('.jpg', ''))
+        end
+
+        def self.process_data_binding(text)
+          return quote(text) unless text.is_a?(String)
+
+          if (inner = Helpers::BindingExpression.extract_inner(text))
+            # Value context (src): canonical parse; a `??` default becomes a
+            # real Kotlin elvis on nullable properties. With no default, the
+            # plain (possibly null) access is emitted — AsyncImage's null
+            # model is the attribute-default behavior.
+            Helpers::BindingExpression.value_access(inner)
+          else
+            quote(text)
+          end
+        end
+
+        # A Kotlin string literal: a backslash, a quote and a `$` all need
+        # escaping — an unescaped `$` opens a string template — and so does a
+        # control character. The one escaper.
+        def self.quote(text)
+          JsonUIShared::StringLiterals.kotlin(text)
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

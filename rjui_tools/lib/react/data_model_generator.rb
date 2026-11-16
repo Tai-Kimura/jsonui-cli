@@ -1,0 +1,1545 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'fileutils'
+require 'set'
+require_relative '../core/tap_accessibility'
+require_relative '../core/bind_fold'
+require_relative '../core/logger'
+require_relative '../core/binding_validator_core'
+require_relative '../core/data_item_platform'
+require_relative '../core/data_class_conflict'
+require_relative '../core/type_synonyms'
+require_relative '../core/node_keys'
+require_relative '../core/config_manager'
+require_relative '../core/type_converter'
+require_relative '../core/generated_marker'
+require_relative 'style_loader'
+require_relative 'include_expander'
+require_relative 'included_members'
+require_relative '../core/layout_variant'
+require_relative '../core/screen_index'
+require_relative 'helpers/string_manager_helper'
+require_relative '../core/string_manager_core'
+require_relative '../core/string_literals'
+
+module RjuiTools
+  module React
+    class DataModelGenerator
+      include Helpers::StringManagerHelper
+
+      # Where this generator reads layouts and writes Data models; the build's
+      # orphan sweep reads them here rather than spelling them again.
+      attr_reader :source_path, :layouts_dir, :data_dir
+
+      def initialize
+        @config = Core::ConfigManager.load_config
+        @source_path = @config['source_path'] || Dir.pwd
+        @layouts_dir = File.join(@source_path, @config['layouts_directory'] || 'Layouts')
+        @data_dir = File.join(@source_path, @config['data_directory'] || 'src/generated/data')
+        @styles_dir = File.join(@source_path, @config['styles_directory'] || 'Styles')
+        # TypeScript only when the project says so — the components are .jsx
+        # otherwise (build_command: `@config['typescript'] ? '.tsx' : '.jsx'`),
+        # and a config without the key is JavaScript (DEFAULT_CONFIG). Until
+        # jsonui-cli 1.9.0 this read `!= false`: a config without the key got
+        # .ts here beside .jsx components.
+        @use_typescript = @config['typescript'] ? true : false
+      end
+
+      def update_data_models
+        # Ensure data directory exists
+        FileUtils.mkdir_p(@data_dir)
+
+        # Generate CollectionDataSource if not exists
+        generate_collection_data_source
+
+        # Process all JSON files in Layouts directory
+        json_files = Dir.glob(File.join(@layouts_dir, '**/*.json')).reject do |file|
+          # Variant files (home@regular.json) never get their own Data model
+          next true if JsonUIShared::LayoutVariant.variant?(file)
+          # Resources and Styles hold no layout (ScreenIndex.layout_path?)
+          !JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, file)
+        end
+
+        ensure_unique_layout_basenames!(json_files)
+
+        json_files.each do |json_file|
+          # A layout `jui build` refused (an ERROR in its bindings) keeps its
+          # last generated files (StageFailures.block_layout).
+          next if defined?(JsonUI::StageFailures) && JsonUI::StageFailures.layout_blocked?(json_file)
+
+          process_json_file(json_file)
+        end
+      end
+
+      # Data models are written as <Basename>Data.<ext> into a single flat
+      # directory on EVERY platform (ts here, swift/kt on sjui/kjui — Swift
+      # has no directory namespacing at all), so layout basenames must be
+      # unique project-wide. A silent last-write-wins overwrite corrupts the
+      # earlier screen's Data model (rjui-cell-data-model-name-collision-
+      # across-screens), so duplicates abort the build.
+      def ensure_unique_layout_basenames!(json_files)
+        duplicates = json_files.group_by { |f| File.basename(f) }
+                               .select { |_, files| files.size > 1 }
+        return if duplicates.empty?
+
+        details = duplicates.map do |base, files|
+          rels = files.map { |f| f.sub(%r{\A#{Regexp.escape(@layouts_dir)}/?}, '') }.sort
+          "  #{base}: #{rels.join(', ')}"
+        end
+        abort(
+          "ERROR: duplicate layout file name(s) detected.\n" \
+          "Data models are generated as <Name>Data files into a single directory/package " \
+          "on every platform (TypeScript/Swift/Kotlin), so layout basenames must be unique " \
+          "project-wide even across subdirectories — otherwise the last one processed " \
+          "silently overwrites the others. Rename one file of each pair (and its references):\n" +
+          details.join("\n")
+        )
+      end
+
+      private
+
+      # Custom types registered in .jsonui-type-map.json (found walking up
+      # from the project dir) carry per-platform import paths — the guidance
+      # tells users "TypeScript path が必要な型はここに登録", so the
+      # generated Data model must actually resolve them
+      # (rjui-data-model-ignores-type-map-custom-types).
+      def project_type_map
+        return @project_type_map if defined?(@project_type_map)
+
+        @project_type_map = {}
+        dir = @source_path || Dir.pwd
+        while dir && dir != File.dirname(dir)
+          path = File.join(dir, '.jsonui-type-map.json')
+          if File.exist?(path)
+            begin
+              @project_type_map = JSON.parse(File.read(path)).fetch('types', {})
+            rescue JSON::ParserError => e
+              # Through rjui's warning logger ("[WARN] "): every custom type
+              # then falls back to its bare name, which a warning count has
+              # to see (a bare `warn` on stderr until jsonui-cli 1.9.0).
+              RjuiTools::Core::Logger.warn "[DataModelGenerator] failed to parse #{path}: #{e.message}"
+            end
+            break
+          end
+          dir = File.dirname(dir)
+        end
+        @project_type_map
+      end
+
+      # Import lines for custom types referenced by the emitted tsTypes.
+      # Scans identifier tokens against the type map's web entries; the
+      # `web.imports` list wins over the top-level one (which is usually a
+      # Swift module list), matching jui's TypeMapper resolution.
+      def collect_type_map_imports(data_properties)
+        type_map = project_type_map
+        return [] if type_map.empty?
+
+        tokens = data_properties.flat_map do |prop|
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          ts_type.to_s.scan(/\b[A-Z][A-Za-z0-9_]*\b/)
+        end.uniq
+
+        lines = []
+        tokens.each do |token|
+          entry = type_map[token]
+          next unless entry.is_a?(Hash)
+
+          web = entry['web'].is_a?(Hash) ? entry['web'] : nil
+          klass = (web && web['class']) || entry['class'] || token
+          imports = web&.key?('imports') ? web['imports'] : entry['imports']
+          Array(imports).each do |import_path|
+            next unless import_path.is_a?(String) && !import_path.empty?
+
+            lines << "import type { #{klass} } from '#{import_path}';"
+          end
+        end
+        lines.uniq
+      end
+
+      def process_json_file(json_file)
+        # Data defaults resolve strings, and which sections are "own"
+        # depends on the layout being processed — the same announcement
+        # react_generator makes per file (both section spellings:
+        # bare basename + relative-path join). Without it every
+        # data-default lookup runs with no namespace context (the sjui
+        # data face gained the same announcement in 1.6.3).
+        announce_own_namespaces(json_file)
+        # The layout a warning about one of its data properties names.
+        @current_layout = json_file.to_s.sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
+
+        json_content = File.read(json_file, encoding: 'UTF-8')
+        json_data = JSON.parse(json_content)
+
+        # Expand styles before extracting data and actions
+        expanded_data = StyleLoader.load_and_merge(json_data, @styles_dir)
+
+        # Includes expanded inline, as sjui / kjui build a Data type: a
+        # partial's declarations are the including screen's, prefixed by the
+        # include's id (ruling 2026-10-02 — the include draws the screen's
+        # data; until jsonui-cli 1.9.6 this Data type carried none of them).
+        # Only the Data type reads this tree: the include is still drawn as
+        # a component call, which hands the partial these names.
+        expanded_data = IncludeExpander.process_includes(expanded_data, File.dirname(json_file), nil, @layouts_dir)
+
+        # Extract event bindings (handler name => component/attribute info) for Event type conversion
+        event_bindings = extract_event_bindings_for_type(expanded_data)
+
+        # Extract data properties from expanded JSON (pass event_bindings for Event type conversion)
+        @declared_data_properties = {}.compare_by_identity
+        @data_class_conflicts = JsonUIShared::DataClassConflict.new(@current_layout)
+        data_properties = extract_data_properties(expanded_data, [], true, event_bindings)
+        add_undeclared_members(json_file, expanded_data, data_properties)
+
+        # Extract onclick actions from expanded JSON
+        onclick_actions = extract_onclick_actions(expanded_data)
+
+        # Extract TextField bindings for onChange handlers
+        text_field_bindings = extract_text_field_bindings(expanded_data)
+
+        # Extract event handler bindings (Switch, SelectBox, etc.)
+        event_handlers = extract_event_handler_bindings(expanded_data)
+
+        # Extract value bindings (Switch, Slider, SelectBox, etc.)
+        value_bindings = extract_value_bindings(expanded_data)
+
+        # Get the view name from file path
+        base_name = File.basename(json_file, '.json')
+
+        # Update the Data model file
+        update_data_file(base_name, data_properties, onclick_actions, text_field_bindings, event_handlers, value_bindings)
+      end
+
+      # Extract event bindings from JSON to map handler names to component/attribute
+      # Used for converting Event type to platform-specific types
+      # @param json_data [Hash] the JSON data
+      # @param bindings [Hash] accumulated bindings (handler_name => { component:, attribute: })
+      # @return [Hash] event bindings
+      def extract_event_bindings_for_type(json_data, bindings = {})
+        return bindings unless json_data.is_a?(Hash) || json_data.is_a?(Array)
+
+        if json_data.is_a?(Hash)
+          # The type the node is drawn as: a synonym or alias spelling
+          # needs the data its drawn type needs (shared/core/type_synonyms.rb)
+          component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
+
+          # Event attributes to check
+          event_attrs = %w[onClick onclick onValueChange onValueChanged onTextChange onChange onLongPress]
+
+          event_attrs.each do |attr|
+            value = json_data[attr]
+            next unless value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
+
+            handler_name = value[2...-1]
+            bindings[handler_name] = {
+              component: component_type,
+              attribute: attr
+            }
+          end
+
+          # Process children
+          child = json_data['child'] || json_data['children']
+          if child.is_a?(Array)
+            child.each { |c| extract_event_bindings_for_type(c, bindings) }
+          elsif child
+            extract_event_bindings_for_type(child, bindings)
+          end
+        elsif json_data.is_a?(Array)
+          json_data.each { |item| extract_event_bindings_for_type(item, bindings) }
+        end
+
+        bindings
+      end
+
+      def extract_onclick_actions(json_data, actions = Set.new)
+        if json_data.is_a?(Hash)
+          # Check for onclick attribute (selector format, string|array — the
+          # String guard silently dropped the array face's actions)
+          # An empty or blank name is no action (TapAccessibility.handler_values).
+          # A bound selector (`@{tap}`) is no selector (binding_semantics nameRef): no
+          # action, where it declared a property named `@{tap}`, which did not parse.
+          JsonUIShared::TapAccessibility.handler_values(json_data['onclick']).each { |a| actions.add(a) unless a.to_s.start_with?('@{') }
+
+          # Process children
+          child = json_data['child'] || json_data['children']
+          if child
+            if child.is_a?(Array)
+              child.each do |c|
+                extract_onclick_actions(c, actions)
+              end
+            else
+              extract_onclick_actions(child, actions)
+            end
+          end
+        elsif json_data.is_a?(Array)
+          json_data.each do |item|
+            extract_onclick_actions(item, actions)
+          end
+        end
+
+        actions.to_a
+      end
+
+      # Extract TextField text bindings for auto-generating onChange handlers
+      # e.g., TextField with text: "@{email}" -> "email"
+      def extract_text_field_bindings(json_data, bindings = Set.new)
+        if json_data.is_a?(Hash)
+          # Check for TextField type with text binding
+          if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TextField' && json_data['text']
+            text_value = json_data['text']
+            # Check if it's a binding (@{propertyName})
+            if text_value.is_a?(String) && text_value.start_with?('@{') && text_value.end_with?('}')
+              # Skip if custom onChange is already defined
+              unless json_data['onTextChange'] || json_data['onChange']
+                property_name = text_value[2...-1]
+                bindings.add(property_name)
+              end
+            end
+          end
+
+          # Process children
+          child = json_data['child'] || json_data['children']
+          if child
+            if child.is_a?(Array)
+              child.each do |c|
+                extract_text_field_bindings(c, bindings)
+              end
+            else
+              extract_text_field_bindings(child, bindings)
+            end
+          end
+        elsif json_data.is_a?(Array)
+          json_data.each do |item|
+            extract_text_field_bindings(item, bindings)
+          end
+        end
+
+        bindings.to_a
+      end
+
+      # Extract event handler bindings from components
+      # Returns hash with handler name => { type: value_type, binding: property_name }
+      def extract_event_handler_bindings(json_data, handlers = {})
+        if json_data.is_a?(Hash)
+          # The type the node is drawn as: a synonym or alias spelling
+          # needs the data its drawn type needs (shared/core/type_synonyms.rb)
+          component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
+
+          # Switch, Toggle, Slider, Radio, Segment - onValueChange with boolean/number/string
+          if component_type == 'Switch'
+            extract_handler_binding(json_data, 'onValueChange', 'boolean', handlers)
+          elsif component_type == 'Slider'
+            extract_handler_binding(json_data, 'onValueChange', 'number', handlers)
+          elsif %w[Radio Segment].include?(component_type)
+            extract_handler_binding(json_data, 'onValueChange', 'string', handlers)
+          # Collection - the page-change callback, with the new page index
+          # (the definitions' alias spellings too: this reads the raw node)
+          elsif component_type == 'Collection'
+            key = %w[onValueChange onValueChanged onPageChanged].find { |k| json_data[k] }
+            extract_handler_binding(json_data, key, 'number', handlers) if key
+          # SelectBox - onValueChanged or onChange with string
+          elsif component_type == 'SelectBox'
+            handler_key = json_data['onValueChanged'] ? 'onValueChanged' : 'onChange'
+            extract_handler_binding(json_data, handler_key, 'string', handlers)
+          # TextView - onTextChange or onChange with string
+          elsif component_type == 'TextView'
+            handler_key = json_data['onTextChange'] ? 'onTextChange' : 'onChange'
+            extract_handler_binding(json_data, handler_key, 'string', handlers) if json_data[handler_key]
+          # Embed - each event calls the handler it names with the event's
+          # payload (EmbedConverter#build_event_bridge_attr); a value that
+          # names no handler is not called, and is not declared.
+          elsif component_type == 'Embed' && json_data['events'].is_a?(Hash)
+            json_data['events'].each_value do |handler|
+              next if JsonUIShared::BindingValidatorCore.embed_event_handler_problem(handler)
+
+              handlers[handler] ||= { type: 'Record<string, unknown>' }
+            end
+          end
+
+
+          # Process children
+          child = json_data['child'] || json_data['children']
+          if child
+            if child.is_a?(Array)
+              child.each { |c| extract_event_handler_bindings(c, handlers) }
+            else
+              extract_event_handler_bindings(child, handlers)
+            end
+          end
+        elsif json_data.is_a?(Array)
+          json_data.each { |item| extract_event_handler_bindings(item, handlers) }
+        end
+
+        handlers
+      end
+
+      def extract_handler_binding(json_data, handler_key, value_type, handlers)
+        handler = json_data[handler_key]
+        return unless handler.is_a?(String) && handler.start_with?('@{') && handler.end_with?('}')
+
+        handler_name = handler[2...-1]
+        handlers[handler_name] = { type: value_type }
+      end
+
+      # Extract value bindings from components (Switch, Slider, SelectBox, TextField, TextView, etc.)
+      # These are the bound values like @{notificationsEnabled} in Switch isOn attribute
+      # `bind` is folded into the attribute it stands for before it is read
+      # (JsonUIShared::BindFold, as at the converter dispatch), so a layout
+      # that uses only `bind` registers the property it binds.
+      # The report-back handler a value binding derives. SelectBox and the
+      # TextField family derive `on<Prop>Change`; Radio and Segment derive
+      # `set<Prop>`. The convention rides on the binding (recorded by
+      # extract_value_bindings) because the emit loops cannot tell which
+      # component a property came from.
+      def value_binding_handler_name(prop_name, info)
+        return "set#{capitalize_first(prop_name)}" if info.is_a?(Hash) && info[:handler] == :setter
+
+        "on#{capitalize_first(prop_name)}Change"
+      end
+
+      def extract_value_bindings(json_data, bindings = {})
+        if json_data.is_a?(Hash)
+          # The type the node is drawn as: a synonym or alias spelling
+          # needs the data its drawn type needs (shared/core/type_synonyms.rb).
+          # The node the converter draws: `bind` folded into the attribute it
+          # stands for (JsonUIShared::BindFold), as at the dispatch — so a
+          # layout that uses only `bind` registers the property under it
+          component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
+          json_data = JsonUIShared::BindFold.fold(json_data, component_type)
+
+          # Switch, Toggle - isOn/checked/value binding (boolean)
+          if component_type == 'Switch'
+            is_on = json_data['isOn'] || json_data['checked'] || json_data['value']
+            if is_on.is_a?(String) && is_on.start_with?('@{') && is_on.end_with?('}')
+              property_name = is_on[2...-1]
+              bindings[property_name] = { type: 'boolean', defaultValue: false }
+            end
+          end
+
+          # CheckBox, Check - isOn/checked binding (boolean)
+          if component_type == 'CheckBox'
+            is_on = json_data['isOn'] || json_data['checked']
+            if is_on.is_a?(String) && is_on.start_with?('@{') && is_on.end_with?('}')
+              property_name = is_on[2...-1]
+              bindings[property_name] = { type: 'boolean', defaultValue: false }
+            end
+          end
+
+          # Slider - value binding (number)
+          if component_type == 'Slider'
+            value = json_data['value']
+            if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
+              property_name = value[2...-1]
+              bindings[property_name] = { type: 'number', defaultValue: 0 }
+            end
+          end
+
+          # Radio, Segment, SelectBox - value binding (string)
+          #
+          # The CANONICAL selection spellings are read too, not just the
+          # generic `value` / `bind`. Each of these converters reads its own
+          # spelling and emits BOTH a `data.<prop>` read and a report-back
+          # handler call from it — so a layout written the way the SSoT
+          # describes produced references to properties the data model never
+          # declared, i.e. TS2339 in an @generated file the consumer cannot
+          # patch. Same shape as the Radio `checked={…}` TS2367 that blocked
+          # this wave's push; found by plan 49 D hitting the SelectBox case.
+          #
+          # The handler NAME is not uniform: SelectBox derives
+          # `on<Prop>Change` while Radio and Segment derive `set<Prop>`, so
+          # the convention travels with the binding rather than being assumed
+          # by the emit loop.
+          if %w[Radio Segment SelectBox].include?(component_type)
+            value = json_data['value']
+            if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
+              property_name = value[2...-1]
+              bindings[property_name] = { type: 'string', defaultValue: '""' }
+            end
+          end
+
+          # SelectBox — `selectedDate` (date-picker mode) and `selectedValue`.
+          # Both reach the <input>/<select> value as a string.
+          if component_type == 'SelectBox'
+            selected = json_data['selectedDate'] || json_data['selectedItem'] || json_data['selectedValue']
+            if selected.is_a?(String) && selected.start_with?('@{') && selected.end_with?('}')
+              bindings[selected[2...-1]] ||= { type: 'string', defaultValue: '""' }
+            end
+
+            # `selectedIndex` is an INDEX, so it is a number, reported back
+            # through `on<Prop>Change` (SelectBox's convention, unlike
+            # Segment's setter). The converter already emitted that handler
+            # into the JSX; nothing declared it, so every bound-selectedIndex
+            # SelectBox was TS2551 in an @generated file (51-A urgent, plan D
+            # bound-fixture find).
+            sel_index = json_data['selectedIndex']
+            if sel_index.is_a?(String) && sel_index.start_with?('@{') && sel_index.end_with?('}')
+              bindings[sel_index[2...-1]] ||= { type: 'number', defaultValue: 0 }
+            end
+          end
+
+          # Radio — `selectedValue`, reported back through `set<Prop>`.
+          if component_type == 'Radio'
+            selected = json_data['selectedValue']
+            if selected.is_a?(String) && selected.start_with?('@{') && selected.end_with?('}')
+              bindings[selected[2...-1]] ||=
+                { type: 'string', defaultValue: '""', handler: :setter }
+            end
+          end
+
+          # Segment / TabView — `selectedIndex` is an INDEX, so it is a
+          # number, and it is reported back through `set<Prop>` like Radio.
+          # TabView's converter always derived `set<Prop>` from the binding;
+          # only the fixed no-binding pair (selectedTabIndex /
+          # setSelectedTabIndex) was ever declared, so a BOUND selectedIndex
+          # was TS2551 (51-A urgent, plan D bound-fixture find).
+          if %w[Segment TabView].include?(component_type)
+            selected = json_data['selectedIndex'] || json_data['selectedTabIndex']
+            if selected.is_a?(String) && selected.start_with?('@{') && selected.end_with?('}')
+              bindings[selected[2...-1]] ||=
+                { type: 'number', defaultValue: 0, handler: :setter }
+            end
+          end
+
+          # Collection - currentPage binding (number). The paired
+          # on<Prop>Change report-back handler is derived from this binding by
+          # the value-binding handler loop in update_data_file — it is what the
+          # collection's onScroll calls when the user scrolls to another page.
+          if component_type == 'Collection'
+            page = json_data['currentPage']
+            if page.is_a?(String) && page.start_with?('@{') && page.end_with?('}')
+              bindings[page[2...-1]] = { type: 'number', defaultValue: 0 }
+            end
+          end
+
+          # Focus-state binding (cross-platform parity with sjui/kjui
+          # data.<id>IsFocused): every editable field with a literal id gets a
+          # boolean prop the ViewModel can set to drive focus (the generated
+          # component hoists a ref + effect). The paired optional
+          # on<Camel>IsFocusedChange report-back handler is derived from this
+          # binding by the value-binding handler loop in update_data_file.
+          if %w[TextField TextView].include?(component_type)
+            field_id = json_data['id']
+            if field_id.is_a?(String) && !field_id.empty? && !field_id.include?('@{')
+              camel = snake_to_camel_id(field_id)
+              bindings["#{camel}IsFocused"] ||= { type: 'boolean', defaultValue: false }
+            end
+          end
+
+          # TextField - text binding (string)
+          if component_type == 'TextField'
+            text = json_data['text']
+            if text.is_a?(String) && text.start_with?('@{') && text.end_with?('}')
+              property_name = text[2...-1]
+              bindings[property_name] = { type: 'string', defaultValue: '""' }
+            end
+          end
+
+          # TextView - text binding (string)
+          if component_type == 'TextView'
+            text = json_data['text']
+            if text.is_a?(String) && text.start_with?('@{') && text.end_with?('}')
+              property_name = text[2...-1]
+              bindings[property_name] = { type: 'string', defaultValue: '""' }
+            end
+          end
+
+          # Process children
+          child = json_data['child'] || json_data['children']
+          if child
+            if child.is_a?(Array)
+              child.each { |c| extract_value_bindings(c, bindings) }
+            else
+              extract_value_bindings(child, bindings)
+            end
+          end
+        elsif json_data.is_a?(Array)
+          json_data.each { |item| extract_value_bindings(item, bindings) }
+        end
+
+        bindings
+      end
+
+      # The names an INCLUDED layout binds without declaring them, as members
+      # of its Data type (IncludedMembers.undeclared). On sjui / kjui such a
+      # partial reads the including layout's declaration (the include is
+      # expanded into it); here the include call site hands it the value, so
+      # its Data type needs the member, typed as the including layouts
+      # declare it — their types joined when they differ, `any` when none
+      # declares it. Until jsonui-cli 1.9.6 the component read
+      # `data.<name>` off a Data type without it, which tsc rejects (TS2339;
+      # ticket rjui-partial-binding-an-undeclared-name-does-not-compile). A
+      # layout nothing includes is left as it is.
+      def add_undeclared_members(json_file, expanded, properties)
+        sites = include_sites[layout_reference(json_file)]
+        return if sites.nil? || sites.empty?
+
+        (IncludedMembers.undeclared(expanded) - properties.map { |p| p['name'] }).each do |name|
+          types = sites.filter_map { |file, node| including_type(file, node, name) }.uniq
+          properties << { 'name' => name, 'class' => nil, 'tsType' => types.empty? ? 'any' : types.join(' | '),
+                          'defaultValue' => nil }
+        end
+      end
+
+      # The include path that names a layout file: its path from the layouts
+      # root, without `.json`.
+      def layout_reference(json_file)
+        File.expand_path(json_file).sub(%r{\A#{Regexp.escape(File.expand_path(@layouts_dir))}/?}, '').sub(/\.json\z/, '')
+      end
+
+      # { include path => [[including file, include node], ...] } over every
+      # layout, read once.
+      def include_sites
+        @include_sites ||= Dir.glob(File.join(@layouts_dir, '**', '*.json')).each_with_object({}) do |file, sites|
+          next unless JsonUIShared::ScreenIndex.layout_path?(@layouts_dir, file)
+
+          tree = begin
+            JSON.parse(File.read(file, encoding: 'UTF-8'))
+          rescue JSON::ParserError
+            next
+          end
+          walk_includes(tree) { |node| (sites[node['include']] ||= []) << [file, node] }
+        end
+      end
+
+      def walk_includes(node, &block)
+        case node
+        when Hash
+          yield node if node['include'].is_a?(String)
+          node.each_value { |value| walk_includes(value, &block) }
+        when Array
+          node.each { |item| walk_includes(item, &block) }
+        end
+      end
+
+      # The TypeScript type an including layout gives `name` at one include
+      # site: a map's literal, or the declaration the map's binding — or the
+      # name, prefixed by the include's id — reads in its expanded tree.
+      def including_type(file, include_node, name)
+        map = JsonUIShared::IncludeDataMap.of(include_node).transform_keys(&:to_s)
+        if map.key?(name)
+          value = map[name]
+          return literal_ts_type(value) unless value.is_a?(String) && value.match?(/\A@\{[A-Za-z_][A-Za-z0-9_]*\}\z/)
+
+          spelled = value[2...-1]
+        else
+          id = include_node['id']
+          prefix = id.is_a?(String) && !id.empty? && !id.include?('@{') ? IncludeExpander.to_camel_case(id) : nil
+          spelled = prefix ? IncludeExpander.combine_with_prefix(prefix, name) : name
+        end
+        declared_ts_types(file)[spelled]
+      end
+
+      def literal_ts_type(value)
+        case value
+        when String then 'string'
+        when Numeric then 'number'
+        when TrueClass, FalseClass then 'boolean'
+        end
+      end
+
+      # { name => TypeScript type } for what a layout's expanded Data type
+      # declares, read once per layout.
+      def declared_ts_types(file)
+        (@declared_ts_types ||= {})[file] ||= begin
+          tree = StyleLoader.load_and_merge(JSON.parse(File.read(file, encoding: 'UTF-8')), @styles_dir)
+          tree = IncludeExpander.process_includes(tree, File.dirname(file), nil, @layouts_dir)
+          types = {}
+          collect = lambda do |node, is_root|
+            case node
+            when Hash
+              if IncludeExpander.declares_data?(node, is_root)
+                node['data'].each do |item|
+                  next unless item.is_a?(Hash) && item['name'] && !types.key?(item['name'])
+                  next unless JsonUIShared::DataItemPlatform.applies?(item, 'react')
+
+                  normalized = Core::TypeConverter.normalize_data_property(item.reject { |k, _| k == 'defaultValue' }, 'react')
+                  types[item['name']] = normalized['tsType'] || Core::TypeConverter.to_typescript_type(normalized['class'])
+                end
+              end
+              child = node['child'] || node['children']
+              (child.is_a?(Array) ? child : [child].compact).each { |c| collect.call(c, false) }
+            when Array
+              node.each { |c| collect.call(c, false) }
+            end
+          end
+          collect.call(tree, true)
+          types
+        rescue JSON::ParserError
+          {}
+        end
+      end
+
+      # The members a TabView's Data type gets without a declaration: the tab
+      # state and its setter (the converter reads `data.selectedTabIndex ??
+      # seeded` and calls `data.setSelectedTabIndex`), and one `<view>Data`
+      # per tab view. One rule for the Data type and the include call site,
+      # which hands a partial these from the including screen
+      # (IncludedMembers; ticket rjui-include-does-not-hand-a-partials-
+      # tabview-state).
+      def tab_view_members(json_data)
+        return [] unless json_data.is_a?(Hash)
+        return [] unless JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TabView' && json_data['tabs'].is_a?(Array)
+
+        # The tab state and its setter. The converter reads the state back
+        # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
+        # declaring only the setter left the generated JSX referencing a
+        # property the interface does not have.
+        members = [
+          { 'name' => 'selectedTabIndex', 'class' => 'Int', 'tsType' => 'number', 'defaultValue' => nil },
+          { 'name' => 'setSelectedTabIndex', 'class' => 'Function', 'tsType' => '(index: number) => void', 'defaultValue' => nil }
+        ]
+        json_data['tabs'].each do |tab|
+          next unless tab.is_a?(Hash) && tab['view']
+
+          # Convert view name to camelCase + Data (e.g., home -> homeData, item_card -> itemCardData)
+          view_name = tab['view']
+          data_prop_name = view_name.split('_').each_with_index.map { |part, i| i == 0 ? part.downcase : part.capitalize }.join + 'Data'
+          pascal_name = view_name.split('_').map(&:capitalize).join
+          members << { 'name' => data_prop_name, 'class' => 'Object', 'tsType' => "#{pascal_name}Data", 'defaultValue' => nil }
+        end
+        members
+      end
+
+      # A data[] item as this Data type writes it: TypeConverter (mode:
+      # react), then a bound Event's signature.
+      def normalize_declared_data(data_item, event_bindings)
+        normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
+
+        # Check if this property is bound to an event and has Event type
+        prop_name = normalized['name']
+        prop_class = normalized['class'].to_s
+
+        if event_bindings[prop_name] && prop_class.include?('Event')
+          # Get event type from type_mapping.json
+          binding_info = event_bindings[prop_name]
+          event_type = Core::TypeConverter.get_event_type(
+            binding_info[:component],
+            binding_info[:attribute]
+          )
+
+          if event_type
+            # Convert Event to platform-specific type (React event type string)
+            converted_class = prop_class.gsub('Event', event_type)
+            normalized['class'] = converted_class
+            # Recalculate tsType with the converted class
+            normalized['tsType'] = Core::TypeConverter.to_typescript_type(converted_class)
+          end
+        end
+
+        normalized
+      end
+
+      # The properties a data[] item declared, by identity — the TabView
+      # properties the walk makes up are not declarations.
+      def declared_data_properties
+        @declared_data_properties ||= {}.compare_by_identity
+      end
+
+      # A later data[] item naming a declared property with another type, as
+      # TypeScript writes it (`Int` and `Float` are both `number` here). The
+      # dropped item is normalized without its defaultValue: defaults are not
+      # compared, and a default's own warnings belong to the kept one.
+      def report_data_class_conflict(kept, data_item, event_bindings)
+        return unless declared_data_properties.key?(kept)
+
+        dropped = normalize_declared_data(data_item.reject { |key, _| key == 'defaultValue' }, event_bindings)
+        @data_class_conflicts ||= JsonUIShared::DataClassConflict.new(@current_layout)
+        @data_class_conflicts.report(kept['name'], written_ts_type(kept), written_ts_type(dropped))
+      end
+
+      def written_ts_type(prop)
+        prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+      end
+
+      def extract_data_properties(json_data, properties = [], is_root = true, event_bindings = {})
+        if json_data.is_a?(Hash)
+          # Check for data section
+          if json_data['data'] && json_data['data'].is_a?(Array)
+            # Extract from root element OR data-only elements (no type, just data key)
+            if IncludeExpander.declares_data?(json_data, is_root)
+              json_data['data'].each do |data_item|
+                # Another platform's item is not this Data type's (read as
+                # `jui build` reads it; until jsonui-cli 1.9.0 rjui did not
+                # read a data item's platform at all).
+                next unless JsonUIShared::DataItemPlatform.applies?(data_item, 'react')
+
+                if data_item.is_a?(Hash)
+                  # One name, one member: the first declaration in document
+                  # order is kept (the root's data before its data-only
+                  # nodes), as on sjui / kjui, and a later one with another
+                  # type is said out loud (data_class_conflict.rb). Until
+                  # jsonui-cli 1.9.6 both were written — the interface and
+                  # createXxxData() each carried the name twice, which tsc
+                  # rejects whether or not the types agree (TS2300, TS1117;
+                  # ticket rjui-data-name-declared-twice-is-written-twice).
+                  kept = properties.find { |p| p['name'] == data_item['name'] }
+                  if kept
+                    report_data_class_conflict(kept, data_item, event_bindings)
+                    next
+                  end
+
+                  normalized = normalize_declared_data(data_item, event_bindings)
+                  declared_data_properties[normalized] = true
+                  properties << normalized
+                end
+              end
+            end
+          end
+
+          # Check for TabView tabs - generate data properties for each tab's view
+          properties.concat(tab_view_members(json_data))
+
+          # Process children
+          child = json_data['child'] || json_data['children']
+          if child
+            if child.is_a?(Array)
+              child.each do |c|
+                extract_data_properties(c, properties, false, event_bindings)
+              end
+            else
+              extract_data_properties(child, properties, false, event_bindings)
+            end
+          end
+        elsif json_data.is_a?(Array)
+          json_data.each do |item|
+            extract_data_properties(item, properties, false, event_bindings)
+          end
+        end
+
+        properties
+      end
+
+      def update_data_file(base_name, data_properties, onclick_actions = [], text_field_bindings = [], event_handlers = {}, value_bindings = {})
+        # Convert base_name to PascalCase
+        view_name = to_pascal_case(base_name)
+
+        # Determine file extension
+        extension = @use_typescript ? '.ts' : '.js'
+        data_file_path = File.join(@data_dir, "#{view_name}Data#{extension}")
+
+        # Create directory if needed
+        FileUtils.mkdir_p(@data_dir)
+
+        # Generate new content
+        content = generate_data_content(view_name, data_properties, onclick_actions, text_field_bindings, event_handlers, value_bindings)
+
+        # Write the updated content
+        File.write(data_file_path, content)
+        puts "  Updated Data model: #{data_file_path}"
+      end
+
+      def generate_data_content(view_name, data_properties, onclick_actions = [], text_field_bindings = [], event_handlers = {}, value_bindings = {})
+        if @use_typescript
+          generate_typescript_content(view_name, data_properties, onclick_actions, text_field_bindings, event_handlers, value_bindings)
+        else
+          generate_javascript_content(view_name, data_properties, onclick_actions, text_field_bindings, event_handlers, value_bindings)
+        end
+      end
+
+      def generate_typescript_content(view_name, data_properties, onclick_actions = [], text_field_bindings = [], event_handlers = {}, value_bindings = {})
+        # Check if we need to import CollectionDataSource
+        needs_collection_import = data_properties.any? { |p| p['tsType']&.include?('CollectionDataSource') || p['class'] == 'CollectionDataSource' }
+
+        # Check for other Data type imports (e.g., HomeData, SearchData).
+        # tsType may be a bare identifier (FooData), an array (FooData[]),
+        # a union (FooData | undefined), or an array of union etc. — scan
+        # out every FooData token rather than relying on an exact match.
+        data_type_imports = data_properties
+          .map { |p| p['tsType'] }
+          .compact
+          .flat_map { |t| t.scan(/\b([A-Z][a-zA-Z0-9]*Data)\b/).flatten }
+          .uniq
+          .reject { |t| t == "#{view_name}Data" }
+
+        # Get existing property names from data section to avoid duplicates
+        existing_prop_names = data_properties.map { |p| p['name'] }.to_set
+
+        # Pre-scan string defaults so the StringManager import can be
+        # decided before the property loops render them.
+        @resolved_string_defaults = {}
+        data_properties.each do |prop|
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          expr = string_default_expression(prop['defaultValue'], ts_type)
+          @resolved_string_defaults[prop['name']] = expr if expr
+        end
+
+        marker_header = Core::GeneratedMarker.comment_header(
+          source: "#{view_name}Data",
+          generator: "rjui build"
+        )
+        imports = "#{marker_header}\n\n"
+        # Data models live one level below the generated root, next to
+        # CollectionDataSource; StringManager sits at that root.
+        imports += "import { StringManager } from '../StringManager';\n" if @resolved_string_defaults.any?
+        imports += "import { CollectionDataSource } from './CollectionDataSource';\n" if needs_collection_import
+        data_type_imports.each do |data_type|
+          imports += "import type { #{data_type} } from './#{data_type}';\n"
+        end
+        collect_type_map_imports(data_properties).each do |line|
+          imports += "#{line}\n"
+        end
+        imports += test_bridge_imports(test_fields(data_properties), typescript: true)
+        imports += "\n"
+
+        content = <<~TS
+          #{imports}export interface #{view_name}Data {
+        TS
+
+        if data_properties.empty? && onclick_actions.empty? && text_field_bindings.empty? && event_handlers.empty? && value_bindings.empty?
+          content += "  // No data properties defined in JSON\n"
+        else
+          # Add each property with correct type
+          data_properties.each do |prop|
+            name = prop['name']
+            ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+            default_value = prop['defaultValue']
+
+            # Properties are optional by default
+            if default_value.nil?
+              content += "  #{name}?: #{ts_type};\n"
+            else
+              content += "  #{name}: #{ts_type};\n"
+            end
+          end
+
+          # Add value bindings (Switch, Slider, SelectBox values) - skip if already in data_properties
+          value_bindings.each do |prop_name, info|
+            next if existing_prop_names.include?(prop_name)
+
+            ts_type = info[:type]
+            content += "  #{prop_name}: #{ts_type};\n"
+          end
+
+          # Add onclick actions as function properties. A layout MAY declare
+          # the handler in its data section (a selector names a data property
+          # exactly as `@{...}` does); the declaration wins, and emitting the
+          # synthesized twin beside it produced a duplicate identifier — the
+          # same guard every other synthesized group below already has.
+          onclick_actions.each do |action|
+            next if existing_prop_names.include?(action)
+
+            content += "  #{action}?: () => void;\n"
+          end
+
+          # Add onChange handlers for TextField bindings
+          text_field_bindings.each do |binding|
+            handler_name = "on#{capitalize_first(binding)}Change"
+            next if existing_prop_names.include?(handler_name)
+
+            content += "  #{handler_name}?: (value: string) => void;\n"
+          end
+
+          # Add onChange handlers for value bindings (auto-generated handlers)
+          # Skip if already handled by text_field_bindings
+          text_field_set = text_field_bindings.to_set
+          value_bindings.each do |prop_name, info|
+            next if text_field_set.include?(prop_name)
+            handler_name = value_binding_handler_name(prop_name, info)
+            next if existing_prop_names.include?(handler_name)
+            ts_type = info[:type]
+            content += "  #{handler_name}?: (value: #{ts_type}) => void;\n"
+          end
+
+          # Add event handlers (Switch, SelectBox, etc.) - skip if already in data_properties
+          event_handlers.each do |handler_name, info|
+            next if existing_prop_names.include?(handler_name)
+
+            ts_type = info[:type]
+            content += "  #{handler_name}?: (value: #{ts_type}) => void;\n"
+          end
+        end
+
+        content += "}\n\n"
+
+        # Generate default data object
+        content += "export const create#{view_name}Data = (): #{view_name}Data => ({\n"
+
+        data_properties.each do |prop|
+          name = prop['name']
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          default_value = prop['defaultValue']
+
+          formatted_value = (@resolved_string_defaults || {})[name] ||
+                            format_default_value(default_value, ts_type, prop['class'])
+          content += "  #{name}: #{formatted_value},\n"
+        end
+
+        # Add value bindings with default values - skip if already in data_properties
+        value_bindings.each do |prop_name, info|
+          next if existing_prop_names.include?(prop_name)
+
+          default_val = info[:defaultValue]
+          content += "  #{prop_name}: #{default_val},\n"
+        end
+
+        onclick_actions.each do |action|
+          next if existing_prop_names.include?(action)
+
+          content += "  #{action}: undefined,\n"
+        end
+
+        # Add onChange handlers with undefined default
+        text_field_bindings.each do |binding|
+          handler_name = "on#{capitalize_first(binding)}Change"
+          next if existing_prop_names.include?(handler_name)
+
+          content += "  #{handler_name}: undefined,\n"
+        end
+
+        # Add onChange handlers for value bindings with undefined default
+        # Skip if already handled by text_field_bindings
+        value_bindings.each do |prop_name, info|
+          next if text_field_set.include?(prop_name)
+          handler_name = value_binding_handler_name(prop_name, info)
+          next if existing_prop_names.include?(handler_name)
+          content += "  #{handler_name}: undefined,\n"
+        end
+
+        # Add event handlers with undefined default - skip if already in data_properties
+        event_handlers.each do |handler_name, _info|
+          next if existing_prop_names.include?(handler_name)
+
+          content += "  #{handler_name}: undefined,\n"
+        end
+
+        content += "});\n"
+        content += "\n"
+        content += test_bridge_functions(view_name, test_fields(data_properties), typescript: true)
+        content += Core::GeneratedMarker.comment_footer + "\n"
+
+        content
+      end
+
+      # snake_case id -> lowerCamel stem (sync: BaseConverter#snake_to_camel_id)
+      def snake_to_camel_id(str)
+        parts = str.split('_')
+        parts[0] + parts[1..].map(&:capitalize).join
+      end
+
+      def capitalize_first(str)
+        return str if str.nil? || str.empty?
+        str[0].upcase + str[1..]
+      end
+
+      def generate_javascript_content(view_name, data_properties, onclick_actions = [], text_field_bindings = [], event_handlers = {}, value_bindings = {})
+        # Same pre-scan as the TypeScript face (see generate_typescript_content).
+        @resolved_string_defaults = {}
+        data_properties.each do |prop|
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          expr = string_default_expression(prop['defaultValue'], ts_type)
+          @resolved_string_defaults[prop['name']] = expr if expr
+        end
+
+        # Get existing property names from data section to avoid duplicates
+        existing_prop_names = data_properties.map { |p| p['name'] }.to_set
+        marker_header = Core::GeneratedMarker.comment_header(
+          source: "#{view_name}Data",
+          generator: "rjui build"
+        )
+        content = <<~JS
+          #{marker_header}
+
+        JS
+        content += "import { StringManager } from '../StringManager';\n" if @resolved_string_defaults.any?
+        content += test_bridge_imports(test_fields(data_properties), typescript: false)
+        content += "\n" if @resolved_string_defaults.any? || !content.end_with?("\n\n")
+        content += <<~JS
+          /**
+           * @typedef {Object} #{view_name}Data
+        JS
+
+        data_properties.each do |prop|
+          name = prop['name']
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          content += " * @property {#{ts_type}} [#{name}]\n"
+        end
+
+        # Add value bindings (Switch, Slider, SelectBox values) - skip if already in data_properties
+        value_bindings.each do |prop_name, info|
+          next if existing_prop_names.include?(prop_name)
+
+          ts_type = info[:type]
+          content += " * @property {#{ts_type}} #{prop_name}\n"
+        end
+
+        onclick_actions.each do |action|
+          next if existing_prop_names.include?(action)
+
+          content += " * @property {(() => void) | undefined} [#{action}]\n"
+        end
+
+        # Add onChange handlers for TextField bindings
+        text_field_bindings.each do |binding|
+          handler_name = "on#{capitalize_first(binding)}Change"
+          next if existing_prop_names.include?(handler_name)
+
+          content += " * @property {((value: string) => void) | undefined} [#{handler_name}]\n"
+        end
+
+        # Add onChange handlers for value bindings (auto-generated handlers)
+        # Skip if already handled by text_field_bindings
+        text_field_set = text_field_bindings.to_set
+        value_bindings.each do |prop_name, info|
+          next if text_field_set.include?(prop_name)
+
+          handler_name = value_binding_handler_name(prop_name, info)
+          ts_type = info[:type]
+          content += " * @property {((value: #{ts_type}) => void) | undefined} [#{handler_name}]\n"
+        end
+
+        # Add event handlers (Switch, SelectBox, etc.)
+        event_handlers.each do |handler_name, info|
+          ts_type = info[:type]
+          content += " * @property {((value: #{ts_type}) => void) | undefined} [#{handler_name}]\n"
+        end
+
+        content += " */\n\n"
+
+        # Generate default data object
+        content += "export const create#{view_name}Data = () => ({\n"
+
+        data_properties.each do |prop|
+          name = prop['name']
+          ts_type = prop['tsType'] || Core::TypeConverter.to_typescript_type(prop['class'])
+          default_value = prop['defaultValue']
+
+          formatted_value = (@resolved_string_defaults || {})[name] ||
+                            format_default_value(default_value, ts_type, prop['class'])
+          content += "  #{name}: #{formatted_value},\n"
+        end
+
+        # Add value bindings with default values - skip if already in data_properties
+        value_bindings.each do |prop_name, info|
+          next if existing_prop_names.include?(prop_name)
+
+          default_val = info[:defaultValue]
+          content += "  #{prop_name}: #{default_val},\n"
+        end
+
+        onclick_actions.each do |action|
+          next if existing_prop_names.include?(action)
+
+          content += "  #{action}: undefined,\n"
+        end
+
+        # Add onChange handlers with undefined default
+        text_field_bindings.each do |binding|
+          handler_name = "on#{capitalize_first(binding)}Change"
+          next if existing_prop_names.include?(handler_name)
+
+          content += "  #{handler_name}: undefined,\n"
+        end
+
+        # Add onChange handlers for value bindings with undefined default
+        # Skip if already handled by text_field_bindings
+        value_bindings.each do |prop_name, info|
+          next if text_field_set.include?(prop_name)
+
+          handler_name = value_binding_handler_name(prop_name, info)
+          content += "  #{handler_name}: undefined,\n"
+        end
+
+        # Add event handlers with undefined default - skip if already in data_properties
+        event_handlers.each do |handler_name, _info|
+          next if existing_prop_names.include?(handler_name)
+
+          content += "  #{handler_name}: undefined,\n"
+        end
+
+        content += "});\n"
+        content += "\n"
+        content += test_bridge_functions(view_name, test_fields(data_properties), typescript: false)
+        content += Core::GeneratedMarker.comment_footer + "\n"
+
+        content
+      end
+
+      # The Data fields the layout DECLARES (data[] items, not the members
+      # the generator adds), as [name, class as the layout writes it] —
+      # what initialState may set and the state bridge shows (test-runner
+      # spec §10.3; shared/core/layout_data_fields_vectors.json).
+      def test_fields(data_properties)
+        data_properties.select { |p| declared_data_properties.key?(p) }
+                       .map { |p| [p['name'], (p['declaredClass'] || p['class']).to_s] }
+      end
+
+      def test_bridge_imports(fields, typescript:)
+        names = fields.empty? ? 'jsonuiTestSnapshot' : 'checkTestValue, jsonuiTestSnapshot'
+        line = "import { #{names} } from '../jsonuiTestBridge';\n"
+        line += "import type { JsonUITestApplyResult } from '../jsonuiTestBridge';\n" if typescript
+        line
+      end
+
+      # testSnapshot<X>Data and applyTestInitialState<X>Data, the two
+      # functions useJsonUITestBridge is handed (emit_test_bridge_helper).
+      # The value check is the helper's checkTestValue, called once per
+      # declared field with the class as the layout writes it; a key that is
+      # no declared field is `not a data field`.
+      def test_bridge_functions(view_name, fields, typescript:)
+        data_type = "#{view_name}Data"
+        fields_const = "#{view_name}TestFields"
+        ty = ->(text) { typescript ? text : '' }
+        table = fields.map { |name, klass| "  #{name.to_json}: #{klass.to_json}," }.join("\n")
+        out = +''
+        out << "/** The Data fields the layout declares (name -> class as written): what initialState may set. */\n"
+        out << "export const #{fields_const}#{ty.(': Record<string, string>')} = {\n#{table}#{table.empty? ? '' : "\n"}};\n\n"
+        out << "/** The state bridge's data for #{data_type} (development builds only). */\n"
+        out << "export function testSnapshot#{data_type}(data#{ty.(": #{data_type}")})#{ty.(': Record<string, unknown>')} {\n"
+        out << "  return jsonuiTestSnapshot(data#{ty.(' as unknown as Record<string, unknown>')}, #{fields_const});\n"
+        out << "}\n\n"
+        out << "/** Check a test's initialState against the declared Data and return what to set. */\n"
+        result_type = "JsonUITestApplyResult<#{data_type}>"
+        if fields.empty?
+          out << "export function applyTestInitialState#{data_type}(values#{ty.(': Record<string, unknown>')})#{ty.(": #{result_type}")} {\n"
+          out << "  return { vars: {}, applied: [], rejected: Object.keys(values).map((key) => ({ key, reason: 'not a data field' })) };\n"
+          out << "}\n\n"
+          return out
+        end
+        out << "export function applyTestInitialState#{data_type}(values#{ty.(': Record<string, unknown>')})#{ty.(": #{result_type}")} {\n"
+        out << "  const result#{ty.(": #{result_type}")} = { vars: {}, applied: [], rejected: [] };\n"
+        out << "  for (const key of Object.keys(values)) {\n"
+        out << "    const value = values[key];\n"
+        out << "    let reason#{ty.(': string | null')};\n"
+        out << "    switch (key) {\n"
+        fields.each do |name, klass|
+          out << "      case #{name.to_json}:\n"
+          out << "        reason = checkTestValue(value, #{klass.to_json});\n"
+          out << "        if (reason === null) result.vars[#{name.to_json}] = value#{ty.(" as #{data_type}[#{name.to_json}]")};\n"
+          out << "        break;\n"
+        end
+        out << "      default:\n"
+        out << "        reason = 'not a data field';\n"
+        out << "    }\n"
+        out << "    if (reason === null) result.applied.push(key);\n"
+        out << "    else result.rejected.push({ key, reason });\n"
+        out << "  }\n"
+        out << "  return result;\n"
+        out << "}\n\n"
+        out
+      end
+
+      def announce_own_namespaces(json_file)
+        # Own-section spellings via the CANONICAL
+        # StringManagerCore.namespace_candidates — normalized spellings
+        # first (extractor parity: camel split + kebab hyphens folded), raw
+        # spellings trailing. The hand-rolled copy this replaces lacked the
+        # hyphen fold, so a kebab layout's data defaults could not own
+        # their own sections (own-spelling normalization filing,
+        # 2026-08-11).
+        rel = json_file.to_s.sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
+        @config['_current_json_name'] =
+          JsonUIShared::StringManagerCore.namespace_candidates(rel, preferred: :relative).first
+        @config['_current_namespaces'] =
+          JsonUIShared::StringManagerCore.namespace_candidates(rel, preferred: :basename)
+      end
+
+      # Data-default string resolution — the sjui data face's canon (1.6.3):
+      # membership-gated key resolution (fully-qualified or the layout's OWN
+      # sections) then value reverse-lookup, SILENTLY — a defaultValue is not
+      # declared display text (sentinel vocabulary like "today"/"gone" lives
+      # here), so nothing warns and an unresolved literal stays literal.
+      # Returns the bare TS expression (the helper's JSX braces stripped) or
+      # nil.
+      def string_default_expression(default_value, ts_type)
+        return nil unless ['string', 'string | undefined'].include?(ts_type)
+        return nil if default_value.nil?
+
+        # The text the spelling means (StringLiterals.default_text) — the
+        # text format_default_value writes when nothing resolves.
+        inner = JsonUIShared::StringLiterals.default_text(default_value)
+        return nil if inner.empty? || inner.match?(/^@\{.*\}$/)
+
+        resolved = convert_string_key(inner, warnings: false) ||
+                   lookup_string_manager_by_value(inner)
+        return nil unless resolved
+
+        resolved.start_with?('{') && resolved.end_with?('}') ? resolved[1..-2] : resolved
+      end
+
+      def format_default_value(value, ts_type, json_class = nil)
+        return 'undefined' if value.nil?
+
+        if json_class == 'CollectionDataSource' && (value.is_a?(Array) || value.is_a?(Hash))
+          return collection_data_source_literal(value)
+        end
+
+        # The text the layout's spelling means ('' / "…" / '…' / bare,
+        # StringLiterals.default_text), as a TS literal, for a String and a
+        # String? alike. Until 1.9.0 a quoted spelling passed through as
+        # written (`'it''s'` was not TS), a bare one was quoted unescaped,
+        # and a String? default was written as it stood, as code. A value
+        # that is not a String (a dictionary given to a String property)
+        # stays on the paths below, which write code that does not parse: a
+        # quoted Hash#to_s would build and show it. A dictionary written per
+        # platform no longer arrives here — the TypeConverter gives it this
+        # platform's value, or the String default "".
+        if json_class.to_s.chomp('?') == 'String' && value.is_a?(String)
+          return JsonUIShared::StringLiterals.ts(JsonUIShared::StringLiterals.default_text(value))
+        end
+
+        case ts_type
+        when 'string'
+          if value == "''"
+            '""'
+          elsif value.is_a?(String) && (value.start_with?('"') || value.start_with?("'"))
+            # Already quoted (e.g., from TypeConverter for Color/Image types)
+            value
+          else
+            value.is_a?(String) ? "\"#{value}\"" : "\"#{value}\""
+          end
+        when 'number'
+          value.to_s
+        when 'boolean'
+          value.to_s.downcase
+        else
+          # For arrays and objects
+          if value.is_a?(Array) || value.is_a?(Hash)
+            to_js_literal(value)
+          elsif value.is_a?(String) && value =~ /^CollectionDataSource\(/
+            "new #{value}"
+          else
+            value.to_s
+          end
+        end
+      end
+
+      # CollectionDataSource defaultValue → constructor call. Shapes
+      # (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]` (one section
+      # holding these cell dicts) or explicit
+      # `{"sections" => [{"cell" => name?, "cells" => [...], "header" => {...}?,
+      # "footer" => {...}?}]}` — a section's header / footer dict is its
+      # header / footer data (from jsonui-cli 1.9.0; until then dropped, and
+      # the header drew with `{}`). The generated
+      # collection component reads `items?.sections?.[i]?.cells?.data`, which
+      # a plain array literal never satisfies. Cell view names come from the
+      # node's own `sections` declaration — the TS section shape carries none.
+      def collection_data_source_literal(value)
+        sections =
+          if value.is_a?(Array)
+            [{ 'cells' => value }]
+          elsif value['sections'].is_a?(Array)
+            value['sections']
+          else
+            []
+          end
+        return 'new CollectionDataSource()' if sections.empty?
+
+        section_literals = sections.map do |section|
+          next nil unless section.is_a?(Hash)
+          cells = section['cells'].is_a?(Array) ? section['cells'] : []
+          header = section['header'].is_a?(Hash) ? "header: #{to_js_literal(section['header'])}, " : ''
+          footer = section['footer'].is_a?(Hash) ? ", footer: #{to_js_literal(section['footer'])}" : ''
+          "{ #{header}cells: { data: #{to_js_literal(cells)} }#{footer} }"
+        end.compact
+
+        "new CollectionDataSource([#{section_literals.join(', ')}])"
+      end
+
+      # Render a data-section Hash/Array defaultValue as a real (recursive)
+      # JS literal so nested defaults like {name: "Grace"} actually seed the
+      # data map — binding_semantics fallbackPrecedence step 1 merges the
+      # data-section defaultValue BEFORE any binding resolves, so emptying
+      # these to {} / [] made `data.conformanceProfile?.name` render
+      # nothing. Keys stay as-is when they are valid JS identifiers (quoted
+      # otherwise); strings are double-quoted; bools/numbers stay bare.
+      def to_js_literal(value)
+        case value
+        when Hash
+          return '{}' if value.empty?
+          pairs = value.map { |k, v| "#{js_object_key(k)}: #{to_js_literal(v)}" }
+          "{ #{pairs.join(', ')} }"
+        when Array
+          "[#{value.map { |v| to_js_literal(v) }.join(', ')}]"
+        when String
+          value.to_json
+        when nil
+          'null'
+        else
+          value.to_s
+        end
+      end
+
+      def js_object_key(key)
+        k = key.to_s
+        k.match?(/\A[A-Za-z_$][\w$]*\z/) ? k : k.to_json
+      end
+
+      def to_pascal_case(str)
+        # Handle various naming patterns
+        snake = str.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                   .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                   .downcase
+        snake.split(/[_\-]/).map(&:capitalize).join
+      end
+
+      def generate_collection_data_source
+        extension = @use_typescript ? '.ts' : '.js'
+        file_path = File.join(@data_dir, "CollectionDataSource#{extension}")
+
+        # Always regenerate — the body is static boilerplate and the
+        # @generated marker has to stay fresh even if the file pre-existed
+        # from an older tool version.
+        content = if @use_typescript
+                    generate_collection_data_source_typescript
+                  else
+                    generate_collection_data_source_javascript
+                  end
+
+        File.write(file_path, content)
+        puts "  Generated: #{file_path}"
+      end
+
+      def generate_collection_data_source_typescript
+        marker_header = Core::GeneratedMarker.comment_header(
+          source: "CollectionDataSource",
+          generator: "rjui build"
+        )
+        marker_footer = Core::GeneratedMarker.comment_footer
+        <<~TS
+          #{marker_header}
+
+          /**
+           * Section data for collection views.
+           *
+           * Defaults T to `unknown` rather than `Record<string, unknown>` so that
+           * user-defined closed shapes (from .jsonui-type-map.json) can be
+           * supplied directly without TS2345 — `Record<string, unknown>`
+           * would require an index signature the user type doesn't carry.
+           */
+          export interface CollectionDataSection<T = unknown> {
+            /** Header data */
+            header?: Record<string, unknown>;
+            /** Cell data array */
+            cells?: {
+              data: T[];
+            };
+            /** Footer data */
+            footer?: Record<string, unknown>;
+          }
+
+          /**
+           * Collection data source configuration
+           */
+          export class CollectionDataSource<T = unknown> {
+            sections: CollectionDataSection<T>[];
+
+            constructor(sections: CollectionDataSection<T>[] = []) {
+              this.sections = sections;
+            }
+
+            /** Add a new section */
+            addSection(section: CollectionDataSection<T>): void {
+              this.sections.push(section);
+            }
+
+            /** Create and add a new empty section */
+            createSection(): CollectionDataSection<T> {
+              const section: CollectionDataSection<T> = {};
+              this.sections.push(section);
+              return section;
+            }
+
+            /** Set cells for a section */
+            setCells(sectionIndex: number, data: T[]): void {
+              if (this.sections[sectionIndex]) {
+                this.sections[sectionIndex].cells = { data };
+              }
+            }
+
+            /** Get all cell data from all sections */
+            getAllCells(): T[] {
+              return this.sections.flatMap(section => section.cells?.data || []);
+            }
+          }
+
+          /** Create a new CollectionDataSource instance */
+          export const createCollectionDataSource = <T = unknown>(
+            sections: CollectionDataSection<T>[] = []
+          ): CollectionDataSource<T> => {
+            return new CollectionDataSource<T>(sections);
+          };
+
+          #{marker_footer}
+        TS
+      end
+
+      def generate_collection_data_source_javascript
+        marker_header = Core::GeneratedMarker.comment_header(
+          source: "CollectionDataSource",
+          generator: "rjui build"
+        )
+        marker_footer = Core::GeneratedMarker.comment_footer
+        <<~JS
+          #{marker_header}
+
+          /**
+           * @typedef {Object} CollectionDataSection
+           * @property {Object} [header] - Header data
+           * @property {{ data: Array }} [cells] - Cell data array
+           * @property {Object} [footer] - Footer data
+           */
+
+          /**
+           * Collection data source configuration
+           */
+          export class CollectionDataSource {
+            /**
+             * @param {CollectionDataSection[]} sections
+             */
+            constructor(sections = []) {
+              this.sections = sections;
+            }
+
+            /**
+             * Add a new section
+             * @param {CollectionDataSection} section
+             */
+            addSection(section) {
+              this.sections.push(section);
+            }
+
+            /**
+             * Create and add a new empty section
+             * @returns {CollectionDataSection}
+             */
+            createSection() {
+              const section = {};
+              this.sections.push(section);
+              return section;
+            }
+
+            /**
+             * Set cells for a section
+             * @param {number} sectionIndex
+             * @param {Array} data
+             */
+            setCells(sectionIndex, data) {
+              if (this.sections[sectionIndex]) {
+                this.sections[sectionIndex].cells = { data };
+              }
+            }
+
+            /**
+             * Get all cell data from all sections
+             * @returns {Array}
+             */
+            getAllCells() {
+              return this.sections.flatMap(section => section.cells?.data || []);
+            }
+          }
+
+          /**
+           * Create a new CollectionDataSource instance
+           * @param {CollectionDataSection[]} sections
+           * @returns {CollectionDataSource}
+           */
+          export const createCollectionDataSource = (sections = []) => {
+            return new CollectionDataSource(sections);
+          };
+
+          #{marker_footer}
+        JS
+      end
+    end
+  end
+end

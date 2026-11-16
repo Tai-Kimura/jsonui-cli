@@ -1,0 +1,84 @@
+{
+  "type": "screen_spec",
+  "version": "1.0",
+  "metadata": {
+    "name": "StubBox",
+    "displayName": "StubBox",
+    "description": "StubBox: the shape of a consumer screen whose stubs did not compile",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "layoutFile": "stub_box"
+  },
+  "structure": {
+    "layout": {
+      "root": "root",
+      "children": []
+    },
+    "components": [
+      {
+        "id": "root",
+        "type": "View",
+        "description": "root"
+      }
+    ]
+  },
+  "stateManagement": {
+    "uiVariables": []
+  },
+  "dataFlow": {
+    "viewModel": {
+      "vars": [
+        {
+          "name": "batchId",
+          "type": "String",
+          "readOnly": true
+        },
+        {
+          "name": "isHistory",
+          "type": "Bool"
+        },
+        {
+          "name": "onDismiss",
+          "type": "() -> Void",
+          "optional": true
+        }
+      ],
+      "methods": [
+        {
+          "name": "onAppear"
+        },
+        {
+          "name": "onToggle",
+          "params": [
+            {
+              "name": "id",
+              "type": "Int"
+            }
+          ]
+        }
+      ]
+    },
+    "useCases": [],
+    "repositories": [
+      {
+        "name": "StubRepository",
+        "methods": [
+          {
+            "name": "fetchItem",
+            "params": [
+              {
+                "name": "id",
+                "type": "String"
+              }
+            ],
+            "returnType": "StubItem",
+            "isAsync": true
+          }
+        ]
+      }
+    ]
+  }
+}

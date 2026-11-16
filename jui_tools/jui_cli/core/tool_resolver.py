@@ -1,0 +1,134 @@
+"""Shared helpers for invoking project-local platform tools.
+
+Each JsonUI project may install `sjui_tools/bin/sjui`, `kjui_tools/bin/kjui`,
+or `rjui_tools/bin/rjui` *locally* rather than on $PATH. Both the
+per-platform build step and the auto-converter step need the same lookup
+logic, so it lives here.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+from pathlib import Path
+from typing import Mapping
+
+
+# Max number of parent directories to walk when searching for a local
+# `{tool}_tools/bin/{tool}` installation. Ten is deep enough to cover
+# nested monorepos without risking an unbounded walk.
+_MAX_PARENT_HOPS = 10
+
+
+def _rbenv_version_installed(version: str) -> bool:
+    """Return True if *version* is installed under rbenv.
+
+    rbenv keeps each Ruby at ``$RBENV_ROOT/versions/<version>`` (default
+    ``~/.rbenv/versions/<version>``) — the same directory rbenv itself
+    consults — so a cheap ``is_dir()`` check avoids shelling out to rbenv
+    (which may not even be on $PATH at this point).
+    """
+    return (_rbenv_root() / "versions" / version).is_dir()
+
+
+def _rbenv_root() -> Path:
+    return Path(os.environ.get("RBENV_ROOT") or os.path.join(os.path.expanduser("~"), ".rbenv"))
+
+
+def _rbenv_present() -> bool:
+    """Whether this machine has rbenv's Rubies at all (its versions/ folder): with none there, no shim reads a pin."""
+    return (_rbenv_root() / "versions").is_dir()
+
+
+def resolve_tool(tool_name: str, cwd: Path) -> str:
+    """Return an absolute path to a project-local tool, or the bare name.
+
+    Walks up from ``cwd`` looking for ``{tool_name}_tools/bin/{tool_name}``
+    and also ``jsonui-cli/{tool_name}_tools/bin/{tool_name}`` (used when
+    the jsonui-cli checkout is a sibling of the project). Falls back to
+    ``tool_name`` so the caller's ``subprocess.run`` can still do a
+    $PATH lookup when no local install is present.
+    """
+    search = cwd
+    for _ in range(_MAX_PARENT_HOPS):
+        local = search / f"{tool_name}_tools" / "bin" / tool_name
+        if local.exists():
+            return str(local)
+        cli_local = search / "jsonui-cli" / f"{tool_name}_tools" / "bin" / tool_name
+        if cli_local.exists():
+            return str(cli_local)
+        parent = search.parent
+        if parent == search:
+            break
+        search = parent
+    return tool_name
+
+
+def build_tool_env(
+    resolved: str,
+    tool_name: str,
+    *,
+    extra: Mapping[str, str] | None = None,
+) -> dict[str, str] | None:
+    """Build a subprocess env that includes ``RBENV_VERSION`` when relevant.
+
+    Returns ``None`` when no env tweaking is needed and there are no
+    ``extra`` vars — callers pass ``env=None`` to ``subprocess.run`` so the
+    child inherits the parent env unmodified.
+
+    When the tool directory has a ``.ruby-version`` file, ``RBENV_VERSION``
+    is exported so the local Ruby toolchain is used — but ONLY when that
+    exact version is actually installed under rbenv. ``extra`` is merged on
+    top (e.g. ``JUI_SKIP_EXISTING=1`` for non-interactive invocations).
+
+    The tool directory is the resolved project-local install's, or — for a
+    bare name — the one of the ``{tool}`` that PATH will run (the home
+    install, ~/.jsonui-cli/{tool}_tools/bin on the faces). Until jsonui-cli
+    1.9.0 a bare name got no pin at all, so `jui init`, which runs the tools
+    before it copies them into the project, ran them on whatever ruby the new
+    platform root resolved to — the system Ruby 2.6 on a Mac whose rbenv
+    global was never set, which the tools refuse from 1.9.0 (floor 3.2).
+    """
+    env_overrides: dict[str, str] = {}
+
+    located = resolved if resolved != tool_name else shutil.which(tool_name)
+    if located:
+        tool_dir = Path(located).resolve().parent.parent  # bin/{tool} -> {tool}_tools/
+        ruby_version_file = tool_dir / ".ruby-version"
+        if ruby_version_file.exists():
+            pinned = ruby_version_file.read_text().strip()
+            # Only force RBENV_VERSION when that exact Ruby is installed.
+            # The bundled `.ruby-version` pins the maintainer's dev Ruby
+            # (e.g. 3.2.11); forcing it unconditionally hard-fails `jui build`
+            # for every consumer who lacks that exact patch
+            # ("rbenv: version `3.2.11' is not installed (set by
+            # RBENV_VERSION environment variable)"). When it's absent we omit
+            # the override and let rbenv resolve the consumer's own
+            # .ruby-version / global Ruby, which runs the tool fine.
+            if pinned and _rbenv_version_installed(pinned):
+                env_overrides["RBENV_VERSION"] = pinned
+
+    if extra:
+        env_overrides.update(extra)
+
+    if not env_overrides:
+        return None
+    return {**os.environ, **env_overrides}
+
+
+def tool_command(
+    cmd: list[str],
+    cwd: Path,
+    *,
+    extra: Mapping[str, str] | None = None,
+) -> tuple[list[str], dict[str, str] | None]:
+    """The argv and env to start platform tool ``cmd[0]`` from ``cwd`` with.
+
+    EVERY place jui starts sjui / kjui / rjui goes through here, so every
+    start gets the same tool (resolve_tool) on the same ruby (build_tool_env).
+    `jui init` did not until jsonui-cli 1.9.0 — it ran the bare name with the
+    parent's env — and jui_tools' test_every_tool_launch_goes_through_
+    tool_command counts the launch sites so a new one cannot skip it.
+    """
+    tool_name = cmd[0]
+    resolved = resolve_tool(tool_name, cwd)
+    return [resolved] + list(cmd[1:]), build_tool_env(resolved, tool_name, extra=extra)

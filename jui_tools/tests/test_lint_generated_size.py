@@ -1,0 +1,294 @@
+"""Size gate + waiver ratchet in `jui lint-generated`.
+
+The per-function bound is iOS-calibrated (SwiftUI type-metadata depth on a
+1MB device stack); Android's real constraint (the dex method limit) is a
+hard compile error, so waivers there are informational. The failure signal
+is the SwiftUI waiver set GROWING — the ratchet; Compose's new waivers are
+listed and counted (with the longest), never gating
+(lint-generated-size-ratchet-held-a-consumers-android-red, 2026-10-21).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+
+from jui_cli.commands.lint_generated_cmd import (
+    BASELINE_FILENAME,
+    EXIT_HEALTH,
+    EXIT_OK,
+    EXIT_RATCHET,
+    _exit_code,
+    _oversized_functions,
+    _ratchet_size_baseline,
+    _resolve_size_bounds,
+    cmd_lint_generated,
+)
+
+
+def _write_view(tmp_path: Path, name: str, depth: int, lines: int) -> Path:
+    body = []
+    body.append("@ViewBuilder private func big() -> some View {")
+    for i in range(depth):
+        body.append("    " * (i + 1) + "VStack {")
+    body.append("    " * (depth + 1) + 'Text("x")')
+    filler = lines - len(body) - depth - 1
+    for _ in range(max(filler, 0)):
+        body.append("    " * (depth + 1) + '.padding(1)')
+    for i in range(depth, 0, -1):
+        body.append("    " * i + "}")
+    body.append("}")
+    path = tmp_path / name
+    path.write_text("\n".join(body), encoding="utf-8")
+    return path
+
+
+class TestOversizedFunctions:
+    def test_deep_function_is_reported_with_body_depth(self, tmp_path):
+        path = _write_view(tmp_path, "AGeneratedView.swift", depth=8, lines=20)
+        found = list(_oversized_functions(path, 5, 250))
+        assert found and found[0][0] == "big"
+        assert found[0][1] == 8  # body depth excludes the decl's own brace
+
+    def test_bounded_function_is_silent(self, tmp_path):
+        path = _write_view(tmp_path, "AGeneratedView.swift", depth=4, lines=30)
+        assert list(_oversized_functions(path, 5, 250)) == []
+
+    def test_braces_in_strings_do_not_count(self, tmp_path):
+        path = tmp_path / "SGeneratedView.swift"
+        path.write_text(
+            '@ViewBuilder private func s() -> some View {\n'
+            '    Text("{ { { deep-looking } } }")\n'
+            '}\n',
+            encoding="utf-8",
+        )
+        assert list(_oversized_functions(path, 5, 250)) == []
+
+    def test_kotlin_receiver_extension_names_resolve(self, tmp_path):
+        path = tmp_path / "KGeneratedView.kt"
+        inner = "\n".join("    " * (i + 1) + "Column {" for i in range(7))
+        close = "\n".join("    " * i + "}" for i in range(7, 0, -1))
+        path.write_text(
+            "@Composable\n"
+            "private fun androidx.compose.foundation.layout.RowScope.Section3(\n"
+            "    data: D,\n    viewModel: V\n) {\n"
+            f"{inner}\n        Text(\"x\")\n{close}\n}}\n",
+            encoding="utf-8",
+        )
+        found = list(_oversized_functions(path, 5, 250))
+        assert found and found[0][0] == "Section3"
+
+
+class TestRatchet:
+    def _oversized(self, tmp_path):
+        return [(tmp_path / "A.kt", "Section1", 7, 100),
+                (tmp_path / "B.kt", "Section2", 2, 400)]
+
+    def test_no_baseline_means_informational_only(self, tmp_path):
+        assert _ratchet_size_baseline(tmp_path, self._oversized(tmp_path), update=False) == []
+
+    def test_update_writes_and_subsequent_run_is_clean(self, tmp_path):
+        oversized = self._oversized(tmp_path)
+        assert _ratchet_size_baseline(tmp_path, oversized, update=True) == []
+        assert (tmp_path / BASELINE_FILENAME).is_file()
+        assert _ratchet_size_baseline(tmp_path, oversized, update=False) == []
+
+    def test_new_entry_is_flagged(self, tmp_path):
+        oversized = self._oversized(tmp_path)
+        _ratchet_size_baseline(tmp_path, oversized, update=True)
+        grown = oversized + [(tmp_path / "C.kt", "Section9", 8, 300)]
+        new = _ratchet_size_baseline(tmp_path, grown, update=False)
+        assert new == ["C.kt Section9"]
+
+    def test_shrinking_is_free(self, tmp_path):
+        oversized = self._oversized(tmp_path)
+        _ratchet_size_baseline(tmp_path, oversized, update=True)
+        assert _ratchet_size_baseline(tmp_path, oversized[:1], update=False) == []
+
+    def test_wobbling_numbers_do_not_trip_the_ratchet(self, tmp_path):
+        oversized = self._oversized(tmp_path)
+        _ratchet_size_baseline(tmp_path, oversized, update=True)
+        wobbled = [(p, n, d + 1, l + 30) for p, n, d, l in oversized]
+        assert _ratchet_size_baseline(tmp_path, wobbled, update=False) == []
+
+
+class TestExitCodes:
+    """A permanently-red gate is ignored like a permanent warning, so the two
+    signals get distinct codes and either can gate alone
+    (jui-lint-generated-exit-code-cannot-gate-the-size-ratchet).
+    """
+
+    def test_clean_is_zero(self):
+        assert _exit_code("any", {"size-ratchet": False, "health": False}) == EXIT_OK
+
+    def test_ratchet_and_health_have_distinct_codes(self):
+        assert _exit_code(
+            "any", {"size-ratchet": True, "health": False}) == EXIT_RATCHET
+        assert _exit_code(
+            "any", {"size-ratchet": False, "health": True}) == EXIT_HEALTH
+
+    def test_health_alone_does_not_mask_the_ratchet(self):
+        assert _exit_code(
+            "size-ratchet", {"size-ratchet": False, "health": True}) == EXIT_OK
+        assert _exit_code(
+            "size-ratchet", {"size-ratchet": True, "health": True}) == EXIT_RATCHET
+
+    def test_ratchet_alone_does_not_mask_health(self):
+        assert _exit_code(
+            "health", {"size-ratchet": True, "health": False}) == EXIT_OK
+        assert _exit_code(
+            "health", {"size-ratchet": True, "health": True}) == EXIT_HEALTH
+
+    def test_non_gating_finding_is_announced(self, capsys):
+        _exit_code("size-ratchet", {"size-ratchet": False, "health": True})
+        assert "Not gating on" in capsys.readouterr().out
+
+
+class TestSizeBoundResolution:
+    """Flag > jui.config.json > the generators' own bounds, and never looser
+    than the generators (jui-lint-generated-size-bounds-not-configurable)."""
+
+    class _Cfg:
+        def __init__(self, lint):
+            self._lint = lint
+
+        def load(self):
+            return {"lint": self._lint} if self._lint is not None else {}
+
+    def _args(self, depth=None, lines=None):
+        return argparse.Namespace(max_depth=depth, max_lines=lines)
+
+    def test_builtin_defaults_when_nothing_is_declared(self):
+        assert _resolve_size_bounds(self._args(), self._Cfg(None)) == (5, 250)
+
+    def test_config_supplies_stricter_defaults(self):
+        cfg = self._Cfg({"max_depth": 4, "max_lines": 200})
+        assert _resolve_size_bounds(self._args(), cfg) == (4, 200)
+
+    def test_flag_beats_config(self):
+        cfg = self._Cfg({"max_depth": 4, "max_lines": 200})
+        assert _resolve_size_bounds(self._args(depth=3, lines=150), cfg) == (3, 150)
+
+    def test_flag_equal_to_the_builtin_still_beats_config(self):
+        """The reason the flags default to None rather than to the number."""
+        cfg = self._Cfg({"max_depth": 4, "max_lines": 200})
+        assert _resolve_size_bounds(self._args(depth=5, lines=250), cfg) == (5, 250)
+
+    def test_looser_config_is_refused_and_warned(self, capsys):
+        cfg = self._Cfg({"max_depth": 9, "max_lines": 900})
+        assert _resolve_size_bounds(self._args(), cfg) == (5, 250)
+        out = capsys.readouterr().out
+        assert "looser" in out and BASELINE_FILENAME in out
+
+    def test_junk_config_values_fall_back(self):
+        cfg = self._Cfg({"max_depth": "four", "max_lines": True})
+        assert _resolve_size_bounds(self._args(), cfg) == (5, 250)
+
+
+class TestCommandExitCodes:
+    """End to end: a real project tree, straight through the command."""
+
+    def _project(self, tmp_path: Path) -> Path:
+        (tmp_path / "jui.config.json").write_text(json.dumps({
+            "platforms": {"web": {"root": "web"}},
+        }), encoding="utf-8")
+        gen = tmp_path / "web" / "src" / "generated" / "hooks"
+        gen.mkdir(parents=True)
+        (gen / "useThing.ts").write_text(
+            "// @generated AUTO-GENERATED FILE — DO NOT EDIT\n"
+            "export const thing = 1;\n"
+            "// ══ END AUTO-GENERATED — DO NOT APPEND BELOW THIS LINE ══\n",
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    def _run(self, root: Path, **overrides) -> int:
+        args = argparse.Namespace(
+            fix=False, verbose=False, max_depth=5, max_lines=250,
+            update_size_baseline=False, fail_on="any",
+        )
+        for key, value in overrides.items():
+            setattr(args, key, value)
+        cwd = os.getcwd()
+        os.chdir(root)
+        try:
+            return cmd_lint_generated(args)
+        finally:
+            os.chdir(cwd)
+
+    def test_healthy_project_exits_zero(self, tmp_path):
+        assert self._run(self._project(tmp_path)) == EXIT_OK
+
+    def test_missing_sentinel_exits_health(self, tmp_path):
+        root = self._project(tmp_path)
+        hook = root / "web" / "src" / "generated" / "hooks" / "useThing.ts"
+        hook.write_text("export const thing = 1;\n", encoding="utf-8")
+        assert self._run(root) == EXIT_HEALTH
+
+    def test_missing_sentinel_does_not_gate_a_ratchet_run(self, tmp_path):
+        """The reported failure: one stale sentinel made every run exit
+        non-zero, so the ratchet's own verdict was invisible."""
+        root = self._project(tmp_path)
+        hook = root / "web" / "src" / "generated" / "hooks" / "useThing.ts"
+        hook.write_text("export const thing = 1;\n", encoding="utf-8")
+        assert self._run(root, fail_on="size-ratchet") == EXIT_OK
+
+
+def _kotlin_section(path: Path, name: str, depth: int) -> None:
+    inner = "\n".join("    " * (i + 1) + "Column {" for i in range(depth))
+    close = "\n".join("    " * i + "}" for i in range(depth, 0, -1))
+    path.write_text(
+        f"@Composable\nprivate fun {name}(\n    data: D,\n    viewModel: V\n) {{\n"
+        f"{inner}\n        Text(\"x\")\n{close}\n}}\n",
+        encoding="utf-8",
+    )
+
+
+class TestOnlySwiftUIGates:
+    """A consumer's Android: 31 Compose sections not in the baseline held
+    the gate red (rc=2) although the bound is SwiftUI's and a passing build
+    proves Android's method limit. Compose is reported, SwiftUI gates."""
+
+    def _project(self, tmp_path: Path) -> Path:
+        TestCommandExitCodes()._project(tmp_path)          # one healthy generated file
+        (tmp_path / "jui.config.json").write_text(json.dumps({
+            "platforms": {"ios": {"root": "ios"}, "android": {"root": "android"}, "web": {"root": "web"}},
+        }), encoding="utf-8")
+        (tmp_path / "ios").mkdir()
+        (tmp_path / "android").mkdir()
+        (tmp_path / BASELINE_FILENAME).write_text("# baseline\n", encoding="utf-8")
+        return tmp_path
+
+    def _run(self, root: Path, capsys) -> tuple[int, str]:
+        code = TestCommandExitCodes()._run(root)
+        return code, capsys.readouterr().out
+
+    def test_a_new_compose_waiver_is_reported_not_gating(self, tmp_path, capsys):
+        root = self._project(tmp_path)
+        _kotlin_section(root / "android" / "FormGeneratedView.kt", "Section0_1", 8)
+        code, out = self._run(root, capsys)
+        assert code == EXIT_OK
+        assert "Compose (.kt, reported, not gating): 1, the longest" in out
+        assert "SwiftUI (.swift, the ratchet): 0" in out
+        assert "FormGeneratedView.kt Section0_1" in out.split("reported, not gating —")[1]
+        assert "NEW oversized functions" not in out
+
+    def test_a_new_swiftui_waiver_still_gates(self, tmp_path, capsys):
+        root = self._project(tmp_path)
+        _write_view(root / "ios", "AGeneratedView.swift", depth=8, lines=20)
+        _kotlin_section(root / "android" / "FormGeneratedView.kt", "Section0_1", 8)
+        code, out = self._run(root, capsys)
+        assert code == EXIT_RATCHET
+        new = out.split("NEW oversized functions")[1].split("Not in .jui-size-waivers")[0]
+        assert "AGeneratedView.swift big" in new and ".kt" not in new
+
+    def test_the_longest_compose_function_is_shown(self, tmp_path, capsys):
+        root = self._project(tmp_path)
+        path = root / "android" / "LongGeneratedView.kt"
+        body = "\n".join("    Text(\"x\")" for _ in range(300))
+        path.write_text(f"@Composable\nprivate fun Section1(\n    data: D\n) {{\n{body}\n}}\n", encoding="utf-8")
+        _kotlin_section(root / "android" / "FormGeneratedView.kt", "Section0_1", 8)
+        code, out = self._run(root, capsys)
+        lines = [l for n, d, l in _oversized_functions(path, 5, 250)]
+        assert code == EXIT_OK and f"Compose (.kt, reported, not gating): 2, the longest {lines[0]} lines" in out

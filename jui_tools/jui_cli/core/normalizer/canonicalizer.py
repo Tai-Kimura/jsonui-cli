@@ -1,0 +1,376 @@
+"""L1 canonicalization: alias → canonical attribute rewrite + ``$jui`` marker.
+
+Specification (renderer SSoT plan, phase 05 §2.2):
+
+1. Aliases are rewritten to their canonical spelling using the ``aliases``
+   fields of attribute_definitions.json (component-specific definitions
+   override ``common``).
+2. When a node carries both an alias and its canonical name, the canonical
+   value wins and a warning is emitted (never a silent drop).
+3. ``deprecated`` attributes produce a warning but are NOT rewritten
+   (there is no rewrite target in the definitions).
+4. The top-level tree gains ``"$jui": {"normalized": "L1", "schemaVersion": 1}``.
+5. ``style`` / ``include`` / ``platform`` are left untouched at L1.
+6. Unknown attributes pass through unchanged (validation is the attribute
+   validator's job; the normalizer only transforms).
+
+The transform is idempotent: ``canonicalize(canonicalize(x)) == canonicalize(x)``.
+"""
+from __future__ import annotations
+
+import copy
+import json
+from typing import Any
+
+from .alias_table import AliasTable
+
+MARKER_KEY = "$jui"
+SCHEMA_VERSION = 1
+
+# Keys that hold nested component nodes. L1 only rewrites attributes on
+# component nodes reached through the layout tree — arbitrary dict-valued
+# attributes (e.g. ``data`` entries, ``partialAttributes``) are NOT
+# rewritten, since their keys are not component attributes.
+_CHILD_KEYS = ("child", "children")
+_SECTION_NODE_KEYS = ("header", "footer", "cell")
+# Components whose legacy `size` (a length) is retired: folded into width /
+# height like Indicator's. Ruled 2026-10-24 ("size を廃止する"): kjui read it
+# behind the required width / height, and no other face read it.
+_RETIRED_SIZE = ("Image", "CircleView")
+
+
+class Canonicalizer:
+    """Applies the L1 alias→canonical rewrite across a layout tree."""
+
+    def __init__(self, alias_table: AliasTable | None = None):
+        self._table = alias_table or AliasTable.from_file()
+
+    def canonicalize(
+        self,
+        tree: Any,
+        *,
+        source: str = "",
+        add_marker: bool = True,
+    ) -> tuple[Any, list[str]]:
+        """Return ``(canonical_tree, warnings)``. *tree* is not mutated.
+
+        *source* is an optional file label used to prefix warnings.
+        ``add_marker=False`` skips the ``$jui`` marker (used by the L2
+        pipeline, which stamps its own marker at the end).
+        """
+        warnings: list[str] = []
+        if not isinstance(tree, dict):
+            return tree, warnings
+
+        result = self._canonicalize_node(
+            copy.deepcopy(tree), warnings, source=source, path="root"
+        )
+        if add_marker:
+            result = apply_marker(result, level="L1")
+        return result, warnings
+
+    # ------------------------------------------------------------------
+
+    def _canonicalize_node(
+        self, node: Any, warnings: list[str], *, source: str, path: str
+    ) -> Any:
+        if not isinstance(node, dict):
+            return node
+
+        node_type = node.get("type") if isinstance(node.get("type"), str) else None
+        # Component alias (EditText/Input/Check/Toggle): rewrite the type to
+        # the canonical spelling. Cross-platform synonyms (Text, Scroll, …)
+        # are deliberately NOT rewritten — they are display spellings every
+        # platform dispatch accepts; only `_alias_of` sections are collapsed
+        # pointers whose spelling the Compose codegen does not dispatch.
+        canonical_type = self._table.component_alias_target(node_type)
+        if canonical_type is not None:
+            warnings.append(
+                self._fmt(
+                    source,
+                    self._node_label(node, node_type, path),
+                    f"type '{node_type}' is a component alias of "
+                    f"'{canonical_type}' — rewrote the type",
+                )
+            )
+            node["type"] = canonical_type
+            node_type = canonical_type
+        alias_map = self._table.aliases_for(node_type)
+        deprecated_map = self._table.deprecated_for(node_type)
+        value_alias_map = self._table.value_aliases_for(node_type)
+        item_alias_map = self._table.item_aliases_for(node_type)
+        label = self._node_label(node, node_type, path)
+
+        rebuilt: dict[str, Any] = {}
+        for key, value in node.items():
+            if key == MARKER_KEY:
+                continue  # re-stamped by apply_marker (root only)
+            canonical = alias_map.get(key)
+            if canonical is None:
+                target = key
+            elif canonical in node:
+                # Alias + canonical both present → canonical wins, warn.
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{key}' is an alias of '{canonical}' and both are "
+                        f"set — keeping '{canonical}', dropping '{key}'",
+                    )
+                )
+                continue
+            elif canonical in rebuilt:
+                # Two aliases of the same canonical → first one won.
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{key}' is an alias of '{canonical}' which was "
+                        f"already set via another alias — dropping '{key}'",
+                    )
+                )
+                continue
+            else:
+                target = canonical
+            rebuilt[target] = value
+
+            # Declared value aliases (`valueAliases` on the definition):
+            # rewrite the alias spelling to the canonical value. Exact-match
+            # only — case leniency stays with the runtime enum readers.
+            value_aliases = value_alias_map.get(target)
+            if (
+                value_aliases
+                and isinstance(value, str)
+                and value in value_aliases
+            ):
+                canonical_value = value_aliases[value]
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{target}: {value}' is an alias spelling of "
+                        f"'{canonical_value}' — rewrote the value",
+                    )
+                )
+                rebuilt[target] = canonical_value
+
+            # Declared aliases of the properties of an array attribute's
+            # objects (`aliases` on `items.properties.X`): a partialAttributes
+            # range's `onclick` → `onClick`. Same rule as a node's own:
+            # canonical wins when both are set, with a warning.
+            item_aliases = item_alias_map.get(target)
+            if item_aliases and isinstance(rebuilt[target], list):
+                rebuilt[target] = [
+                    self._canonicalize_item(
+                        item, item_aliases, warnings, source=source, label=f"{label}.{target}[{i}]"
+                    )
+                    for i, item in enumerate(rebuilt[target])
+                ]
+
+            dep = deprecated_map.get(target)
+            if dep is not None:
+                note = f" — {dep.note}" if dep.note else ""
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{target}' is deprecated ({dep.scope_label()}){note}",
+                    )
+                )
+
+        self._fold_bind(rebuilt, node_type, warnings, source=source, label=label)
+
+        definition = self._table.definition_key_for(node_type)
+        if definition == "Indicator":
+            self._fold_indicator_legacy(rebuilt, node_type, warnings, source=source, label=label)
+        elif definition in _RETIRED_SIZE:
+            self._fold_legacy_size(
+                rebuilt, definition, f"{definition} legacy spelling", warnings, source=source, label=label
+            )
+
+        # Recurse into child nodes (structure keys are never aliases).
+        for child_key in _CHILD_KEYS:
+            if child_key not in rebuilt:
+                continue
+            value = rebuilt[child_key]
+            if isinstance(value, list):
+                rebuilt[child_key] = [
+                    self._canonicalize_node(
+                        c, warnings, source=source, path=f"{path}.{child_key}[{i}]"
+                    )
+                    for i, c in enumerate(value)
+                ]
+            elif isinstance(value, dict):
+                rebuilt[child_key] = self._canonicalize_node(
+                    value, warnings, source=source, path=f"{path}.{child_key}"
+                )
+
+        # Collection/Table `sections` carry full component nodes under
+        # header/footer/cell — the platform validators and renderers treat
+        # them as ordinary nodes, so canonicalize them too.
+        sections = rebuilt.get("sections")
+        if isinstance(sections, list):
+            rebuilt["sections"] = [
+                self._canonicalize_section(
+                    sec, warnings, source=source, path=f"{path}.sections[{i}]"
+                )
+                for i, sec in enumerate(sections)
+            ]
+
+        return rebuilt
+
+    def _fold_bind(
+        self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """`bind`, an alternative spelling of the component's own value
+        attribute (SSoT common.bind, ``primaryValue``), which "takes precedence
+        when both are set". A lone `bind` becomes the first of the section's
+        value attributes, silently, as any alias spelling does. Beside any of
+        them, `bind` is dropped and named — the converters disagreed on which
+        one was the value (rjui and sjui's Switch the own attribute, sjui's
+        CheckBox the binding, kjui showed one and wrote the other).
+        """
+        if "bind" not in node:
+            return
+        # The fold is on the node a renderer draws: after its style is merged
+        # and its responsive branch resolved (shared/core/bind_fold.rb). A
+        # node naming a style or carrying responsive overrides is not drawn
+        # as written — a style may give it its own value (then `bind` is
+        # ignored) or a `bind` — so it is left for the renderer's fold. Folded
+        # here, a layout `bind` beside a style's `isOn: true` became
+        # `isOn: @{…}` and the style's value lost (measured on the kjui, sjui
+        # and rjui codegen: the binding won on a normalized layout, the
+        # style's value on the layout as written).
+        if "style" in node or "responsive" in node:
+            return
+        values = self._table.bind_value_attributes(node_type, node)
+        if not values:
+            return
+        own = next((key for key in values if key in node), None)
+        bind = node.pop("bind")
+        if own is None:
+            node[values[0]] = bind
+            return
+        section = self._table.definition_key_for(node_type) or node_type
+        warnings.append(self._fmt(source, label,
+            f"'bind: {bind}' is ignored: '{own}: {json.dumps(node[own]) if not isinstance(node[own], str) else node[own]}' "
+            f"is the {section}'s value"))
+
+    def _canonicalize_item(
+        self, item: Any, aliases: dict[str, str], warnings: list[str], *, source: str, label: str
+    ) -> Any:
+        """One object of an array attribute, its alias keys rewritten."""
+        if not isinstance(item, dict):
+            return item
+        out: dict[str, Any] = {}
+        for key, value in item.items():
+            canonical = aliases.get(key)
+            if canonical is None:
+                out[key] = value
+            elif canonical in item or canonical in out:
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{key}' is an alias of '{canonical}' and both are "
+                        f"set — keeping '{canonical}', dropping '{key}'",
+                    )
+                )
+            else:
+                out[canonical] = value
+        return out
+
+    def _fold_indicator_legacy(
+        self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """An Indicator's two legacy spellings, folded into what is declared.
+
+        ``style`` naming one of ``indicatorStyle``'s values (small / medium /
+        large / linear, read from the definition) is the indicator's style
+        written with the style-file key: the Compose tools read it as the
+        indicator's size and the style loaders looked for a style file of that
+        name. It becomes ``indicatorStyle``; a ``style`` naming anything else
+        is a style file and is left alone. ``size`` (a length, undeclared) is
+        the spinner's width and height. Each fold is a named warning
+        (``Indicator legacy spelling``); a declared attribute already present
+        wins and the legacy one is dropped, also with the warning.
+        (kjui-dynamic-components-that-skip-the-common-modifiers, C.)
+        """
+        tag = "Indicator legacy spelling"
+        styles = self._table.enum_for(node_type, "indicatorStyle")
+        style = node.get("style")
+        if isinstance(style, str) and style in styles:
+            if "indicatorStyle" in node:
+                warnings.append(self._fmt(source, label,
+                    f"{tag}: 'style: {style}' names an indicator style and 'indicatorStyle: "
+                    f"{node['indicatorStyle']}' is set — keeping indicatorStyle, dropping style"))
+            else:
+                node["indicatorStyle"] = style
+                warnings.append(self._fmt(source, label,
+                    f"{tag}: 'style: {style}' is the indicator's style, not a style file — "
+                    f"rewrote to 'indicatorStyle: {style}' (a style file named '{style}' is "
+                    f"not applied to an Indicator)"))
+            del node["style"]
+        self._fold_legacy_size(node, "Indicator", tag, warnings, source=source, label=label)
+
+    def _fold_legacy_size(
+        self, node: dict, definition: str, tag: str, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """``size`` (a length, undeclared) as the node's width and height.
+
+        Indicator's, and Image's (CircleImage included) and CircleView's since
+        2026-10-24. A declared width / height (or frame) wins and size is
+        dropped; either way the warning is named with ``tag``.
+        """
+        if "size" not in node:
+            return
+        size = node.pop("size")
+        if "width" in node or "height" in node or "frame" in node:
+            warnings.append(self._fmt(source, label,
+                f"{tag}: 'size: {size}' and a declared width / height are both set — "
+                f"keeping width / height, dropping size"))
+        else:
+            node["width"] = size
+            node["height"] = size
+            warnings.append(self._fmt(source, label,
+                f"{tag}: 'size: {size}' is not declared on {definition} — rewrote to "
+                f"'width: {size}, height: {size}'"))
+
+    def _canonicalize_section(
+        self, section: Any, warnings: list[str], *, source: str, path: str
+    ) -> Any:
+        if not isinstance(section, dict):
+            return section
+        out = dict(section)
+        for key in _SECTION_NODE_KEYS:
+            node = out.get(key)
+            if isinstance(node, dict):
+                out[key] = self._canonicalize_node(
+                    node, warnings, source=source, path=f"{path}.{key}"
+                )
+        return out
+
+    @staticmethod
+    def _node_label(node: dict, node_type: str | None, path: str) -> str:
+        node_id = node.get("id")
+        where = f"id={node_id}" if isinstance(node_id, str) and node_id else path
+        return f"{where} ({node_type})" if node_type else where
+
+    @staticmethod
+    def _fmt(source: str, label: str, message: str) -> str:
+        prefix = f"{source}: " if source else ""
+        return f"{prefix}[{label}] {message}"
+
+
+def apply_marker(
+    tree: dict[str, Any], *, level: str, platform: str | None = None
+) -> dict[str, Any]:
+    """Return *tree* with the ``$jui`` normalization marker as first key.
+
+    Any pre-existing marker is replaced (keeps normalize idempotent).
+    """
+    marker: dict[str, Any] = {"normalized": level, "schemaVersion": SCHEMA_VERSION}
+    if platform:
+        marker["platform"] = platform
+    rest = {k: v for k, v in tree.items() if k != MARKER_KEY}
+    return {MARKER_KEY: marker, **rest}

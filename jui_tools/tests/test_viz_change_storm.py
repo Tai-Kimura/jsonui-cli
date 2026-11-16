@@ -1,0 +1,473 @@
+"""A storm of file changes does not hold the server (the ENOSPC night of 2026-11-09; ticket
+2026-11-06-viz-e2e-full-run-red-under-load, its section 「ENOSPC の serve の読み」).
+
+That night the live serve stopped answering /health for over a minute: its loop was in specs_touching (each file
+change compared with every spec, relatedFile and root), each change was one call on the loop with its own publish, the
+rooms' watchers were started again on folders the old ones still held ("already scheduled"), and a session its hooks
+kept bringing back was ended again at every poll. Measured on 2.5.16 with these arms' shapes: 10 000 changes in a room
+of 300 specs held the loop 45.8 s (2 000: 9.3 s); the session was ended 10 times in 10 polls.
+
+(a) specs_touching looks the path up in a table built from the specs and the last build's facts, and answers as the
+comparison did. (b) ChangeBatch hands the changes to the loop in batches, one publish each. (c) Watchers keeps a
+room's watcher while its folders are the same, and joins one it replaces. (d) a session ended as vanished has its
+process forgotten, so its hooks bringing it back do not end it again; one that is really gone still ends.
+"""
+from __future__ import annotations
+
+import sys
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from jui_cli.viz.change_batch import ChangeBatch, Watchers
+from jui_cli.viz.ingest import World
+from jui_cli.viz.state import VizState
+
+from tests.test_viz_files_off_the_loop import _room, _settle, _world
+
+#: what 10 000 changes may hold the loop for (2.5.16: 45.8 s; the table: about 0.05 s)
+STORM_BOUND_SEC = 3.0
+
+
+# ---------------------------------------------------------------- (a) specs_touching looked up
+
+
+def test_a_storm_of_changes_holds_the_loop_briefly(tmp_path):
+    root = _room(tmp_path, n=300, related=5)
+    world, _state, pid = _world(root, off_loop=True)
+    layouts = root / "docs" / "screens" / "layouts"
+    for i in range(10_000):   # what the watcher hands over: .json files under a watched folder, none a spec's
+        world.file_changed(pid, str(layouts / f"churn/f{i}.json"), 200)
+    for job, _ in list(world._files_jobs):
+        job.result(timeout=120)
+    start = time.perf_counter()
+    world._files_apply()
+    took = time.perf_counter() - start
+    assert not world._files_jobs
+    assert took < STORM_BOUND_SEC, f"10 000 changes held the loop {took:.2f} s"
+
+
+def _compared(project, file_path: str) -> list[str]:
+    """specs_touching as 2.5.16 answered it off the loop: every spec compared."""
+    target = Path(file_path)
+    hits = []
+    for sid, entry in project.specs.items():
+        if target == entry.path:
+            hits.append(sid)
+            continue
+        facts = project.facts.get(sid)
+        if facts is None:
+            continue
+        lp, roots = facts["layout"], facts["roots"]
+        declared = [Path(item["path"]) for item in (entry.data or {}).get("relatedFiles") or []
+                    if isinstance(item, dict) and isinstance(item.get("path"), str)]
+        if (lp and target == lp) or any(target == (d if d.is_absolute() else r / d) for d in declared for r in roots):
+            hits.append(sid)
+    return hits
+
+
+def test_the_table_answers_as_the_comparison_did(tmp_path):
+    root = _room(tmp_path, n=12, related=3)
+    world, _state, pid = _world(root, off_loop=True)
+    project = world.jsonui[pid]
+    paths = [str(e.path) for e in project.specs.values()]
+    for facts in project.facts.values():
+        if facts["layout"]:
+            paths.append(str(facts["layout"]))
+        for r in facts["roots"]:
+            paths += [str(r / f"src/s{i}_{k}.swift") for i in range(12) for k in range(3)]
+    paths += [str(root / "docs/screens/layouts/none.json"), str(root / "src/other.swift"), "/elsewhere/x.json"]
+    asked = 0
+    for p in paths:
+        assert project.specs_touching(p) == _compared(project, p), p
+        asked += 1
+    assert asked > 100 and any(project.specs_touching(p) for p in paths)   # the table answers something, the same
+    # a spec read again is in the table from then on (the table is built again when the specs change)
+    spec = next(iter(project.specs.values())).path
+    world.file_changed(pid, str(spec), 300)
+    _settle(world, 300)
+    assert project.specs_touching(str(spec)) == _compared(project, str(spec)) != []
+
+
+# ---------------------------------------------------------------- (b) the changes in batches
+
+
+def test_changes_from_the_watchers_thread_reach_the_loop_in_batches():
+    asked: list = []
+    applied: list = []
+    published: list = []
+    batch = ChangeBatch(asked.append, lambda pid, path: applied.append((pid, path)), lambda: published.append(1))
+
+    def watcher():
+        for i in range(10_000):
+            batch.add("room-a" if i % 2 else "room-b", f"/w/f{i % 5000}.json")   # each path twice
+
+    t = threading.Thread(target=watcher)
+    t.start()
+    t.join()
+    assert len(asked) == 1, "one call on the loop for the whole storm"
+    assert asked[0]() == 10_000 // 2 and len(published) == 1
+    assert len(set(applied)) == len(applied) == 5000          # each path once per room
+    assert [p for r, p in applied if r == "room-b"][:2] == ["/w/f0.json", "/w/f2.json"]   # in the order they came
+    batch.add("room-a", "/w/late.json")                       # a change after the batch: the next one
+    assert len(asked) == 2 and asked[1]() == 1 and len(published) == 2
+    assert asked[1]() == 0 and len(published) == 2            # nothing left: no publish
+
+
+# ---------------------------------------------------------------- (c) a room's watcher kept
+
+
+class _Observer:
+    def __init__(self, log, n):
+        self.log, self.n = log, n
+
+    def stop(self):
+        self.log.append(("stop", self.n))
+
+    def join(self, timeout=None):
+        self.log.append(("join", self.n))
+
+
+class _Room:
+    project_id = "room"
+
+
+def test_the_same_folders_keep_their_watcher_and_one_replaced_is_joined_first():
+    log: list = []
+    folders = [Path("/r/specs"), Path("/r/layouts")]
+    started: list = []
+
+    def start(project):
+        o = _Observer(log, len([e for e in log if e[0] == "start"]))
+        log.append(("start", o.n))
+        return o
+
+    w = Watchers(lambda p: list(folders), start, started)
+    assert w.watch(_Room()) is True
+    for _ in range(20):                       # the room's apps read again and again, the same folders
+        assert w.watch(_Room()) is False
+    w.settle(5)
+    assert log == [("start", 0)] and len(started) == 1
+    folders.append(Path("/r/tests"))          # a folder came: watched again, the old one let go first
+    assert w.watch(_Room()) is True
+    w.settle(5)
+    assert log == [("start", 0), ("stop", 0), ("join", 0), ("start", 1)]
+    assert [o.n for o in started] == [1]
+
+
+class _HeldObserver(_Observer):
+    """Its stop (or its start) waits until let go, 20 s at most: FSEvents' stop and start took 20 to 68 s when
+    fseventsd was busy (ticket 2026-11-12-viz-loop-stalls-on-watcher-stop)."""
+
+    def __init__(self, log, n, go):
+        super().__init__(log, n)
+        self.go = go
+
+    def stop(self):
+        self.log.append(("stop", self.n))
+        self.go.wait(20)
+
+
+@pytest.mark.parametrize("held", ["the old one's stop", "the new one's start"])
+def test_a_watcher_held_in_its_stop_or_start_does_not_hold_the_caller(held):
+    """Watchers.watch runs on the loop's thread (a room's worktrees changed): it hands the stop, the join and the start
+    to its worker and returns at once. Until 2.5.31 it called them itself, and the loop answered nothing for 20 to 68 s.
+    The order stays: the old one stopped and joined before the new one starts (the ENOSPC night of 2026-11-09)."""
+    log: list = []
+    go = threading.Event()
+    folders = [Path("/r/specs")]
+    started: list = []
+
+    def start(project):
+        n = len([e for e in log if e[0] == "start"])
+        if held == "the new one's start" and n == 1:
+            log.append(("start", n))
+            go.wait(20)
+            return _Observer(log, n)
+        log.append(("start", n))
+        return _HeldObserver(log, n, go) if held == "the old one's stop" else _Observer(log, n)
+
+    w = Watchers(lambda p: list(folders), start, started)
+    try:
+        assert w.watch(_Room()) is True
+        w.settle(5)
+        folders.append(Path("/r/tests"))
+        t0 = time.monotonic()
+        assert w.watch(_Room()) is True
+        assert w.watch(_Room()) is False      # the same folders again while the swap is under way: no second swap
+        took = time.monotonic() - t0
+        assert took < 1.0, f"watch waited {took:.1f} s on {held}"
+    finally:
+        go.set()
+    w.settle(5)
+    assert log == [("start", 0), ("stop", 0), ("join", 0), ("start", 1)]
+    assert [o.n for o in started] == [1]
+
+
+def test_watchers_closed_hand_back_the_running_ones_and_start_no_more():
+    log: list = []
+    folders = [Path("/r/specs")]
+    w = Watchers(lambda p: list(folders), lambda p: _Observer(log, 0), [])
+    w.watch(_Room())
+    w.settle(5)
+    running = w.close()
+    assert [o.n for o in running] == [0] and w.started == []
+    folders.append(Path("/r/tests"))
+    assert w.watch(_Room()) is False          # closed: nothing more is started
+
+
+# ---------------------------------------------------------------- (d) a session its hooks bring back
+
+
+def _hook(world: World, sid: str, at: int) -> None:
+    world.apply_hook({"session_id": sid, "cwd": "/work/x", "hook_event_name": "PreToolUse", "tool_name": "Read",
+                      "tool_input": {"file_path": "/work/x/a"}}, at)
+
+
+def _known(world: World, sid: str, pid: int, at: int) -> None:
+    world.apply_session_file({"pid": pid, "sessionId": sid, "cwd": "/work/x", "entrypoint": "cli", "status": "idle",
+                              "procStart": "Thu Oct 29 00:00:00 2026"}, at)
+
+
+def test_a_session_its_hooks_bring_back_is_ended_once_not_at_every_poll():
+    w = World(VizState(100))
+    _known(w, "s-back", 11, 1000)
+    ended = []
+    for i in range(10):                       # gone from the list and the registry, its hooks still coming
+        at = 2000 + i * 3000
+        ended += w.end_vanished(set(), set(), at)
+        _hook(w, "s-back", at + 1000)
+    assert ended == ["s-back"], ended         # 2.5.16: ended 10 times in 10 polls
+    assert w.sessions["s-back"]["status"] != "ended"
+    assert len([e for e in w.state.recent_events() if e["kind"] == "SessionEnd"]) == 1
+
+
+def test_a_session_really_gone_still_ends_and_one_known_again_can_end_again():
+    w = World(VizState(100))
+    _known(w, "s-dead", 21, 1000)
+    _known(w, "s-alive", 22, 1000)
+    assert w.end_vanished({"s-alive"}, set(), 2000) == ["s-dead"]
+    assert w.sessions["s-dead"]["status"] == "ended" and w.sessions["s-alive"]["status"] != "ended"
+    assert w.end_vanished({"s-alive"}, set(), 5000) == []          # ended once
+    # it comes back with a process (a resumed session's entry): known again, and ended again once it is gone
+    _known(w, "s-dead", 23, 6000)
+    _hook(w, "s-dead", 6500)
+    assert w.end_vanished({"s-dead", "s-alive"}, set(), 8000) == []
+    assert w.end_vanished({"s-alive"}, set(), 11000) == ["s-dead"]
+
+
+def test_a_room_whose_watcher_did_not_start_is_tried_again_after_a_while():
+    """FSEvents would not start (fs_watch gave None): the room is without a watcher, and tried again on a watch at least
+    RETRY_SEC later, not at every one (fseventsd in trouble is not asked over and over)."""
+    log: list = []
+    folders = [Path("/r/specs")]
+
+    def start(project):
+        log.append("start")
+        return None
+
+    w = Watchers(lambda p: list(folders), start, [])
+    w.RETRY_SEC = 0.3
+    assert w.watch(_Room()) is True
+    w.settle(5)
+    assert w.watch(_Room()) is False          # too soon
+    time.sleep(0.4)
+    assert w.watch(_Room()) is True           # tried again
+    w.settle(5)
+    assert log == ["start", "start"]
+
+
+# ---------------------------------------------------------------- (e) a stream FSEvents would not start
+
+
+def _fsevents_shape() -> str | None:
+    """watchdog's FSEvents here: "6" (_watchdog_fsevents.add_watch), "7" (a Stream per emitter), None off macOS."""
+    if sys.platform != "darwin":
+        return None
+    import _watchdog_fsevents as native
+    return "6" if hasattr(native, "add_watch") else "7" if hasattr(native, "Stream") else "?"
+
+
+def _only(shape: str):
+    """Off macOS: FSEvents is macOS's. On macOS: the arm of the other major's shape skips (each runs where that watchdog
+    is installed: 6.x in the gate's venv, 7.x in a 7.1.0 venv)."""
+    here = _fsevents_shape()
+    if here is None:
+        return pytest.mark.skipif(True, reason="FSEvents is macOS's")
+    return pytest.mark.skipif(here != shape, reason=f"watchdog's FSEvents here is the {here}.x shape, the arm is the {shape}.x one")
+
+
+@_only("6")
+def test_a_stream_fsevents_did_not_start_is_let_go_without_stopping_it(tmp_path, monkeypatch):
+    """After fseventsd was restarted its streams would not start ("Cannot start fsevents stream"); the stream stays
+    registered unstarted, and stopping the observer called FSEventStreamStop on it: SIGSEGV (2026-11-12 16:36). The
+    observer is let go without that call, and the caller is told it has no watcher. The FSEvents calls are stand-ins
+    here, so the case cannot end the process."""
+    import _watchdog_fsevents as native
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    calls: list = []
+
+    def add_watch(*a):
+        calls.append("add_watch")
+        raise SystemError("Cannot start fsevents stream. Use a kqueue or polling observer instead.")
+
+    monkeypatch.setattr(native, "add_watch", add_watch)
+    monkeypatch.setattr(native, "remove_watch", lambda *a: calls.append("remove_watch"))
+    monkeypatch.setattr(native, "stop", lambda *a: calls.append("stop"))
+    obs = fs_watch.observer()
+    obs.schedule(FileSystemEventHandler(), str(tmp_path), recursive=True)
+    obs.daemon = True
+    obs.start()
+    assert fs_watch.kept_or_none(obs, "a test folder") is None
+    assert calls == ["add_watch"], calls      # never stopped through FSEvents
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_stream_that_started_is_kept_and_stopped_as_before(tmp_path):
+    """The control: FSEvents as it is; the watcher is kept, sees a file written, and stops."""
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    seen = threading.Event()
+
+    class Handler(FileSystemEventHandler):
+        def on_any_event(self, event):
+            if event.src_path.endswith("a.json"):
+                seen.set()
+
+    obs = fs_watch.observer()
+    obs.schedule(Handler(), str(tmp_path), recursive=True)
+    obs.daemon = True
+    try:
+        assert fs_watch.start(obs, "a test folder") is obs
+        (tmp_path / "a.json").write_text("{}")
+        assert seen.wait(10), "no event from FSEvents"
+    finally:
+        obs.stop()
+        obs.join(timeout=5)
+    assert not obs.is_alive()
+
+
+@_only("6")
+def test_a_watcher_whose_one_folder_did_not_start_keeps_the_others(tmp_path, monkeypatch):
+    """One folder's stream refused ("Cannot add watch ... already scheduled", another watcher holds it), the other
+    folder's started: the watcher stays for the folder it has, as watchdog left it before, and the refused folder is
+    never stopped through FSEvents."""
+    import _watchdog_fsevents as native
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    real_add, real_remove = native.add_watch, native.remove_watch
+    refused: list = []
+    (tmp_path / "good").mkdir()
+    (tmp_path / "bad").mkdir()
+
+    def add_watch(emitter, watch, *a):
+        if watch.path.endswith("bad"):
+            refused.append(watch.path)
+            raise RuntimeError(f"Cannot add watch {watch} - it is already scheduled")
+        return real_add(emitter, watch, *a)
+
+    def remove_watch(watch):
+        assert not watch.path.endswith("bad"), "the refused folder was stopped through FSEvents"
+        return real_remove(watch)
+
+    monkeypatch.setattr(native, "add_watch", add_watch)
+    monkeypatch.setattr(native, "remove_watch", remove_watch)
+    obs = fs_watch.observer()
+    for name in ("good", "bad"):
+        obs.schedule(FileSystemEventHandler(), str(tmp_path / name), recursive=True)
+    obs.daemon = True
+    obs.start()
+    try:
+        assert fs_watch.kept_or_none(obs, "a test room") is obs
+        assert len(refused) == 1
+    finally:
+        obs.stop()
+        obs.join(timeout=5)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_watchdog_whose_fsevents_is_neither_6x_nor_7x_is_told_once_and_watches_nothing(tmp_path, monkeypatch, capsys):
+    """watchdog 7.x replaced the FSEvents emitter with a Stream object (no _watchdog_fsevents.add_watch): the guarded
+    emitter's start waited forever under 7.1.0, the room unwatched and the watchers' thread held (2.5.32). setup.py
+    pins watchdog<7; an install the pin did not reach gets one line and no watcher, never a start that hangs."""
+    import _watchdog_fsevents as native
+    from jui_cli.viz.sources import fs_watch
+
+    monkeypatch.delattr(native, "add_watch", raising=False)
+    monkeypatch.delattr(native, "Stream", raising=False)
+    monkeypatch.setattr(fs_watch, "_told", [])
+    assert fs_watch.observer() is None
+    assert fs_watch.observer() is None
+    lines = [line for line in capsys.readouterr().err.splitlines() if "neither the 6.x nor the 7.x" in line]
+    assert len(lines) == 1 and "watchdog>=4.0.0,<8" in lines[0], lines
+
+
+class _StandInStream:
+    """watchdog 7.x's native Stream, standing in: run() raises as FSEventStreamStart's refusal does (before started()),
+    for a path holding "refused"; otherwise it says started and waits for stop()."""
+    made: list = []
+
+    def __init__(self, paths, latency=0.0):
+        self.paths, self.stopped = list(paths), threading.Event()
+        self.made.append(self)
+
+    def run(self, callback, started=None):
+        if any("refused" in str(p) for p in self.paths):
+            raise SystemError("Cannot start fsevents stream. Use a kqueue or polling observer instead.")
+        if started is not None:
+            started()
+        self.stopped.wait(30)
+
+    def stop(self):
+        self.stopped.set()
+
+
+@_only("7")
+def test_watchdog_7_a_stream_fsevents_did_not_start_leaves_the_room_unwatched_not_the_server_ended(tmp_path, monkeypatch, capsys):
+    """7.x: the emitter's start() raises a stream FSEvents would not start; fs_watch.start says so in one line, stops
+    the emitters it did start, and hands back None (Watchers tries the room again later). 2.5.32 gave 7.x no watcher
+    at all (pinned <7, told once)."""
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import fsevents
+    from jui_cli.viz.sources import fs_watch
+
+    _StandInStream.made = []
+    monkeypatch.setattr(fsevents._fsevents, "Stream", _StandInStream)
+    for name in ("a", "refused"):
+        (tmp_path / name).mkdir()
+    obs = fs_watch.observer()
+    assert obs is not None, "no watcher for watchdog 7.x"
+    for name in ("a", "refused"):
+        obs.schedule(FileSystemEventHandler(), str(tmp_path / name), recursive=True)
+    obs.daemon = True
+    assert fs_watch.start(obs, "a test room") is None
+    err = capsys.readouterr().err
+    assert "a test room not watched: FSEvents did not start (SystemError" in err, err
+    assert all(s.stopped.is_set() for s in _StandInStream.made if "refused" not in str(s.paths)), "a started stream left running"
+
+
+@_only("7")
+def test_watchdog_7_native_stream_stopped_before_or_after_its_run_is_safe():
+    """The C side 7.x relies on, run for real: stop() on a stream that never ran, and again after its run() ended,
+    only marks it stopped (no FSEventStreamStop on a stream that is not running: 6.x's SIGSEGV). A crash here ends
+    the test process."""
+    import _watchdog_fsevents as native
+
+    never = native.Stream(["/tmp"], latency=0.0)
+    never.stop()
+    never.stop()
+    assert never.run(lambda *a: None) is None   # stopped before: returns at once
+    ran = native.Stream(["/tmp"], latency=0.0)
+    t = threading.Thread(target=ran.run, args=(lambda *a: None,), daemon=True)
+    t.start()
+    time.sleep(0.3)
+    ran.stop()
+    t.join(5)
+    assert not t.is_alive()
+    ran.stop()                                   # after its run ended

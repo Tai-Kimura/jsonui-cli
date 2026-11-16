@@ -1,0 +1,610 @@
+# frozen_string_literal: true
+
+require_relative '../../spec_helper'
+require 'react/converters/base_converter'
+require 'react/converters/view_converter'
+
+RSpec.describe RjuiTools::React::Converters::BaseConverter do
+  let(:default_config) { { 'use_tailwind' => true } }
+
+  # Use ViewConverter as concrete implementation for testing BaseConverter
+  def create_converter(json_data, config = nil)
+    RjuiTools::React::Converters::ViewConverter.new(json_data, config || default_config)
+  end
+
+  describe '#build_class_name' do
+    context 'with min/max size constraints' do
+      it 'maps minWidth to min-w class' do
+        converter = create_converter({
+          'type' => 'View',
+          'minWidth' => 100
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('min-w-[100px]')
+      end
+
+      it 'maps maxWidth to max-w class' do
+        converter = create_converter({
+          'type' => 'View',
+          'maxWidth' => 200
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('max-w-[200px]')
+      end
+
+      it 'maps minHeight to min-h class' do
+        converter = create_converter({
+          'type' => 'View',
+          'minHeight' => 50
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('min-h-[50px]')
+      end
+
+      it 'maps maxHeight to max-h class' do
+        converter = create_converter({
+          'type' => 'View',
+          'maxHeight' => 300
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('max-h-[300px]')
+      end
+
+      it 'maps matchParent to full width/height' do
+        converter = create_converter({
+          'type' => 'View',
+          'minWidth' => 'matchParent',
+          'maxHeight' => 'matchParent'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('min-w-full')
+        expect(classes).to include('max-h-full')
+      end
+    end
+
+    context 'with RTL-aware paddings' do
+      it 'maps paddingStart to ps- class' do
+        converter = create_converter({
+          'type' => 'View',
+          'paddingStart' => 16
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('ps-[1rem]')
+      end
+
+      it 'maps paddingEnd to pe- class' do
+        converter = create_converter({
+          'type' => 'View',
+          'paddingEnd' => 8
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('pe-[0.5rem]')
+      end
+    end
+
+    context 'with alternative padding formats' do
+      it 'supports paddingTop/paddingRight/paddingBottom/paddingLeft format' do
+        converter = create_converter({
+          'type' => 'View',
+          'paddingTop' => 16,
+          'paddingRight' => 8
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('pt-[1rem]')
+        expect(classes).to include('pr-[0.5rem]')
+      end
+
+      it 'maps insets to padding' do
+        converter = create_converter({
+          'type' => 'View',
+          'insets' => [16, 8]
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('py-[1rem]')
+        expect(classes).to include('px-[0.5rem]')
+      end
+
+      it 'maps insetHorizontal to horizontal padding' do
+        converter = create_converter({
+          'type' => 'View',
+          'insetHorizontal' => 16
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('px-[1rem]')
+      end
+    end
+
+    context 'with RTL-aware margins' do
+      it 'maps startMargin to ms- class' do
+        converter = create_converter({
+          'type' => 'View',
+          'startMargin' => 16
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('ms-[1rem]')
+      end
+
+      it 'maps endMargin to me- class' do
+        converter = create_converter({
+          'type' => 'View',
+          'endMargin' => 8
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('me-[0.5rem]')
+      end
+    end
+
+    context 'with disabled state' do
+      it 'adds opacity-50 and pointer-events-none when enabled is false' do
+        converter = create_converter({
+          'type' => 'View',
+          'enabled' => false
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('opacity-50')
+        expect(classes).to include('pointer-events-none')
+      end
+
+      it 'does not add disabled classes when enabled is true' do
+        converter = create_converter({
+          'type' => 'View',
+          'enabled' => true
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).not_to include('opacity-50')
+        expect(classes).not_to include('pointer-events-none')
+      end
+    end
+
+    context 'with userInteractionEnabled' do
+      it 'adds pointer-events-none when userInteractionEnabled is false' do
+        converter = create_converter({
+          'type' => 'View',
+          'userInteractionEnabled' => false
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('pointer-events-none')
+      end
+    end
+
+    context 'with offset' do
+      it 'adds transform style for offsetX and offsetY' do
+        converter = create_converter({
+          'type' => 'View',
+          'offsetX' => 10,
+          'offsetY' => 20
+        })
+        converter.send(:build_class_name)
+        dynamic_styles = converter.instance_variable_get(:@dynamic_styles)
+        expect(dynamic_styles['transform']).to eq("'translate(10px, 20px)'")
+      end
+
+      it 'defaults missing offset values to 0' do
+        converter = create_converter({
+          'type' => 'View',
+          'offsetX' => 15
+        })
+        converter.send(:build_class_name)
+        dynamic_styles = converter.instance_variable_get(:@dynamic_styles)
+        expect(dynamic_styles['transform']).to eq("'translate(15px, 0px)'")
+      end
+    end
+
+    context 'with tintColor' do
+      it 'adds accentColor style' do
+        converter = create_converter({
+          'type' => 'View',
+          'tintColor' => '#FF0000'
+        })
+        converter.send(:build_class_name)
+        dynamic_styles = converter.instance_variable_get(:@dynamic_styles)
+        expect(dynamic_styles['accentColor']).to eq("'#FF0000'")
+      end
+    end
+  end
+
+  describe '#build_testid_attr' do
+    it 'returns data-testid attribute when testId is present' do
+      converter = create_converter({
+        'type' => 'View',
+        'testId' => 'my-test-id'
+      })
+      attr = converter.send(:build_testid_attr)
+      expect(attr).to eq(' data-testid="my-test-id"')
+    end
+
+    it 'returns empty string when testId is not present' do
+      converter = create_converter({
+        'type' => 'View'
+      })
+      attr = converter.send(:build_testid_attr)
+      expect(attr).to eq('')
+    end
+  end
+
+  describe '#build_tag_attr' do
+    it 'returns data-tag attribute when tag is present' do
+      converter = create_converter({
+        'type' => 'View',
+        'tag' => 'custom-tag'
+      })
+      attr = converter.send(:build_tag_attr)
+      expect(attr).to eq(' data-tag="custom-tag"')
+    end
+
+    it 'returns empty string when tag is not present' do
+      converter = create_converter({
+        'type' => 'View'
+      })
+      attr = converter.send(:build_tag_attr)
+      expect(attr).to eq('')
+    end
+  end
+
+  # Canonical textStringification (shared/core/binding_semantics.json):
+  # TEXT sinks emit template literals so booleans render "true"/"false"
+  # and unresolved paths render "" (raw JSX {data.flag} renders booleans
+  # as NOTHING). Value contexts keep using #convert_binding.
+  describe '#convert_text_binding' do
+    let(:converter) { create_converter({ 'type' => 'View' }) }
+
+    it 'emits a whole-value binding as a stringifying template literal' do
+      expect(converter.send(:convert_text_binding, '@{x}')).to eq('{`${data.x ?? ""}`}')
+    end
+
+    it 'keeps optional chaining for dotted and indexed paths' do
+      expect(converter.send(:convert_text_binding, '@{profile.name}'))
+        .to eq('{`${data.profile?.name ?? ""}`}')
+      expect(converter.send(:convert_text_binding, '@{items[0].title}'))
+        .to eq('{`${data.items?.[0]?.title ?? ""}`}')
+    end
+
+    it 'composes an authored ?? default instead of the empty-string fallback' do
+      expect(converter.send(:convert_text_binding, '@{x ?? "Guest"}'))
+        .to eq('{`${data.x ?? "Guest"}`}')
+      expect(converter.send(:convert_text_binding, '@{count ?? 42}'))
+        .to eq('{`${data.count ?? 42}`}')
+    end
+
+    it 'treats a null default as unresolved (empty string)' do
+      expect(converter.send(:convert_text_binding, '@{x ?? null}')).to eq('{`${data.x ?? ""}`}')
+    end
+
+    it 'canonicalizes mixed text as one template literal run' do
+      expect(converter.send(:convert_text_binding, 'Hello @{name}!'))
+        .to eq('{`Hello ${data.name ?? ""}!`}')
+      expect(converter.send(:convert_text_binding, 'A @{a} and B @{b.c}'))
+        .to eq('{`A ${data.a ?? ""} and B ${data.b?.c ?? ""}`}')
+    end
+
+    it 'escapes backticks and ${ in literal segments' do
+      expect(converter.send(:convert_text_binding, 'a `t` ${n} @{x}'))
+        .to eq('{`a \`t\` \${n} ${data.x ?? ""}`}')
+    end
+
+    it 'renders negation in text as unresolved (binding-negation-context)' do
+      expect(converter.send(:convert_text_binding, '@{!flag}')).to eq('{``}')
+    end
+
+    it 'leaves plain text on the existing literal path' do
+      expect(converter.send(:convert_text_binding, 'plain text')).to eq('plain text')
+      expect(converter.send(:convert_text_binding, "line1\nline2")).to eq('<>line1<br />line2</>')
+    end
+
+    it 'routes strings.json keys to StringManager before binding logic' do
+      allow(converter).to receive(:convert_string_key)
+        .with('home_title')
+        .and_return('{StringManager.currentLanguage.homeTitle}')
+      expect(converter.send(:convert_text_binding, 'home_title'))
+        .to eq('{StringManager.currentLanguage.homeTitle}')
+    end
+  end
+
+  describe '#convert_binding' do
+    context 'with simple property binding' do
+      it 'converts @{title} to {data.title}' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{title}')
+        expect(result).to eq('{data.title}')
+      end
+    end
+
+    context 'with data prefix binding' do
+      it 'converts @{data.name} to {data.name}' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{data.name}')
+        expect(result).to eq('{data.name}')
+      end
+    end
+
+    context 'with viewModel prefix binding' do
+      it 'converts @{viewModel.onTap} to {data.onTap}' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{viewModel.onTap}')
+        expect(result).to eq('{data.onTap}')
+      end
+    end
+
+    context 'with nested property binding' do
+      # Multi-segment user data paths get optional chaining so a missing
+      # intermediate node resolves to undefined instead of throwing
+      # (binding SSoT: intermediateMiss must never crash).
+      it 'converts @{item.name} to {data.item?.name}' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{item.name}')
+        expect(result).to eq('{data.item?.name}')
+      end
+
+      it 'chains every segment of a deep path' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{profile.meta.age}')
+        expect(result).to eq('{data.profile?.meta?.age}')
+      end
+
+      it 'chains bracket-indexed paths (@{items[0].title})' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{items[0].title}')
+        expect(result).to eq('{data.items?.[0]?.title}')
+      end
+
+      it 'keeps a single flat segment unchained' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{title}')
+        expect(result).to eq('{data.title}')
+      end
+    end
+
+    context 'with ?? default (canonical)' do
+      it 'emits the default after the chained path' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, "@{a.b ?? 'd'}")
+        expect(result).to eq("{data.a?.b ?? 'd'}")
+      end
+
+      it 'supports double-quoted and non-string literals' do
+        converter = create_converter({ 'type' => 'View' })
+        expect(converter.send(:convert_binding, '@{missing ?? "Guest"}')).to eq('{data.missing ?? "Guest"}')
+        expect(converter.send(:convert_binding, '@{count ?? 42}')).to eq('{data.count ?? 42}')
+        expect(converter.send(:convert_binding, '@{flag ?? true}')).to eq('{data.flag ?? true}')
+      end
+
+      it 'drops a null default (null means unresolved)' do
+        converter = create_converter({ 'type' => 'View' })
+        expect(converter.send(:convert_binding, '@{missing ?? null}')).to eq('{data.missing}')
+      end
+    end
+
+    context 'with bool negation (canonical on bool value contexts)' do
+      it 'emits {!data.flag} instead of {data.!flag}' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{!flag}')
+        expect(result).to eq('{!data.flag}')
+      end
+
+      it 'chains a negated dotted path' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, '@{!settings.enabled}')
+        expect(result).to eq('{!data.settings?.enabled}')
+      end
+    end
+
+    context 'with plain text (no binding)' do
+      it 'returns plain text as-is' do
+        converter = create_converter({ 'type' => 'View' })
+        result = converter.send(:convert_binding, 'Hello World')
+        expect(result).to eq('Hello World')
+      end
+    end
+  end
+
+  describe '#build_onclick_attr' do
+    context 'with onClick binding format' do
+      it 'converts @{onTap} to data.onTap' do
+        converter = create_converter({
+          'type' => 'View',
+          'onClick' => '@{onTap}'
+        })
+        attr = converter.send(:build_onclick_attr)
+        expect(attr).to eq(' onClick={() => data.onTap?.()}')
+      end
+
+      it 'converts @{viewModel.onTap} to data.onTap' do
+        converter = create_converter({
+          'type' => 'View',
+          'onClick' => '@{viewModel.onTap}'
+        })
+        attr = converter.send(:build_onclick_attr)
+        expect(attr).to eq(' onClick={() => data.onTap?.()}')
+      end
+    end
+
+    context 'with onclick selector format' do
+      it 'converts selector to data.selector' do
+        converter = create_converter({
+          'type' => 'View',
+          'onclick' => 'handleClick'
+        })
+        attr = converter.send(:build_onclick_attr)
+        expect(attr).to eq(' onClick={() => data.handleClick?.()}')
+      end
+    end
+
+    context 'with link action' do
+      it 'generates window.open for link action' do
+        converter = create_converter({
+          'type' => 'View',
+          'onClick' => { 'action' => 'link', 'url' => 'https://example.com' }
+        })
+        attr = converter.send(:build_onclick_attr)
+        expect(attr).to eq(" onClick={() => window.open('https://example.com', '_blank')}")
+      end
+    end
+  end
+
+  describe 'bound dimensions' do
+    it 'routes a bound height into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'height' => '@{barHeight}' })
+      classes = converter.send(:build_class_name)
+      expect(classes).not_to include('h-[')
+      expect(converter.send(:build_style_attr)).to include('height: `${data.barHeight}px`')
+    end
+
+    it 'routes a bound width into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'width' => '@{barWidth}' })
+      classes = converter.send(:build_class_name)
+      expect(classes).not_to include('w-[')
+      expect(converter.send(:build_style_attr)).to include('width: `${data.barWidth}px`')
+    end
+
+    it 'treats a bound size as explicit, so it does not shrink' do
+      converter = create_converter({ 'type' => 'View', 'height' => '@{barHeight}' })
+      expect(converter.send(:build_class_name)).to include('shrink-0')
+    end
+
+    it 'routes bound min/max bounds into the inline style' do
+      converter = create_converter({
+        'type' => 'View',
+        'minHeight' => '@{minH}', 'maxHeight' => '@{maxH}',
+        'minWidth' => '@{minW}', 'maxWidth' => '@{maxW}'
+      })
+      classes = converter.send(:build_class_name)
+      style = converter.send(:build_style_attr)
+      expect(classes).not_to include('min-h-[')
+      expect(classes).not_to include('max-w-[')
+      expect(style).to include('minHeight: `${data.minH}px`')
+      expect(style).to include('maxHeight: `${data.maxH}px`')
+      expect(style).to include('minWidth: `${data.minW}px`')
+      expect(style).to include('maxWidth: `${data.maxW}px`')
+    end
+
+    it 'leaves literal dimensions on the Tailwind class path' do
+      converter = create_converter({ 'type' => 'View', 'height' => 140, 'width' => 'matchParent' })
+      classes = converter.send(:build_class_name)
+      expect(classes).to include('h-[140px]')
+      expect(classes).to include('w-full')
+      expect(converter.send(:build_style_attr)).to eq('')
+    end
+  end
+
+  # The SSoT declares `["number", "binding"]` for all sixteen per-side
+  # spacing attributes, and a bound value used to reach `closest_padding`,
+  # which does `(k - value).abs` over the spacing scale: `jui build` ABORTED
+  # with a TypeError on a layout written exactly the way the declaration
+  # describes (plan 41 codegen differential).
+  describe 'bound per-side spacing' do
+    it 'routes a bound padding into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'paddingTop' => '@{gap}' })
+      expect(converter.send(:build_class_name)).not_to include('pt-')
+      expect(converter.send(:build_style_attr)).to include('paddingTop: `${Number(data.gap) / 16}rem`')
+    end
+
+    it 'reads the alternate spelling of the same side' do
+      converter = create_converter({ 'type' => 'View', 'topPadding' => '@{gap}' })
+      converter.send(:build_class_name)
+      expect(converter.send(:build_style_attr)).to include('paddingTop: `${Number(data.gap) / 16}rem`')
+    end
+
+    it 'routes a bound margin into the inline style as px' do
+      converter = create_converter({ 'type' => 'View', 'bottomMargin' => '@{gap}' })
+      expect(converter.send(:build_class_name)).not_to include('mb-')
+      expect(converter.send(:build_style_attr)).to include('marginBottom: `${Number(data.gap) / 16}rem`')
+    end
+
+    it 'keeps the RTL spellings logical rather than physical' do
+      converter = create_converter({
+        'type' => 'View', 'paddingStart' => '@{lead}', 'endMargin' => '@{trail}'
+      })
+      converter.send(:build_class_name)
+      style = converter.send(:build_style_attr)
+      expect(style).to include('paddingInlineStart: `${Number(data.lead) / 16}rem`')
+      expect(style).to include('marginInlineEnd: `${Number(data.trail) / 16}rem`')
+    end
+
+    it 'covers every side of both properties' do
+      converter = create_converter({
+        'type' => 'View',
+        'paddingTop' => '@{a}', 'paddingRight' => '@{b}',
+        'paddingBottom' => '@{c}', 'paddingLeft' => '@{d}',
+        'topMargin' => '@{e}', 'rightMargin' => '@{f}',
+        'bottomMargin' => '@{g}', 'leftMargin' => '@{h}'
+      })
+      converter.send(:build_class_name)
+      style = converter.send(:build_style_attr)
+      %w[paddingTop paddingRight paddingBottom paddingLeft
+         marginTop marginRight marginBottom marginLeft].each do |property|
+        expect(style).to include("#{property}: `${Number(data.")
+      end
+    end
+
+    # The whole point of routing the binding out BEFORE `closest_padding`:
+    # that function is the road every static padding travels, and moving it
+    # would move every fixture in the conformance suite.
+    it 'leaves static spacing on the Tailwind class path, untouched' do
+      converter = create_converter({
+        'type' => 'View', 'paddingTop' => 8, 'topMargin' => 16,
+        'paddingStart' => 4, 'leftPadding' => 12
+      })
+      classes = converter.send(:build_class_name)
+      expect(classes).to include('pt-[0.5rem]')
+      expect(classes).to include('pl-[0.75rem]')
+      expect(classes).to include('ps-[0.25rem]')
+      expect(classes).to include('mt-[1rem]')
+      expect(converter.send(:build_style_attr)).to eq('')
+    end
+  end
+
+  describe '#build_style_attr with CSS custom properties' do
+    it 'asserts React.CSSProperties when a custom property is present, in a TypeScript project' do
+      converter = create_converter({ 'type' => 'View' }, { 'use_tailwind' => true, 'typescript' => true })
+      converter.instance_variable_set(:@dynamic_styles, { '--pv-color' => "'#FF0000'" })
+      expect(converter.send(:build_style_attr))
+        .to eq(" style={{ '--pv-color': '#FF0000' } as React.CSSProperties}")
+    end
+
+    # A JavaScript project's .jsx does not parse an `as` (jsonui-cli 1.9.0;
+    # spec/react/javascript_mode_output_parses_spec.rb).
+    it 'writes no assertion in a JavaScript project, typescript false or absent' do
+      [{ 'use_tailwind' => true, 'typescript' => false }, { 'use_tailwind' => true }].each do |config|
+        converter = create_converter({ 'type' => 'View' }, config)
+        converter.instance_variable_set(:@dynamic_styles, { '--pv-color' => "'#FF0000'" })
+        expect(converter.send(:build_style_attr)).to eq(" style={{ '--pv-color': '#FF0000' }}")
+      end
+    end
+
+    it 'leaves a plain style object uncast' do
+      converter = create_converter({ 'type' => 'View' })
+      converter.instance_variable_set(:@dynamic_styles, { 'backgroundColor' => "'#FF0000'" })
+      expect(converter.send(:build_style_attr))
+        .to eq(" style={{ backgroundColor: '#FF0000' }}")
+    end
+  end
+end
+
+# offsetX / offsetY were interpolated into the transform as literals, so a
+# bound offset emitted `translate(@{x}px, 0px)` — a string CSS discards, i.e.
+# the element never moved. Same defect class plan 41 catalogued as
+# bound-literal-leak; the arithmetic belongs in the emitted expression.
+RSpec.describe RjuiTools::React::Converters::BaseConverter, 'bound offset' do
+  def style_for(attrs)
+    c = RjuiTools::React::Converters::ViewConverter.new(
+      { 'class' => 'View', 'id' => 'v' }.merge(attrs), { 'use_tailwind' => true }
+    )
+    c.send(:build_class_name)
+    c.send(:build_style_attr)
+  end
+
+  it 'emits a runtime expression for a bound offset' do
+    style = style_for('offsetX' => '@{dx}', 'offsetY' => '@{dy}')
+    expect(style).to include('transform: `translate(${data.dx}px, ${data.dy}px)`')
+    expect(style).not_to include('@{')
+  end
+
+  it 'keeps a static offset byte-identical' do
+    expect(style_for('offsetX' => 10, 'offsetY' => 20))
+      .to include("transform: 'translate(10px, 20px)'")
+  end
+
+  it 'mixes a bound axis with a static one' do
+    expect(style_for('offsetX' => '@{dx}')).to include('translate(${data.dx}px, ${0}px)')
+  end
+end

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/textAlign__left.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.textAlign (left)",
+    "description": "Conformance fixture for 'textAlign' on Button (section: Button, class: visual). Value under test: \"Left\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__left",
+      "description": "Conformance fixture for 'textAlign' on Button (section: Button, class: visual). Value under test: \"Left\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_textAlign__left"
+        }
+      ]
+    }
+  ]
+}

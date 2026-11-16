@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/returnKeyType__next.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.returnKeyType (next)",
+    "description": "Conformance fixture for 'returnKeyType' on TextField (section: TextField, class: visual). Value under test: \"Next\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "returnKeyType__next",
+      "description": "Conformance fixture for 'returnKeyType' on TextField (section: TextField, class: visual). Value under test: \"Next\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_returnKeyType__next"
+        }
+      ]
+    }
+  ]
+}

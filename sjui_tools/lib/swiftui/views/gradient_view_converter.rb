@@ -1,0 +1,121 @@
+#!/usr/bin/env ruby
+
+require_relative 'base_view_converter'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      class GradientViewConverter < BaseViewConverter
+        def initialize(component, indent_level = 0, action_manager = nil, converter_factory = nil, view_registry = nil, binding_registry = nil)
+          super(component, indent_level, action_manager, binding_registry)
+          @converter_factory = converter_factory
+          @view_registry = view_registry
+        end
+        
+        def convert
+          children = @component['child'] || []
+          
+          # 子要素を生成
+          if children.empty?
+            add_line "Color.clear"
+          elsif children.length == 1
+            # Same door as ScrollView: a child's `visibility` was dropped here
+            # (found by counting the class of the 2026-09-20 report).
+            render_child_honoring_visibility(children.first)
+          else
+            add_line "VStack(spacing: 0) {"
+            indent do
+              children.each do |child|
+                render_child_honoring_visibility(child)
+              end
+            end
+            add_line "}"
+          end
+          
+          # グラデーション背景を適用
+          if @component['colors'] || @component['gradient']
+            apply_gradient_background
+          end
+          
+          # 共通のモディファイアを適用
+          apply_modifiers
+          
+          generated_code
+        end
+        
+        private
+        
+        def apply_gradient_background
+          # Handle colors property
+          color_array = @component['colors'] || @component['gradient'] || []
+          colors = color_array.map { |color| get_swiftui_color(color) }
+          
+          # Handle start and end points
+          if @component['startPoint'] && @component['endPoint']
+            start_point = gradient_point(@component['startPoint'])
+            end_point = gradient_point(@component['endPoint'])
+            gradient_params = "startPoint: #{start_point}, endPoint: #{end_point}"
+          else
+            direction = @component['gradientDirection'] || 'Vertical'
+            gradient_params = case direction
+            when 'Horizontal'
+              "startPoint: .leading, endPoint: .trailing"
+            when 'Oblique'
+              "startPoint: .topLeading, endPoint: .bottomTrailing"
+            else
+              "startPoint: .top, endPoint: .bottom"
+            end
+          end
+          
+          # `locations` places each colour along the axis (0.0-1.0), the
+          # SwiftUI equivalent of CAGradientLayer.locations which UIKit already
+          # honours (SJUIView: `layer.locations = locationNumbers`). Without it
+          # the colours are always evenly spaced, so a two-stop gradient meant
+          # to break at 20% rendered as a 50/50 fade.
+          #
+          # LinearGradient has no `colors:` + `locations:` form — stops are the
+          # only way to express it — so the two initialisers are separate here.
+          # A count mismatch falls back to even spacing rather than emitting a
+          # gradient with fewer stops than colours.
+          locations = @component['locations']
+          if locations.is_a?(Array) && locations.length == colors.length && !colors.empty?
+            stops = colors.each_with_index.map do |color, i|
+              ".init(color: #{color}, location: #{locations[i]})"
+            end
+            add_modifier_line ".background(LinearGradient(stops: [#{stops.join(', ')}], #{gradient_params}))"
+          else
+            add_modifier_line ".background(LinearGradient(colors: [#{colors.join(', ')}], #{gradient_params}))"
+          end
+        end
+        
+        def gradient_point(point)
+          x = point['x'] || 0
+          y = point['y'] || 0
+          
+          # Map common gradient points
+          if x == 0 && y == 0
+            ".topLeading"
+          elsif x == 0.5 && y == 0
+            ".top"
+          elsif x == 1 && y == 0
+            ".topTrailing"
+          elsif x == 0 && y == 0.5
+            ".leading"
+          elsif x == 0.5 && y == 0.5
+            ".center"
+          elsif x == 1 && y == 0.5
+            ".trailing"
+          elsif x == 0 && y == 1
+            ".bottomLeading"
+          elsif x == 0.5 && y == 1
+            ".bottom"
+          elsif x == 1 && y == 1
+            ".bottomTrailing"
+          else
+            "UnitPoint(x: #{x}, y: #{y})"
+          end
+        end
+      end
+    end
+  end
+end

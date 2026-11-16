@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/size__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.size (static)",
+    "description": "Conformance fixture for 'size' on SelectBox (section: SelectBox, class: visual). Value under test: 3.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "size__static",
+      "description": "Conformance fixture for 'size' on SelectBox (section: SelectBox, class: visual). Value under test: 3.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_size__static"
+        }
+      ]
+    }
+  ]
+}

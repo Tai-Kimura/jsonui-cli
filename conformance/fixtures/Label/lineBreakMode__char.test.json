@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lineBreakMode__char.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lineBreakMode (char)",
+    "description": "Conformance fixture for 'lineBreakMode' on Label (section: Label, class: visual). Value under test: \"Char\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineBreakMode__char",
+      "description": "Conformance fixture for 'lineBreakMode' on Label (section: Label, class: visual). Value under test: \"Char\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lineBreakMode__char"
+        }
+      ]
+    }
+  ]
+}

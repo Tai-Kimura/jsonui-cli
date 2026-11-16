@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/GradientView__child-e837dcb6.layout.json"
+  },
+  "metadata": {
+    "name": "conformance control GradientView",
+    "description": "Control for GradientView: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "control"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "GradientView__child-e837dcb6",
+      "description": "Control for GradientView: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_GradientView__child-e837dcb6"
+        }
+      ]
+    }
+  ]
+}

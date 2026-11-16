@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/minimumScaleFactor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.minimumScaleFactor (binding)",
+    "description": "Conformance fixture for 'minimumScaleFactor' on Label (section: Label, class: visual). Value under test: \"@{boundMinimumScaleFactor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minimumScaleFactor__binding",
+      "description": "Conformance fixture for 'minimumScaleFactor' on Label (section: Label, class: visual). Value under test: \"@{boundMinimumScaleFactor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_minimumScaleFactor__binding"
+        }
+      ]
+    }
+  ]
+}

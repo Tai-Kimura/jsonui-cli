@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/emptyView__zero.layout.json"
+  },
+  "metadata": {
+    "name": "conformance emptyView__zero",
+    "description": "An empty View sized 0 on both axes, with a 12pt top margin, above a Label `after`. It has nothing to be the size of, so it is 0 and `after` sits 12pt down; a platform that draws it filling the space pushes `after` off.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "emptyView__zero",
+      "description": "An empty View sized 0 on both axes, with a 12pt top margin, above a Label `after`. It has nothing to be the size of, so it is 0 and `after` sits 12pt down; a platform that draws it filling the space pushes `after` off.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_emptyView__zero"
+        }
+      ]
+    }
+  ]
+}

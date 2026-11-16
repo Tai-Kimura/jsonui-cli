@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/errorImage__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.errorImage (static)",
+    "description": "Conformance fixture for 'errorImage' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "errorImage__static",
+      "description": "Conformance fixture for 'errorImage' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_errorImage__static"
+        }
+      ]
+    }
+  ]
+}

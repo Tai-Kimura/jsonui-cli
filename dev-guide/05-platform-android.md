@@ -1,0 +1,205 @@
+# 05. Android — KotlinJsonUI + kjui_tools
+
+**KotlinJsonUI**（ランタイム、Gradle 4モジュール）+ **jsonui-cli/kjui_tools**（Ruby CLI `kjui`）。
+
+> **XML (Android Views) モードは 2026-07-03 に正式凍結**。新機能は Compose のみ、
+> XML は 3.0 削除候補、XML バグは won't-fix（ビルドを壊す場合を除く）。
+> `lib/xml/` と `Kjui*` View ウィジェットには投資しない。
+
+## 1. KotlinJsonUI モジュール構成
+
+| モジュール | 役割 | 公開 |
+|---|---|---|
+| `:library` | コア。Compose composables + `core/`（DynamicModeManager, DynamicViewProvider=リフレクションブリッジ, ColorResolver, FontSpec）+ 凍結中の `views/Kjui*`（viewBinding/dataBinding はこのため残存） | `io.github.tai-kimura:kotlinjsonui` |
+| `:library-dynamic` | 実行時 JSON→Compose インタープリタ。`DynamicView.kt`, `DataBindingContext`, `TypedAttrs.kt`, `components/Dynamic*Component.kt`（35個 = kjui emitter のランタイムミラー）, `hotloader/`。Compose-only | `io.github.tai-kimura:kotlinjsonui-dynamic` |
+| `:sample-app` | dev/prod フレーバー付きサンプル。CI は `compileDevDebugKotlin` | — |
+| `:conformance-host` | Compose **dynamic モード専用**の conformance 実行アプリ（UIAutomator、vendored driver） | — |
+
+配線の要点:
+
+- 生成される `<Screen>GeneratedView.kt` は `DynamicModeManager.isActive()` 分岐を持ち、
+  active なら `SafeDynamicView(layoutName=…)`（:library → リフレクションで :library-dynamic へ）、
+  でなければ静的 Compose ツリー。アプリは `implementation(core)` + `debugImplementation(dynamic)`。
+- **`EmbedContainer` は :library 側**（全 GeneratedView が参照するため release でもコンパイル必須。
+  `lifecycle-viewmodel-compose` が api 公開なのも同じ理由）。
+- Dynamic v2 rewrite 計画（`Docs/dynamic-v2-rewrite-plan.md`）: Dynamic コンポーネントは
+  kjui_tools の `modifier_builder.rb` / `resource_resolver.rb` / `*_component.rb` を
+  source of truth として書き直し中。既知の未解決: `DynamicView.kt` の weight+gone ガード欠如、
+  `VisibilityWrapper` に RowScope/ColumnScope オーバーロードがない（Box ラップで weight 消失）。
+
+## 2. kjui_tools 構造と Compose パイプライン
+
+```
+kjui_tools/lib/
+├── cli/                 init/setup/build/generate（view|partial|collection|binding|converter|adapter）
+├── core/                config/validators/normalization/style_loader/…（attribute_definitions.json は symlink）
+├── compose/
+│   ├── compose_builder.rb        ★ 中央オーケストレータ（~1500行）— かつ自身が emit sink
+│   ├── components/*.rb           28 emitters（+ extensions/ = カスタム部品プラグイン点）
+│   ├── helpers/modifier_builder.rb   ★ 横断 modifier 工場（~1170行）。順序はここに符号化
+│   ├── helpers/import_manager.rb     required_imports シンボル → import 行（import の唯一の sink）
+│   ├── helpers/{resource_resolver,font_spec_helper,visibility_helper,responsive_helper,section_extractor}.rb
+│   ├── generators/               view/cell/partial/converter/kotlin_component/dynamic_component/…
+│   └── {style_loader,include_expander,data_model_updater,build_cache_manager}.rb
+└── xml/                 凍結
+```
+
+リソース: `core/resources/string_manager.rb` が strings.json（SSoT）→
+`res/values*/strings.xml` を update-or-add + **管理 prefix 内の stale prune**
+（`<layout>_` prefix が strings.json に存在するキーのみ削除対象。
+管理外の手書きキーは触らない — iOS の auto-generated セクションと同じ意味論。
+2026-07-07 のバグ修正で prune 追加）。
+
+ビルドフロー（`build.rb#build_compose` → ComposeBuilder）: キャッシュ判定（mtime + include/style
+依存グラフ）→ リソース抽出 → `<Screen>Data.kt` 再生成 → validate（attribute/binding/
+JsonUIShared::LayoutValidator）→ per-file: `$jui` 判定 → style merge → include 展開（ID prefix、
+sjui 互換）→ scaffold（冪等）→ `generate_component` 再帰 emit →
+`// >>> GENERATED_CODE_START/END` マーカー間に splice、ViewModel の `updateData(Map)` も
+専用マーカー内を再生成、**import セクションは毎回全再構築**。
+
+### emit sink の全リスト（「components/ だけ grep」は事故る）
+
+kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink は:
+
+1. `components/<x>_component.rb` — 大半のコンポーネント
+2. **`compose_builder.rb` 内インライン** — `SafeAreaView`（`generate_safe_area_view*`、
+   ConstraintLayout 切替含む）、`Spacer`、**responsive 全経路**
+   （`generate_responsive_component` / `*_responsive_inline`）
+3. `helpers/modifier_builder.rb` — padding/margin/size/weight/shadow/background/border/
+   visibility/alpha/clickable/relative-positioning/testTag/lifecycle 等の横断属性
+4. `helpers/resource_resolver.rb`（色・文字列）、`font_spec_helper.rb`（フォント）、
+   `visibility_helper.rb`（visibility/gone 静的スキップ）
+5. import が要るなら `import_manager.rb#get_imports_map` + emit 側 `required_imports&.add(:sym)`
+   — 登録漏れは生成コードのコンパイルエラー
+
+## 3. どこを直すか — 「コンポーネント X に属性追加」
+
+1. SSoT `shared/core/attribute_definitions.json`（`platform`/`mode` タグ必須。漏れると
+   kjui validator が Unknown attribute 警告）
+2. kjui_tools の該当 emit sink（上記リストから特定）+ import 登録
+3. bindable なら `data_model_updater.rb` / `compose_builder.rb` の `get_kotlin_cast` /
+   `generate_update_data_function`
+4. **KotlinJsonUI 側 Dynamic ミラー（必須）**: `library-dynamic/.../components/Dynamic<X>Component.kt`
+   （+ `TypedAttrs.kt` 等）。落とすと静的では出るが dynamic/hot-reload で消え、conformance で落ちる
+5. :library 本体は通常触らない（新しいランタイム composable が要るときだけ）
+6. カスタムコンポーネントは `kjui g converter` が 5 sink（extensions の .rb / mappings /
+   attribute_definitions / Kotlin 部品 / Dynamic 部品+registry）へ書く
+
+## 4. ビルド・テスト・conformance・公開
+
+- コンパイル（CI 同等）:
+  `./gradlew :library:compileReleaseKotlin :library-dynamic:compileReleaseKotlin :sample-app:compileDevDebugKotlin --warning-mode all`
+- ユニット: `./gradlew :library:testReleaseUnitTest :library-dynamic:testReleaseUnitTest`。
+  **CI はゼロ警告ゲート**（`^w:` 再出現で fail）— 生成コード側も警告フリー前提
+  （`@Suppress("UNCHECKED_CAST")` 等は意図的）。
+- conformance（ローカル）: 検証専用 AVD（**日常用 Pixel_Tablet にテストを入れない**。
+  専用 AVD port 5560 / 10G、macOS は timeout shim 必要）で
+  `CONFORMANCE_DIR=... ./conformance-host/scripts/run_conformance.sh --fresh` → `collect_results.sh`。
+  結果は `/sdcard/Android/data/com.kotlinjsonui.conformance/files/conformance/`
+  （`progress.jsonl` によるクラッシュ/タイムアウト resume 付き）。ローカル 717 fixtures ≒ 4分、
+  CI は 25-30分（×5-7倍で採寸する — 08章）。
+- 公開: バージョンは **root `gradle.properties` の `version=` 一本**（現 2.17.2）。両モジュールが
+  これを読むため **library と library-dynamic は構造的に同一バージョン公開**。
+  Maven Central（vanniktech maven-publish、CENTRAL_PORTAL、automaticRelease）が正、
+  jitpack.yml は best-effort。**publish 前にテストを回すこと**（過去の運用事故由来のルール）。
+  - `library-dynamic` は **空 javadoc jar**（AGP/Dokka が Java17 sealed class を解析できない回避策）。
+  - `library/build.gradle.kts` のコメントアウトされた旧 publishing{} は無視（正は mavenPublishing{}）。
+
+## 5. 罠（Android 固有）
+
+- 🚨 **Android 17 以降、回転で IME の表示状態は復元されない**（targetSdk 不問、全アプリに効く）。
+  🔻 **2026-09-14 追記: 下の「担えない」は dynamic 面だけの話で、codegen 面には当たらない**（当初の記述は
+  射程を外していた。docsite 担当が生成器の実装を読んで指摘）。**面ごとに分けて読むこと**:
+
+  | 面 | focus の経路 | 構成変更後 |
+  |---|---|---|
+  | **dynamic**（`library-dynamic`） | `FocusManager` の replay 0 な `SharedFlow` | **再配信されない**＝下の記述どおり |
+  | **codegen**（`kjui_tools` が emit） | フィールドごとの `remember { FocusRequester() }` ＋ `LocalSoftwareKeyboardController` を `LaunchedEffect(data.<id>IsFocused)` が駆動 | 🚨 **再要求が走り得る**（下記） |
+
+  codegen 面の実測（**emit 元は 2 本**: `textfield_component.rb:212` と `textview_component.rb:172`。生成物で確認）:
+  ```kotlin
+  val focusRequester_<name> = remember { FocusRequester() }
+  val keyboardController_<id> = LocalSoftwareKeyboardController.current
+  LaunchedEffect(data.<id>IsFocused) { if (data.<id>IsFocused) { focusRequester_<name>.requestFocus(); keyboardController_<id>?.show() } }
+  ```
+  `data` は `viewModel()` 由来（wrapper の `val data by viewModel.data.collectAsState()`）で、**`ViewModel` は構成変更をまたいで保持される**。`<id>IsFocused` は data クラスの実フィールド。⇒ 回転後に composition が作り直されると `LaunchedEffect` が key `true` のまま再入し、**`requestFocus()` と `keyboardController?.show()` が走る経路が在る**。
+  ⚠️ **走ることまでは実装から読めるが、Android 17 上で実際に IME が出るかは未測定**（端末が要る）。`FocusManager` を根拠にした「担えない」は、**この経路には移らない**。
+  ⚠️ **母集団**: この配線を持つのは `id` を宣言した **TextField と TextView**。**`id` 付き TextField だけ、と読むと TextView 側を落とす。**
+
+  🔴 **内訳の数え方（1.8.79 に載せた数は誤りだった。2026-09-14 14:2x に訂正）**
+  ```
+  🚫 生成物を `TextField(` で grep して emitter を判別する — できない
+     両 emitter が **同じ composable 名**を出す:
+       textfield_component.rb:217 / textview_component.rb:177  CustomTextFieldWithMargins(
+       textfield_component.rb:219 / textview_component.rb:179  CustomTextField(
+  ✅ 配線の id を生成物から拾い、**layout JSON の `type`** で引く。単位は **配線 1 本**（ファイル単位で数えない）
+  ```
+  この述語で数え直すと **多数側は TextField** で、1.8.79 に載せた「TextField 1 / TextView 7」は**数も向きも逆**だった:
+
+  | 面 | 配線 | TextField | TextView |
+  |---|---|---|---|
+  | KotlinJsonUI sample-app | 36 | 30 | 6 |
+  | 消費側 1 面（独立に再測） | 69 | 66 | 3 |
+
+  ⚠️ **ただしこの軸は的 B には効かない。** 両 emitter の配線は**形が同一**なので、emitter の違いは B の結果を変えない。⇒ **検体の条件は「配線を持っていること」だけ。**
+  🚨 **この壊れた述語には 2 レーンが独立に到達した**（片方は「TextView 由来 0 本」と結論しかけた）。⇒ **手順として置く**: 検体を選ぶ前に、面ごとに配線の内訳を **layout の `type`** で出す。**生成物の composable 名では判別できない。**
+
+  🔻 **未測定が 2 つ在る。回転より手前に 1 つ在る。**
+
+  | 的 | 問い | 状態 |
+  |---|---|---|
+  | A | **回転をまたいだ**後に IME が出るか | 未測定（API 37 の image がこの機械に無い） |
+  | B | **回転と無関係に**、ViewModel から `<id>IsFocused` を true にしたとき IME が出るか | 🚨 **未測定** |
+
+  B は A より手前に在る。`keyboardController?.show()` は **ユーザー操作に紐づかない IME 表示**で、
+  プラットフォームがこれを拒否する方向の変更は**回転の復元より広い範囲に当たる**（web 面で
+  `showPicker` に user-activation の guard を入れたのと同じクラス）。
+  ⇒ **B が false なら、限定条件は「回転後」の脚注ではなく能動経路の記述そのものに要る。**
+
+  **dynamic 面について**: **ライブラリは復元を担わない。担えない**——`FocusManager`（library-dynamic）は
+  `MutableSharedFlow<String>(extraBufferCapacity = 1)`、つまり**状態でなくイベントバス**で、
+  構成変更後に `LaunchedEffect` が購読し直しても**直前の focus 要求は再配信されない**。
+  ⚠️ **`extraBufferCapacity` と `replay` は別軸**。buffer は emit 側が suspend しないための容量で、
+  **新しい購読者に過去の値を配るのは `replay` のほう**。ここは `replay` を渡していない＝**既定の 0** なので、
+  購読し直した側には何も届かない。`extraBufferCapacity = 1` を「直前の 1 件を配る」と読むと逆の結論になる。
+  実装漏れではなく設計（`FocusManager.requestFocus` は submit 時の次フィールド送りが用途）。
+  ライブラリが一律に再表示すると、意図しない IME 出現を作る。
+  ⇒ **復元が要る画面は消費側の責務**: `windowSoftInputMode="stateAlwaysVisible"` か、
+  `onCreate` / `onConfigurationChanged` で再要求する。
+  補足（測定 2026-09-14）: `conformance-host` は
+  `configChanges="orientation|screenSize|keyboardHidden"` を宣言しているので回転で再生成されず、
+  **この挙動はホストには届かない**。テストランナー側も「キーボードが表示されている」ことを
+  **assert する腕は 0 本**（`isKeyboardShown` は `hideKeyboard` アクションの private helper で、
+  schema はアクションとしてのみ公開）。非復元は `hideKeyboard` を **no-op 側**に倒すので、期待値が反転する腕は無い。
+- 🚨 **`publishToMavenLocal` は「無害な検証」ではない。`mavenLocal()` を `mavenCentral()` より先に置く
+  消費側が 1 つでも在れば、それは *その面への配布* である。**（2026-09-14 のインシデント）
+  - `~/.m2` は**機械全体で共有**。**同じ版番号のまま中身が入れ替わる**ので、
+    「`<version>` で build した」という記録が、その時刻以降**2 つの別物を指す**。
+    引いた側に合図は 1 つも出ない —— 版番号は同じ、gradle は警告を出さない、ビルドは緑。
+  - 実測例: ソースは同一で `compileSdk` / AGP / Compose BOM だけ違うビルドが 495,291 B、
+    中央のリリース版が 498,120 B。**ソースを 1 行も変えなくても別物になる。**
+  - **上書きは痕跡を残さない**（mtime は上書きした側の物になる）。⇒ 先に何が在ったかは**事後には分からない**。
+    消して原状復帰する前に、**引いている面の担当に聞く**。
+  - 判別子: その座標に `_remote.repositories` が**無く** `maven-metadata-local.xml` だけ在るなら、
+    中央から落ちた物ではなく**誰かがローカル install した物**。
+  - **撃つ前に測る**: 消費側の `settings.gradle.kts` / `build.gradle.kts` を `mavenLocal` で grep し、
+    在るならその順序を読む。⚠️ **消費側が submodule なら親から `git grep` を撃っても 0 件に見える**
+    （tracked が親に無い）。**disk の `find` で撃つこと** —— 「無い」と「窓が届いていない」は同じ 0 を返す。
+  - **汚さない代替**: 依存を差し替えて検証したいだけなら gradle の
+    **init script（`-I`）＋ `dependencySubstitution`**。`~/.m2` に触らない。
+- **responsive はインライン emit が正**: ファイルスコープ helper へ抽出すると
+  `data`/`viewModel`/scope が漏れ `Modifier.weight` が壊れる（過去バグ多数、
+  compose_builder.rb に長文コメントあり）。`LocalWindowInfo`/`LocalDensity` を使う
+  （`LocalConfiguration.screenWidthDp` は deprecated）。
+- responsive な Embed/Collection は下端の `wrap_with_visibility` に到達する前に return する
+  経路があるため**自己ラップ必須**。`Embed` はコンテナ skip-list から除外
+  （EmbedComponent.generate は Hash でなく String を返す）。
+- **JVM 64KB メソッド制限**: `SectionExtractor` が大きいコンテナ子を `SectionN` helper へ
+  リフト（`RESPONSIVE_HELPERS` マーカー間）。
+- import は毎ビルド全再構築 + blessed-names で刈られる。必要な import が消えるのは
+  名前が blessed に入っていないから。
+- `attribute_check.md` が正準/非正準の履歴表（`margin`→個別 margin、`color`→`fontColor`、
+  `children`→`child`、`onValueChange`→`onTextChange`、`source|name`→`src`）。
+- conformance driver は vendored + ローカルパッチ 1 件（`// KJUI-CONFORMANCE PATCH`、
+  assertText retry）。`sync_driver.sh` で再同期時にパッチ消失に注意。
+- `KotlinJsonUI/CLAUDE.md` は 2026-08-01（P9）に刷新済み。乖離を見つけたら README の乖離表の教訓どおり同時修正する。

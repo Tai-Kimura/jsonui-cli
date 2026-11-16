@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/labelPosition__leading.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.labelPosition (leading)",
+    "description": "Conformance fixture for 'labelPosition' on Switch (section: Switch, class: visual). Value under test: \"leading\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "labelPosition__leading",
+      "description": "Conformance fixture for 'labelPosition' on Switch (section: Switch, class: visual). Value under test: \"leading\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_labelPosition__leading"
+        }
+      ]
+    }
+  ]
+}

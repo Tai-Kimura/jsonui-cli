@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/fontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.fontSize (static)",
+    "description": "Conformance fixture for 'fontSize' on Radio (section: Radio, class: visual). Value under test: 20.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__static",
+      "description": "Conformance fixture for 'fontSize' on Radio (section: Radio, class: visual). Value under test: 20.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_fontSize__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/defaultImage__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.defaultImage (static)",
+    "description": "Conformance fixture for 'defaultImage' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "defaultImage__static",
+      "description": "Conformance fixture for 'defaultImage' on Image (section: Image, class: visual). Value under test: \"conformance_sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_defaultImage__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/maxFontScale__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.maxFontScale (static)",
+    "description": "Conformance fixture for 'maxFontScale' on Radio (section: Radio, class: visual). Value under test: 1.2.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxFontScale__static",
+      "description": "Conformance fixture for 'maxFontScale' on Radio (section: Radio, class: visual). Value under test: 1.2.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_maxFontScale__static"
+        }
+      ]
+    }
+  ]
+}

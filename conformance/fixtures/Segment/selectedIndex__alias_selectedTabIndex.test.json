@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/selectedIndex__alias_selectedTabIndex.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.selectedIndex (alias_selectedTabIndex)",
+    "description": "Conformance fixture for 'selectedIndex' on Segment (section: Segment, class: visual). Value under test: 1.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedIndex__alias_selectedTabIndex",
+      "description": "Conformance fixture for 'selectedIndex' on Segment (section: Segment, class: visual). Value under test: 1.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_selectedIndex__alias_selectedTabIndex"
+        }
+      ]
+    }
+  ]
+}

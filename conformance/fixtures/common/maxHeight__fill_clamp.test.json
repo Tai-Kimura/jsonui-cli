@@ -1,0 +1,31 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxHeight__fill_clamp.layout.json"
+  },
+  "metadata": {
+    "name": "conformance maxHeight__fill_clamp",
+    "description": "matchParent height + maxHeight 120: the bound clamps the fill to min(parent, 120) — canonical size.maxBoundsClampFill. A platform that ignores the bound renders identically to the filled control.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxHeight__fill_clamp",
+      "description": "matchParent height + maxHeight 120: the bound clamps the fill to min(parent, 120) — canonical size.maxBoundsClampFill. A platform that ignores the bound renders identically to the filled control.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_maxHeight__fill_clamp"
+        }
+      ]
+    }
+  ]
+}

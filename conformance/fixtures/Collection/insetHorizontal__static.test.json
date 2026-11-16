@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/insetHorizontal__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.insetHorizontal (static)",
+    "description": "Conformance fixture for 'insetHorizontal' on Collection (section: Collection, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "insetHorizontal__static",
+      "description": "Conformance fixture for 'insetHorizontal' on Collection (section: Collection, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_insetHorizontal__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/textAlign__center_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.textAlign (center_2)",
+    "description": "Conformance fixture for 'textAlign' on Label (section: Label, class: visual). Value under test: \"center\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__center_2",
+      "description": "Conformance fixture for 'textAlign' on Label (section: Label, class: visual). Value under test: \"center\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_textAlign__center_2"
+        }
+      ]
+    }
+  ]
+}

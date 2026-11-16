@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/GradientView/orientation__horizontal.layout.json"
+  },
+  "metadata": {
+    "name": "conformance GradientView.orientation (horizontal)",
+    "description": "Conformance fixture for 'orientation' on GradientView (section: GradientView, class: visual). Value under test: \"horizontal\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "GradientView"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "orientation__horizontal",
+      "description": "Conformance fixture for 'orientation' on GradientView (section: GradientView, class: visual). Value under test: \"horizontal\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "GradientView_orientation__horizontal"
+        }
+      ]
+    }
+  ]
+}

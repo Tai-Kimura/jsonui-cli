@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/textAlign__center_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.textAlign (center_2)",
+    "description": "Conformance fixture for 'textAlign' on TextView (section: TextView, class: visual). Value under test: \"center\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__center_2",
+      "description": "Conformance fixture for 'textAlign' on TextView (section: TextView, class: visual). Value under test: \"center\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_textAlign__center_2"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+# frozen_string_literal: true
+
+require_relative '../view_binding_handler'
+require_relative '../../views/color_helper'
+require_relative '../../../core/string_literals'
+
+module SjuiTools
+  module SwiftUI
+    module Binding
+      class LabelBindingHandler < ViewBindingHandler
+        def handle_specific_binding(component, key, value)
+          case key
+          when 'text'
+            # Text content is handled in the Text initialization
+            # Return nil as it's not a modifier
+            nil
+          when 'fontColor'
+            if is_binding?(value)
+              binding = parse_binding(value, read_only: true)
+              color_expr = resolve_color_binding_expr(binding)
+              ".foregroundColor(#{color_expr})"
+            end
+          when 'fontSize'
+            # A bound size reaches PartialAttributedText's `fontSize:` (the Label converter passes it), which draws it
+            # through the provider at the text size rule's size. A `.font(.system(size:))` on top fixed the size and
+            # the typeface again (ticket sjui-label-font-size-ignores-dynamic-type), so nothing is added here.
+            nil
+          when 'font'
+            if is_binding?(value)
+              binding = parse_binding(value, read_only: true)
+              # Handle font weight binding
+              ".fontWeight(#{binding} == \"bold\" ? .bold : .regular)"
+            end
+          else
+            nil
+          end
+        end
+
+        # Get the text content (with binding support)
+        # Canonical '@{path ?? default}' is parsed via BindingExpression;
+        # string defaults become double-quoted Swift literals, number/bool
+        # defaults stay bare, null/no default keeps the '?? ""' text fallback
+        # for optional properties.
+        def get_text_content(component)
+          text_value = component['text']
+          if is_binding?(text_value)
+            # Full binding: @{propertyName [?? default]}
+            expr = BindingExpression.swift_text_expr(text_value[2..-2], prefix: 'data')
+            if expr
+              "\"\\(#{expr})\""
+            elsif !BindingExpression.emittable_path?(BindingExpression.parse(text_value[2..-2]).path)
+              # Not a path at all: show the author's own text instead of
+              # emitting Swift that will not compile. Silence would hide a
+              # typo that the screen can now display.
+              BindingExpression.swift_literal_for(text_value)
+            else
+              # Negation is not valid in text contexts — canonical runtimes
+              # treat the token as unresolved (empty string)
+              "\"\""
+            end
+          elsif text_value && text_value.include?('@{')
+            # Text with interpolation: "Some text @{property} more text".
+            # Literal segments are escaped individually so quotes emitted as
+            # part of Swift default literals stay unescaped inside \(...)
+            parts = text_value.split(/(@\{[^}]+\})/)
+            interpolated = parts.map do |part|
+              if (m = part.match(/\A@\{([^}]+)\}\z/))
+                expr = BindingExpression.swift_text_expr(m[1], prefix: 'data')
+                expr ? "\\(#{expr})" : ''
+              else
+                JsonUIShared::StringLiterals.swift_body(part)
+              end
+            end.join
+            "\"#{interpolated}\""
+          else
+            JsonUIShared::StringLiterals.swift(text_value || '')
+          end
+        end
+      end
+    end
+  end
+end

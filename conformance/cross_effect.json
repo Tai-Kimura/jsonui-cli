@@ -1,0 +1,846 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted cross-platform attribute-effect findings, two kinds. DIVERGENCE ({fixture, platforms}): the control-diff verdict (active = the attribute changed the render, inert = it did not) disagrees across the platforms the attribute is declared for — semantic drift unless a deliberate platform idiom; the reason says which. UNIFORMLY-INERT ({fixture, verdict, declared}): a value the SSoT enumerates changes nothing on ANY platform — either it is the default rendering (say so in the reason) or it is dead/unimplemented everywhere. Unrecorded findings fail `jui conformance gate --cross-effect`; entries the measurement no longer supports are stale and must be pruned (`jui conformance cross-effect --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it. HAND-MAINTAINED, NOT GENERATED: `jui conformance generate` does not write this file (measured — its md5 is unchanged across a generate). Edit it directly; nothing regenerates it, and nothing will restore it if an entry is dropped.",
+  "entries": [
+    {
+      "fixture": "Blur/blurRadius__static",
+      "platforms": {
+        "android": "inert",
+        "web": "active"
+      },
+      "reason": "Renderer-environment: the AVD/CI emulator renders Compose blur through software (swiftshader), where the radius delta between the declared value and the default lands under the dhash threshold; web's CSS blur shows it. The android EFFECT is real (effectStyle rows measure active) — only the radius magnitude is sub-threshold in this environment.",
+      "note": ""
+    },
+    {
+      "fixture": "Button/textAlign__center",
+      "verdict": "uniformly-inert",
+      "declared": "Center",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "Button/textAlign__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Button/textAlign__right",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/layout__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "vertical",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "adjudicated collection behavior: the fixture's data section resolves boundLazy to \"eager\", so this row is the binding face of Collection/lazy__eager and inherits its ruling — ios renders the eager layout visibly at this fixture size while android/web equal their defaults. Measured on web at HEAD: all four lazy faces (lazy/eager/none/binding) move 0 px, consistent with the ledgered C0/unread-spelling for Collection.lazy [web]. Behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__eager",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__lazy",
+      "verdict": "uniformly-inert",
+      "declared": "lazy",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/lazy__none",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "adjudicated collection behavior: ios renders scroll chrome/eager layout visibly at this fixture size while android/web equal their defaults — behavioral attributes need the interactive/geometry probe, not activeness. Family: collection-behavior.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/listStyle__grouped",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Sub-threshold on web only: the grouped chrome surface is a light grey drawn over the fixture's #DDDDDD box, and dhash cannot separate the two greys; insetgrouped/sidebar change geometry (insets, corners) and measure active on the same face.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/listStyle__plain",
+      "verdict": "uniformly-inert",
+      "declared": "plain",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/orientation__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "vertical",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "IconLabel/iconPosition__left",
+      "verdict": "uniformly-inert",
+      "declared": "Left",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Image/renderingMode__original",
+      "verdict": "uniformly-inert",
+      "declared": "original",
+      "reason": "declared value equals the platform default rendering everywhere (vertical/top/left/word-style defaults) or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Indicator/animating__true",
+      "platforms": {
+        "android": "inert",
+        "ios": "active"
+      },
+      "reason": "android is inert here and ios is active, and the ios side is the one that is wrong — not because the attribute behaves differently, but because the iOS CONTROL IS A LIVE ANIMATION and its capture is not reproducible. Indicator.animating is declared boolean with default true, so `true` IS the control: android, which quiesces animations under UiAutomator, measures exactly 0 px against its control while __false and __binding measure 1907 px on the same render. On ios the same comparison gave 623 px in the 12:18 render and 816 px in the 13:26 render of the SAME tree (same library commit, same xcode 26.6) — and the reason is visible in the artifacts: Indicator_animating__true.png is byte-identical between those two runs (diff 0) while control_Indicator.png differs between them by 828 px. The fixture is stable; the CONTROL moves. Every fixture-vs-control number for Indicator on ios is therefore noise of roughly that size, and 623/816 are both under it. This row records a capture property of the iOS conformance host — it does not quiesce indicator animations the way the Android host does — and NOT a cross-platform difference in the attribute. It is filed against the host separately; when the host stills the animation, ios should join android at 0 and this row should be pruned.",
+      "note": "ios/android split is an artifact of animation quiescing, measured across two renders of one tree."
+    },
+    {
+      "fixture": "Label/autoShrink__true",
+      "platforms": {
+        "android": "active",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Platform capability: CSS has no intrinsic shrink-to-fit for overflowing text; ios (adjustsFontSizeToFitWidth analogue) and android (auto-size) both shrink. The web face renders the un-shrunk text — the declared behavior is unexpressible, not unimplemented.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__char",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__clip",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__head",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated text metrics: shrink/inset/line metrics render at sub-threshold or platform-quantized sizes at this fixture shape (measured single-platform actives); geometry/interactive probes close them. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__middle",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__tail",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated text metrics: joins Label/lineBreakMode__head. Measured on web at HEAD the four truncating values move 3504-3519 px against the long-text control, so web folds the line; ios and android photograph the same picture because the Label wraps instead of truncating at this fixture shape (no line limit companion, so a truncation policy has nothing to apply) — the same reasoning the Wave-2 TextView/lineBreakMode rows carry. The codegen differential --paired reads the spelling and the value on all three. Geometry/line-count probes close it. Family: text-metrics.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/lineBreakMode__word",
+      "verdict": "uniformly-inert",
+      "declared": "Word",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textAlign__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "adjudicated value-is-default: the fixture's own data section declares boundTextAlign with defaultValue \"Left\", so the binding resolves to the platforms' default alignment — measured 0 px on web at HEAD while textAlign center/right move 816/809 px against the same control. The ios activeness is its own text-box metrics, the same split already adjudicated for Label/textAlign__left. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textAlign__left",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/textAlign__left_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "NetworkImage/renderingMode__original",
+      "verdict": "uniformly-inert",
+      "declared": "original",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/direction__lefttoright",
+      "verdict": "uniformly-inert",
+      "declared": "leftToRight",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/direction__none",
+      "verdict": "uniformly-inert",
+      "declared": "none",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/direction__righttoleft",
+      "verdict": "uniformly-inert",
+      "declared": "rightToLeft",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/direction__toptobottom",
+      "verdict": "uniformly-inert",
+      "declared": "topToBottom",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/defaultScrollAnchor__top",
+      "verdict": "uniformly-inert",
+      "declared": "top",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/orientation__vertical",
+      "verdict": "uniformly-inert",
+      "declared": "vertical",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__countdown",
+      "verdict": "uniformly-inert",
+      "declared": "countDown",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__date",
+      "verdict": "uniformly-inert",
+      "declared": "date",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__dateandtime",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; joins the already-adjudicated datePickerMode date/time/countdown rows. Measured on web at HEAD: 72 px, the closed-control chrome the web <select> shows for a datetime input, which the ios and android closed controls do not. Promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerMode__time",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": "51-B corroboration (local ios artifacts, both lanes): datePickerMode time / date / countdown / dateandtime render pixel-identically on ios in the dynamic AND the codegen lane (0 differing px). sjui selectbox_converter.rb:79-86 maps `time` to `.time`, so the codegen is innocent and android/web activeness is their own closed-control chrome."
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__automatic",
+      "verdict": "uniformly-inert",
+      "declared": "automatic",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__compact",
+      "verdict": "uniformly-inert",
+      "declared": "compact",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__graphical",
+      "verdict": "uniformly-inert",
+      "declared": "graphical",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__inline",
+      "verdict": "uniformly-inert",
+      "declared": "inline",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__wheel",
+      "verdict": "uniformly-inert",
+      "declared": "wheel",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/datePickerStyle__wheels",
+      "verdict": "uniformly-inert",
+      "declared": "wheels",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/fontColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/items__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: the item list is only visible while the picker is OPEN. iOS and Android photograph the closed control, which shows the selection, not the options; the web <select> renders its options into the same box. Joins the existing selectbox-closed-control family. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__1",
+      "verdict": "uniformly-inert",
+      "declared": 1,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__10",
+      "verdict": "uniformly-inert",
+      "declared": 10,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__12",
+      "verdict": "uniformly-inert",
+      "declared": 12,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__15",
+      "verdict": "uniformly-inert",
+      "declared": 15,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__2",
+      "verdict": "uniformly-inert",
+      "declared": 2,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__20",
+      "verdict": "uniformly-inert",
+      "declared": 20,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__3",
+      "verdict": "uniformly-inert",
+      "declared": 3,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__30",
+      "verdict": "uniformly-inert",
+      "declared": 30,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__4",
+      "verdict": "uniformly-inert",
+      "declared": 4,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__5",
+      "verdict": "uniformly-inert",
+      "declared": 5,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__6",
+      "verdict": "uniformly-inert",
+      "declared": 6,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/minuteInterval__static",
+      "verdict": "uniformly-inert",
+      "declared": 15,
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectItemType__date",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated: the closed select control styles its label differently per platform (ios renders its own chrome label); fontSize/fontWeight forwarding landed on android (46b905c) — remaining splits are closed-control chrome. Interactive promotion measures the open state. Family: selectbox-chrome.",
+      "note": ""
+    },
+    {
+      "fixture": "SelectBox/selectItemType__normal",
+      "verdict": "uniformly-inert",
+      "declared": "Normal",
+      "reason": "observable only interactively — the closed select control renders identically whatever the picker configuration; promotion to an interactive fixture is the measurement fix. Family: selectbox-interactive.",
+      "note": ""
+    },
+    {
+      "fixture": "TabView/unselectedColor__binding",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "ios lost this to the iOS 26 tab bar, not to a missing implementation. Both iOS faces apply it through the UIKit appearance proxy — SwiftJsonUI TabViewConverter.swift:167 and sjui_tools tab_view_converter.rb:181 write the same `UITabBar.appearance().unselectedItemTintColor` — and on iOS 26 that assignment moves no pixels. Measured on iPhone 16 Pro / iOS 26.5 with control_diff.diff_pixels: fixture vs control = 0, while tabBarBackground = 223110 and tintColor = 4553 on the same render. Two replacement routes were rendered and both measured 0 (UITabBarAppearance item colours via standardAppearance/scrollEdgeAppearance, in .onAppear and again before view construction); a build control injecting `.backgroundColor = .red` on the same path moved 223110 px, so the code demonstrably ran. NOT a v10.22.0 regression: run 34849471695 shows the finding on iOS 26 before that tag existed, and runs 34055792747 / 34779310938 on iOS 18 do not show it. The prescription is narrow — Slider/Switch/Segment appearance proxies are all still active on iOS 26. Ticket: docs/bugs/reports/closed/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md DECLARED 2026-09-15 in shared/core/attribute_definitions.json (TabView.unselectedColor description): iOS 26 and later do not honour it and there is NO replacement — the whole SwiftUI tab/toolbar modifier surface was enumerated from the iOS 27 SDK swiftinterface and none of it reaches an item tint, and reading the UIKit proxy back immediately after the set and one runloop later both return the assigned colour, so it is set and ignored rather than cleared. This row therefore records a platform capability that went away, not a defect awaiting a fix in this repository.",
+      "note": "owner: SwiftJsonUI runtime + jsonui-cli sjui_tools codegen (both faces); re-measure with CONFORMANCE_FILTER=TabView"
+    },
+    {
+      "fixture": "TabView/unselectedColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "ios lost this to the iOS 26 tab bar, not to a missing implementation. Both iOS faces apply it through the UIKit appearance proxy — SwiftJsonUI TabViewConverter.swift:167 and sjui_tools tab_view_converter.rb:181 write the same `UITabBar.appearance().unselectedItemTintColor` — and on iOS 26 that assignment moves no pixels. Measured on iPhone 16 Pro / iOS 26.5 with control_diff.diff_pixels: fixture vs control = 0, while tabBarBackground = 223110 and tintColor = 4553 on the same render. Two replacement routes were rendered and both measured 0 (UITabBarAppearance item colours via standardAppearance/scrollEdgeAppearance, in .onAppear and again before view construction); a build control injecting `.backgroundColor = .red` on the same path moved 223110 px, so the code demonstrably ran. NOT a v10.22.0 regression: run 34849471695 shows the finding on iOS 26 before that tag existed, and runs 34055792747 / 34779310938 on iOS 18 do not show it. The prescription is narrow — Slider/Switch/Segment appearance proxies are all still active on iOS 26. Ticket: docs/bugs/reports/closed/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md DECLARED 2026-09-15 in shared/core/attribute_definitions.json (TabView.unselectedColor description): iOS 26 and later do not honour it and there is NO replacement — the whole SwiftUI tab/toolbar modifier surface was enumerated from the iOS 27 SDK swiftinterface and none of it reaches an item tint, and reading the UIKit proxy back immediately after the set and one runloop later both return the assigned colour, so it is set and ignored rather than cleared. This row therefore records a platform capability that went away, not a defect awaiting a fix in this repository.",
+      "note": "owner: SwiftJsonUI runtime + jsonui-cli sjui_tools codegen (both faces); re-measure with CONFORMANCE_FILTER=TabView"
+    },
+    {
+      "fixture": "TextField/borderStyle__none",
+      "verdict": "uniformly-inert",
+      "declared": "none",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/hintLineHeightMultiple__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "Fixture shape: the hint is a single line, and a line-height multiplier only moves pixels when the box metric renders — Compose's lineHeight changes the single line's box; ios/web leave a lone line's baseline where it was. A multi-line hint would measure active everywhere (TextView's long-hint fixtures do).",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__center",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__center_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__left",
+      "verdict": "uniformly-inert",
+      "declared": "Left",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__left_2",
+      "verdict": "uniformly-inert",
+      "declared": "left",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextField/textAlign__right_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/editable__false",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "inert"
+      },
+      "reason": "adjudicated platform idiom: a read-only text area is not a still-visible state on web or ios (measured on web at HEAD: both editable__true and editable__false move 0 px against the same control — the browser draws a readOnly textarea identically), while Compose restyles a non-editable field, which is why android alone is active. The codegen differential --paired reads the spelling on all three, so this is neither a dropped spelling nor a value gap; the observable is an interaction (can the caret enter), which the interactive probe owns. Family: editable-not-still-visible.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/flexible__true",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "Platform capability: `flexible` renders as a user-resize affordance, which only the web textarea has (resize handle). ios/android grow programmatically (the growth floor is measured by the flexible height fixtures), so a still screenshot shows nothing on those faces. Updated from the pre-wave record (ios was measuring a spurious active).",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__char",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "Platform capability: char wrapping is web-only (word-break: break-all); SwiftUI and Compose have no per-character wrap mode, so Word and Char collapse there. Updated from uniformly-inert: the web face implemented it this wave.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__clip",
+      "verdict": "uniformly-inert",
+      "declared": "Clip",
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
+    },
+    {
+      "fixture": "TextView/lineBreakMode__head",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Platform capability: head truncation exists only on ios (truncationMode .head); Compose offers Clip/Ellipsis(tail) only, and CSS text-overflow has no head mode. Updated from uniformly-inert: the ios dynamic face implemented it this wave.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__middle",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Platform capability: middle truncation exists only on ios (truncationMode .middle); Compose and CSS have no middle mode. Updated from uniformly-inert: the ios dynamic face implemented it this wave.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/lineBreakMode__tail",
+      "verdict": "uniformly-inert",
+      "declared": "Tail",
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
+    },
+    {
+      "fixture": "TextView/lineBreakMode__word",
+      "verdict": "uniformly-inert",
+      "declared": "Word",
+      "reason": "the fixture cannot discriminate — not a platform gap: the TextView probe carries hint \"Sample\" (6 chars) in a 200x100 box, so a line-break policy has nothing to fold, and every value renders the same picture on every platform whether or not it is implemented",
+      "note": "Adjudicated 2026-08-07 (51-H). Decisive comparison: Label/lineBreakMode__* carries an overflowing text and measures 5 of 6 values active in control_diff.json (char/clip/head/middle/tail; word is inert as the default) — same attribute, same three platforms. So inertness here is a property of the probe, not of the implementations. owner: D (51-D) — reshape the TextView lineBreakMode probe so its content overflows, as Label's already does. rules.py is D's occupied file; H does not touch it. This row self-prunes on the next `cross-effect --update` once the reshaped fixture measures active."
+    },
+    {
+      "fixture": "TextView/textAlign__center",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__center_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__left",
+      "verdict": "uniformly-inert",
+      "declared": "Left",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__left_2",
+      "verdict": "uniformly-inert",
+      "declared": "left",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__right",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "TextView/textAlign__right_2",
+      "platforms": {
+        "android": "inert",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "adjudicated fixture-shape: wrapContent/hint text leaves the alignment little slack on the inert platforms; the active side reflects its own text-box metrics. Phase 3 relational predicates are the mechanical closure. Family: textalign-no-slack.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__lefttoright",
+      "verdict": "uniformly-inert",
+      "declared": "leftToRight",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__none",
+      "verdict": "uniformly-inert",
+      "declared": "none",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "View/direction__toptobottom",
+      "verdict": "uniformly-inert",
+      "declared": "topToBottom",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__bottom",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__bottomleading",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__bottomtrailing",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__center",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__leading",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__top",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__topleading",
+      "verdict": "uniformly-inert",
+      "declared": "topLeading",
+      "reason": "declared value equals the platform default rendering everywhere or has no slack at this fixture shape; kept as accepted uniform-inert. Family: value-is-default.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__toptrailing",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/alignment__trailing",
+      "platforms": {
+        "android": "active",
+        "ios": "inert"
+      },
+      "reason": "adjudicated geometry (measured bboxes in the 33 diagnosis table): platforms move different children/edges — the margins/gravity/alignment models differ structurally, and activeness only names WHICH side moved. Deviants recorded per-row in the 33 report; Phase 3 relational predicates are the mechanical closure. Family: geometry-adjudicated.",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__left",
+      "verdict": "uniformly-inert",
+      "declared": "left",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "common/gravity__top",
+      "verdict": "uniformly-inert",
+      "declared": "top",
+      "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxHeight__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Constraint not binding: the fixture's content already fits under the declared max, so the bound is inert where it is a pure clamp (android heightIn, web max-height). ios measures active because frame(maxHeight:) also changes the frame's proposal/alignment — same declared constraint, different layout system.",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxHeight__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Constraint not binding: same as the binding face — content under the max, clamp inert on android/web; ios's frame(maxHeight:) repositions.",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxWidth__binding",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Constraint not binding: content under the declared max — clamp inert on android/web; ios's frame(maxWidth:) repositions.",
+      "note": ""
+    },
+    {
+      "fixture": "common/maxWidth__static",
+      "platforms": {
+        "android": "inert",
+        "ios": "active",
+        "web": "inert"
+      },
+      "reason": "Constraint not binding: content under the declared max — clamp inert on android/web; ios's frame(maxWidth:) repositions.",
+      "note": ""
+    }
+  ]
+}

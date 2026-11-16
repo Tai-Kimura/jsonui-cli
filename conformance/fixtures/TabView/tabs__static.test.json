@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TabView/tabs__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TabView.tabs (static)",
+    "description": "Conformance fixture for 'tabs' on TabView (section: TabView, class: visual). Value under test: [{\"title\": \"Alpha\"}, {\"title\": \"Beta\"}, {\"title\": \"Gamma\"}].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TabView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tabs__static",
+      "description": "Conformance fixture for 'tabs' on TabView (section: TabView, class: visual). Value under test: [{\"title\": \"Alpha\"}, {\"title\": \"Beta\"}, {\"title\": \"Gamma\"}].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TabView_tabs__static"
+        }
+      ]
+    }
+  ]
+}

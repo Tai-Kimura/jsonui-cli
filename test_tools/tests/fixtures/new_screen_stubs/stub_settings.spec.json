@@ -1,0 +1,58 @@
+{
+  "type": "screen_spec",
+  "version": "1.0",
+  "metadata": {
+    "name": "StubSettings",
+    "displayName": "StubSettings",
+    "description": "StubSettings: the shape of a consumer screen whose stubs did not compile",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "layoutFile": "stub_settings"
+  },
+  "structure": {
+    "layout": {
+      "root": "root",
+      "children": []
+    },
+    "components": [
+      {
+        "id": "root",
+        "type": "View",
+        "description": "root"
+      }
+    ]
+  },
+  "stateManagement": {
+    "uiVariables": []
+  },
+  "dataFlow": {
+    "viewModel": {
+      "vars": [
+        {
+          "name": "termsURL",
+          "type": "URL",
+          "readOnly": true
+        },
+        {
+          "name": "showNotice",
+          "type": "Bool"
+        },
+        {
+          "name": "navigateTo",
+          "type": "String?",
+          "optional": true
+        }
+      ],
+      "methods": [
+        {
+          "name": "onAppear"
+        }
+      ]
+    },
+    "useCases": [],
+    "repositories": []
+  }
+}

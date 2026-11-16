@@ -1,0 +1,544 @@
+# frozen_string_literal: true
+
+require 'swiftui/views/selectbox_converter'
+require 'swiftui/converter_factory'
+
+RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
+  before(:all) do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false
+  end
+
+  after(:all) do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true
+  end
+
+  describe '#convert' do
+    context 'with doneButtonText' do
+      def code_of(component)
+        described_class.new({ 'type' => 'SelectBox' }.merge(component)).convert
+      end
+
+      it 'passes a text, in the place the view declares it' do
+        code = code_of('prompt' => 'Pick', 'doneButtonText' => 'Apply')
+        expect(code).to include('doneButtonText: "Apply"')
+        expect(code.index('prompt:')).to be < code.index('doneButtonText:')
+      end
+
+      it 'is passed with no prompt too' do
+        expect(code_of('doneButtonText' => 'Apply')).to include('doneButtonText: "Apply"')
+      end
+
+      it 'passes a binding' do
+        expect(code_of('doneButtonText' => '@{doneWord}')).to include('doneButtonText: data.doneWord')
+      end
+
+      it 'says nothing when absent: the view has its own word' do
+        expect(code_of('prompt' => 'Pick')).not_to include('doneButtonText')
+      end
+    end
+
+    context 'with basic selectbox' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'id' => 'countrySelector'
+        }
+      end
+
+      it 'generates SelectBoxView' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('SelectBoxView(')
+        expect(code).to include('id: "countrySelector"')
+      end
+    end
+
+    # A bound selectedItem / selectedValue is declared two-way: the box follows the data
+    # and the pick is written back (ticket selectbox-selected-item-binding-is-read-once —
+    # a one-time `selectedIndex: items.firstIndex(of:)` was neither, measured on a
+    # simulator).
+    context 'with a bound selectedItem or selectedValue' do
+      %w[selectedItem selectedValue].each do |spelling|
+        it "reads and writes the data through the items (#{spelling})" do
+          code = described_class.new({ 'type' => 'SelectBox', 'id' => 's', 'items' => %w[pp qq], spelling => '@{choice}' }).convert
+          # The read is the seed's optional-aware expression (no data definition here:
+          # `?? ""`); the write goes to the property.
+          expect(code).to include('selectedIndexBinding: SwiftUI.Binding(get: { ["pp", "qq"].firstIndex(of: (data.choice ?? "")) ?? -1 }, ')
+          expect(code).to include('set: { index in data.choice = ["pp", "qq"].indices.contains(index) ? ["pp", "qq"][index] : "" })')
+          expect(code).not_to include('selectedIndex: ["pp", "qq"].firstIndex(of:')
+        end
+      end
+
+      it 'keeps the one-time seed for an expression it cannot write to' do
+        code = described_class.new({ 'type' => 'SelectBox', 'id' => 's', 'items' => %w[pp qq], 'selectedItem' => '@{a ?? "pp"}' }).convert
+        expect(code).to include('selectedIndex: ["pp", "qq"].firstIndex(of:')
+        expect(code).not_to include('selectedIndexBinding: SwiftUI.Binding(get:')
+      end
+    end
+
+    context 'with prompt' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'prompt' => 'Select a country'
+        }
+      end
+
+      it 'includes prompt parameter' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('prompt: "Select a country"')
+      end
+    end
+
+    context 'with static items' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'items' => ['Apple', 'Banana', 'Cherry']
+        }
+      end
+
+      it 'includes items array' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('items: ["Apple", "Banana", "Cherry"]')
+      end
+    end
+
+    context 'with binding items' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'items' => '@{countryList}'
+        }
+      end
+
+      # Bindings resolve through the view-data model, so the binding `@{countryList}`
+      # becomes `data.countryList` in the generated Swift.
+      it 'uses binding for items' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('items: Array(data.countryList)')
+      end
+    end
+
+    context 'with Date selectItemType' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date'
+        }
+      end
+
+      it 'sets selectItemType to date' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('selectItemType: .date')
+      end
+    end
+
+    context 'with datePickerMode time' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerMode' => 'time'
+        }
+      end
+
+      it 'sets datePickerMode to time' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('datePickerMode: .time')
+      end
+    end
+
+    context 'with datePickerMode datetime' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerMode' => 'datetime'
+        }
+      end
+
+      it 'sets datePickerMode to dateTime' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('datePickerMode: .dateTime')
+      end
+    end
+
+    context 'with datePickerStyle' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerStyle' => 'compact'
+        }
+      end
+
+      it 'sets datePickerStyle' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('datePickerStyle: .compact')
+      end
+    end
+
+    context 'with datePickerStyle graphical' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerStyle' => 'graphical'
+        }
+      end
+
+      it 'sets datePickerStyle to graphical' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('datePickerStyle: .graphical')
+      end
+    end
+
+    context 'with dateStringFormat' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'dateStringFormat' => 'yyyy-MM-dd'
+        }
+      end
+
+      it 'includes dateStringFormat' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('dateStringFormat: "yyyy-MM-dd"')
+      end
+    end
+
+    context 'with selectedDate (Date mode)' do
+      it 'forwards the optional from String.toDate without falling back to today' do
+        component = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'dateStringFormat' => 'yyyy-MM-dd',
+          'selectedDate' => '@{fromDate}'
+        }
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('selectedDate: data.fromDate.toDate(format: "yyyy-MM-dd")')
+        expect(code).not_to include('?? Date()')
+      end
+
+      it 'forwards the optional for literal selectedDate too' do
+        component = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'dateStringFormat' => 'yyyy-MM-dd',
+          'selectedDate' => '2026-01-01'
+        }
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('selectedDate: "2026-01-01".toDate(format: "yyyy-MM-dd")')
+        expect(code).not_to include('?? Date()')
+      end
+    end
+
+    context 'with minimumDate and maximumDate' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'minimumDate' => '2020-01-01',
+          'maximumDate' => '2030-12-31'
+        }
+      end
+
+      it 'includes date constraints' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('minimumDate:')
+        expect(code).to include('maximumDate:')
+      end
+    end
+
+    context 'with minuteInterval' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerMode' => 'time',
+          'minuteInterval' => 15
+        }
+      end
+
+      it 'includes minuteInterval' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('minuteInterval: 15')
+      end
+    end
+
+    context 'with selectedIndex' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'items' => ['A', 'B', 'C'],
+          'selectedIndex' => 1
+        }
+      end
+
+      it 'includes selectedIndex' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('selectedIndex: 1')
+      end
+    end
+
+    context 'with styling' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'fontSize' => 16,
+          'fontColor' => '#333333',
+          'background' => '#FFFFFF',
+          'cornerRadius' => 8
+        }
+      end
+
+      it 'includes styling parameters' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('fontSize: 16')
+        expect(code).to include('fontColor:')
+        expect(code).to include('backgroundColor:')
+        expect(code).to include('cornerRadius: 8')
+      end
+    end
+
+    context 'with paddings' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'paddings' => 16
+        }
+      end
+
+      it 'includes padding EdgeInsets' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('padding: EdgeInsets(')
+      end
+    end
+
+    context 'with paddings array' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'paddings' => [10, 20]
+        }
+      end
+
+      it 'includes padding with array values' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('padding: EdgeInsets(top: 10')
+      end
+    end
+
+    context 'with border' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'borderWidth' => 1,
+          'borderColor' => '#CCCCCC',
+          'cornerRadius' => 8
+        }
+      end
+
+      it 'adds overlay with stroke' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.overlay(')
+        expect(code).to include('RoundedRectangle')
+        expect(code).to include('.stroke(')
+      end
+    end
+
+    context 'with opacity' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'alpha' => 0.8
+        }
+      end
+
+      it 'adds opacity modifier' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.opacity(0.8)')
+      end
+    end
+
+    context 'with hidden' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'hidden' => true
+        }
+      end
+
+      it 'adds hidden modifier' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.opacity(0).accessibilityHidden(true)')
+      end
+    end
+
+    # `caretAttributes` was UIKit-only (SJUISelectBox) until 1.8.101, so this
+    # converter never read it. The SSoT's rule: absent keeps the native
+    # indicator, present draws the caret from the keys, every key optional.
+    context 'with caretAttributes' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'items' => %w[One Two],
+          'caretAttributes' => {
+            'width' => 32, 'height' => 32, 'tintColor' => '#FF0000',
+            'background' => '#00AA00', 'rightMargin' => 24
+          }
+        }
+      end
+
+      it 'emits the declared keys as SelectBoxView.CaretAttributes' do
+        code = described_class.new(component).convert
+
+        expect(code).to include('caret: SelectBoxView.CaretAttributes(')
+        expect(code).to include('width: 32, height: 32')
+        expect(code).to include('tintColor: SwiftJsonUIConfiguration.shared.getColor(for: "#FF0000")')
+        expect(code).to include('background: SwiftJsonUIConfiguration.shared.getColor(for: "#00AA00")')
+        expect(code).to include('rightMargin: 24)')
+      end
+
+      it 'names only the declared keys, so rightMargin alone is enough' do
+        code = described_class.new(
+          'type' => 'SelectBox', 'caretAttributes' => { 'rightMargin' => 12 }
+        ).convert
+
+        expect(code).to include('caret: SelectBoxView.CaretAttributes(rightMargin: 12),')
+        expect(code).not_to include('src:')
+      end
+
+      # Absent / present is the SSoT's distinction, not empty / non-empty:
+      # `{}` is present, and the view draws its default glyph at margin 0.
+      it 'treats an empty object as present' do
+        code = described_class.new('type' => 'SelectBox', 'caretAttributes' => {}).convert
+
+        expect(code).to include('caret: SelectBoxView.CaretAttributes(),')
+      end
+
+      it 'emits nothing when the object is absent, so existing layouts do not move' do
+        code = described_class.new('type' => 'SelectBox', 'items' => %w[One]).convert
+
+        expect(code).not_to include('caret:')
+      end
+    end
+
+    # Cross-platform contract, pinned on both sides (kjui
+    # selectbox_component_spec 'with a bound selectedIndex'): the handler
+    # receives the new value of the selection binding — the Int index for a
+    # bound selectedIndex — so one `((Int) -> Void)?` / `((Int) -> Unit)?`
+    # declaration compiles on both platforms.
+    context 'with onValueChange on a bound selectedIndex' do
+      before do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Int) -> Void)?' }
+        }
+      end
+      after { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
+
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'id' => 'countrySelect',
+          'items' => '@{countries}',
+          'selectedIndex' => '@{countryIndex}',
+          'onValueChange' => '@{onSelectionChange}'
+        }
+      end
+
+      # From the pick — SelectBoxView writes the index first — and not an
+      # `.onChange(of:)` on the index, which ran after the click and for the
+      # view model's writes too.
+      it 'hands the index binding its new Int value to the handler from the pick' do
+        code = described_class.new(component).convert
+        expect(code).to include('onValueChange: { newValue in data.onSelectionChange?(data.countryIndex) }')
+        expect(code).not_to include('.onChange(of:')
+      end
+
+      it 'passes viewId + index to a (String, Int) -> Void handler' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, Int) -> Void)?' }
+        }
+        code = described_class.new(component).convert
+        expect(code).to include('data.onSelectionChange?("countrySelect", data.countryIndex)')
+      end
+    end
+  end
+end
+
+# A SelectBox's height and insets (ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height, ruling 2026-11-13;
+# Dynamic's SelectBoxConverter the same): no height or wrapContent takes the content's height (fixedSize vertical,
+# since SelectBoxView fills the height it is offered); the insets are worked out side by side from SelectBoxView's
+# default (0 / 12), `padding`, `paddings`, then each side's key.
+RSpec.describe 'sjui SelectBox height and insets' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def emit(extra)
+    SjuiTools::SwiftUI::ConverterFactory.new
+      .create_converter({ 'type' => 'SelectBox', 'id' => 'a', 'width' => 240, 'items' => ['x'] }.merge(extra), 0)
+      .convert.to_s
+  end
+
+  it 'no height and wrapContent take the content height; a fixed one and a min one do as before' do
+    expect(emit({})).to include('.fixedSize(horizontal: false, vertical: true)')
+    expect(emit('height' => 'wrapContent')).to include('.fixedSize(horizontal: false, vertical: true)')
+    expect(emit('height' => 48)).not_to include('.fixedSize(')
+    min = emit('height' => 'wrapContent', 'minHeight' => 48)
+    expect(min).to include('.frame(minHeight: 48)')
+    expect(min.scan('.fixedSize(').size).to eq(1)
+  end
+
+  it 'the insets: default, padding, paddings, then a side' do
+    expect(emit({})).not_to include('padding: EdgeInsets')
+    expect(emit('padding' => 10)).to include('padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)')
+    expect(emit('paddings' => [4, 6])).to include('padding: EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6)')
+    expect(emit('paddingTop' => 2)).to include('padding: EdgeInsets(top: 2, leading: 12, bottom: 0, trailing: 12)')
+    expect(emit('padding' => 10, 'paddingLeft' => 3))
+      .to include('padding: EdgeInsets(top: 10, leading: 3, bottom: 10, trailing: 10)')
+  end
+end

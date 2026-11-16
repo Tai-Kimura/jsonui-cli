@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/SafeAreaView.layout.json"
+  },
+  "metadata": {
+    "name": "conformance control SafeAreaView",
+    "description": "Control for SafeAreaView: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "control"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "SafeAreaView",
+      "description": "Control for SafeAreaView: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_SafeAreaView"
+        }
+      ]
+    }
+  ]
+}

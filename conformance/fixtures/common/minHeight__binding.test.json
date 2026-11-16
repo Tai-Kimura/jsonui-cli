@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minHeight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minHeight (binding)",
+    "description": "Conformance fixture for 'minHeight' on View (section: common, class: visual). Value under test: \"@{boundMinHeight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minHeight__binding",
+      "description": "Conformance fixture for 'minHeight' on View (section: common, class: visual). Value under test: \"@{boundMinHeight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_minHeight__binding"
+        }
+      ]
+    }
+  ]
+}

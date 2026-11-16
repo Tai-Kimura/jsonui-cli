@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignRight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignRight (binding)",
+    "description": "Conformance fixture for 'alignRight' on View (section: common, class: visual). Value under test: \"@{boundAlignRight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alignRight__binding",
+      "description": "Conformance fixture for 'alignRight' on View (section: common, class: visual). Value under test: \"@{boundAlignRight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignRight__binding"
+        }
+      ]
+    }
+  ]
+}

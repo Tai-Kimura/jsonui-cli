@@ -1,0 +1,1464 @@
+name: conformance-mobile
+
+# Full 3-platform conformance run (iOS + Android + Web) with the combined
+# cross-platform report as the gate: 0 mismatches / 0 fail / 0 error.
+#
+# Too slow for per-push (iOS ~30 min on a macOS runner, Android needs an
+# emulator boot), so it runs weekly + on manual dispatch. Per-push coverage
+# is ci.yml (unit suites + guards + web conformance). For an on-demand full
+# run (e.g. before a release), use workflow_dispatch.
+#
+# The iOS host lives in the SwiftJsonUI repo (ConformanceHost/), the Android
+# host in the KotlinJsonUI repo (conformance-host/) — both public and checked
+# out read-only alongside this repo. The iOS UITest driver is vendored at
+# sync time from the public jsonui-test-runner repo; the Android host commits
+# its vendored driver.
+
+on:
+  schedule:
+    # Sunday 18:00 UTC = Monday 03:00 JST — weekly, results ready before the
+    # work week starts.
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+    # Before a SwiftJsonUI / KotlinJsonUI tag: dispatch with the release
+    # branches, see the jobs green (TapIdentifierOnceUITests is not opt-in — it
+    # runs in both iOS jobs), then tag. The schedule has no inputs, so it keeps
+    # `master` / `main`.
+    inputs:
+      # A short run that draws only the named fixtures (and each one's
+      # control) on every face and uploads them, for baking a baseline the
+      # full run then has: a fixture whose picture is new or changed made the
+      # full run red (no_baseline / MOVED), its artifacts were baked, and the
+      # whole run went again. Named, the probes and android-library-tests are
+      # off and the report (the gate) does not run; empty, the run is what it
+      # always was (.github/scripts/conformance_only.py).
+      only:
+        description: "Draw ONLY these fixtures (ids, comma-separated) and their controls, for a baseline bake: no probes, no report/gate. Empty = the full run"
+        required: false
+        default: ''
+        type: string
+      swiftjsonui_ref:
+        description: "SwiftJsonUI ref (branch, tag or SHA) both iOS jobs check out"
+        required: false
+        default: master
+        type: string
+      # jsonui-test-runner ref the iOS jobs vendor the driver from (its drivers/ios
+      # submodule at that ref). Until 1.9.30 the checkout took the default branch
+      # only, so a driver change could be measured here only after it was on
+      # test-runner's main — i.e. after it was distributed.
+      test_runner_ref:
+        description: "jsonui-test-runner ref (branch, tag or SHA) the iOS jobs vendor drivers/ios from"
+        required: false
+        default: main
+        type: string
+      # The two probe switches default to TRUE (jsonui-cli 1.9.8): a dispatch is
+      # almost always the check before a tag, and with `false` a dispatch that
+      # forgot the flag went green with the probes skipped — 1.9.7's tag was
+      # judged on such a run (9 library-dynamic probes skipped). Lower one with
+      # `-f android_probes=false`. The schedule has no inputs, so `inputs.*`
+      # is empty there — and until jsonui-cli 1.9.27 that left every opt-in
+      # probe off on the weekly run: the one run nobody dispatches never ran
+      # them at all. Each switch below therefore reads
+      # `(inputs.X || github.event_name == 'schedule')`: a dispatch is exactly
+      # what it was (true unless lowered), the schedule raises all three, and
+      # the "every raised probe ran" check runs on the schedule too
+      # (jui_tools/tests/test_the_schedule_raises_the_probes.py evaluates each
+      # of them for both events).
+      image_probes:
+        description: "Also run the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) in both iOS jobs (default true; the schedule raises them). ios_probes raises them too"
+        required: false
+        default: true
+        type: boolean
+      # Every ConformanceHost probe switch (`["X"] == "1"` in its UITests),
+      # read from the sources by .github/scripts/ios_probe_gates.py, as
+      # android_probes reads KotlinJsonUI's. Until 1.9.23 nothing raised them
+      # but the two image ones, and 23 classes / 40 tests with assertions
+      # never ran in a dispatch (ticket
+      # conformance-mobile-ios-probe-guards-never-run-in-dispatch).
+      ios_probes:
+        description: "Also run every opt-in probe in both iOS jobs (each environment switch a ConformanceHost UI test compares to \"1\"; default true; the schedule raises them)"
+        required: false
+        default: true
+        type: boolean
+      kotlinjsonui_ref:
+        description: "KotlinJsonUI ref (branch, tag or SHA) the three Android jobs check out"
+        required: false
+        default: main
+        type: string
+      android_probes:
+        description: "Also run the opt-in probes in KotlinJsonUI's device tests (every instrumentation argument a test compares to \"1\"; default true; the schedule raises them)"
+        required: false
+        default: true
+        type: boolean
+      tap_repro:
+        description: 'Run ONLY the iOS tap-miss reproduction (loops two interactive fixtures; every other job is off)'
+        required: false
+        default: false
+        type: boolean
+      frame_parity:
+        description: "Judge cross-platform frame parity (gate --frame-parity: the same declared id drawn in the same place on every face; frame_parity.json). Default true, and the schedule runs it too; pass false to skip"
+        type: boolean
+        default: true
+      tap_repro_repeats:
+        description: 'tap_repro only: copies of EACH of the two fixtures, alternating (150 -> 300 taps)'
+        required: false
+        default: '150'
+        type: string
+      tap_repro_after_visual:
+        description: 'tap_repro only: put the visual fixture that preceded each CI miss in front of every interactive copy'
+        required: false
+        default: false
+        type: boolean
+      # One leg, for repeating it: the train's conformance run is once per
+      # train (the CI rule), and a question about KotlinJsonUI's device tests
+      # alone (ticket ci-android-library-tests-emulator-dies-in-the-keyboard-
+      # tests-and-the-run-hangs: 2.43.5 against 2.43.6 on the same jsonui-cli)
+      # should not cost the other six jobs each time.
+      android_library_only:
+        description: 'Run ONLY android-library-tests (KotlinJsonUI device tests at kotlinjsonui_ref; every other job, the report included, is off)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # 🔻 THE iOS JOBS RUN AS SHARDS. One iOS job took 108-114 min (run
+  # 38393632937): the fixture suite and 124 probe tests, one after another on
+  # one simulator. Each of IOS_SHARDS shards runs a slice of the suite
+  # (SwiftJsonUI's CONFORMANCE_SHARD) and a share of the probe classes
+  # (.github/scripts/ios_shards.py plan, CONFORMANCE_ONLY_TESTING); ios-merge /
+  # ios-codegen-merge put them back together and refuse a run whose shards do
+  # not add up to it. 2 per mode is 4 macOS jobs: GitHub runs at most 5 macOS
+  # jobs at once on this account's plan, so 3 per mode (6) would queue one
+  # behind the others and finish later than 2. The matrices below list
+  # 1..IOS_SHARDS (jui_tools/tests/test_ios_shards.py holds them together).
+  IOS_SHARDS: 2
+
+concurrency:
+  group: conformance-mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # Web — rerun (not reuse a stale artifact) so all three results in the
+  # report come from the same commit's fixtures. Same steps as ci.yml's
+  # web-conformance job minus the per-platform gate (the report job gates).
+  # ------------------------------------------------------------------ #
+  web:
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      library_sha: ${{ steps.library_sha.outputs.sha }}
+      chromium: ${{ steps.library_sha.outputs.chromium }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # scripts/run.ts relies on native TS type stripping (Node >= 23)
+          check-latest: true # pick up security releases before the runner image's toolcache does
+          cache: npm
+          cache-dependency-path: conformance/hosts/web/package-lock.json
+      - uses: ruby/setup-ruby@v1 # rjui_tools codegen inside generate.sh
+        with:
+          ruby-version: "3.3"
+      - name: Drop the checked-out results file
+        # Every results file in this repo is TRACKED, so a checkout puts a
+        # PREVIOUS campaign's results on disk before this job measures
+        # anything. When a run dies before its collect step, the upload below
+        # still finds that file, `if-no-files-found: error` is satisfied, and
+        # the artifact reads as a successful suite — mobile run 30912810635
+        # shipped plan 32's "pass: 478" as though android-codegen had run,
+        # while the lane had produced zero screenshots. Delete it first so the
+        # artifact can only ever contain THIS run's product.
+        run: rm -f conformance/results/web.results.json
+      - name: npm ci
+        working-directory: conformance/hosts/web
+        run: npm ci
+      # 🔻 `--with-deps` runs `apt-get update`, and apt fails the update
+      # WHOLESALE when any single configured source has an inconsistent index.
+      # The runner image ships Google's chrome repo, and this job does not use
+      # one package from it.
+      #
+      # Measured 2026-09-10 from outside CI, reproducing the failure by hand:
+      #   Release (Date 2026-09-09 17:16:59 UTC) declares
+      #     main/binary-amd64/Packages.gz  sha256 233e56de…  1405 B
+      #   the file actually served was
+      #     sha256 bc1428ab…  1405 B
+      #   and gunzipping it gave an index whose google-chrome-beta is
+      #   154.0.8037.0-1 while the plain (matching) Packages says
+      #   154.0.8037.17-1 — the .gz on the CDN is one release behind its own
+      #   Release file. Three consecutive runs died here before a single test
+      #   executed.
+      #
+      # That repository carries exactly five packages, all `google-chrome-*`
+      # (read off the index itself), and Playwright downloads Chromium from
+      # its own CDN. So nothing this job needs can come from it.
+      #
+      # 🚫 THIS DOES NOT SOFTEN THE GATE. The browser install must still
+      # succeed and every remaining source must still be consistent; `apt-get
+      # update` is not made non-fatal, and no `|| true` is added. What changes
+      # is that an unrelated third party can no longer decide whether this job
+      # runs. Removing the source is narrower than ignoring update failures,
+      # which would also hide a broken Ubuntu mirror.
+      - name: Drop the unused Chrome apt source
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
+      - name: Install Playwright Chromium
+        working-directory: conformance/hosts/web
+        run: npx playwright install --with-deps chromium
+      - name: Record the web renderer these pixels were drawn by
+        id: library_sha
+        # web had no provenance at all — ci/web.hashes.json carried an empty
+        # rendered_by, so "did the renderer move since the bake" could not be
+        # answered for this platform even in principle. Two things draw here:
+        # the rjui codegen in this repo, and the browser.
+        run: |
+          rjui=$(git rev-parse HEAD:rjui_tools/lib)
+          chromium=$(npx --yes playwright --version 2>/dev/null | tr -d '\n' || echo unknown)
+          echo "sha=tree:$rjui" >> "$GITHUB_OUTPUT"
+          echo "chromium=$chromium" >> "$GITHUB_OUTPUT"
+      - name: Generate fixtures into the host (rjui codegen)
+        working-directory: conformance/hosts/web
+        run: ./generate.sh
+      - name: Run web conformance suite
+        working-directory: conformance/hosts/web
+        run: npm run conformance
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-web
+          if-no-files-found: error
+          path: |
+            conformance/results/web.results.json
+            conformance/artifacts/web/
+
+  # ------------------------------------------------------------------ #
+  # iOS — SwiftJsonUI Dynamic mode host, headless xcodebuild test on a
+  # simulator. Xcode is pinned so the simulator runtime is deterministic.
+  # ------------------------------------------------------------------ #
+  ios:
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    runs-on: macos-15
+    # 2026-08-07 (plan 51-H) re-measure — held, with the reading recorded so
+    # the next resize starts from a number instead of re-deriving one.
+    # Measured 41 min (run 31135850340, green) and 36 min (31088841656) of
+    # 90. iOS-eligible fixtures go to 958 with the Wave 3 expansion (+13%
+    # on the manifest), putting it near 47 — still ~1.9x headroom, and the
+    # simulator has no degraded-runner attempt loop to absorb like Android's.
+    # 2026-10-07: measured 61 / 76 / 73 / 79 min in runs 37189084185 /
+    # 37368630695 / 37422435382 / 37480369210 (1.9.13 / 1.9.16 / 1.9.17 /
+    # 1.9.18) — 11 min under 90 and rising with the fixtures (1183 at
+    # 1.9.18). 150 is ~1.9x the measured maximum (ticket ci-ios-conformance-
+    # jobs-outgrow-their-90-minute-budget).
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2] # 1..IOS_SHARDS
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+      JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+      - name: Record the SwiftJsonUI SOURCE these pixels were drawn by
+        id: library_sha
+        # The tree hash of Sources/, not `rev-parse HEAD`. The checkout SHA
+        # moves for commits that cannot change a pixel — on 2026-09-04 three
+        # ConformanceHost-only commits would have reported "the library moved"
+        # with Sources/ byte-identical, and a lane was one bake away from
+        # investigating it. Identical drawing code gives an identical tree
+        # hash whatever the history above it looks like.
+        run: |
+          echo "SwiftJsonUI ref=${{ inputs.swiftjsonui_ref || 'master' }} HEAD=$(git -C SwiftJsonUI rev-parse HEAD)"
+          echo "sha=tree:$(git -C SwiftJsonUI rev-parse HEAD:Sources)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/jsonui-test-runner
+          ref: ${{ inputs.test_runner_ref || 'main' }}
+          path: jsonui-test-runner
+          # drivers/ios is a submodule since test-runner 61a860e — without this
+          # the vendor step finds an empty gitlink and fails
+          submodules: true
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.3"
+      - uses: ruby/setup-ruby@v1 # generate_project.rb needs the xcodeproj gem
+        with:
+          ruby-version: "3.3"
+      - name: Install xcodeproj gem
+        run: gem install xcodeproj --no-document
+      - name: Sync fixtures + vendor the iOS test-runner driver
+        run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
+      - name: Generate ConformanceHost.xcodeproj
+        run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_project.rb
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/results/ios.results.json
+      # The baseline records who drew the pixels. Until now that was the
+      # library SHA only — the subject. The tools that decide what the
+      # picture looks like (Xcode, the SDK, the simulator runtime, the
+      # device model) were recorded nowhere, so a `moved` entry could not
+      # be attributed: a token change in a new Xcode moves pictures that
+      # use none of the changed features, and from the baseline alone that
+      # is indistinguishable from a library regression. The web leg has
+      # recorded its renderer (chromium) since it was written; iOS and
+      # Android had the subject and not the tools.
+      - name: Record the toolchain that drew these pixels
+        id: toolchain
+        env:
+          SIMULATOR_NAME: iPhone 16 Pro
+          # Pinned, not "whatever is newest" — see run_conformance.sh.
+          SIMULATOR_OS: "26"
+        run: |
+          set -euo pipefail
+          # Read once, then cut with bash: piping xcodebuild into `head`
+          # closed the pipe under it, and xcodebuild died on the write
+          # ("NSFileHandleOperationException … Broken pipe", exit 134) —
+          # run 37160603791's ios job, before the suite (ticket
+          # conformance-toolchain-step-pipes-xcodebuild-into-head).
+          version=$(xcodebuild -version)
+          first=${version%%$'\n'*}
+          last=${version##*$'\n'}
+          xcode=${first#Xcode }
+          build=${last#Build version }
+          if [ -z "$xcode" ] || [ -z "$build" ] || [ "$xcode" = "$first" ] || [ "$build" = "$last" ]; then
+            echo "::error::xcodebuild -version did not read as 'Xcode X' / 'Build version Y': $version" >&2
+            exit 1
+          fi
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          # ⚠️ APPLIES THE SAME PIN THE RUN WILL APPLY. This took rs[-1] — the
+          # newest INSTALLED iOS runtime — while the suite picked its own. When
+          # the two disagree the manifest records a runtime that drew nothing:
+          # a measurement-shaped value that cannot be checked against anything.
+          runtime=$(xcrun simctl list runtimes --json \
+            | python3 -c 'import json,os,re,sys; w=tuple(int(n) for n in re.findall(r"\d+", os.environ.get("SIMULATOR_OS",""))); rs=[r for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name","")]; rs=[r for r in rs if not w or tuple(int(n) for n in re.findall(r"\d+", r["version"]))[:len(w)]==w]; print(rs[-1]["version"] if rs else "unknown")')
+          if [ "$runtime" = "unknown" ]; then
+            echo "::error::no available iOS runtime matches SIMULATOR_OS=${SIMULATOR_OS:-<unset>}" >&2
+            xcrun simctl list runtimes >&2 || true
+            exit 1
+          fi
+          echo "spec=xcode=${xcode} (${build});sdk=iphonesimulator${sdk};simulator_os=iOS ${runtime};device=${SIMULATOR_NAME}" >> "$GITHUB_OUTPUT"
+      - name: Run iOS conformance suite (headless simulator)
+        env:
+          SIMULATOR_NAME: iPhone 16 Pro
+          # Pinned, not "whatever is newest" — see run_conformance.sh.
+          SIMULATOR_OS: "26"
+          # The opt-in probes read these through the test runner (TEST_RUNNER_
+          # prefix stripped); "0" when not dispatched with image_probes.
+          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          # A fixed staging of the caller's (kept after a green run, for the
+          # per-test record below); /tmp, as run_conformance.sh's own.
+          CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
+          CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
+          IOS_PROBES: ${{ (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
+          SHARD_MODE: ios
+          ONLY: ${{ inputs.only }}
+        run: |
+          # When this step began, for record_xctests.py's phase times (printed only).
+          date +%s > "$RUNNER_TEMP/suite-started"
+          # The probe switches are environment variables of the xcodebuild
+          # process (run_conformance.sh's), derived from the UITests, not listed.
+          if [ "$IOS_PROBES" = true ]; then
+            switches=$(python3 .github/scripts/ios_probe_gates.py exports SwiftJsonUI/ConformanceHost/UITests)
+            for s in $switches; do export "$s"; done
+            echo "opt-in probes raised: $(echo "$switches" | grep -c .) — $(echo $switches)"
+          else
+            echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
+          fi
+          # A dispatch with `only` runs the suite alone (its slice of the narrowed manifest), no probe class.
+          if [ -n "$ONLY" ]; then
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py suite)"
+          else
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          fi
+          echo "shard $CONFORMANCE_SHARD: $(echo $CONFORMANCE_ONLY_TESTING | wc -w | tr -d ' ') test classes — $CONFORMANCE_ONLY_TESTING"
+          SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
+      - name: Record every XCTest result
+        if: always()
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt --started-at "$(cat "$RUNNER_TEMP/suite-started" 2>/dev/null)"
+      # One shard's part of the run, under a name the report's results-* does
+      # not match: ios-merge proves the shards add up and uploads
+      # results-ios / xctests-ios as the unsharded job did.
+      - name: Gather this shard's results
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/shard"
+          mkdir -p "$out/$(dirname results/ios.results.json)" "$out/artifacts/ios"
+          cp conformance/results/ios.results.json "$out/results/ios.results.json" || true
+          [ -d conformance/artifacts/ios ] && cp -R conformance/artifacts/ios/. "$out/artifacts/ios/" || true
+          cp /tmp/jsonui-conformance-ios.ci/xctests.txt /tmp/jsonui-conformance-ios.ci/tap_timing.txt "$out/" 2>/dev/null || true
+          # The probes' retaps are lines of this log, which leaves the runner only on a failure. No record reads as
+          # "not counted", which is red in the report: never as no retaps.
+          python3 .github/scripts/ios_retaps.py scan /tmp/jsonui-conformance-ios.ci/xcodebuild.log "$out/probe_retaps.json" --attempt "$GITHUB_RUN_ATTEMPT" || true
+          printf '{"library_sha": "%s", "toolchain": "%s"}\n' "${{ steps.library_sha.outputs.sha }}" "${{ steps.toolchain.outputs.spec }}" > "$out/meta.json"
+      - name: Upload this shard's results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-shard-${{ matrix.shard }}
+          if-no-files-found: error
+          retention-days: 7
+          path: ${{ runner.temp }}/shard/
+      - name: Name the failed tests
+        if: failure()
+        run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios.*/xcodebuild.log
+      - name: Upload the xcodebuild log and the xcresult
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-log-ios-${{ matrix.shard }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            /tmp/jsonui-conformance-ios.*/xcodebuild.log
+            SwiftJsonUI/ConformanceHost/build/DerivedData/Logs/Test/*.xcresult
+
+  # ------------------------------------------------------------------ #
+  # iOS codegen — the SAME fixtures through the sjui-GENERATED SwiftUI
+  # views (production pipeline). Screenshots feed `gate --parity`, which
+  # compares them against the dynamic baselines: dynamic ≡ codegen as a
+  # judged invariant instead of maintainer working memory (plan 25 A).
+  # ------------------------------------------------------------------ #
+  ios-codegen:
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    runs-on: macos-15
+    # 2026-10-07: measured 71 / 81 / 89 min (runs 37189084185 / 37368630695 /
+    # 37422435382) and cancelled at 90 in 37480369210 (1.9.18, 1183
+    # fixtures). 150 is ~1.65x the last completed run (ticket ci-ios-
+    # conformance-jobs-outgrow-their-90-minute-budget).
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2] # 1..IOS_SHARDS
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+      JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
+      SJUI_TOOLS_PATH: ${{ github.workspace }}/sjui_tools
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/jsonui-test-runner
+          ref: ${{ inputs.test_runner_ref || 'main' }}
+          path: jsonui-test-runner
+          submodules: true
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.3"
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Install xcodeproj gem
+        run: gem install xcodeproj --no-document
+      - name: Sync fixtures + vendor the iOS test-runner driver
+        run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/codegen/ios.results.json
+      # The host compiles views that draw the Collection cells, staged only from fixtures that name them: a
+      # narrowed manifest names none. Added back for the staging alone, after the sync bundled the narrowed list
+      # the suite runs (conformance_only.py stage-cells).
+      - name: Stage the Collection cells for the codegen host (only)
+        if: ${{ inputs.only != '' }}
+        run: python3 .github/scripts/conformance_only.py stage-cells conformance
+      - name: Generate the codegen fixture registry (sjui build)
+        run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_codegen_host.rb
+      - name: Generate ConformanceHost.xcodeproj (codegen sources)
+        run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_project.rb
+      - name: Run iOS codegen suite (headless simulator)
+        env:
+          SIMULATOR_NAME: iPhone 16 Pro
+          # Pinned, not "whatever is newest" — see run_conformance.sh.
+          SIMULATOR_OS: "26"
+          HOST_MODE: codegen
+          # A fixed staging of the caller's (kept after a green run, for the
+          # per-test record below); /tmp, as run_conformance.sh's own.
+          CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios-codegen.ci
+          CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
+          SHARD_MODE: ios-codegen
+          ONLY: ${{ inputs.only }}
+          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          IOS_PROBES: ${{ (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
+        run: |
+          # When this step began, for record_xctests.py's phase times (printed only).
+          date +%s > "$RUNNER_TEMP/suite-started"
+          echo "SwiftJsonUI ref=${{ inputs.swiftjsonui_ref || 'master' }} HEAD=$(git -C SwiftJsonUI rev-parse HEAD)"
+          # As the ios job: every probe switch the UITests read, derived.
+          if [ "$IOS_PROBES" = true ]; then
+            switches=$(python3 .github/scripts/ios_probe_gates.py exports SwiftJsonUI/ConformanceHost/UITests)
+            for s in $switches; do export "$s"; done
+            echo "opt-in probes raised: $(echo "$switches" | grep -c .) — $(echo $switches)"
+          else
+            echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
+          fi
+          # A dispatch with `only` runs the suite alone (its slice of the narrowed manifest), no probe class.
+          if [ -n "$ONLY" ]; then
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py suite)"
+          else
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          fi
+          echo "shard $CONFORMANCE_SHARD: $(echo $CONFORMANCE_ONLY_TESTING | wc -w | tr -d ' ') test classes — $CONFORMANCE_ONLY_TESTING"
+          SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
+      - name: Record every XCTest result
+        if: always()
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt --started-at "$(cat "$RUNNER_TEMP/suite-started" 2>/dev/null)"
+      # One shard's part of the run, under a name the report's results-* does
+      # not match: ios-codegen-merge proves the shards add up and uploads
+      # results-ios-codegen / xctests-ios-codegen as the unsharded job did.
+      - name: Gather this shard's results
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/shard"
+          mkdir -p "$out/$(dirname codegen/ios.results.json)" "$out/artifacts/ios-codegen"
+          cp conformance/codegen/ios.results.json "$out/codegen/ios.results.json" || true
+          [ -d conformance/artifacts/ios-codegen ] && cp -R conformance/artifacts/ios-codegen/. "$out/artifacts/ios-codegen/" || true
+          cp /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt /tmp/jsonui-conformance-ios-codegen.ci/tap_timing.txt "$out/" 2>/dev/null || true
+          # As the ios job: the probes' retaps, from a log that leaves the runner only on a failure.
+          python3 .github/scripts/ios_retaps.py scan /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log "$out/probe_retaps.json" --attempt "$GITHUB_RUN_ATTEMPT" || true
+      - name: Upload this shard's results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-codegen-shard-${{ matrix.shard }}
+          if-no-files-found: error
+          retention-days: 7
+          path: ${{ runner.temp }}/shard/
+      - name: Name the failed tests
+        if: failure()
+        run: python3 .github/scripts/name_failed_xctests.py /tmp/jsonui-conformance-ios-codegen.*/xcodebuild.log
+      - name: Upload the xcodebuild log and the xcresult
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-log-ios-codegen-${{ matrix.shard }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            /tmp/jsonui-conformance-ios-codegen.*/xcodebuild.log
+            SwiftJsonUI/ConformanceHost/build/DerivedData/Logs/Test/*.xcresult
+
+  # ------------------------------------------------------------------ #
+  # Android — KotlinJsonUI Compose dynamic host on a headless emulator
+  # (KVM-accelerated on ubuntu-latest). Tablet profile matches the
+  # committed baseline runs (small phones can push fixtures offscreen).
+  # ------------------------------------------------------------------ #
+  # Puts the ios shards back together as the one result the report reads
+  # (results-ios / xctests-ios, the names and shape of the unsharded
+  # job's), and refuses a run whose shards do not add up: a fixture or a
+  # probe test in no shard or in two, a shard missing, a results file
+  # without the shard record (a SwiftJsonUI that ignores CONFORMANCE_SHARD
+  # ran everything in every shard). .github/scripts/ios_shards.py merge.
+  ios-merge:
+    needs: ios
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      library_sha: ${{ steps.merge.outputs.library_sha }}
+      toolchain: ${{ steps.merge.outputs.toolchain }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+          sparse-checkout: ConformanceHost/UITests
+      - name: Download the shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ios-shard-*
+          path: shards
+      - name: Merge the shards (and prove they are the whole run)
+        id: merge
+        run: |
+          set -euo pipefail
+          ls -d shards/ios-shard-* || true
+          python3 .github/scripts/ios_shards.py merge --mode ios --shards "$IOS_SHARDS" ${{ inputs.only != '' && '--fixtures-only' || '' }} \
+            --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
+            --out merged shards/ios-shard-*
+          python3 .github/scripts/ios_shards.py meta shards/ios-shard-* | tee -a "$GITHUB_OUTPUT"
+      # A fixture that passed only on a second tap names it (SwiftJsonUI results[].retap; ticket
+      # 2026-10-24-ios-conformance-tap-not-delivered-recurred, the requester's choice B), and so does a probe that
+      # touched once more (its lines in each shard's log). Every retap is printed here, and the run's list is kept
+      # 90 days: the report counts it, and the next run reads it to fail the same one twice in a row.
+      - name: Name the retaps (fixtures and probes that needed a second touch)
+        run: >-
+          python3 .github/scripts/ios_retaps.py write merged/results/ios.results.json merged/retaps.json
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --sha "${{ github.sha }}"
+          --face ios --shard-dirs shards/ios-shard-*
+      - name: Upload the retaps record
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-retaps-a${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: merged/retaps.json
+      - name: Every probe whose switch was raised ran
+        if: ${{ !cancelled() && (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) }}
+        run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ios
+          if-no-files-found: error
+          path: |
+            merged/results/ios.results.json
+            merged/artifacts/ios/
+      - name: Upload the per-test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctests-ios
+          if-no-files-found: warn
+          retention-days: 7
+          path: merged/xctests.txt
+
+  # Puts the ios-codegen shards back together as the one result the report reads
+  # (results-ios-codegen / xctests-ios-codegen, the names and shape of the unsharded
+  # job's), and refuses a run whose shards do not add up: a fixture or a
+  # probe test in no shard or in two, a shard missing, a results file
+  # without the shard record (a SwiftJsonUI that ignores CONFORMANCE_SHARD
+  # ran everything in every shard). .github/scripts/ios_shards.py merge.
+  ios-codegen-merge:
+    needs: ios-codegen
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+          sparse-checkout: ConformanceHost/UITests
+      - name: Download the shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ios-codegen-shard-*
+          path: shards
+      - name: Merge the shards (and prove they are the whole run)
+        id: merge
+        run: |
+          set -euo pipefail
+          ls -d shards/ios-codegen-shard-* || true
+          python3 .github/scripts/ios_shards.py merge --mode ios-codegen --shards "$IOS_SHARDS" ${{ inputs.only != '' && '--fixtures-only' || '' }} \
+            --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
+            --out merged shards/ios-codegen-shard-*
+          python3 .github/scripts/ios_shards.py meta shards/ios-codegen-shard-* | tee -a "$GITHUB_OUTPUT"
+      # As ios-merge: this face's retaps, on the same count in the report.
+      - name: Name the retaps (fixtures and probes that needed a second touch)
+        run: >-
+          python3 .github/scripts/ios_retaps.py write merged/codegen/ios.results.json merged/retaps.json
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --sha "${{ github.sha }}"
+          --face ios-codegen --shard-dirs shards/ios-codegen-shard-*
+      - name: Upload the retaps record
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-codegen-retaps-a${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: merged/retaps.json
+      - name: Every probe whose switch was raised ran
+        if: ${{ !cancelled() && (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) }}
+        run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ios-codegen
+          if-no-files-found: error
+          path: |
+            merged/codegen/ios.results.json
+            merged/artifacts/ios-codegen/
+      - name: Upload the per-test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctests-ios-codegen
+          if-no-files-found: warn
+          retention-days: 7
+          path: merged/xctests.txt
+
+  android:
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    runs-on: ubuntu-latest
+    # Suite duration (full 672-fixture set incl. interactive + screenshots;
+    # 2026-07-24: +4 assertable Embed fixtures + 2 companion layouts — local
+    # conf AVD assertable pass stayed ~58s/attempt, so +4 text-assert
+    # fixtures ≈ +5-10s local → ≪1 min even at the 5-7x CI multiplier;
+    # 2026-07-24 (2): +2 interactive tap-driven Embed fixtures (isolated
+    # push/pop) + 1 companion — local conf AVD full sweep 250s vs 226s at
+    # 643 fixtures, i.e. +24s local ≈ +2-3 min at the 5-7x CI multiplier;
+    # 2026-07-24 (3): +14 interactive binding-resolution fixtures (track
+    # 15-5: Label.text ×13 + hidden negation ×1, all waitFor+assert, no
+    # screenshots) — local conf AVD full sweep 365s measured under
+    # concurrent host load (a second emulator + an iOS sim; clean baseline
+    # extrapolates to ~260-265s @664), so +14 ≈ +10-15s clean local
+    # ≈ +1-2 min at the 5-7x CI multiplier;
+    # 2026-07-25: +8 assertable variant-file fixtures (06 track: 3 run on
+    # this lane, 5 skip by platforms) + 8 companion screens — local conf
+    # AVD full sweep 356s measured under concurrent host load (web +
+    # iOS lanes in parallel; comparable to the 365s@664 loaded reading
+    # above), waitFor+text asserts only ≈ +5-10s clean local ≈ ≪1 min at
+    # the 5-7x CI multiplier;
+    # margin is dominated by the bad-runner multi-attempt case, not by
+    # fixture count — see the budget arithmetic below)
+    # varies WILDLY with the hosted runner drawn: ~7 min on a good runner
+    # (401s, one attempt, run 28683440355) vs 6x slower on a bad one
+    # (progress.jsonl: 330 outcomes after a full 20-min attempt, run
+    # 28687476052) — same commit, same config. Budgets must fit the bad
+    # runner: run_conformance's attempt loop RESUMES via on-device
+    # progress.jsonl (chop-safe: a fixture chopped by the per-attempt
+    # timeout re-runs once before counting as an error), so a slow runner
+    # needs boot ~2 + gradle ~5 + several 20-min attempts.
+    # The liveness probe (adb + screencap) fast-fails a truly wedged
+    # emulator and the step is retried once FRESH.
+    #
+    # Budget sized from measurement, not from the healthy case. Emulator
+    # throughput on hosted runners varies ~10x run to run: 1207 outcomes in
+    # one 7-minute instrumentation attempt (2026-07-26, job green in 13 min)
+    # versus ~325 per 20-minute attempt on a degraded runner — the same suite
+    # needs ~85-95 min there, which the old 70-minute steps could not hold.
+    # Two of three runs on 2026-07-29 died on that ceiling.
+    #
+    # 2026-08-07 (plan 51-H) re-measure — the Wave 3 fixture expansion:
+    #   android-eligible fixtures 672 → 853 (+27%; manifest total 1031).
+    #   The degraded-runner case is the one that sizes this, and it scales
+    #   with fixture count: 87 min at 672 (4 resumed attempts at the
+    #   measured worst rate of ~325 outcomes per 20-min attempt, plus boot
+    #   ~2 + gradle ~5) → 87 × 853/672 ≈ 110 min at 853. Cross-check from
+    #   the outcome side, since outcomes ≈ 1.8 × fixtures (1207 measured
+    #   at 672): 853 × 1.8 ≈ 1532 outcomes → ceil(1532/325) = 5 attempts
+    #   → 5 × 20 + 7 = 107 min. Two independent derivations, 107 vs 110.
+    #   The OLD retry step of 100 no longer holds either number, which is
+    #   the whole failure mode this budget exists to prevent (a cancelled
+    #   job reads as a red suite, and "cancelled" means suspect the
+    #   timeout first).
+    #   Good-runner readings for scale, same workflow: android 20 min and
+    #   android-codegen 18 min in run 31135850340 (green, 2026-08-07) —
+    #   the budget is sized for the bad runner, not these.
+    #
+    # attempt < step < job:
+    #   per-attempt cap 20 min (run_conformance.sh), resumed on timeout
+    #   step 95 + retry 130 + setup ~15 + upload ≈ 245 → job 270
+    #   (retry 130 holds the 110-min degraded case with ~18% margin, the
+    #   same margin ratio the old 100-vs-87 pair carried)
+    # Weekly on a public repo — runner minutes are free; wall-clock only
+    # gates the weekly report.
+    timeout-minutes: 270
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+    outputs:
+      library_sha: ${{ steps.library_sha.outputs.sha }}
+      toolchain: ${{ steps.android_toolchain.outputs.spec }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          ref: ${{ inputs.kotlinjsonui_ref || 'main' }}
+          path: KotlinJsonUI
+      - name: Record the KotlinJsonUI SOURCE these pixels were drawn by
+        id: library_sha
+        # Both published modules draw: `library` (codegen) and
+        # `library-dynamic`. See the ios note for why this is a tree hash.
+        run: |
+          echo "KotlinJsonUI ref=${{ inputs.kotlinjsonui_ref || 'main' }} HEAD=$(git -C KotlinJsonUI rev-parse HEAD)"
+          lib=$(git -C KotlinJsonUI rev-parse HEAD:library/src)
+          dyn=$(git -C KotlinJsonUI rev-parse HEAD:library-dynamic/src)
+          echo "sha=tree:$lib+$dyn" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Attempt 1: continue-on-error so a wedge (now fast-failed by the script,
+      # ~2 min via the liveness gate, not a full-step hang) doesn't fail the job —
+      # the retry below runs on a FRESH emulator, which is the only way to
+      # recover a frozen one. 70-min step timeout is a backstop.
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/results/android.results.json conformance/results/android.logcat*.txt
+      # Same reason as the iOS leg: the baseline recorded the subject
+      # (library SHA) and none of the tools. An AGP / emulator image /
+      # API level change moves pictures that use none of the changed
+      # features. `api_level` is read from this workflow's own value so the
+      # record cannot drift from what actually booted.
+      - name: Record the toolchain that drew these pixels
+        id: android_toolchain
+        run: |
+          set -euo pipefail
+          # AGP has (at least) two spellings and this repo uses the one the
+          # first predicate could not see: the plugin DSL
+          #   id("com.android.library") version "9.2.0"
+          # not the buildscript classpath `com.android.tools.build:gradle:X`.
+          # Every ci baseline baked before 2026-09-15 therefore records
+          # `agp=unknown` — which reads as "looked, and there is no AGP"
+          # rather than "our grep does not match this repo". A toolchain
+          # coordinate the baseline exists to record was silently absent.
+          # Both spellings are searched, and NOT FINDING ONE IS AN ERROR:
+          # `unknown` is what a dead predicate returns, so it must not be a
+          # value this step can quietly ship.
+          # ⚠️ `|| true` ON EVERY SEARCH, BECAUSE `set -euo pipefail` IS ABOVE.
+          # Without it the FIRST grep finding nothing kills the step: the
+          # command substitution exits non-zero, `set -e` fires, and neither
+          # the second spelling nor the "neither matched" error below is ever
+          # reached. Measured 2026-09-15 (run 34933040350): this step exited 2
+          # with no output at all — the fallback and the diagnostic were both
+          # written and both unreachable. A no-match is the NORMAL outcome for
+          # whichever spelling this repo does not use, so it cannot be fatal.
+          agp=$(grep -ohE 'com\.android\.tools\.build:gradle:[0-9.]+' \
+                  KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
+                | head -1 | cut -d: -f3 || true)
+          if [ -z "$agp" ]; then
+            agp=$(grep -ohE 'id\("com\.android\.(library|application)"\) version "[0-9.]+"' \
+                    KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
+                  | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+          fi
+          if [ -z "$agp" ]; then
+            echo "error: neither AGP spelling matched. A third spelling exists, or the" >&2
+            echo "       files moved. Recording 'unknown' would hide that." >&2
+            exit 1
+          fi
+          gradle=$(grep -oE 'gradle-[0-9.]+-' KotlinJsonUI/gradle/wrapper/gradle-wrapper.properties \
+                | head -1 | sed 's/gradle-//;s/-$//' || echo unknown)
+          echo "spec=api_level=34;emulator_target=default;agp=${agp};gradle=${gradle}" >> "$GITHUB_OUTPUT"
+      - name: Run Android conformance suite (emulator)
+        id: android_emu
+        continue-on-error: true
+        timeout-minutes: 95
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          # Pinpoint boot cutoff: a healthy emulator boots in ~1-2 min, so a
+          # 5-min boot-timeout fast-fails a boot-phase wedge (the action kills
+          # the emulator and the step fails) — the fresh-emulator retry then
+          # recovers, instead of a boot hang riding the whole step timeout.
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+            KotlinJsonUI/conformance-host/scripts/collect_results.sh
+      # Retry once with a fresh emulator only if attempt 1 failed. This step is
+      # NOT continue-on-error, so a second failure correctly fails the job.
+      - name: Retry Android conformance suite (fresh emulator)
+        if: steps.android_emu.outcome == 'failure'
+        # Wider than attempt 1: this is the one that has to absorb a degraded
+        # runner, where the suite needs ~85-95 min rather than ~10.
+        timeout-minutes: 130
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          # Pinpoint boot cutoff: a healthy emulator boots in ~1-2 min, so a
+          # 5-min boot-timeout fast-fails a boot-phase wedge (the action kills
+          # the emulator and the step fails) — the fresh-emulator retry then
+          # recovers, instead of a boot hang riding the whole step timeout.
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+            KotlinJsonUI/conformance-host/scripts/collect_results.sh
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-android
+          if-no-files-found: error
+          path: |
+            conformance/results/android.results.json
+            conformance/results/android.logcat*.txt
+            conformance/artifacts/android/
+
+  # ------------------------------------------------------------------ #
+  # Android codegen — the SAME fixtures through the kjui-GENERATED
+  # Compose views (production pipeline); screenshots feed `gate --parity`
+  # against the dynamic baselines (plan 25 B). Same emulator budget
+  # arithmetic as the dynamic job.
+  # ------------------------------------------------------------------ #
+  android-codegen:
+    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    runs-on: ubuntu-latest
+    timeout-minutes: 270
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+      KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
+    steps:
+      - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          ref: ${{ inputs.kotlinjsonui_ref || 'main' }}
+          path: KotlinJsonUI
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: ruby/setup-ruby@v1 # kjui build inside generate_codegen_host.rb
+        with:
+          ruby-version: "3.3"
+      - name: Drop the checked-out results file
+        # See the web job: the results files are tracked, so a run that dies
+        # before its collect step would otherwise upload a PREVIOUS
+        # campaign's file and read as a successful suite.
+        run: rm -f conformance/codegen/android.results.json
+      - name: Generate the codegen fixture registry (kjui build)
+        run: |
+          echo "KotlinJsonUI ref=${{ inputs.kotlinjsonui_ref || 'main' }} HEAD=$(git -C KotlinJsonUI rev-parse HEAD)"
+          ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+      - name: Size the Kotlin compile daemon's heap
+        # The codegen host compiles every generated fixture view in one
+        # module, so the Kotlin daemon's heap grows with the fixture count.
+        # Unset, the daemon inherits KotlinJsonUI's org.gradle.jvmargs
+        # (-Xmx2048m). At 1183 fixtures (jsonui-cli 1.9.18) this job ran out
+        # of heap in :conformance-host:compileDebugKotlin (run 37471959505)
+        # after passing at 1162 (run 37422435382). Measured locally (arm64,
+        # openjdk 17): 1162 compiles at 1792m, 1183 fails at 1792m and passes
+        # at 2048m with 1652M live after GC. No single method grew, and the
+        # registry is already chunked (ticket ci-android-codegen-conformance-
+        # host-compile-runs-out-of-heap). 4g leaves room for the fixtures
+        # still to come. The user-home gradle.properties takes precedence
+        # over the project's, for this job only.
+        run: |
+          mkdir -p ~/.gradle
+          echo 'kotlin.daemon.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
+          cat ~/.gradle/gradle.properties
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Android codegen suite (emulator)
+        id: android_codegen_emu
+        continue-on-error: true
+        timeout-minutes: 95
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/collect_results.sh
+      - name: Retry Android codegen suite (fresh emulator)
+        if: steps.android_codegen_emu.outcome == 'failure'
+        timeout-minutes: 130
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+            HOST_MODE=codegen KotlinJsonUI/conformance-host/scripts/collect_results.sh
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-android-codegen
+          if-no-files-found: error
+          path: |
+            conformance/codegen/android.results.json
+            conformance/artifacts/android-codegen/
+
+  # ------------------------------------------------------------------ #
+  # Android device tests — KotlinJsonUI's own instrumented tests
+  # (library, library-dynamic and conformance-host, src/androidTest; the
+  # host's ConformanceSuiteTest is left out, the android jobs above run it).
+  # No other job runs them: KotlinJsonUI's ci.yml runs the JVM units. The
+  # host's 13 probe classes ran nowhere until 2026-10-04 (ticket
+  # kjui-conformance-host-androidtest-probes-never-run-in-ci); one had been
+  # red since KotlinJsonUI 14c075b. kjui_device_tests.py also fails on a
+  # module with device tests that it neither runs nor names. Until 2026-09-26 an arm written there was
+  # green on a developer's emulator and nowhere else. Judged from the results
+  # XML (.github/scripts/kjui_device_tests.py), not from Gradle's exit alone:
+  # a class with @Test and no case in the results is red.
+  # Not in the report job's `needs`: the report judges pixels, and this job's
+  # red already makes the run red.
+  # ------------------------------------------------------------------ #
+  android-library-tests:
+    if: ${{ !inputs.tap_repro && inputs.only == '' }} # off when only the tap repro runs, and for an `only` bake; on with android_library_only
+    runs-on: ubuntu-latest
+    # Budget. First run (36196156936, 2026-09-26, API 34): step 17.5 min,
+    # gradle 15m47s for 262 cases on a good runner. The android job's
+    # degraded runner is ~6x slower on the emulator part, so allow ~80 of
+    # the 90-minute step. Step 90, job 105 (attempt < step < job). A
+    # cancelled run here means suspect this number first.
+    # 2026-10-04, conformance-host's probes added: the step took 17.8-26.3
+    # min over the last 5 runs (library + library-dynamic, 394 cases); the
+    # host adds 34 cases and its app build, ~5 min locally, taken as ~8 on
+    # CI. (26.3 + 8) x 3 = 103, so step 110, job 125.
+    timeout-minutes: 125
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          ref: ${{ inputs.kotlinjsonui_ref || 'main' }}
+          path: KotlinJsonUI
+      - name: Record the KotlinJsonUI SOURCE these tests ran against
+        run: echo "KotlinJsonUI ref=${{ inputs.kotlinjsonui_ref || 'main' }} HEAD=$(git -C KotlinJsonUI rev-parse HEAD)"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run KotlinJsonUI device tests (emulator)
+        timeout-minutes: 110
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_PROBES: ${{ (inputs.only == '' && (inputs.android_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
+        # API 35, not the conformance jobs' 34 (those keep 34 for their
+        # baselines; this job has none). Measured 2026-09-26, same
+        # KotlinJsonUI 329f5d6 and the same runner image. Only the classes
+        # that had failed were run (10 + 13 cases).
+        # - On this API 34 image the IME never shows: logcat has
+        #   `onFailed at PHASE_CLIENT_REQUEST_IME_SHOW`. The accessibility walk
+        #   of the active window intermittently finds nothing, not even a tab
+        #   label.
+        #   - api 34:         10/10 + 13/13 failed on one run,
+        #                     6 + 6 on another.
+        #   - api 34, raised: show_ime_with_hard_keyboard was already 1, and
+        #                     it failed the same way.
+        #   - api 35:         0 failed, with the setting 0 or 1.
+        # Read as the test window not taking window focus on the API 34 CI
+        # emulator; focus during the tests was not measured. The run was
+        # 36197930038 (scratch branch). On API 34 these arms measure the
+        # emulator, not the library.
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_tablet
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: bash .github/scripts/kjui_device_tests.sh KotlinJsonUI
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-android-library-tests
+          if-no-files-found: warn
+          path: |
+            KotlinJsonUI/library/build/outputs/androidTest-results/
+            KotlinJsonUI/library-dynamic/build/outputs/androidTest-results/
+            KotlinJsonUI/conformance-host/build/outputs/androidTest-results/
+            KotlinJsonUI/library/build/reports/androidTests/
+            KotlinJsonUI/library-dynamic/build/reports/androidTests/
+            KotlinJsonUI/conformance-host/build/reports/androidTests/
+            KotlinJsonUI/device-evidence/
+
+  # ------------------------------------------------------------------ #
+  # Merge all three fresh results into REPORT.md and gate on:
+  # 0 cross-platform mismatches / 0 fail / 0 error / no stale results /
+  # screenshots actually compared / no visual or attribute-effect
+  # regressions / missing_artifact & no_baseline within their ratchet
+  # ceilings (conformance/gate_ratchet.json).
+  # ------------------------------------------------------------------ #
+  report:
+    runs-on: ubuntu-latest
+    # 2026-08-07 (plan 51-H) re-measure. This was the TIGHTEST budget in the
+    # file and nobody had noticed, because it is also the shortest: 8 min
+    # used of 10 in run 31135850340 (green) and 6 of 10 in 31088841656 —
+    # 80% and 60%. Every other job sat under 50%.
+    #
+    # It scales with fixture count twice over: the baseline compare dHashes
+    # every PNG of all five artifact sets, and the control diff pixel-diffs
+    # each fixture against its control. The Wave 3 expansion takes the
+    # manifest 915 → 1031 (+13%), which lands the measured 8 min at ~9 —
+    # inside 10 only until the next fixture lands, and a gate job that gets
+    # cut off reads as a red suite rather than as a budget problem
+    # ("cancelled" means suspect the timeout first).
+    #
+    # 20 restores roughly the 2x headroom the other jobs carry. Cheap: this
+    # is a weekly public-repo run, so wall-clock only gates the report.
+    timeout-minutes: 20
+    needs: [web, ios, ios-merge, android, ios-codegen, ios-codegen-merge, android-codegen]
+    # 🔴 ALWAYS, BECAUSE ONE RED LEG USED TO DELETE THE WHOLE JUDGMENT.
+    # Measured on run 34987243780: web/ios/ios-codegen/android all succeeded,
+    # android-codegen failed on a real defect — and this job was SKIPPED, so
+    # --parity, --cross-effect, --inert-complete, --value-discrimination, the
+    # library drift notices, the visual regressions, the ink coverage and the
+    # control diff were evaluated for NOTHING. Four legs left artifacts that
+    # nobody judged, after about three hours of runner time.
+    #
+    # ⚠️ The tension is real and is NOT being collapsed the other way: a
+    # COMPLETE report does need all five sets (it cross-checks them). What was
+    # wrong was turning "cannot produce a complete report" into "produce
+    # nothing". The verdict step below keeps the run RED whenever a face is
+    # missing — an incomplete report is "not judged", never "passed".
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only && inputs.only == '' }} # an `only` run draws for a bake, not for the gate
+    permissions:
+      contents: read
+      # ios_retaps.py reads the run before's retaps records (GET /actions/runs, /artifacts)
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        working-directory: jui_tools
+        # [conformance] pulls in Pillow. Without it every screenshot
+        # comparison is skipped and the gate below reports 0 regressions for
+        # a check that never ran — which is exactly how an iOS runner upgrade
+        # re-rendered all 490 fixtures unnoticed.
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[conformance]'
+      - name: Which faces can this run judge
+        id: faces
+        # 🔻 THE COVERAGE IS DERIVED FROM THE LEGS' OWN RESULTS, not assumed.
+        # A leg that failed produced no trustworthy result set, so its face is
+        # NOT JUDGED and says so by name. The codegen legs do not carry a
+        # --platform of their own: they feed --parity for the face they mirror,
+        # so a missing codegen leg removes parity for that face while leaving
+        # its dynamic judgment intact.
+        run: |
+          set -euo pipefail
+          judged=""; missing=""
+          add() { [ "$2" = success ] && judged="$judged $1" || missing="$missing $1($2)"; }
+          add web    "${{ needs.web.result }}"
+          # A sharded face is judged when every shard and the merge that
+          # proved they are the whole run succeeded.
+          both() { [ "$1" = success ] && echo "$2" || echo "$1"; }
+          add ios    "$(both "${{ needs.ios.result }}" "${{ needs.ios-merge.result }}")"
+          add android "${{ needs.android.result }}"
+          cg_missing=""
+          cg_ios="$(both "${{ needs.ios-codegen.result }}" "${{ needs.ios-codegen-merge.result }}")"
+          [ "$cg_ios" = success ] || cg_missing="$cg_missing ios-codegen($cg_ios)"
+          [ "${{ needs.android-codegen.result }}" = success ] || cg_missing="$cg_missing android-codegen(${{ needs.android-codegen.result }})"
+          all_missing="${missing}${cg_missing}"
+          echo "judged=${judged# }" >> "$GITHUB_OUTPUT"
+          echo "missing=${all_missing# }" >> "$GITHUB_OUTPUT"
+          echo "== faces this run can judge: ${judged:-(none)}"
+          echo "== NOT JUDGED: ${all_missing:-(none)}"
+          echo "   (a face listed here was not measured. It is not a pass.)"
+      - name: Download platform results
+        # merge-multiple lands results/<p>.results.json + artifacts/<p>/ from
+        # all three jobs under conformance/, replacing the committed baseline.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: conformance
+          merge-multiple: true
+      - name: Render report + gate (jui conformance gate)
+        # The full judgment: all three platforms selected, visual checks on.
+        # Cross-platform mismatch is judged because every result here is
+        # fresh from this run; the attribute-effect check is the only gate
+        # that notices an attribute going inert (a dropped attribute renders
+        # the default and matches the default baseline it recorded last
+        # time); the ratchets stop fixtures from quietly exiting visual
+        # coverage. Same command runs locally; logic + tests live in
+        # jui_tools/jui_cli/conformance/gate.py + tests/test_conformance_gate.py.
+        #
+        # --env ci: visual facts are per-renderer, so this lane compares only
+        # against baselines/ci/ (baked from CI artifacts) and uses the ci
+        # ratchet ceilings — never the developer-machine bakes under
+        # baselines/local/ (a locally-baked baseline vs a CI render mismatched
+        # 534/506 screenshots wholesale on 2026-08-01; that comparison
+        # measures the environment, not a regression). The attribute-effect
+        # ledger is asserted from local renders, so under this env an inert
+        # entry is a notice, not a failure (plan 25 Phase 0).
+        # --parity: the codegen jobs' screenshots must match the dynamic
+        # baselines within the calibrated thresholds, with every deviation
+        # recorded + justified in codegen_parity.json (plan 25 A/B).
+        # --cross-effect: cross-platform activeness agreement + semantics-
+        # contract expectations (plan 33). Enforced under env local; under
+        # this lane's env=ci findings are NOTICES by design — same
+        # env-scoping as the attribute-effect ledger above.
+        # --inert-complete: every fixture that renders identically to its
+        # control is accounted for — by a ledger, by the contract, or by an
+        # entry in inert_audit.json (plan 34 Phase 3). This is the check that
+        # sees an attribute SILENTLY dropping out: the other lanes all ask
+        # "is this specific recorded thing still true", and a newly-inert
+        # fixture nobody has an opinion about answers none of them. Same
+        # env-scoping again — asserted local, notice here.
+        # --rendered-by: which library drew this run's pixels. A baseline
+        # records the same, so when a regression is measured against one
+        # drawn by a different library, the gate says so — a notice, not a
+        # failure. Thirteen regressions in one run were neither fixture nor
+        # codegen and two lanes reached "the library moved" by elimination.
+        #
+        # 🔻 ONLY THE FACES THIS RUN ACTUALLY MEASURED are passed. A failed leg
+        # has no trustworthy results, and asking the gate to judge them would
+        # report the committed baseline's leftovers as this run's answer.
+        # `--rendered-by` follows the same rule: a failed leg's job output is
+        # empty, and an empty coordinate compared against a baked one is a
+        # drift notice about nothing.
+        if: steps.faces.outputs.judged != ''
+        run: |
+          set -euo pipefail
+          args=(conformance gate --env ci --parity --cross-effect --inert-complete --value-discrimination)
+          for p in ${{ steps.faces.outputs.judged }}; do args+=(--platform "$p"); done
+          # Frame parity (frame_parity.py): every face writes frames, and the
+          # three are declared in EXPECTED_FRAME_HOSTS. On by default since
+          # jsonui-cli 1.9.17: frame_parity.json accounts for every
+          # disagreement run 37368630695 measured (417 of 417 accepted, none
+          # unrecorded, none stale). The test is `!= false`, not `= true`: a
+          # schedule run has NO inputs, so `inputs.frame_parity` is empty there
+          # and `= true` would leave the schedule off whatever the default says.
+          # A run without the flag prints "frame parity: NOT judged".
+          [ "${{ inputs.frame_parity }}" != false ] && args+=(--frame-parity)
+          [ "${{ needs.ios.result }}" = success ] && [ "${{ needs.ios-merge.result }}" = success ] && args+=(--rendered-by "swiftjsonui.src=${{ needs.ios-merge.outputs.library_sha }}" --rendered-by "ios.toolchain=${{ needs.ios-merge.outputs.toolchain }}")
+          [ "${{ needs.android.result }}" = success ] && args+=(--rendered-by "kotlinjsonui.src=${{ needs.android.outputs.library_sha }}" --rendered-by "android.toolchain=${{ needs.android.outputs.toolchain }}")
+          [ "${{ needs.web.result }}" = success ] && args+=(--rendered-by "rjui.src=${{ needs.web.outputs.library_sha }}" --rendered-by "chromium=${{ needs.web.outputs.chromium }}")
+          printf 'gate args:'; printf ' %s' "${args[@]}"; printf '\n'
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(sys.argv[1:]))" "${args[@]}"
+      - name: Download the retaps records
+        # By pattern, not by this attempt's name: re-running failed jobs does not re-run a merge that passed, so an
+        # attempt 2 may hold only ios-retaps-a1 (runs 41016959345 and 41352149749 went red on this step for that).
+        # Each lands in retaps/<name>/; the judge takes each face's latest.
+        if: ${{ always() && contains(steps.faces.outputs.judged, 'ios') }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ios*-retaps-a*
+          path: retaps
+      - name: Retaps — more than two touches in the run, or the same fixture or probe on the run before
+        # A retap is a pass that names itself, not a fix (ticket 2026-10-24-ios-conformance-tap-not-delivered-
+        # recurred): red when this run retapped more than two, fixtures and probes together over both faces, or a
+        # fixture or probe the run before (this run's attempt before, else the last earlier run that left a record)
+        # retapped too. A run before that cannot be read is said and not counted; a shard's log that was not read is
+        # red. A second tap that did not pass either is the fixture's or the probe's own error above. The count and the
+        # names go to the job summary.
+        if: ${{ always() && contains(steps.faces.outputs.judged, 'ios') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 .github/scripts/ios_retaps.py judge retaps/*/retaps.json --repo "${{ github.repository }}"
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --workflow conformance-mobile.yml
+      - name: Verdict — an incomplete run is NOT a pass
+        # 🔴 THE STEP THAT STOPS "4/5 GREEN" FROM EXISTING. The gate above now
+        # judges whatever was measured, which is the point — but a run missing
+        # a face has not been judged, and the only honest colour for that is
+        # red. The count is in the heading so a reader cannot skim past it.
+        if: always()
+        run: |
+          set -euo pipefail
+          judged="${{ steps.faces.outputs.judged }}"
+          missing="${{ steps.faces.outputs.missing }}"
+          n_missing=$(printf '%s' "$missing" | wc -w | tr -d ' ')
+          echo "== conformance verdict: ${n_missing} face(s) NOT JUDGED"
+          echo "   judged:     ${judged:-(none)}"
+          echo "   not judged: ${missing:-(none)}"
+          if [ -z "$judged" ]; then
+            echo "error: no face produced results — nothing was judged at all" >&2
+            exit 1
+          fi
+          if [ "$n_missing" != 0 ]; then
+            echo "error: ${n_missing} face(s) were not measured, so this run is INCOMPLETE." >&2
+            echo "       The gate's verdict above covers only: $judged" >&2
+            exit 1
+          fi
+      - name: Upload combined report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          if-no-files-found: error
+          path: |
+            conformance/REPORT.md
+            conformance/results/
+            conformance/artifacts/
+
+  # iOS tap-miss reproduction — dispatch only, never on push / schedule.
+  #
+  # Ticket ios-dynamic-interactive-fixture-tap-not-delivered-intermittently:
+  # twice in CI an interactive Dynamic fixture's tap fired no callback
+  # (Switch/onValueChange__callback_fire, common/clipToBounds__hit_overflow_true).
+  # A local loop of 600 taps — unloaded, and at load average 150-200 — never
+  # missed, and its tap timing stayed at p90 1.2 s against CI's 4.3 s. What is
+  # left lives on the CI runner: Xcode 26.3, the image, the runner's own load.
+  # So this loops the two fixtures there, on the same image, Xcode, simulator
+  # and host as conformance-mobile's `ios` job, with SwiftJsonUI's post-tap
+  # instrument (8815b51: every miss says whether a second tap passed) and its
+  # TAP_TIMING lines (c016de9).
+  #
+  # Every other job of this workflow is off when tap_repro is true, and this
+  # one is off otherwise — the normal conformance path is unchanged.
+  weekly-red:
+    # A red weekly run says so (ticket 2026-10-21-conformance-weekly-ios-interaction-gate-red): GitHub mails a
+    # scheduled run's failure only to whoever last edited the cron line, and the 10-18 run sat red for three days
+    # before anyone saw it. On a scheduled run whose jobs did not all pass, one issue a week (labelled
+    # conformance-weekly-red, the run in its title); a second red run that week comments on it. A run dispatched by
+    # hand never opens one: whoever dispatched it is watching.
+    if: ${{ always() && github.event_name == 'schedule' }}
+    needs: [web, ios, ios-merge, android, ios-codegen, ios-codegen-merge, android-codegen, android-library-tests, report]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      # gh run view reads the run (GET /actions/runs/{id}); a job's permissions block sets every scope it does not
+      # name to none, and a red week must not end in this job failing silently
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Open (or add to) this week's issue when a job is red
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # the run's own start, not this job's: a run that crosses midnight on Sunday stays in its week
+          started="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --json createdAt --jq .createdAt)"
+          python3 .github/scripts/weekly_red_issue.py "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$RUN_URL" "$NEEDS" "$started"
+
+  tap-repro:
+    # Only when dispatched with tap_repro=true; every other job is then off.
+    if: ${{ inputs.tap_repro && !inputs.android_library_only }}
+    runs-on: macos-15
+    # Budget by arithmetic, from v1.9.13's conformance (37189084185) and the
+    # local loops: setup ~1 min + host build ~6 min + the probe XCTests
+    # run_conformance.sh always runs ~11.5 min = ~18.5 min fixed; a loop
+    # fixture took 4.37 s locally (300 in 1310 s), taken here as 6.5 s for a
+    # slower runner -> 300 in ~32.5 min. ~51 min of 90: 1.76x headroom. Raise
+    # `repeats` only with this line re-derived.
+    timeout-minutes: 90
+    env:
+      CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+      JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: ${{ inputs.swiftjsonui_ref || 'master' }}
+          path: SwiftJsonUI
+          fetch-depth: 0 # the ancestry check below needs the history
+      - name: Say which host runs
+        run: |
+          git -C SwiftJsonUI log -1 --oneline
+          for c in 8815b51 c016de9; do
+            git -C SwiftJsonUI merge-base --is-ancestor "$c" HEAD \
+              || { echo "::error::the host does not carry $c — misses would not classify themselves"; exit 1; }
+          done
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/jsonui-test-runner
+          ref: ${{ inputs.test_runner_ref || 'main' }}
+          path: jsonui-test-runner
+          submodules: true
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.3"
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Install xcodeproj gem
+        run: gem install xcodeproj --no-document
+      - name: Add the loop fixtures
+        run: python3 .github/scripts/tap_repro.py make conformance "${{ inputs.tap_repro_repeats || '150' }}" ${{ inputs.tap_repro_after_visual && '--after-visual' || '' }}
+      - name: Sync fixtures + vendor the iOS test-runner driver
+        run: SwiftJsonUI/ConformanceHost/scripts/sync_fixtures.sh
+      - name: Generate ConformanceHost.xcodeproj
+        run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_project.rb
+      - name: Run the loop (headless simulator)
+        env:
+          SIMULATOR_NAME: iPhone 16 Pro
+          SIMULATOR_OS: "26"
+          CONFORMANCE_FILTER: Loop/
+          CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
+        run: SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
+      - name: Judge the loop
+        if: always()
+        run: |
+          repeats="${{ inputs.tap_repro_repeats || '150' }}"
+          per=${{ inputs.tap_repro_after_visual && '4' || '2' }}
+          python3 .github/scripts/tap_repro.py judge /tmp/jsonui-conformance-ios.ci/results/ios.results.json "$((repeats * per))"
+      - name: Tap timing and the per-test record
+        if: always()
+        run: python3 .github/scripts/record_xctests.py /tmp/jsonui-conformance-ios.ci/xcodebuild.log /tmp/jsonui-conformance-ios.ci/xctests.txt
+      - name: Upload the results, the log and the miss screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-tap-repro
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            /tmp/jsonui-conformance-ios.ci/results/ios.results.json
+            /tmp/jsonui-conformance-ios.ci/xcodebuild.log
+            /tmp/jsonui-conformance-ios.ci/artifacts/ios/*__post_tap_failure.png
+            /tmp/jsonui-conformance-ios.ci/tap_timing.txt

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/keyboardType__default.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.keyboardType (default)",
+    "description": "Conformance fixture for 'keyboardType' on TextView (section: TextView, class: visual). Value under test: \"default\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "keyboardType__default",
+      "description": "Conformance fixture for 'keyboardType' on TextView (section: TextView, class: visual). Value under test: \"default\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_keyboardType__default"
+        }
+      ]
+    }
+  ]
+}

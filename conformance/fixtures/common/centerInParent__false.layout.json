@@ -1,0 +1,68 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "View",
+      "id": "target",
+      "width": 200,
+      "height": 200,
+      "background": "#DDDDDD",
+      "child": [
+        {
+          "type": "View",
+          "id": "box_a",
+          "width": 40,
+          "height": 40,
+          "background": "#FF0000"
+        },
+        {
+          "type": "View",
+          "id": "box_b",
+          "width": 40,
+          "height": 40,
+          "background": "#0000FF"
+        },
+        {
+          "type": "View",
+          "id": "box_c",
+          "width": 40,
+          "height": 40,
+          "background": "#00AA00"
+        },
+        {
+          "type": "View",
+          "id": "box_d",
+          "width": 40,
+          "height": 40,
+          "background": "#FFAA00"
+        },
+        {
+          "type": "View",
+          "id": "box_e",
+          "width": 40,
+          "height": 40,
+          "background": "#AA00AA"
+        },
+        {
+          "type": "View",
+          "id": "box_f",
+          "width": 40,
+          "height": 40,
+          "background": "#00AAAA"
+        }
+      ],
+      "centerInParent": false
+    }
+  ]
+}

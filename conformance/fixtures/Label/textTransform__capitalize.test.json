@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/textTransform__capitalize.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.textTransform (capitalize)",
+    "description": "Conformance fixture for 'textTransform' on Label (section: Label, class: visual). Value under test: \"capitalize\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "textTransform__capitalize",
+      "description": "Conformance fixture for 'textTransform' on Label (section: Label, class: visual). Value under test: \"capitalize\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_textTransform__capitalize"
+        }
+      ]
+    }
+  ]
+}

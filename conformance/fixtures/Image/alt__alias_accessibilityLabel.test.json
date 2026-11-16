@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/alt__alias_accessibilityLabel.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.alt (alias_accessibilityLabel)",
+    "description": "Conformance fixture for 'alt' on Image (section: Image, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "alt__alias_accessibilityLabel",
+      "description": "Conformance fixture for 'alt' on Image (section: Image, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_alt__alias_accessibilityLabel"
+        }
+      ]
+    }
+  ]
+}

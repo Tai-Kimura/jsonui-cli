@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jsonui_doc_cli*"]
+
+[tool.setuptools.package-data]
+"jsonui_doc_cli.check.db_schema" = ["type_families.json"]
+"jsonui_doc_cli.infra" = ["infra-model.v0.schema.json", "infra-load.v0.schema.json", "infra-prices.v0.schema.json",
+                         "infra-migration.v0.schema.json"]
+"jsonui_doc_cli.infra.cost" = ["bundled-prices.json"]
+
+[project]
+name = "jsonui-doc-cli"
+version = "2.5.47"
+description = "CLI tool for generating documentation from JsonUI test files and specifications"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Tai Kimura"}
+]
+keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
+# jsonui_doc_cli.validator re-exports the one in-repo test validator, which
+# lives in the sibling `test_tools` package. Undeclared, `jsonui-doc --help`
+# died on a plain install — every developer machine has both editable, so it
+# only surfaced the first time a CI job installed this package alone.
+#
+# The tag MUST match the repo-root VERSION, and moves with it on every
+# release: without a rev, installing this package at a tag still resolved
+# the sibling to the default branch, so a pinned CI could not tell a tool
+# change from an implementation change. jui_tools/tests/test_version_lockstep.py
+# enforces it.
+#
+# PyYAML and markdown-it-py read and render prose kept in a spec's
+# `<name>.texts.yaml` (`{"md": "key"}` references). Both are imported only
+# when a spec uses one, and their absence is a validation error naming the
+# `pip install` — so the launcher-only path (no pip run) still documents
+# every spec that does not.
+dependencies = [
+    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v2.5.47#subdirectory=test_tools",
+    "PyYAML>=6.0",
+    "markdown-it-py>=3.0",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+]
+
+[project.scripts]
+jsonui-doc = "jsonui_doc_cli.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+# `jsonui-doc check` DB live connection (the comparator itself and the
+# dump_command path need NO extras — base install stays dependency-free)
+db = [
+    "sqlalchemy>=2.0",
+]
+mysql = [
+    "sqlalchemy>=2.0",
+    "pymysql>=1.0",
+]
+postgres = [
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+]
+
+[tool.pytest.ini_options]
+# Keep tmp_path only for failed tests: the default kept every test's for
+# the last 3 runs (9 MB per run of this suite, measured 2026-10-15).
+tmp_path_retention_policy = "failed"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

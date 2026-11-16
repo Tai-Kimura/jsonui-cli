@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/gradientDirection__bottomtotop.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.gradientDirection (bottomtotop)",
+    "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: visual). Value under test: \"BottomToTop\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "gradientDirection__bottomtotop",
+      "description": "Conformance fixture for 'gradientDirection' on View (section: View, class: visual). Value under test: \"BottomToTop\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_gradientDirection__bottomtotop"
+        }
+      ]
+    }
+  ]
+}

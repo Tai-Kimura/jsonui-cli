@@ -1,0 +1,473 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/static_seed'
+require_relative '../helpers/resource_resolver'
+require_relative '../../core/attribute_validator_core'
+require_relative '../helpers/font_spec_helper'
+
+module KjuiTools
+  module Compose
+    module Components
+      class SegmentComponent
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # A Segment reads no cornerRadius (the requester's ruling 2026-11-16): its track and fill
+          # are capsules on every platform, as iOS draws them. Taken out before anything reads it —
+          # the clip, the shadow's and the border's shape — so a declared one is written nowhere.
+          json_data = json_data.reject { |key, _| key == 'cornerRadius' } if json_data.is_a?(Hash) && json_data.key?('cornerRadius')
+          required_imports&.add(:segment)
+          # Each label on one line, as iOS draws a segment's (the requester's ruling 2026-11-15,
+          # ticket jui-segment-android-draws-no-track, option (a)).
+          required_imports&.add(:text_overflow)
+
+          # `selectedTabIndex` is the declared alias of selectedIndex (the
+          # dynamic table folds it; TabView declares the same alias). Folding
+          # it once here reaches every read site below — the alias fixture
+          # measured a parity gap against the dynamic render because only the
+          # canonical spelling was read (d=15, run 31202080745). Canonical
+          # wins when both are written.
+          if json_data['selectedTabIndex'] && !json_data['selectedIndex']
+            json_data = json_data.merge('selectedIndex' => json_data['selectedTabIndex'])
+          end
+
+          # Segment uses 'selectedIndex' or 'bind' for selected index
+          # Track if the selected index is dynamic (from data binding) or static
+          is_dynamic_index = false
+          selected_index = if json_data['selectedIndex']
+            if json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+              variable = $1
+              is_dynamic_index = true
+              "data.#{variable}"
+            else
+              # Direct integer value - keep as integer for proper comparison
+              json_data['selectedIndex'].to_i
+            end
+          else
+            0  # Default to 0 as integer
+          end
+          
+          # A static index (or none) is the seed of the segment's own state
+          # (Helpers::StaticSeed): the body then reads it as it reads a bound
+          # index, and a tap writes it.
+          unless is_dynamic_index
+            return Helpers::StaticSeed.wrap(selected_index.to_s, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, true, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected_index, is_dynamic_index, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected_index, is_dynamic_index, seeded)
+          # `items` only. `segments` was an undeclared alias -- absent from
+          # attribute_definitions.json, read by no other face, and used by no
+          # consumer layout (measured across six faces: 0). It is gone from the
+          # extract vocabulary in the same commit, so a layout still writing it
+          # now renders nothing rather than rendering from strings nobody
+          # collected.
+          # Objects are not items — the declaration says static labels, and
+          # the dynamic runtime keeps primitives only (DynamicSegmentComponent
+          # mapNotNull). Dropped before anything indexes them.
+          # Declared `type: "array"` with no binding, so only an array is
+          # items. A binding string used to be resolved here into a
+          # `forEachIndexed` — a feature this face invented alone (sjui
+          # raised NoMethodError on the same input, iOS dynamic takes
+          # strings only, and no face uses it). A binding no longer
+          # arrives: it is refused at `:error` before conversion (ruled
+          # 2026-09-05). The guard stays for the values that are NOT
+          # bindings — an object, a number — which nothing upstream
+          # refuses.
+          raw_items = json_data['items']
+          segments = raw_items.is_a?(Array) ? raw_items.select { |item| JsonUIShared::AttributeValidatorCore.scalar_item?(item) } : []
+          
+          # The tabs' text goes through the app's fontProvider (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web). A Segment declares no font
+          # attribute: FontSpec is empty, and a slot the provider leaves null draws as before (the tab's style).
+          # Resolved inside each tab's text, where the tab's text style (its weight) is the current one.
+          font_var = 'segmentFont'
+          font_spec = Helpers::FontSpecHelper.plain_spec(nil, nil, required_imports)
+          code = indent("Segment(", depth)
+          # For display in Segment parameter, always output as string
+          selected_tab_param = is_dynamic_index ? selected_index : selected_index.to_s
+          code += "\n" + indent("selectedTabIndex = #{selected_tab_param},", depth + 1)
+          
+          # Add enabled state if specified
+          if json_data.key?('enabled')
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code += "\n" + indent("enabled = #{enabled},", depth + 1)
+          end
+          
+          # Tab colors - only add if specified, otherwise use defaults from Configuration
+          colors_params = []
+
+          # The track (containerColor): the declared background; none written, the library's
+          # Segment draws iOS's track (the ruling 2026-11-15, option (a)). It was
+          # Color.Transparent, under Material's TabRow.
+          bg_value = json_data['background']
+          if bg_value
+            bg_color = Helpers::ResourceResolver.process_color(bg_value, required_imports)
+            colors_params << "containerColor = #{bg_color}"
+          end
+          
+          # Label colours: fontColor is the unselected label and
+          # selectedFontColor the selected one, falling back to fontColor
+          # (contract: semantics.segmentLabelColors). normalColor / selectedColor
+          # are declared aliases — the normalizer canonicalizes them, so only the
+          # canonical spellings are read here.
+          # Normal text color (contentColor) - for unselected tabs
+          if json_data['fontColor']
+            normal_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            colors_params << "contentColor = #{normal_color}"
+          end
+          
+          # Selected text color (selectedContentColor)
+          if json_data['selectedFontColor'] || json_data['fontColor']
+            color = json_data['selectedFontColor'] || json_data['fontColor']
+            selected_color = Helpers::ResourceResolver.process_color(color, required_imports)
+            colors_params << "selectedContentColor = #{selected_color}"
+          end
+
+          # Selected-segment background. tintColor paints the SELECTED SEGMENT'S
+          # BACKGROUND on every platform (ios selectedSegmentTintColor, web bg-*);
+          # android used to feed it into the label colour instead, so the same
+          # declaration coloured different things (contract:
+          # semantics.segmentLabelColors). The indicator is this component's
+          # selected-state background — its default is Configuration.Segment
+          # .defaultSelectedBackgroundColor. indicatorColor was an undeclared
+          # second spelling for the same thing and is no longer read.
+          if json_data['tintColor'] || json_data['selectedSegmentTintColor']
+            indicator_color = Helpers::ResourceResolver.process_color(
+              json_data['tintColor'] || json_data['selectedSegmentTintColor'],
+              required_imports
+            )
+            colors_params << "indicatorColor = #{indicator_color}"
+          end
+          
+          # No cornerRadius: a Segment reads none — its track and its selected fill are capsules on
+          # every platform, as iOS draws them (the requester's ruling 2026-11-16). The library's
+          # Segment keeps the parameter, unread, for code generated before.
+
+          if colors_params.any?
+            code += "\n" + indent(colors_params.join(",\n"), depth + 1) + ","
+          end
+          
+          # Build modifiers
+          modifiers = []
+          # userInteractionEnabled stops this node and
+          # what is in it (ModifierBuilder.build_interaction_blocker); this
+          # component builds no clickable, which is where it came from.
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → border → corner clip: the View slots between alpha and
+          # padding. All three are declared on `common` and were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # background is the Segment's containerColor above, so the border and
+          # the clip come without it — the clip rounds that colour too, since
+          # the component draws it inside this chain. There is no click here:
+          # the declared onClick is called from each Tab's own selection
+          # (operation_click_call). The Segment carries the tag and each Tab
+          # the `enabled`, so the Segment takes `disabled()` for a UI test to
+          # read.
+          # The shadow and the border follow the capsule the library's Segment draws its track in
+          # (the orchestrator's decision 2026-11-16, under the ruling that a Segment reads no
+          # cornerRadius): a RectangleShape outline sat square around the capsule. The track's
+          # colour is clipped by the Segment itself.
+          required_imports&.add(:shape)
+          required_imports&.add(:circle_shape) if json_data['shadow'] || (json_data['borderColor'] && json_data['borderWidth'])
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: 'CircleShape'))
+          modifiers.concat(Helpers::ModifierBuilder.build_border(json_data, required_imports, shape: 'CircleShape'))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+
+          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          
+          code += "\n" + indent(") {", depth)
+          
+          # `<id>_tab_<n>` on each Tab: the testTag the Android driver's
+          # selectTab waits for (ActionExecutor.kt executeSelectTab), the id
+          # rjui gives each segment button and sjui each segment. The Tabs
+          # were untagged, so a Segment could not be selected from a UI test
+          # (ticket jui-segment-tabs-carry-no-tab-ids-so-selecttab-cannot-
+          # reach-them). The Segment's own testTagsAsResourceId covers them.
+          # None without an id, like the Segment's own tag.
+          tab_tags = !json_data['id'].nil?
+          if tab_tags
+            required_imports&.add(:test_tag)
+          end
+
+          # Generate tabs
+          if segments.is_a?(Array)
+            segments.each_with_index do |segment, index|
+              code += "\n" + indent("SegmentTab(", depth + 1)
+              code += "\n" + indent("modifier = Modifier.testTag(#{JsonUIShared::StringLiterals.kotlin("#{json_data['id']}_tab_#{index}")}),", depth + 2) if tab_tags
+              # For selected comparison, handle both dynamic and static cases
+              selected_comparison = is_dynamic_index ? "(#{selected_index} == #{index})" : (selected_index == index).to_s
+              code += "\n" + indent("selected = #{selected_comparison},", depth + 2)
+              
+              # Add enabled state to Tab if segment is disabled
+              if json_data.key?('enabled')
+                # `enabled` as every other stage reads it (enabled_expression): a
+                # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+                # was did not type-check against the Boolean parameter.
+                enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+                code += "\n" + indent("enabled = #{enabled},", depth + 2)
+              end
+              
+              code += "\n" + indent("onClick = {", depth + 2)
+              code += "\n" + indent("#{seeded} = #{index}", depth + 3) if seeded
+              
+              # Check if we have a binding variable
+              has_binding = false
+              binding_variable = nil
+              
+              if json_data['selectedIndex'] && json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+                has_binding = true
+                binding_variable = $1
+              end
+              
+              # Generate onClick handler
+              # onValueChange (camelCase) -> binding format only (@{functionName})
+              view_id = Helpers::ModifierBuilder.view_id(json_data)
+              if json_data['onValueChange']
+                if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
+                  handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, index.to_s)
+                  if has_binding
+                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3)
+                    code += "\n" + indent("#{handler_call}", depth + 3)
+                  else
+                    code += "\n" + indent("#{handler_call}", depth + 3)
+                  end
+                else
+                  code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 3)
+                end
+              elsif json_data['valueChange'].is_a?(String) && !json_data['valueChange'].empty?
+                # `valueChange` is the legacy SELECTOR spelling (a bare
+                # method name, like `onclick`) that only UIKit read. Selector
+                # names camelize, matching the rjui/sjui handling of the same
+                # attribute.
+                code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3) if has_binding
+                code += "\n" + indent(value_change_call(json_data, view_id, index.to_s), depth + 3)
+              elsif has_binding
+                # Update the bound variable
+                code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3)
+              else
+                # No action if selectedIndex is a static value with no binding
+                code += "\n" + indent("// Static selected index", depth + 3) unless seeded
+              end
+              # The declared onClick, from the tab's own selection, after it
+              # (ModifierBuilder.operation_click_call).
+              if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+                code += "\n" + indent(click, depth + 3)
+              end
+              
+              code += "\n" + indent("},", depth + 2)
+              
+              # Generate text with color based on selection
+              # Store color info for later use
+              normal_color = json_data['fontColor']
+              selected_color = json_data['selectedFontColor'] || json_data['fontColor']
+              
+              if normal_color || selected_color
+                # Need to handle text color based on selection
+                resolved_text = Helpers::ResourceResolver.process_text(segment, required_imports)
+                code += "\n" + indent("text = {", depth + 2)
+                code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 3, required_imports)
+                code += "\n" + indent("Text(", depth + 3)
+                code += "\n" + indent("#{resolved_text},", depth + 4)
+                code += "\n" + Helpers::FontSpecHelper.text_arg_lines(font_var, depth + 3, required_imports, json_data)
+                code += "\n" + indent("maxLines = 1, overflow = TextOverflow.Ellipsis,", depth + 4)
+                
+                # Use conditional color based on selection
+                if is_dynamic_index
+                  if selected_color && normal_color
+                    selected_resolved = Helpers::ResourceResolver.process_color(selected_color, required_imports)
+                    normal_resolved = Helpers::ResourceResolver.process_color(normal_color, required_imports)
+                    code += "\n" + indent("color = if (#{selected_index} == #{index}) #{selected_resolved} else #{normal_resolved}", depth + 4)
+                  elsif selected_color
+                    selected_resolved = Helpers::ResourceResolver.process_color(selected_color, required_imports)
+                    code += "\n" + indent("color = if (#{selected_index} == #{index}) #{selected_resolved} else Color.Unspecified", depth + 4)
+                  elsif normal_color
+                    normal_resolved = Helpers::ResourceResolver.process_color(normal_color, required_imports)
+                    code += "\n" + indent("color = if (#{selected_index} == #{index}) Color.Unspecified else #{normal_resolved}", depth + 4)
+                  end
+                else
+                  # Static index
+                  is_selected = (selected_index == index)
+                  if is_selected && selected_color
+                    selected_resolved = Helpers::ResourceResolver.process_color(selected_color, required_imports)
+                    code += "\n" + indent("color = #{selected_resolved}", depth + 4)
+                  elsif !is_selected && normal_color
+                    normal_resolved = Helpers::ResourceResolver.process_color(normal_color, required_imports)
+                    code += "\n" + indent("color = #{normal_resolved}", depth + 4)
+                  end
+                end
+                
+                code += "\n" + indent(")", depth + 3)
+                code += "\n" + indent("}", depth + 2)
+              else
+                resolved_text = Helpers::ResourceResolver.process_text(segment, required_imports)
+                code += "\n" + indent("text = {", depth + 2)
+                code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 3, required_imports)
+                code += "\n" + indent("Text(#{resolved_text}, #{segment_font_args(json_data, required_imports, font_var)}, maxLines = 1, overflow = TextOverflow.Ellipsis)", depth + 3)
+                code += "\n" + indent("}", depth + 2)
+              end
+              
+              code += "\n" + indent(")", depth + 1)
+            end
+          elsif segments.is_a?(String) && segments.match(/@\{([^}]+)\}/)
+            # Dynamic segments from data binding
+            segments_var = $1
+            code += "\n" + indent("data.#{segments_var}.forEachIndexed { index, segment ->", depth + 1)
+            code += "\n" + indent("SegmentTab(", depth + 2)
+            # For dynamic segments, selected_index comparison depends on whether the index itself is dynamic
+            selected_comparison = is_dynamic_index ? "(#{selected_index} == index)" : "(#{selected_index} == index)"
+            code += "\n" + indent("selected = #{selected_comparison},", depth + 3)
+            
+            # Add enabled state to Tab if segment is disabled
+            if json_data.key?('enabled')
+              # `enabled` as every other stage reads it (enabled_expression): a
+              # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+              # was did not type-check against the Boolean parameter.
+              enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+              code += "\n" + indent("enabled = #{enabled},", depth + 3)
+            end
+            
+            code += "\n" + indent("onClick = {", depth + 3)
+            code += "\n" + indent("#{seeded} = index", depth + 4) if seeded
+            
+            # Check if we have a binding variable
+            has_binding = false
+            binding_variable = nil
+            
+            if json_data['selectedIndex'] && json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+              has_binding = true
+              binding_variable = $1
+            end
+            
+            # Generate onClick handler
+            # onValueChange (camelCase) -> binding format only (@{functionName})
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
+            if json_data['onValueChange']
+              if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
+                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'index')
+                if has_binding
+                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4)
+                  code += "\n" + indent("#{handler_call}", depth + 4)
+                else
+                  code += "\n" + indent("#{handler_call}", depth + 4)
+                end
+              else
+                code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 4)
+              end
+            elsif json_data['valueChange'].is_a?(String) && !json_data['valueChange'].empty?
+              # `valueChange` is the legacy SELECTOR spelling (a bare method
+              # name, like `onclick`) that only UIKit read. Selector names
+              # camelize, matching the rjui/sjui handling of the same
+              # attribute.
+              code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4) if has_binding
+              code += "\n" + indent(value_change_call(json_data, view_id, 'index'), depth + 4)
+            elsif has_binding
+              # Update the bound variable
+              code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4)
+            else
+              # No action if selectedIndex is a static value with no binding
+              code += "\n" + indent("// Static selected index", depth + 4) unless seeded
+            end
+            
+            code += "\n" + indent("},", depth + 3)
+            
+            # Generate text with color based on selection for dynamic segments
+            normal_color = json_data['fontColor']
+            selected_color = json_data['selectedFontColor'] || json_data['fontColor']
+            
+            if normal_color || selected_color
+              code += "\n" + indent("text = {", depth + 3)
+              code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 4, required_imports)
+              code += "\n" + indent("Text(", depth + 4)
+              code += "\n" + indent("segment,", depth + 5)
+              code += "\n" + Helpers::FontSpecHelper.text_arg_lines(font_var, depth + 4, required_imports, json_data)
+              code += "\n" + indent("maxLines = 1, overflow = TextOverflow.Ellipsis,", depth + 5)
+              
+              # Use conditional color based on selection
+              if selected_color && normal_color
+                selected_resolved = Helpers::ResourceResolver.process_color(selected_color, required_imports)
+                normal_resolved = Helpers::ResourceResolver.process_color(normal_color, required_imports)
+                code += "\n" + indent("color = if (#{selected_comparison}) #{selected_resolved} else #{normal_resolved}", depth + 5)
+              elsif selected_color
+                selected_resolved = Helpers::ResourceResolver.process_color(selected_color, required_imports)
+                code += "\n" + indent("color = if (#{selected_comparison}) #{selected_resolved} else Color.Unspecified", depth + 5)
+              elsif normal_color
+                normal_resolved = Helpers::ResourceResolver.process_color(normal_color, required_imports)
+                code += "\n" + indent("color = if (#{selected_comparison}) Color.Unspecified else #{normal_resolved}", depth + 5)
+              end
+              
+              code += "\n" + indent(")", depth + 4)
+              code += "\n" + indent("}", depth + 3)
+            else
+              code += "\n" + indent("text = {", depth + 3)
+              code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 4, required_imports)
+              code += "\n" + indent("Text(segment, #{segment_font_args(json_data, required_imports, font_var)}, maxLines = 1, overflow = TextOverflow.Ellipsis)", depth + 4)
+              code += "\n" + indent("}", depth + 3)
+            end
+            
+            code += "\n" + indent(")", depth + 2)
+            code += "\n" + indent("}", depth + 1)
+          end
+          
+          code += "\n" + indent("}", depth)
+          code
+        end
+        
+        private
+        
+        # snake_case selector -> camelCase data-property name.
+        # `valueChange` is declared `string`: a bare selector name (camelized,
+        # as rjui/sjui read it) or a binding (SwiftJsonUI 7ea1e4a). Either is
+        # called as its declaration takes it, the index as its value — as
+        # onValueChange is. Through jsonui-cli 1.9.5 it was always `invoke()`
+        # on the raw text: `data.@{h}?.invoke()` for a binding, and no value
+        # for a one-parameter handler; neither compiled
+        # (kjui-segment-valuechange-binding-writes-the-braces).
+        def self.value_change_call(json_data, view_id, index_expr)
+          raw = json_data['valueChange'].strip
+          handler = Helpers::ModifierBuilder.is_binding?(raw) ? raw : "@{#{camelize_selector(raw)}}"
+          Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, index_expr)
+        end
+
+        def self.camelize_selector(name)
+          name.split('_').each_with_index.map { |w, i| i.zero? ? w : w.capitalize }.join
+        end
+
+        # The resolved font as Text(...) arguments on one line.
+        def self.segment_font_args(json_data, required_imports, font_var)
+          Helpers::FontSpecHelper.text_arg_fragments(font_var, required_imports, json_data).join(', ')
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line| 
+            line.empty? ? line : spaces + line 
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

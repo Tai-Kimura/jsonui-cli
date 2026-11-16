@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/allowZoom__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.allowZoom (false)",
+    "description": "Conformance fixture for 'allowZoom' on Web (section: Web, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "allowZoom__false",
+      "description": "Conformance fixture for 'allowZoom' on Web (section: Web, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_allowZoom__false"
+        }
+      ]
+    }
+  ]
+}

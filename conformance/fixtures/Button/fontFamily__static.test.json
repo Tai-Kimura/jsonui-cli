@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/fontFamily__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.fontFamily (static)",
+    "description": "Conformance fixture for 'fontFamily' on Button (section: Button, class: visual). Value under test: \"serif\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontFamily__static",
+      "description": "Conformance fixture for 'fontFamily' on Button (section: Button, class: visual). Value under test: \"serif\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_fontFamily__static"
+        }
+      ]
+    }
+  ]
+}

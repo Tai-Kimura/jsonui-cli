@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/tintColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.tintColor (static)",
+    "description": "Conformance fixture for 'tintColor' on TextField (section: TextField, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tintColor__static",
+      "description": "Conformance fixture for 'tintColor' on TextField (section: TextField, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_tintColor__static"
+        }
+      ]
+    }
+  ]
+}

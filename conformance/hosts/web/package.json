@@ -1,0 +1,41 @@
+{
+  "name": "jsonui-conformance-web-host",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Web execution host for the JsonUI conformance suite (rjui_tools codegen + React + Playwright)",
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "conformance": "node scripts/run.ts",
+    "screen-marker-probe": "node scripts/screen_marker_probe.mjs",
+    "interaction-stop-probe": "node scripts/interaction_stop_probe.mjs",
+    "collection-scroll-probe": "node scripts/collection_scroll_probe.mjs",
+    "collection-reorder-probe": "node scripts/collection_reorder_probe.mjs",
+    "label-gravity-probe": "node scripts/label_gravity_probe.mjs",
+    "selectbox-caret-probe": "node scripts/selectbox_caret_probe.mjs",
+    "font-provider-probe": "node scripts/font_provider_probe.mjs",
+    "collection-insets-probe": "node scripts/collection_insets_probe.mjs",
+    "collection-padding-probe": "node scripts/collection_padding_probe.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.525.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.53.2",
+    "pngjs": "^7.0.0",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0"
+  }
+}

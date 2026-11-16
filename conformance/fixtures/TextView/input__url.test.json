@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/input__url.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.input (url)",
+    "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"url\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "input__url",
+      "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"url\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_input__url"
+        }
+      ]
+    }
+  ]
+}

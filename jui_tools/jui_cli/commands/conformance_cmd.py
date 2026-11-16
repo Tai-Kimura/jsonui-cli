@@ -1,0 +1,2156 @@
+"""`jui conformance` — cross-platform conformance harness commands.
+
+Two subcommands:
+
+- ``jui conformance generate`` — build fixtures/ + manifest.json from
+  ``shared/core/attribute_definitions.json``. Deterministic: running it twice
+  produces zero diff.
+- ``jui conformance report`` — merge ``results/*.results.json`` written by the
+  per-platform runners (plans 02/03/04) into ``REPORT.md``. The results file
+  contract is documented in ``conformance/RESULTS_SCHEMA.md``.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+#: jsonui-cli repo root (…/jui_tools/jui_cli/commands/ -> repo root).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_DEFAULT_DEFINITIONS = _REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
+_DEFAULT_OUT = _REPO_ROOT / "conformance"
+_PLATFORMS = ("ios", "android", "web")
+#: Judgements `jui conformance codegen-effect` can be narrowed to. Spelled out
+#: here so registering the parser stays free of a conformance import.
+_CODEGEN_CHECKS = ("C0", "C1", "C2", "C3")
+
+
+def register_conformance_command(subparsers: argparse._SubParsersAction) -> None:
+    """Register ``jui conformance`` + its two subcommands."""
+    parser = subparsers.add_parser(
+        "conformance",
+        help="Generate cross-platform conformance fixtures / compatibility report",
+    )
+    sub = parser.add_subparsers(dest="conformance_target")
+
+    generate = sub.add_parser(
+        "generate",
+        help="Generate fixtures/ + manifest.json from attribute_definitions.json",
+    )
+    generate.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    generate.add_argument(
+        "--out",
+        default=None,
+        help=f"Output directory (default: {_DEFAULT_OUT})",
+    )
+
+    report = sub.add_parser(
+        "report",
+        help="Merge results/*.results.json into REPORT.md (compat matrix)",
+    )
+    report.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory containing manifest.json (default: {_DEFAULT_OUT})",
+    )
+    report.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    report.add_argument(
+        "--out",
+        default=None,
+        help="Report output path (default: <dir>/REPORT.md)",
+    )
+    report.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key for the visual comparison — baselines are "
+            "read from baselines/<env>/ (default: local). A baseline is a fact "
+            "about one renderer; CI lanes pass their own key and never compare "
+            "against developer-machine bakes."
+        ),
+    )
+
+    gate = sub.add_parser(
+        "gate",
+        help="Render REPORT.md and fail on regressions — the CI gate, runnable locally",
+    )
+    gate.add_argument(
+        "--platform",
+        action="append",
+        required=True,
+        choices=list(_PLATFORMS),
+        help=(
+            "Platform whose results this gate judges (repeatable). Cross-platform "
+            "mismatches are judged only when all three platforms are selected — "
+            "with fewer, the unselected results are committed snapshots, not this run's."
+        ),
+    )
+    gate.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory containing manifest.json (default: {_DEFAULT_OUT})",
+    )
+    gate.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    gate.add_argument(
+        "--out",
+        default=None,
+        help="Report output path (default: <dir>/REPORT.md)",
+    )
+    gate.add_argument(
+        "--no-visual",
+        action="store_true",
+        help=(
+            "Skip the screenshot-dependent checks (baseline comparison, attribute "
+            "effect, artifact ratchets). For lanes that cannot compare renders — "
+            "the per-push web lane runs on a different OS than the committed "
+            "baselines were rendered on and does not install Pillow."
+        ),
+    )
+    gate.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Visual checks compare "
+            "against baselines/<env>/ and use that env's ratchet ceilings; the "
+            "attribute-effect ledger fails the gate only under env 'local' "
+            "(asserted there) and is reported as a notice elsewhere."
+        ),
+    )
+    gate.add_argument(
+        "--value-discrimination",
+        dest="value_discrimination",
+        action="store_true",
+        help=(
+            "Also judge that two declared VALUES of one attribute draw "
+            "different pictures. Every other check compares a fixture to its "
+            "control, another platform, or the codegen's render of itself; an "
+            "attribute that maps every value onto the same layout passes all "
+            "of them. Collapses must be recorded in value_discrimination.json "
+            "with an owner and a reason; stale entries fail too"
+        ),
+    )
+    gate.add_argument(
+        "--ledger-keys",
+        dest="ledger_keys",
+        action="store_true",
+        default=True,
+        help=argparse.SUPPRESS,
+    )
+    gate.add_argument(
+        "--no-ledger-keys",
+        dest="ledger_keys",
+        action="store_false",
+        help=(
+            "Skip the check that every ledger key still names a fixture the "
+            "manifest has. It runs by DEFAULT: a rename leaves the row "
+            "pointing nowhere, the entry looks live, the gate keeps running, "
+            "and nothing it claims is checked again. Dangling rows are "
+            "reported, never deleted. Opting out is for a checkout mid-rename"
+        ),
+    )
+    gate.add_argument(
+        "--rendered-by",
+        dest="rendered_by",
+        action="append",
+        default=None,
+        metavar="NAME=SHA",
+        help=(
+            "Which library drew this run's screenshots (repeatable, e.g. "
+            "swiftjsonui=<sha>). Compared against what the baseline records, "
+            "and when a regression is reported against a baseline drawn by a "
+            "different library, that is said out loud — it is a notice, not a "
+            "failure: the library is meant to move and the baseline is meant "
+            "to be rebaked"
+        ),
+    )
+    gate.add_argument(
+        "--codegen-effect",
+        dest="codegen_effect",
+        action="store_true",
+        help=(
+            "Also judge the codegen differential (C0/C1/C2/C3) against "
+            "codegen_effect.json: defects must be recorded with an owner and a "
+            "reason, and recorded entries must still measure — unrecorded "
+            "defects and stale entries both fail. Needs no renders, so it is "
+            "unaffected by --no-visual."
+        ),
+    )
+    gate.add_argument(
+        "--parity",
+        action="store_true",
+        help=(
+            "Also judge dynamic ≡ codegen: codegen-host screenshots "
+            "(artifacts/<platform>-codegen) must match the dynamic baseline "
+            "within its threshold, deviations must be recorded in "
+            "codegen_parity.json, and recorded entries must still measure — "
+            "unrecorded drift and stale entries fail."
+        ),
+    )
+    gate.add_argument(
+        "--inert-complete",
+        action="store_true",
+        dest="inert_complete",
+        help=(
+            "Also judge inert COMPLETENESS: every fixture that renders "
+            "identically to its control must be accounted for by some ledger "
+            "or contract, or be recorded in inert_audit.json. An attribute "
+            "that silently stops rendering looks exactly like an unrecorded "
+            "inert verdict, and no other check can see it. Unrecorded "
+            "verdicts and stale entries fail (env 'local'; a notice "
+            "elsewhere). Needs the visual checks."
+        ),
+    )
+    gate.add_argument(
+        "--cross-effect",
+        action="store_true",
+        dest="cross_effect",
+        help=(
+            "Also judge cross-platform activeness agreement: a fixture's "
+            "control-diff verdict (active/inert) must agree across the selected "
+            "platforms its attribute is declared for, and SSoT-enumerated values "
+            "must not be inert everywhere. Findings must be recorded in "
+            "cross_effect.json, and recorded entries must still measure — "
+            "unrecorded findings and stale entries fail (env 'local'; a notice "
+            "elsewhere). Needs ≥2 selected platforms and the visual checks."
+        ),
+    )
+    gate.add_argument(
+        "--frame-parity",
+        action="store_true",
+        dest="frame_parity",
+        help=(
+            "Also compare where each declared id was drawn across the selected "
+            "platforms, from the .frames.json each driver writes beside a visual "
+            "fixture's screenshot (conformance/frames.schema.json). A disagreement "
+            "fails unless frame_parity.json accepts it with a reason; stale entries "
+            "fail; a declared frames host with no frames fails; a run that compares "
+            "nothing fails. What could not be compared is printed per reason. Fails "
+            "in every env. Needs ≥2 selected platforms."
+        ),
+    )
+
+    compat = sub.add_parser(
+        "compat-doc",
+        help="Generate the @generated attribute-compatibility markdown",
+    )
+    compat.add_argument(
+        "--platform",
+        required=True,
+        choices=["ios", "android", "web"],
+        help="Platform whose conformance results feed the coverage column",
+    )
+    compat.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    compat.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    compat.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        help="Output markdown path (e.g. Docs/attribute_compatibility.md)",
+    )
+
+    baseline = sub.add_parser(
+        "baseline",
+        help="Screenshot baseline management (perceptual-hash manifests)",
+    )
+    baseline_sub = baseline.add_subparsers(dest="baseline_action")
+    baseline_update = baseline_sub.add_parser(
+        "update",
+        help="Hash artifacts/<platform>/*.png into baselines/<platform>.hashes.json",
+    )
+    baseline_update.add_argument(
+        "--platform",
+        required=True,
+        choices=["ios", "android", "web"],
+        help="Platform whose artifacts to baseline",
+    )
+    baseline_update.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    baseline_update.add_argument(
+        "--artifacts",
+        default=None,
+        help="Artifacts directory (default: <dir>/artifacts/<platform>)",
+    )
+    baseline_update.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key to bake under (baselines/<env>/, default: "
+            "local). Bake 'ci' baselines from CI-run artifacts, never from a "
+            "local render — the manifest records the env and refuses to be "
+            "compared under a different one."
+        ),
+    )
+    baseline_update.add_argument(
+        "--only-new",
+        dest="only_new",
+        action="store_true",
+        help=(
+            "Insert only the entries the baseline does not have; leave every "
+            "existing hash at its committed value and remove nothing. This is "
+            "the right mode for 'new fixtures never got baselines'. The "
+            "default rewrites the whole manifest, which also writes every "
+            "drifted picture into the baseline — a regression that gets "
+            "absorbed stops being a regression."
+        ),
+    )
+    baseline_update.add_argument(
+        "--fail-on-moved",
+        dest="fail_on_moved",
+        action="store_true",
+        help=(
+            "Exit non-zero, without writing, if any existing entry's picture "
+            "changed or is missing from the run. For scripted bakes that must "
+            "stop and let a person look, rather than deciding on their own that "
+            "the drift was noise. With neither, committed entries stay as they "
+            "are: only new entries are written, and with none the file is not "
+            "touched."
+        ),
+    )
+    baseline_update.add_argument(
+        "--take",
+        dest="take",
+        action="append",
+        metavar="SCREENSHOT.png",
+        help=(
+            "Write only this entry from the run (hash, vertical hash, ink); "
+            "repeatable. Everything else stays as committed. With "
+            "--fail-on-moved, an entry that moved or dropped and was not named "
+            "still refuses."
+        ),
+    )
+    baseline_update.add_argument(
+        "--drop",
+        dest="drop",
+        action="append",
+        metavar="SCREENSHOT.png",
+        help=(
+            "Remove only this entry, which the run no longer draws; repeatable. "
+            "Everything else stays as committed. With --fail-on-moved, an entry "
+            "that moved or dropped and was not named still refuses."
+        ),
+    )
+    baseline_update.add_argument(
+        "--rehash",
+        dest="rehash",
+        action="store_true",
+        help=(
+            "Re-bake a baseline whose hashes another hashing library made "
+            "(its `hashed_with` names a different Pillow major, or none). Its "
+            "entries are listed as REHASHED instead of same/moved — a distance "
+            "across two hashers is not a measurement — so judge the same "
+            "artifacts with the OLD major's gate first, and re-bake every "
+            "baseline in the commit that raises the Pillow cap. Refused when "
+            "the hasher did not change."
+        ),
+    )
+    baseline_update.add_argument(
+        "--rendered-by",
+        dest="rendered_by",
+        action="append",
+        default=None,
+        metavar="NAME=SHA",
+        help=(
+            "Record which library drew these pixels (repeatable, e.g. "
+            "swiftjsonui=<sha>). CI passes the SHA it checked out; nothing "
+            "looks it up, because a local bake genuinely does not know what "
+            "CI would have used and guessing would put a wrong answer in the "
+            "manifest. Metadata only — it never takes part in a comparison"
+        ),
+    )
+    baseline_update.add_argument(
+        "--threshold",
+        type=int,
+        default=None,
+        help=(
+            "Comparison threshold stored in this manifest (default: the "
+            "shared calibrated value). Per-(env, platform) recalibration — "
+            "measure the renderer's repeat-run noise first and record the "
+            "numbers in baselines/README.md."
+        ),
+    )
+
+    cov = sub.add_parser(
+        "coverage",
+        help="Check declared attributes against what each platform's converters read",
+    )
+    cov.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help="Limit the check to a platform (repeatable; default: all)",
+    )
+    cov.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    cov.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory holding coverage.json (default: {_DEFAULT_OUT})",
+    )
+    cov.add_argument(
+        "--repo-root",
+        default=None,
+        help=f"Repo root holding the converter sources (default: {_REPO_ROOT})",
+    )
+    cov.add_argument(
+        "--update",
+        action="store_true",
+        help="Rewrite coverage.json from the current gaps (reasons are preserved)",
+    )
+    cov.add_argument(
+        "--binding",
+        action="store_true",
+        help=(
+            "Report the BINDING lane instead: attributes the SSoT declares a "
+            "`@{...}` form for that no fixture ever writes in that form, so no "
+            "platform's behaviour on it is measured. Reporting only — it "
+            "cannot gate until the queue is consumed."
+        ),
+    )
+    cov.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        help="With --binding, write the queue to this path as JSON",
+    )
+
+    par = sub.add_parser(
+        "parity",
+        help="Compare codegen-host screenshots against the dynamic baseline (dynamic ≡ codegen)",
+    )
+    par.add_argument(
+        "--platform",
+        required=True,
+        choices=list(_PLATFORMS),
+        help="Platform whose codegen artifacts to measure",
+    )
+    par.add_argument(
+        "--env",
+        default=None,
+        help="Render-environment key of the dynamic baseline to compare against (default: local)",
+    )
+    par.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    par.add_argument(
+        "--codegen-artifacts",
+        default=None,
+        help="Codegen screenshots directory (default: <dir>/artifacts/<platform>-codegen)",
+    )
+    par.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the measured deviations into codegen_parity.json (reasons "
+            "and notes of surviving entries are preserved; new entries get the "
+            "unreviewed marker). Without --update, unrecorded deviations and "
+            "stale entries exit non-zero — the same check `gate --parity` runs."
+        ),
+    )
+
+    fpar = sub.add_parser(
+        "frame-parity",
+        help=(
+            "Compare where each declared id was drawn across platforms, and "
+            "(--update) write frame_parity.json from frame_parity_rules.json"
+        ),
+    )
+    fpar.add_argument("--platform", action="append", choices=list(_PLATFORMS),
+                      help="Platform to include (repeatable; default: all three)")
+    fpar.add_argument("--dir", dest="conformance_dir", default=None,
+                      help=f"Conformance directory (default: {_DEFAULT_OUT})")
+    fpar.add_argument("--results", default=None, help="Results directory (default: <dir>/results)")
+    fpar.add_argument("--update", action="store_true",
+                      help=("Write frame_parity.json: every disagreement a rule in "
+                            "frame_parity_rules.json matches, with its measured outliers, as long as it "
+                            "differs only on the rule's fields. Matched ids that differ elsewhere are "
+                            "printed and left out. Without --update, prints the check `gate "
+                            "--frame-parity` runs."))
+
+    cross = sub.add_parser(
+        "cross-effect",
+        help=(
+            "Compare attribute activeness (control-diff verdicts) across platforms "
+            "— disagreement is semantic drift unless ledgered with a reason"
+        ),
+    )
+    cross.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help=(
+            "Platform to include in the comparison (repeatable; default: all "
+            "three). At least two are required — activeness agreement across "
+            "one platform compares nothing."
+        ),
+    )
+    cross.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    cross.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    cross.add_argument(
+        "--definitions",
+        default=None,
+        help=(
+            "Path to attribute_definitions.json, for the uniformly-inert check "
+            f"(default: {_DEFAULT_DEFINITIONS})"
+        ),
+    )
+    cross.add_argument(
+        "--semantics",
+        default=None,
+        help=(
+            "Path to the attribute-semantics contract; adjudicated rulings are "
+            "verified from it instead of the ledger "
+            f"(default: {_REPO_ROOT / 'shared' / 'core' / 'attribute_semantics.json'})"
+        ),
+    )
+    cross.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the measured findings into cross_effect.json (reasons and "
+            "notes of entries whose fact still holds are preserved; new entries "
+            "get the unreviewed marker; entries no longer supported are pruned). "
+            "Without --update, unrecorded findings and stale entries exit "
+            "non-zero — the same check `gate --cross-effect` runs."
+        ),
+    )
+
+    cross.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Passed through to the "
+            "fixture-vs-control comparison so the system chrome bands for that "
+            "environment are excluded — the android CI status bar's clock ticks "
+            "between a pair's two captures and otherwise reads as the attribute "
+            "having an effect."
+        ),
+    )
+
+    inert = sub.add_parser(
+        "inert-audit",
+        help=(
+            "Inventory the inert control-diff verdicts no ledger accounts for "
+            "— the completeness audit behind the adjudication queue"
+        ),
+    )
+    inert.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help=(
+            "Platform to audit (repeatable; default: all three). Attribution "
+            "is per platform, but the queue reports every item's full "
+            "cross-platform picture."
+        ),
+    )
+    inert.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    inert.add_argument(
+        "--results",
+        default=None,
+        help="Results directory (default: <dir>/results)",
+    )
+    inert.add_argument(
+        "--definitions",
+        default=None,
+        help=(
+            "Path to attribute_definitions.json, for the declared-value and "
+            f"value-is-default triage (default: {_DEFAULT_DEFINITIONS})"
+        ),
+    )
+    inert.add_argument(
+        "--semantics",
+        default=None,
+        help=(
+            "Path to the attribute-semantics contract; fixtures it declares an "
+            "observable for are attributed to the contract "
+            f"(default: {_REPO_ROOT / 'shared' / 'core' / 'attribute_semantics.json'})"
+        ),
+    )
+    inert.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        help=(
+            "Write the adjudication queue to this path as JSON. The file is a "
+            "report, not a ledger — nothing reads it back."
+        ),
+    )
+    inert.add_argument(
+        "--untriaged-only",
+        action="store_true",
+        help="List only the items no mechanical triage family closes",
+    )
+    inert.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the unattributed inert verdicts into inert_audit.json — "
+            "the ledger `gate --inert-complete` reads. Reasons already "
+            "written are kept as long as the platform set still holds; "
+            "entries the measurement no longer supports are dropped."
+        ),
+    )
+
+    inert.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Passed through to the "
+            "fixture-vs-control comparison so the system chrome bands for that "
+            "environment are excluded — the android CI status bar's clock ticks "
+            "between a pair's two captures and otherwise reads as the attribute "
+            "having an effect."
+        ),
+    )
+
+    eff = sub.add_parser(
+        "effect",
+        help="Record/check which fixtures render differently from their control",
+    )
+    eff.add_argument(
+        "--platform",
+        required=True,
+        choices=list(_PLATFORMS),
+        help="Platform whose artifacts to measure",
+    )
+    eff.add_argument(
+        "--dir",
+        dest="conformance_dir",
+        default=None,
+        help=f"Conformance directory (default: {_DEFAULT_OUT})",
+    )
+    eff.add_argument(
+        "--artifacts",
+        default=None,
+        help="Directory holding this platform's screenshots (default: <dir>/artifacts/<platform>)",
+    )
+    eff.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record every fixture that currently differs from its control into "
+            "control_diff.json. Existing entries are kept: an attribute that "
+            "used to have an effect must not lose it because one run measured "
+            "nothing."
+        ),
+    )
+
+    eff.add_argument(
+        "--env",
+        default=None,
+        help=(
+            "Render-environment key (default: local). Passed through to the "
+            "fixture-vs-control comparison so the system chrome bands for that "
+            "environment are excluded — the android CI status bar's clock ticks "
+            "between a pair's two captures and otherwise reads as the attribute "
+            "having an effect."
+        ),
+    )
+
+    codegen = sub.add_parser(
+        "codegen-effect",
+        help=(
+            "Codegen-stage differential: call each platform's production "
+            "converter and compare the emitted TEXT (no device, no fixture)"
+        ),
+        description=(
+            "For every declared (component, attribute, platform), run the "
+            "production converter four times over a layout hash and compare "
+            "the emitted source text: C0 attribute-vs-control (is the spelling "
+            "read at all), C1 bound-vs-control (does the `@{...}` form "
+            "survive), C2 value1-vs-value2 (is the value read, or is a "
+            "constant emitted). "
+            "This is the CODEGEN stage and only that: it proves the converter "
+            "puts the attribute in its output, never that the library then "
+            "honours it. An attribute the codegen emits correctly and the "
+            "renderer ignores (plan 34 matchParent, plan 39 symmetric margin) "
+            "passes here by design — that residue belongs to the render-stage "
+            "conformance suite. UIKit and the dynamic renderers have no "
+            "codegen output to compare and are scoped out with a reason."
+        ),
+    )
+    codegen.add_argument(
+        "--platform",
+        action="append",
+        choices=list(_PLATFORMS),
+        help="Limit to a platform (repeatable; default: all three)",
+    )
+    codegen.add_argument(
+        "--definitions",
+        default=None,
+        help=f"Path to attribute_definitions.json (default: {_DEFAULT_DEFINITIONS})",
+    )
+    codegen.add_argument(
+        "--repo-root",
+        default=None,
+        help=f"Repo root holding the three tool trees (default: {_REPO_ROOT})",
+    )
+    codegen.add_argument(
+        "--ruby",
+        default="ruby",
+        help="Ruby interpreter used to run the probe scripts (default: ruby)",
+    )
+    codegen.add_argument(
+        "--check",
+        action="append",
+        choices=list(_CODEGEN_CHECKS),
+        help="Report only these judgements (repeatable; default: all)",
+    )
+    codegen.add_argument(
+        "--paired",
+        action="store_true",
+        help=(
+            "Paired probe: write the COMPANION attributes the adjudication "
+            "ledger says an attribute needs on the control and on every case "
+            "alike, so they cancel and the attribute under test is again the "
+            "only difference. Without it, an attribute the ledger rules inert "
+            "on its own (`borderWidth` needs `borderColor`) can only ever "
+            "measure the ruling. The companion sets are DERIVED from "
+            "attribute_semantics.json, never listed by hand"
+        ),
+    )
+    codegen.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        help="Write the full queue (findings + evidence + scope ledger) here",
+    )
+    codegen.add_argument(
+        "--limit",
+        type=int,
+        default=40,
+        help="How many findings to print (default: 40; the JSON holds them all)",
+    )
+    codegen.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Record the measured defects into codegen_effect.json (owners and "
+            "reasons on surviving entries are preserved) instead of judging "
+            "against it. Without it, unrecorded defects and stale entries both "
+            "exit non-zero — the same check `gate --codegen-effect` runs"
+        ),
+    )
+    codegen.add_argument(
+        "--conformance-dir",
+        default=None,
+        help=f"Where codegen_effect.json lives (default: {_DEFAULT_OUT})",
+    )
+
+
+def cmd_conformance(args: argparse.Namespace) -> int:
+    """Dispatch to the right ``conformance`` subcommand."""
+    target = getattr(args, "conformance_target", None)
+    if target == "generate":
+        return _cmd_generate(args)
+    if target == "report":
+        return _cmd_report(args)
+    if target == "gate":
+        return _cmd_gate(args)
+    if target == "compat-doc":
+        return _cmd_compat_doc(args)
+    if target == "baseline":
+        return _cmd_baseline(args)
+    if target == "coverage":
+        return _cmd_coverage(args)
+    if target == "effect":
+        return _cmd_effect(args)
+    if target == "parity":
+        return _cmd_parity(args)
+    if target == "cross-effect":
+        return _cmd_cross_effect(args)
+    if target == "frame-parity":
+        return _cmd_frame_parity(args)
+    if target == "inert-audit":
+        return _cmd_inert_audit(args)
+    if target == "codegen-effect":
+        return _cmd_codegen_effect(args)
+    print(
+        "Usage: jui conformance <generate|report|gate|baseline|coverage|effect|"
+        "parity|cross-effect|inert-audit|codegen-effect> [options]"
+    )
+    return 1
+
+
+def _cmd_frame_parity(args: argparse.Namespace) -> int:
+    """Measure frame parity; with --update, write the ledger from the rules."""
+    from ..conformance import frame_parity as fp
+    from ..conformance.report import load_platform_results, manifest_identity
+
+    conformance_dir = Path(args.conformance_dir or _DEFAULT_OUT)
+    platforms = list(dict.fromkeys(args.platform or list(_PLATFORMS)))
+    manifest_path = conformance_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    digest, equivalent = manifest_identity(manifest_path, conformance_dir)
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, digest, equivalent)}
+    result = fp.measure(conformance_dir, manifest, {p: loaded[p].results for p in platforms if p in loaded}, platforms)
+    for line in fp.not_compared_lines(result):
+        print(line)
+    if args.update:
+        try:
+            rules = fp.load_rules(fp.rules_path(conformance_dir), manifest)
+        except ValueError as exc:
+            print(f"ERROR: {exc}")
+            return 1
+        entries, refused = fp.ledger_from_rules(result, rules)
+        fp.write_ledger(fp.ledger_path(conformance_dir), entries)
+        print(f"wrote {len(entries)} entr(y/ies) to {fp.LEDGER_NAME} from {len(rules)} rule(s)")
+        for line in refused:
+            print(f"  not ledgered — {line}")
+        verdict = fp.check(result, fp.load_ledger(fp.ledger_path(conformance_dir)))
+        print(fp.summarize(result, verdict))
+        return 0
+    verdict = fp.check(result, fp.load_ledger(fp.ledger_path(conformance_dir)))
+    print(fp.summarize(result, verdict))
+    for d in verdict.unrecorded[:20]:
+        print("  " + d.table())
+    return 0 if verdict.ok else 1
+
+
+def _require_env_for_update(args: argparse.Namespace) -> int | None:
+    """`--update` writes a ledger from an env-dependent measurement.
+
+    The screenshot comparisons behind cross-effect, effect and inert-audit
+    select their chrome bands by env: under `ci` the android status bar is
+    cropped, under `local` it must not be. The default is `local`, so a
+    `--update` run against CI artifacts with the flag forgotten records the
+    android clock as 43 findings — measured on the run-4 artifacts, all 43
+    inside the band. The ledger keeps them and nothing ever says why.
+
+    Reading is unaffected: a wrong env on a read shows wrong numbers, which
+    the reader can question. A wrong env on a write becomes the record.
+    """
+    if getattr(args, "update", False) and getattr(args, "env", None) is None:
+        print(
+            "ERROR: --update writes the ledger; pass --env explicitly "
+            "(local and ci differ by 43 entries on the android clock band)"
+        )
+        return 2
+    return None
+
+
+def _cmd_cross_effect(args: argparse.Namespace) -> int:
+    rc = _require_env_for_update(args)
+    if rc is not None:
+        return rc
+    import hashlib
+    import json
+
+    from ..conformance import control_diff as control_diff_mod
+    from ..conformance import cross_effect as ce
+    from ..conformance.report import load_platform_results, manifest_identity
+
+    from ..conformance.baseline import DEFAULT_ENV
+    # Same key `gate` uses: it selects the chrome bands control_diff must
+    # not compare. Without it this command measures the android clock.
+    env = getattr(args, "env", None) or DEFAULT_ENV
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    platforms = (
+        list(dict.fromkeys(args.platform)) if args.platform else list(_PLATFORMS)
+    )
+    if len(platforms) < 2:
+        print(
+            "ERROR: cross-effect needs at least two platforms — activeness "
+            "agreement across one compares nothing"
+        )
+        return 1
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"ERROR: manifest not found: {manifest_path}")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash, render_equivalent = manifest_identity(manifest_path)
+
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+    diffs = {}
+    for platform in platforms:
+        pr = loaded.get(platform)
+        if pr is None:
+            print(f"note: no results for {platform} — its fixtures count as not compared")
+            continue
+        if pr.stale:
+            print(
+                f"note: {platform} results are stale vs the current manifest — "
+                "activeness verdicts are within-run facts, but re-run the suite "
+                "before trusting fixture-level conclusions"
+            )
+        diffs[platform] = control_diff_mod.compare(
+            conformance_dir, platform, manifest, pr.results, env=env
+        )
+        if diffs[platform].error:
+            print(f"note: {platform} comparison errored — {diffs[platform].error}")
+
+    definitions_path = (
+        Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    )
+    enum_values: dict = {}
+    if definitions_path.is_file():
+        enum_values = ce.enum_fixture_values(
+            manifest, json.loads(definitions_path.read_text(encoding="utf-8"))
+        )
+    else:
+        print(
+            f"note: {definitions_path} not found — the uniformly-inert check "
+            "did not participate"
+        )
+
+    semantics_path = (
+        Path(args.semantics)
+        if getattr(args, "semantics", None)
+        else _REPO_ROOT / "shared" / "core" / ce.CONTRACT_NAME
+    )
+    contract = ce.load_contract(semantics_path)
+
+    result = ce.measure(
+        ce.scope_from_manifest(manifest),
+        ce.verdicts_from_diffs(diffs),
+        platforms,
+        enum_values,
+    )
+
+    judged = len(result.consistent) + len(result.mismatched)
+    print(
+        f"cross-effect ({', '.join(platforms)}): {judged} fixture(s) compared on "
+        f"all their in-scope platforms"
+    )
+    print(f"  consistent:          {len(result.consistent)}")
+    print(f"  diverging:           {len(result.mismatched)}")
+    print(f"  uniformly-inert:     {len(result.uniform_inert)} (declared enum values)")
+    print(f"  not compared everywhere: {len(result.not_compared)}")
+    print(f"  in scope on <2 platforms: {result.out_of_scope}")
+    if result.mismatched:
+        print()
+        print("diverging fixtures (activeness disagrees):")
+        for fid in sorted(result.mismatched)[:40]:
+            verdicts = result.mismatched[fid]
+            label = ", ".join(f"{p}: {verdicts[p]}" for p in sorted(verdicts))
+            print(f"  {fid} — {label}")
+        if len(result.mismatched) > 40:
+            print(f"  … {len(result.mismatched) - 40} more")
+    if result.uniform_inert:
+        print()
+        print("declared values inert on every in-scope platform:")
+        for fid in sorted(result.uniform_inert)[:40]:
+            print(f"  {fid} — value {result.uniform_inert[fid]!r}")
+        if len(result.uniform_inert) > 40:
+            print(f"  … {len(result.uniform_inert) - 40} more")
+
+    path = ce.ledger_path(conformance_dir)
+    ledger = ce.load_ledger(path)
+
+    if args.update:
+        merged = ce.update_ledger(ledger, result, contract)
+        path.write_text(ce.render_ledger(merged), encoding="utf-8")
+        unreviewed = sum(
+            1 for e in merged.values() if e.get("reason") == ce.UNREVIEWED
+        )
+        print()
+        print(
+            f"  ledger written to {path} ({len(merged)} entr(y/ies), "
+            f"{unreviewed} unreviewed)"
+        )
+        return 0
+
+    verdict = ce.check(result, ledger, contract)
+    if verdict.contract_violations:
+        print()
+        print(
+            f"{len(verdict.contract_violations)} semantics-contract violation(s) "
+            f"({semantics_path.name}) — fix the platform or change the contract, "
+            "a ledger reason cannot excuse these:"
+        )
+        for line in verdict.contract_violations[:40]:
+            print(f"  {line}")
+    if verdict.contract_unverified:
+        print()
+        print(
+            f"note: {len(verdict.contract_unverified)} contract expectation(s) "
+            "could not be verified this run (fixture not compared everywhere)"
+        )
+    if verdict.unrecorded:
+        print()
+        print(
+            f"{len(verdict.unrecorded)} finding(s) not recorded in {path.name} — "
+            "fix the platform or record + justify with `jui conformance "
+            "cross-effect --update`:"
+        )
+        for line in verdict.unrecorded[:40]:
+            print(f"  {line}")
+        if len(verdict.unrecorded) > 40:
+            print(f"  … {len(verdict.unrecorded) - 40} more")
+    if verdict.stale:
+        print()
+        print(
+            f"{len(verdict.stale)} ledger entr(y/ies) the measurement no longer "
+            "supports (prune with `jui conformance cross-effect --update`):"
+        )
+        for fid in verdict.stale[:40]:
+            print(f"  {fid}")
+    if verdict.unverified:
+        print()
+        print(
+            f"note: {len(verdict.unverified)} ledger entr(y/ies) could not be "
+            "verified this run (fixture not compared everywhere)"
+        )
+    if verdict.ok:
+        print()
+        print(
+            f"cross-effect OK: no unrecorded findings "
+            f"({verdict.accepted} accepted on ledger, "
+            f"{verdict.contract_verified} contract expectation(s) verified)"
+        )
+        return 0
+    return 1
+
+
+def _cmd_inert_audit(args: argparse.Namespace) -> int:
+    rc = _require_env_for_update(args)
+    if rc is not None:
+        return rc
+    import hashlib
+    import json
+
+    from ..conformance import control_diff as control_diff_mod
+    from ..conformance import cross_effect as ce
+    from ..conformance import inert_audit as ia
+    from ..conformance.report import load_platform_results, manifest_identity
+
+    from ..conformance.baseline import DEFAULT_ENV
+    # Same key `gate` uses: it selects the chrome bands control_diff must
+    # not compare. Without it this command measures the android clock.
+    env = getattr(args, "env", None) or DEFAULT_ENV
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    platforms = (
+        list(dict.fromkeys(args.platform)) if args.platform else list(_PLATFORMS)
+    )
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"ERROR: manifest not found: {manifest_path}")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash, render_equivalent = manifest_identity(manifest_path)
+
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+    diffs = {}
+    for platform in platforms:
+        pr = loaded.get(platform)
+        if pr is None:
+            print(
+                f"note: no results for {platform} — its fixtures have no verdict "
+                "to attribute"
+            )
+            continue
+        if pr.stale:
+            print(
+                f"note: {platform} results are stale vs the current manifest — "
+                "re-run the suite before trusting fixture-level conclusions"
+            )
+        diffs[platform] = control_diff_mod.compare(
+            conformance_dir, platform, manifest, pr.results, env=env
+        )
+        if diffs[platform].error:
+            print(f"note: {platform} comparison errored — {diffs[platform].error}")
+
+    definitions_path = (
+        Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    )
+    definitions = {}
+    if definitions_path.is_file():
+        definitions = json.loads(definitions_path.read_text(encoding="utf-8"))
+    else:
+        print(
+            f"note: {definitions_path} not found — declared-value classification "
+            "and the value-is-default triage did not participate"
+        )
+
+    semantics_path = (
+        Path(args.semantics)
+        if getattr(args, "semantics", None)
+        else _REPO_ROOT / "shared" / "core" / ce.CONTRACT_NAME
+    )
+    coverage_path = conformance_dir / "coverage.json"
+    coverage_doc = (
+        json.loads(coverage_path.read_text(encoding="utf-8"))
+        if coverage_path.is_file()
+        else {}
+    )
+
+    result = ia.audit(
+        manifest,
+        ce.verdicts_from_diffs(diffs),
+        platforms,
+        control_diff_ledger=control_diff_mod.load_ledger_all(
+            control_diff_mod.ledger_path(conformance_dir)
+        ),
+        cross_effect_ledger=ce.load_ledger(ce.ledger_path(conformance_dir)),
+        contract=ce.load_contract(semantics_path),
+        coverage=ia.coverage_gaps(coverage_doc),
+        enum_values=ce.enum_fixture_values(manifest, definitions),
+    )
+    from ..conformance import rules as rules_mod
+
+    ia.triage(
+        result,
+        defaults=ia.attribute_defaults(definitions),
+        control_identical=ia.control_identical_fixtures(conformance_dir, manifest),
+        manifest=manifest,
+        fallback_values=(rules_mod.DEFAULT_STRING, rules_mod.DEFAULT_NUMBER),
+        sibling_active=ia.sibling_value_evidence(
+            manifest, ce.verdicts_from_diffs(diffs), result
+        ),
+    )
+
+    print(f"inert-audit ({', '.join(platforms)}):")
+    for platform in platforms:
+        attributed = result.attributed.get(platform, {})
+        claimed = ", ".join(
+            f"{channel} {attributed[channel]}"
+            for channel in ia.CHANNELS
+            if attributed.get(channel)
+        )
+        print(
+            f"  {platform:<8} inert {result.measured.get(platform, 0):>4}  "
+            f"attributed {sum(attributed.values()):>4}"
+            + (f" ({claimed})" if claimed else "")
+            + f"  unadjudicated {result.unattributed.get(platform, 0):>4}"
+        )
+    print()
+    print(
+        f"  queue: {len(result.items)} fixture(s), "
+        f"{len(result.untriaged)} untriaged after mechanical triage"
+    )
+
+    by_kind: dict = {}
+    by_family: dict = {}
+    for item in result.items:
+        by_kind[item.kind] = by_kind.get(item.kind, 0) + 1
+        by_family[item.family] = by_family.get(item.family, 0) + 1
+    for label, counts in (("kind", by_kind), ("family", by_family)):
+        if not counts:
+            continue
+        print(f"  by {label}:")
+        for key in sorted(counts, key=lambda k: (-counts[k], k)):
+            print(f"    {key:<32} {counts[key]}")
+
+    listed = result.untriaged if args.untriaged_only else result.items
+    if listed:
+        print()
+        print("adjudication queue:")
+        for item in listed[:200]:
+            verdicts = ", ".join(
+                f"{p}: {item.verdicts.get(p) or '—'}" for p in item.scope
+            )
+            print(f"  {item.fixture} [{item.kind}] {verdicts}")
+            if item.family != ia.FAMILY_UNTRIAGED:
+                print(f"      triage: {item.family} — {item.evidence}")
+        if len(listed) > 200:
+            print(f"  … {len(listed) - 200} more")
+
+    if args.json_out:
+        out = Path(args.json_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(ia.render_queue(result), encoding="utf-8")
+        print()
+        print(f"  queue written to {out}")
+
+    ledger_file = ia.ledger_path(conformance_dir)
+    if getattr(args, "update", False):
+        doc = ia.update_ledger(result, ledger_file)
+        print()
+        print(
+            f"  ledger written to {ledger_file} "
+            f"({doc['counts']['entries']} entr(y/ies), "
+            f"{doc['counts']['unreviewed']} unreviewed)"
+        )
+        return 0
+
+    unrecorded, stale = ia.check_ledger(result, ia.load_ledger(ledger_file))
+    if unrecorded or stale:
+        print()
+        print(
+            f"  not on the ledger: {len(unrecorded)}, "
+            f"no longer supported: {len(stale)} — "
+            "`jui conformance inert-audit --update` records them; "
+            "`gate --inert-complete` fails on them"
+        )
+    return 0
+
+
+def _cmd_parity(args: argparse.Namespace) -> int:
+    from ..conformance import parity as par
+    from ..conformance.baseline import DEFAULT_ENV
+
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    env = getattr(args, "env", None) or DEFAULT_ENV
+    codegen_dir = Path(args.codegen_artifacts) if args.codegen_artifacts else None
+
+    result = par.measure(conformance_dir, args.platform, env=env, codegen_dir=codegen_dir)
+    if result.error:
+        print(f"ERROR: nothing was measured: {result.error}")
+        return 1
+
+    compared = len(result.matched) + len(result.mismatched)
+    against = (
+        "this run's dynamic renders"
+        if result.source == "dynamic"
+        else "the committed dynamic baseline (fallback — no dynamic renders in this run)"
+    )
+    print(
+        f"codegen parity ({args.platform}, env {env}, threshold {result.threshold}): "
+        f"{compared} screenshot(s) compared against {against}"
+    )
+    print(f"  dynamic ≡ codegen: {len(result.matched)}")
+    print(f"  mismatched:        {len(result.mismatched)}")
+    if result.missing:
+        print(f"  rendered by dynamic only: {len(result.missing)}")
+    if result.codegen_only:
+        print(f"  rendered by codegen only: {len(result.codegen_only)}")
+    if result.baseline_only:
+        print(
+            f"  in the baseline, produced by neither: {len(result.baseline_only)} "
+            f"(rename/deletion residue — not a deviation)"
+        )
+
+    path = par.ledger_path(conformance_dir)
+    ledger = par.load_ledger(path)
+
+    if args.update:
+        merged = par.update_ledger(ledger, result)
+        path.write_text(par.render_ledger(merged), encoding="utf-8")
+        platform_entries = sum(1 for k in merged if k[1] == args.platform)
+        unreviewed = sum(
+            1
+            for k, e in merged.items()
+            if k[1] == args.platform and e.get("reason") == par.UNREVIEWED
+        )
+        print(
+            f"  ledger written to {path} ({platform_entries} entr(y/ies) for "
+            f"{args.platform}, {unreviewed} unreviewed)"
+        )
+        return 0
+
+    verdict = par.check(result, ledger)
+    if verdict.unrecorded:
+        print()
+        print(
+            f"{len(verdict.unrecorded)} deviation(s) not recorded in {path.name} — "
+            "fix the codegen or record + justify with `jui conformance parity --update`:"
+        )
+        for line in verdict.unrecorded[:30]:
+            print(f"  {line}")
+        if len(verdict.unrecorded) > 30:
+            print(f"  … {len(verdict.unrecorded) - 30} more")
+    if verdict.one_sided:
+        print()
+        print(
+            f"{len(verdict.one_sided)} fixture(s) only one pipeline rendered — nothing "
+            "was compared for them. Not a drawing difference: a host skipped work, or "
+            "the two artifact sets are of different vintages:"
+        )
+        for line in verdict.one_sided[:30]:
+            print(f"  {line}")
+        if len(verdict.one_sided) > 30:
+            print(f"  … {len(verdict.one_sided) - 30} more")
+    if verdict.stale:
+        print()
+        print(
+            f"{len(verdict.stale)} ledger entr(y/ies) the measurement no longer supports "
+            "(codegen now matches — prune with `jui conformance parity --update`):"
+        )
+        for name in verdict.stale[:30]:
+            print(f"  {name}")
+    if verdict.ok:
+        print()
+        print(
+            f"parity OK: no unrecorded drift ({verdict.accepted} accepted deviation(s) on ledger)"
+        )
+        return 0
+    return 1
+
+
+def _cmd_generate(args: argparse.Namespace) -> int:
+    from ..conformance.fixture_generator import generate_conformance
+
+    definitions = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    out_dir = Path(args.out) if args.out else _DEFAULT_OUT
+
+    if not definitions.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions}")
+        return 1
+
+    summary = generate_conformance(definitions, out_dir)
+
+    print(f"conformance fixtures written to {summary.out_dir}")
+    print(
+        f"  fixtures: {summary.fixture_count} "
+        f"(assertable: {summary.assertable_count}, visual: {summary.visual_count}, "
+        f"interactive: {summary.interactive_count}, control: {summary.control_count})"
+    )
+    print(f"  skipped attributes (with reason): {summary.skipped_count}")
+    if summary.promoted:
+        promoted = ", ".join(f"{k}: {v}" for k, v in sorted(summary.promoted.items()))
+        print(f"  promoted out of skip reasons: {promoted}")
+    print(f"  files written: {summary.files_written} (incl. manifest.json)")
+    return 0
+
+
+def _cmd_compat_doc(args: argparse.Namespace) -> int:
+    from ..conformance.compat_doc import generate_compat_doc
+
+    definitions = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    out_path = Path(args.out)
+
+    if not definitions.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions}")
+        return 1
+
+    summary = generate_compat_doc(definitions, conformance_dir, args.platform, out_path)
+    for warning in summary.warnings:
+        print(f"WARNING: {warning}")
+    print(
+        f"compat doc written to {summary.out_path} "
+        f"({summary.components} components, {summary.attributes} attributes, "
+        f"{summary.covered} with {args.platform} conformance coverage)"
+    )
+    return 0
+
+
+def _os_key_for_bake(conformance_dir, platform: str, artifacts_dir=None) -> str | None:
+    """The OS that drew the artifacts being baked, from the run's own results.
+
+    Read rather than asked for: the results file the run wrote already records
+    `runner`, so a bake cannot be told an OS that disagrees with its pictures.
+
+    🔻 THE RESULTS NEXT TO THE ARTIFACTS WIN. A `ci` bake reads a DOWNLOADED
+    artifact tree while the checkout still holds a committed results snapshot
+    from some earlier run — measured here: the tree's `results/ios.results.json`
+    said ios-18.6 while the artifacts being baked were drawn on ios-26.2. Taking
+    the checkout's copy would have filed iOS 26 pictures under key 18, which is
+    worse than not keying them at all: the key would exist and be wrong, and
+    every later comparison would trust it.
+
+    Returns None when neither file exists or the runner names no OS; the writer
+    then refuses only if the bake actually contains an availability-gated
+    picture, so nothing changes for platforms that have none.
+    """
+    from jui_cli.conformance.os_dependence import os_key_from_runner
+
+    candidates = []
+    if artifacts_dir is not None:
+        # <root>/artifacts/<platform> -> <root>/results/<platform>.results.json
+        candidates.append(Path(artifacts_dir).parent.parent / "results" / f"{platform}.results.json")
+    candidates.append(Path(conformance_dir) / "results" / f"{platform}.results.json")
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            key = os_key_from_runner(json.loads(path.read_text(encoding="utf-8")).get("runner"))
+        except (ValueError, OSError):
+            continue
+        if key:
+            return key
+    return None
+
+
+def _parse_rendered_by(pairs) -> dict:
+    """`["swiftjsonui=abc123"]` -> `{"swiftjsonui": "abc123"}`."""
+    out: dict = {}
+    for raw in pairs or ():
+        name, _, sha = str(raw).partition("=")
+        if name and sha:
+            out[name.strip()] = sha.strip()
+    return out
+
+
+def _cmd_baseline(args: argparse.Namespace) -> int:
+    from ..conformance.baseline import (
+        DEFAULT_ENV,
+        BaselineError,
+        BaselineMoved,
+        update_baseline,
+    )
+
+    action = getattr(args, "baseline_action", None)
+    if action != "update":
+        print("Usage: jui conformance baseline update --platform <ios|android|web> [options]")
+        return 1
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    artifacts_dir = Path(args.artifacts) if args.artifacts else None
+    env = getattr(args, "env", None) or DEFAULT_ENV
+    threshold = getattr(args, "threshold", None)
+
+    only_new = bool(getattr(args, "only_new", False))
+    fail_on_moved = bool(getattr(args, "fail_on_moved", False))
+
+    from ..conformance.shared_core import input_digest
+
+    print(input_digest(conformance_dir, platforms=[args.platform], artifacts_dir=artifacts_dir))
+    try:
+        summary = update_baseline(
+            conformance_dir,
+            args.platform,
+            artifacts_dir=artifacts_dir,
+            env=env,
+            threshold=threshold,
+            rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
+            os_key=_os_key_for_bake(conformance_dir, args.platform, artifacts_dir),
+            only_new=only_new,
+            # The refusal now happens INSIDE, before the write. Passing the
+            # flag down is the whole fix: checking it out here, on the summary,
+            # meant checking it after the file had already been replaced.
+            refuse_if_moved=fail_on_moved and not only_new,
+            rehash=bool(getattr(args, "rehash", False)),
+            take=getattr(args, "take", None),
+            drop=getattr(args, "drop", None),
+        )
+    except BaselineMoved as e:
+        # Every MOVED line, because reading them is what the flag is for — and
+        # now the file on disk is still the committed one while you read.
+        print(f"  moved {len(e.moved)}  dropped {len(e.dropped)}")
+        for name, dist in e.moved:
+            print(f"    MOVED    {name}  hamming={dist}  -> NOT WRITTEN")
+        for name in e.dropped:
+            print(f"    DROPPED  {name}  -> NOT WRITTEN")
+        print(f"ERROR: --fail-on-moved and {len(e.moved)} entr(y/ies) moved, "
+              f"{len(e.dropped)} dropped; {e.out_path} was NOT written")
+        print("  Decide per entry, then choose deliberately:")
+        print("    --only-new            insert new entries, leave moved ones committed")
+        print("    --take <name>.png     write only the named entries, repeatable")
+        print("    --drop <name>.png     remove only the named entries, repeatable")
+        print("    drop the flag         wholesale, absorbing EVERY moved entry")
+        return 1
+    except BaselineError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    # Always say what the run classified, in both modes. A wholesale bake that
+    # prints only "written" cannot be told from one that absorbed a regression.
+    print(
+        f"  new {len(summary.new)}  same {len(summary.same)}  "
+        f"moved {len(summary.moved)}  dropped {len(summary.dropped)}"
+    )
+    if summary.rehashed_from is not None:
+        print(
+            f"  rehashed {len(summary.rehashed)} from {summary.rehashed_from or '(no recorded hasher)'} "
+            f"to {summary.hashed_with} — not classified: a distance across two hashers "
+            f"is not a measurement"
+        )
+        for key in summary.dropped_os_buckets:
+            print(f"    DROPPED  hashes_by_os.{key}  -> not in this run's artifacts, cannot be rehashed")
+    named_bake = bool(summary.taken or summary.removed)
+    for name in summary.new:
+        if named_bake and name not in summary.taken:
+            print(f"    NEW      {name}  -> not written (not named)")
+        else:
+            print(f"    NEW      {name}")
+    for name, dist in summary.moved:
+        if named_bake:
+            verb = "TAKEN" if name in summary.taken else "kept (not named)"
+        else:
+            verb = "kept (only-new)" if only_new else "REWRITTEN"
+        print(f"    MOVED    {name}  hamming={dist}  -> {verb}")
+    total = getattr(summary, "unstable_total", 0)
+    if total:
+        # The denominator, every run: N screenshots are not held to an exact
+        # match. Without this line the exemption is only ever visible on the
+        # runs where something wobbled.
+        print(
+            f"  visual-stability: {total} screenshot(s) exempt from the exact check "
+            f"(animated / async); {len(getattr(summary, 'tolerated', ()))} differed this run"
+        )
+    for name, dist, reason in getattr(summary, "tolerated", ()):
+        # Printed every run: a tolerance nobody sees is an exemption nobody
+        # can review. These did move — they are simply not held to an exact
+        # match, because the fixture declares an unstable picture.
+        print(f"    unstable {name}  hamming={dist}  (not exact-checked: {reason})")
+    for name in summary.dropped:
+        if named_bake:
+            verb = "REMOVED" if name in summary.removed else "kept (not named)"
+        else:
+            verb = "kept (only-new)" if only_new else "REMOVED"
+        print(f"    DROPPED  {name}  -> {verb}")
+
+    if summary.moved and not only_new and not named_bake:
+        print(
+            "  ⚠️  a wholesale bake rewrote the moved entries above — every one of them "
+            "is now the baseline, including any that were regressions. Use --only-new "
+            "to insert the new entries and leave the rest alone."
+        )
+
+    if summary.unchanged:
+        print(f"baseline not written, nothing to change: {summary.out_path}")
+    else:
+        print(f"baseline written to {summary.out_path}")
+    print(
+        f"  platform: {summary.platform}, env: {summary.env}, "
+        f"screenshots hashed: {summary.hashed}, hashed with: {summary.hashed_with}"
+    )
+    return 0
+
+
+def _cmd_codegen_effect(args: argparse.Namespace) -> int:
+    """Run the codegen-stage differential (C0/C1/C2) over the three trees."""
+    import json as _json
+
+    from ..conformance import codegen_effect as ce
+
+    definitions_path = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    repo_root = Path(args.repo_root) if args.repo_root else _REPO_ROOT
+    platforms = tuple(args.platform) if args.platform else ce.PLATFORMS
+    wanted = tuple(args.check) if args.check else ce.CHECKS
+
+    if not definitions_path.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions_path}")
+        return 1
+    definitions = _json.loads(definitions_path.read_text(encoding="utf-8"))
+
+    companion_specs = None
+    if args.paired:
+        from ..conformance import companions as comp
+
+        semantics_path = definitions_path.parent / "attribute_semantics.json"
+        if not semantics_path.is_file():
+            print(f"ERROR: adjudication ledger not found: {semantics_path}")
+            return 1
+        semantics = _json.loads(semantics_path.read_text(encoding="utf-8")).get(
+            "semantics", {}
+        )
+        companion_specs = comp.derive(semantics, definitions)
+        print(
+            f"paired probe: {len(companion_specs)} attribute(s) carry companions "
+            f"derived from the adjudication ledger"
+        )
+        for spec in sorted(companion_specs.values(), key=lambda s: s.key):
+            flag = "  [PROVISIONAL — no ruling]" if spec.provisional else ""
+            print(f"  {spec.component}.{spec.attribute}: {spec.companions}{flag}")
+            print(f"      from {spec.source or '(nothing — see reason)'}")
+        for row in comp.unmeasurable_report():
+            print(
+                f"  not pairable: {', '.join(row['attributes'])} — {row['reason']}"
+            )
+        print()
+
+    table = ce.build_jobs(
+        definitions, platforms=platforms, companion_specs=companion_specs
+    )
+    outputs = {}
+    for platform in platforms:
+        jobs = table.jobs[platform]
+        print(f"  {platform}: {len(jobs)} emit(s) via {ce.PROBES[platform][0]} …")
+        try:
+            outputs[platform] = ce.run_probe(repo_root, platform, jobs, ruby=args.ruby)
+        except ce.ProbeError as e:
+            print(f"ERROR: {e}")
+            return 1
+
+    result = ce.evaluate(table, outputs)
+    findings = [f for f in result.defects if f.check in wanted]
+    advisories = [f for f in result.advisories if f.check in wanted]
+
+    print()
+    print(
+        f"codegen differential: {result.probes} (component, attribute, platform) "
+        f"probe(s), {result.checks_run} judgement(s)"
+    )
+    for check in ce.CHECKS:
+        ran = result.per_check.get(check, 0)
+        failed = sum(1 for f in result.defects if f.check == check)
+        print(f"  {check}: {ran} run, {failed} failing")
+    classes: dict = {}
+    for finding in result.defects:
+        classes[finding.finding_class] = classes.get(finding.finding_class, 0) + 1
+    for name, count in sorted(classes.items()):
+        print(f"    {name}: {count}")
+    print(f"  probe errors: {len(result.errors)}")
+    print("  advisories (not defects, never ledgered):")
+    print(
+        f"    representative-value candidates: "
+        f"{len(result.advised('value-is-default'))} — the fixture discriminates nothing"
+    )
+    print(
+        f"    numeric-string divergences: "
+        f"{len(result.advised('numeric-string-divergence'))} — every validator "
+        f"warns on the input; `jui build` at zero warnings keeps it out"
+    )
+    print(f"  out of scope: {len(result.out_of_scope)} (recorded with a reason)")
+
+    if findings:
+        print()
+        print(f"{len(findings)} failing judgement(s):")
+        for finding in sorted(
+            findings, key=lambda f: (f.check, f.component, f.attribute, f.platform)
+        )[: max(0, args.limit)]:
+            print(f"  {finding}")
+        if len(findings) > args.limit:
+            print(f"  … {len(findings) - args.limit} more (use --json for the full queue)")
+
+    candidates = [f for f in advisories if f.finding_class == "value-is-default"]
+    if candidates:
+        print()
+        print(
+            f"{len(candidates)} fixture(s) whose representative value emits what "
+            f"the control emits — give `rules.representative_value()` a "
+            f"different one and the fixture discriminates again:"
+        )
+        for finding in sorted(
+            candidates, key=lambda f: (f.component, f.attribute, f.platform)
+        )[: max(0, args.limit)]:
+            print(f"  {finding.key} [{finding.platform}] = {finding.primary!r}")
+        if len(candidates) > args.limit:
+            print(f"  … {len(candidates) - args.limit} more")
+
+    if result.errors:
+        print()
+        print(f"{len(result.errors)} probe error(s) — the converter raised:")
+        for finding in result.errors[: max(0, args.limit)]:
+            print(f"  {finding}")
+        if len(result.errors) > args.limit:
+            print(f"  … {len(result.errors) - args.limit} more")
+
+    if args.json_out:
+        out = Path(args.json_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        doc = ce.render_report(result, table, platforms=platforms)
+        out.write_text(_json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print()
+        print(f"  queue written to {out}")
+
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    path = ce.ledger_path(conformance_dir)
+    ledger = ce.load_ledger(path)
+
+    if args.update:
+        merged = ce.update_ledger(ledger, result, platforms=platforms)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(ce.render_ledger(merged), encoding="utf-8")
+        unreviewed = sum(1 for e in merged.values() if e.get("reason") == ce.UNREVIEWED)
+        print()
+        print(
+            f"  ledger written to {path} ({len(merged)} entr(y/ies), "
+            f"{unreviewed} unreviewed)"
+        )
+        return 0
+
+    verdict = ce.check_ledger(result, ledger, platforms=platforms)
+    for label, rows, hint in (
+        (
+            "defect(s) not recorded",
+            verdict.unrecorded,
+            "fix the converter, or record it with an owner and a reason. "
+            "`--update` records ALL of them at once, so use it only when that "
+            "is what you mean",
+        ),
+        (
+            "stale ledger entr(y/ies)",
+            verdict.stale,
+            "the defect is gone — DELETE those rows, in the commit that fixed "
+            "it. Not with `--update`: that also records every unaccepted defect",
+        ),
+        (
+            "entr(y/ies) without an owner or a reason",
+            verdict.incomplete,
+            "an accepted defect nobody owns is a permanent one",
+        ),
+    ):
+        if not rows:
+            continue
+        print()
+        print(f"{len(rows)} {label} in {path.name} — {hint}:")
+        for line in rows[: max(0, args.limit)]:
+            print(f"  {line}")
+        if len(rows) > args.limit:
+            print(f"  … {len(rows) - args.limit} more")
+
+    if verdict.ok:
+        print()
+        print(
+            f"codegen-effect OK: no unrecorded defects "
+            f"({verdict.accepted} accepted on ledger)"
+        )
+        return 0
+    return 1
+
+
+def _cmd_effect(args: argparse.Namespace) -> int:
+    rc = _require_env_for_update(args)
+    if rc is not None:
+        return rc
+    """Measure fixture-vs-control renders, and record or check the ledger."""
+    import json as _json
+
+    from ..conformance import control_diff as cd
+
+    from ..conformance.baseline import DEFAULT_ENV
+    # Same key `gate` uses: it selects the chrome bands control_diff must
+    # not compare. Without it this command measures the android clock.
+    env = getattr(args, "env", None) or DEFAULT_ENV
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    manifest_path = conformance_dir / "manifest.json"
+    results_path = conformance_dir / "results" / f"{args.platform}.results.json"
+
+    for path, hint in (
+        (manifest_path, "run `jui conformance generate` first"),
+        (results_path, f"run the {args.platform} conformance host first"),
+    ):
+        if not path.is_file():
+            print(f"ERROR: not found: {path} — {hint}")
+            return 1
+
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw = _json.loads(results_path.read_text(encoding="utf-8"))
+    results = {
+        entry["id"]: entry
+        for entry in raw.get("fixtures", raw.get("results", [])) or []
+        if isinstance(entry, dict) and entry.get("id")
+    }
+
+    artifacts = Path(args.artifacts) if args.artifacts else None
+    result = cd.compare(
+        conformance_dir, args.platform, manifest, results,
+        artifacts_dir=artifacts, env=env
+    )
+    if result.error:
+        print(f"ERROR: nothing was compared: {result.error}")
+        return 1
+
+    compared = len(result.active) + len(result.inert)
+    print(f"attribute effect ({args.platform}): {compared} fixture(s) compared to their control")
+    print(f"  differ from control (attribute took effect): {len(result.active)}")
+    print(f"  identical to control (no effect measured):   {len(result.inert)}")
+    if result.no_control:
+        print(f"  no usable control screenshot: {len(result.no_control)}")
+    if result.excluded:
+        # A device that excludes says how many, every run. A drop that stops
+        # being printed is a drop nobody re-derives.
+        print(
+            f"  off-face (value IS the control's state, structurally "
+            f"uncomparable): {len(result.excluded)} excluded"
+        )
+    if result.not_compared_by_design:
+        print(
+            f"  no control by design (a still capture cannot photograph it — "
+            f"see NON_OBSERVABLE_BY_SECTION): "
+            f"{len(result.not_compared_by_design)} not compared"
+        )
+
+    path = cd.ledger_path(conformance_dir)
+    if args.update:
+        # Union within this platform, and other platforms are left alone: a run
+        # on a device where one fixture failed to screenshot would otherwise
+        # quietly drop that attribute's guarantee, and recording web's results
+        # against iOS would fail iOS for a gap it has not been measured for.
+        ledger = cd.load_ledger_all(path)
+        before = sum(1 for f, ps in ledger.items() if args.platform in ps)
+        for fid in result.active:
+            ledger.setdefault(fid, set()).add(args.platform)
+        path.write_text(cd.render_ledger(ledger), encoding="utf-8")
+        after = sum(1 for f, ps in ledger.items() if args.platform in ps)
+        print(
+            f"  ledger written to {path} "
+            f"({after} fixture(s) for {args.platform}, +{after - before} new)"
+        )
+        return 0
+
+    if result.regressions:
+        print()
+        print(
+            f"{len(result.regressions)} fixture(s) recorded as expected-to-differ now "
+            "render identically to their control — the attribute stopped taking effect:"
+        )
+        for fid in result.regressions[:30]:
+            print(f"  {fid}")
+        if len(result.regressions) > 30:
+            print(f"  … {len(result.regressions) - 30} more")
+        return 1
+
+    if result.unmeasured:
+        print()
+        print(
+            f"{len(result.unmeasured)} recorded fixture(s) produced no screenshot, so "
+            "their effect was not verified (not a pass):"
+        )
+        for fid in result.unmeasured[:30]:
+            print(f"  {fid}")
+        return 1
+
+    print()
+    print("No regression: every recorded attribute still changes what is rendered.")
+    return 0
+
+
+def _cmd_coverage_binding(
+    args: argparse.Namespace, cov, definitions: dict, conformance_dir: Path, platforms
+) -> int:
+    """The binding lane: declared `@{...}` forms nothing ever measures."""
+    import json
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"ERROR: manifest not found: {manifest_path}")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    covered = cov.binding_fixture_coverage(manifest)
+    gaps = cov.find_binding_gaps(definitions, covered, platforms=platforms)
+
+    declared = sum(
+        len(cov.applicable_platforms(defn))
+        for component, attrs in definitions.items()
+        if not component.startswith("_") and isinstance(attrs, dict)
+        for attribute, defn in attrs.items()
+        if cov.declares_binding(defn) and cov.in_scope(component, attribute, defn)
+    )
+    per_platform: dict = {}
+    attributes = set()
+    for gap in gaps:
+        per_platform[gap.platform] = per_platform.get(gap.platform, 0) + 1
+        attributes.add(gap.key)
+
+    print(
+        f"binding coverage: {declared} declared attribute/platform pair(s) admit "
+        f"a @{{...}} value"
+    )
+    print(
+        f"  measured in bound form:   {declared - len(gaps)}"
+    )
+    print(
+        f"  never measured:           {len(gaps)} "
+        f"({', '.join(f'{p} {per_platform.get(p, 0)}' for p in platforms)})"
+    )
+    print(f"  distinct attributes:      {len(attributes)}")
+    if gaps:
+        print()
+        print(
+            "declared bound forms no fixture writes — a converter that drops "
+            "the binding cannot be caught until one does:"
+        )
+        for gap in gaps[:60]:
+            print(f"  {gap}")
+        if len(gaps) > 60:
+            print(f"  … {len(gaps) - 60} more")
+
+    if getattr(args, "json_out", None):
+        out = Path(args.json_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "schemaVersion": 1,
+            "_comment": (
+                "Attributes attribute_definitions.json declares a binding form "
+                "for that no conformance fixture writes in that form. Nothing "
+                "measures how any platform treats the bound value, so a silent "
+                "drop (plan 36: rjui returned '' for a bound dimension while "
+                "`jui build` stayed at zero warnings) has nowhere to surface. "
+                "Generated by `jui conformance coverage --binding --json`; a "
+                "report, not a ledger."
+            ),
+            "platforms": list(platforms),
+            "counts": {
+                "declaredPairs": declared,
+                "measured": declared - len(gaps),
+                "unmeasured": len(gaps),
+                "perPlatform": per_platform,
+                "distinctAttributes": len(attributes),
+            },
+            "entries": [
+                {
+                    "component": g.component,
+                    "attribute": g.attribute,
+                    "platform": g.platform,
+                }
+                for g in gaps
+            ],
+        }
+        out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print()
+        print(f"  queue written to {out}")
+
+    # Reporting only — see the module comment on the binding lane.
+    return 0
+
+
+def _cmd_coverage(args: argparse.Namespace) -> int:
+    import json
+
+    from ..conformance import coverage as cov
+
+    definitions_path = Path(args.definitions) if args.definitions else _DEFAULT_DEFINITIONS
+    conformance_dir = Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    repo_root = Path(args.repo_root) if args.repo_root else _REPO_ROOT
+    platforms = tuple(args.platform) if args.platform else cov.PLATFORMS
+
+    if not definitions_path.is_file():
+        print(f"ERROR: attribute definitions not found: {definitions_path}")
+        return 1
+    definitions = json.loads(definitions_path.read_text(encoding="utf-8"))
+
+    if getattr(args, "binding", False):
+        return _cmd_coverage_binding(args, cov, definitions, conformance_dir, platforms)
+
+    result = cov.check(definitions, repo_root, conformance_dir, platforms=platforms)
+    ledger_path = cov.coverage_path(conformance_dir)
+
+    if args.update:
+        existing = cov.load_ledger(ledger_path)
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        ledger_path.write_text(
+            cov.render_ledger(result.gaps, existing=existing, definitions=definitions),
+            encoding="utf-8",
+        )
+        print(f"coverage ledger written to {ledger_path}")
+        print(f"  {len(result.gaps)} gap(s) over {result.checked} declared attribute/platform pairs")
+        return 0
+
+    print(f"attribute coverage: {result.checked} declared attribute/platform pairs checked")
+    print(f"  recorded gaps: {len(result.gaps) - len(result.unrecorded)}")
+    for reason, count in sorted(result.by_reason.items()):
+        print(f"    {reason}: {count}")
+
+    if result.unrecorded:
+        # Two states reach this branch and they need different instructions.
+        # A gap with no entry has never been seen; a gap whose entry says
+        # `unreviewed` has already been through `--update`, and telling its
+        # reader to run `--update` sends them back to where they are. The
+        # states differed by one line in the summary before this split, and
+        # the ACTION line — the one people follow — was identical.
+        recorded = cov.load_ledger(ledger_path)
+        awaiting = [
+            gap for gap in result.unrecorded
+            if (recorded.get((gap.key, gap.platform)) or {}).get("reason") == cov.UNREVIEWED
+        ]
+        fresh = [gap for gap in result.unrecorded if gap not in awaiting]
+
+        if fresh:
+            print(f"\n{len(fresh)} declared attribute(s) no converter reads:")
+            for gap in fresh:
+                print(f"  {gap}")
+            print(
+                "\nImplement it, narrow platform/mode in attribute_definitions.json, or "
+                f"record it with `jui conformance coverage --update` (then set a reason in "
+                f"{ledger_path.name})."
+            )
+        if awaiting:
+            print(
+                f"\n{len(awaiting)} ledger entr(y/ies) still carry the `{cov.UNREVIEWED}` "
+                f"marker `--update` writes:"
+            )
+            for gap in awaiting:
+                print(f"  {gap}")
+            print(
+                f"\nThese are recorded but not ruled on. Open {ledger_path.name} and "
+                f"replace each `{cov.UNREVIEWED}` with a real reason and a note — or close "
+                "the gap by implementing it. Running `--update` again will not change "
+                "them; it is what wrote them."
+            )
+
+    if result.stale:
+        print(f"\n{len(result.stale)} stale ledger entr(y/ies) — the gap is closed or the")
+        print("attribute is gone; drop them with `jui conformance coverage --update`:")
+        for entry in result.stale:
+            print(f"  {entry}")
+
+    if result.ok:
+        print("\nNo unrecorded gaps.")
+        return 0
+    return 1
+
+
+def _cmd_report(args: argparse.Namespace) -> int:
+    from ..conformance.baseline import DEFAULT_ENV
+    from ..conformance.report import ReportError, generate_report
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else None
+    out_path = Path(args.out) if args.out else None
+    env = getattr(args, "env", None) or DEFAULT_ENV
+
+    try:
+        summary = generate_report(
+            conformance_dir, results_dir=results_dir, out_path=out_path, env=env
+        )
+    except ReportError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    print(f"report written to {summary.out_path}")
+    print(f"  platforms: {', '.join(summary.platforms) if summary.platforms else '(none)'}")
+    print(f"  cross-platform mismatches: {summary.mismatch_count}")
+    for platform, count in summary.visual_regressions.items():
+        no_baseline = summary.no_baseline.get(platform, 0)
+        print(
+            f"  {platform}: visual regressions: {count}"
+            + (f", screenshots without baseline: {no_baseline}" if no_baseline else "")
+        )
+    if summary.stale_platforms:
+        print(f"  STALE results: {', '.join(summary.stale_platforms)}")
+    if summary.drifted_platforms:
+        print(
+            f"  manifest drifted (same fixtures, not re-rendered): "
+            f"{', '.join(summary.drifted_platforms)}"
+        )
+    for platform, ids in summary.unknown_ids.items():
+        print(f"  WARNING: {platform} has {len(ids)} fixture id(s) not in manifest")
+    return 0
+
+
+def _cmd_gate(args: argparse.Namespace) -> int:
+    import hashlib
+    import os
+
+    from ..conformance.baseline import DEFAULT_ENV
+    from ..conformance.gate import evaluate
+    from ..conformance.report import ReportError, _status_of, load_platform_results, manifest_identity
+
+    conformance_dir = (
+        Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
+    )
+    results_dir = Path(args.results) if args.results else conformance_dir / "results"
+    out_path = Path(args.out) if args.out else None
+    selected = list(dict.fromkeys(args.platform))
+    env = getattr(args, "env", None) or DEFAULT_ENV
+
+    from ..conformance.shared_core import input_digest
+
+    # What this run was handed, once, so a rerun can show it read the same.
+    print(input_digest(conformance_dir, results_dir=results_dir))
+    try:
+        outcome = evaluate(
+            conformance_dir,
+            selected,
+            results_dir=results_dir,
+            out_path=out_path,
+            visual=not args.no_visual,
+            env=env,
+            parity=bool(getattr(args, "parity", False)),
+            cross_effect=bool(getattr(args, "cross_effect", False)),
+            frame_parity=bool(getattr(args, "frame_parity", False)),
+            inert_complete=bool(getattr(args, "inert_complete", False)),
+            codegen_effect=bool(getattr(args, "codegen_effect", False)),
+            ledger_keys=bool(getattr(args, "ledger_keys", True)),
+            value_discrimination=bool(
+                getattr(args, "value_discrimination", False)
+            ),
+            rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
+            repo_root=_REPO_ROOT,
+            definitions_path=_DEFAULT_DEFINITIONS,
+            semantics_path=_REPO_ROOT / "shared" / "core" / "attribute_semantics.json",
+        )
+    except ReportError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    summary = outcome.summary
+    print(f"report written to {summary.out_path}")
+    for platform in selected:
+        tally = summary.status_tallies.get(platform)
+        if tally is not None:
+            print(f"{platform}: {tally}")
+
+    # List the failing fixtures so a red gate is diagnosable from the log
+    # alone (same 30-entry cap the workflow heredocs used).
+    has_bad_results = any(
+        tally.get("fail", 0) + tally.get("error", 0)
+        for platform in selected
+        if (tally := summary.status_tallies.get(platform)) is not None
+    )
+    if has_bad_results:
+        manifest_hash, render_equivalent = manifest_identity(
+            conformance_dir / "manifest.json", conformance_dir
+        )
+        loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+        for platform in selected:
+            p = loaded.get(platform)
+            if p is None:
+                continue
+            bad = [
+                (fixture_id, entry)
+                for fixture_id, entry in p.results.items()
+                if _status_of(p, fixture_id) in ("fail", "error")
+            ]
+            for fixture_id, entry in bad[:30]:
+                status = _status_of(p, fixture_id)
+                print(f"  {status:5} {fixture_id} — {entry.get('detail', '')}")
+            if len(bad) > 30:
+                print(f"  … {len(bad) - 30} more")
+
+    on_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+    for notice in outcome.notices:
+        print(f"::notice::{notice}" if on_actions else f"note: {notice}")
+    if outcome.problems:
+        for problem in outcome.problems:
+            print(f"::error::{problem}" if on_actions else f"GATE FAIL: {problem}")
+        return 1
+
+    checks = "0 fail / 0 error"
+    if set(_PLATFORMS) <= set(selected):
+        checks = "0 mismatch / " + checks
+    if not args.no_visual:
+        checks += f" / visual + ratchets OK (env {env})"
+    if getattr(args, "cross_effect", False):
+        checks += " / cross-effect OK"
+    if getattr(args, "frame_parity", False):
+        checks += " / frame parity OK"
+    print(f"conformance gate: OK ({', '.join(selected)} — {checks})")
+    return 0

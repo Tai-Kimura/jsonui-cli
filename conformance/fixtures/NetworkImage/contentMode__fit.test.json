@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/contentMode__fit.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.contentMode (fit)",
+    "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"fit\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__fit",
+      "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"fit\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_contentMode__fit"
+        }
+      ]
+    }
+  ]
+}

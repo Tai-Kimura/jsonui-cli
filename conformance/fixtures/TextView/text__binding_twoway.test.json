@@ -1,0 +1,44 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/text__binding_twoway.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.text (binding_twoway)",
+    "description": "Interactive conformance fixture for 'text' on TextView (section: TextView, case: binding_twoway). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__binding_twoway",
+      "description": "Interactive conformance fixture for 'text' on TextView (section: TextView, case: binding_twoway). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "Initial Text"
+        },
+        {
+          "action": "input",
+          "id": "target",
+          "value": "Typed Text"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "Typed Text"
+        }
+      ]
+    }
+  ]
+}

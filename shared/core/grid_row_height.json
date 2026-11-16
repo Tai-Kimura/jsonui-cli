@@ -1,0 +1,7 @@
+{
+  "_description": "Which cells of a grid Collection (columns >= 2) are drawn as tall as their row. A cell whose root is height matchParent fills its row: the row is as tall as its tallest cell (Compose: the row is height(IntrinsicSize.Min) and each cell box fillMaxHeight; a lazy grid's section is drawn a full-width item per row). IntrinsicSize.Min asks each descendant its intrinsic height, and an image whose height its content decides answers with its picture's own pixel height, not one scaled to the cell's width: a row of such cells took the placeholder's 128 px or the tall picture's 600 px (measured on an emulator, 2026-11-15, jsonui-cli ticket kjui-collection-lazy-grid-and-flow-rows-do-not-align-cell-heights). A cell holding such an image is therefore drawn its own height, as a lazy grid's cell was before (its row is not aligned on Android, where iOS aligns it). Read by kjui_tools (CollectionComponent) and, vendored byte for byte, by KotlinJsonUI Dynamic (GridRowHeight). A node's type is read through type_synonyms.json (its canonical type), styles merged and includes followed.",
+  "contentSizedImages": {
+    "types": ["Image", "NetworkImage"],
+    "fixedHeight": "a number, or a string of digits with an optional fraction ('120', '120.5'): any other height — matchParent, wrapContent, a binding, none — is decided by the picture"
+  }
+}

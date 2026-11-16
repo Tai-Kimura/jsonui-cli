@@ -1,0 +1,31 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/visibility__gone_anchor.layout.json"
+  },
+  "metadata": {
+    "name": "conformance visibility__gone_anchor",
+    "description": "A constraint that names a gone element does not apply — canonical visibility.goneModel. The children aligned to a gone anchor (alignTopView + topMargin 10, alignBottomOfView) are placed as they are with no anchor: a face that keeps the anchor in place draws them at its edge, unlike the control.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "visibility__gone_anchor",
+      "description": "A constraint that names a gone element does not apply — canonical visibility.goneModel. The children aligned to a gone anchor (alignTopView + topMargin 10, alignBottomOfView) are placed as they are with no anchor: a face that keeps the anchor in place draws them at its edge, unlike the control.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_visibility__gone_anchor"
+        }
+      ]
+    }
+  ]
+}

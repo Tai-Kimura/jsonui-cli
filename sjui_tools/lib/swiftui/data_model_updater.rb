@@ -1,0 +1,597 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'fileutils'
+require 'set'
+require_relative '../core/config_manager'
+require_relative '../core/project_finder'
+require_relative '../core/type_converter'
+require_relative '../core/generated_marker'
+require_relative '../core/data_model_updater_core'
+require_relative '../core/tap_accessibility'
+require_relative '../core/string_literals'
+require_relative 'test_bridge_code'
+require_relative 'style_loader'
+require_relative 'include_expander'
+require_relative 'helpers/string_manager_helper'
+
+module SjuiTools
+  module SwiftUI
+    # iOS profile over the shared Data-model updater body
+    # (lib/core/data_model_updater_core.rb — byte-identical mirror of
+    # shared/core/data_model_updater_core.rb, pinned by
+    # spec/core/shared_core_mirror_spec.rb). Traversal/extraction live in
+    # the shared core; this class owns the iOS constructor facts and
+    # everything that emits Swift.
+    class DataModelUpdater < ::JsonUIShared::DataModelUpdaterCore
+      include Helpers::StringManagerHelper
+
+      # Where Data models are written; the build's orphan sweep reads it here
+      # rather than spelling it again.
+      attr_reader :data_dir
+
+      def initialize(mode: nil)
+        @config = Core::ConfigManager.load_config
+        @source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+        @layouts_dir = File.join(@source_path, @config['layouts_directory'] || 'Layouts')
+        @data_dir = File.join(@source_path, @config['data_directory'] || 'Data')
+        @styles_dir = File.join(@source_path, @config['styles_directory'] || 'Styles')
+        @mode = mode || @config['mode'] || 'swiftui'
+      end
+
+      private
+
+      # Data defaults resolve strings, and which sections are "own" depends
+      # on the layout being processed — the same per-file announcement the
+      # view converter makes. Without it every data-default lookup ran with
+      # NO namespace context: a key declared in the layout's own section
+      # emitted the bare `.localized()` (raw key as the default) and, once
+      # the foreign-bare warn existed, misreported own declarations as
+      # foreign with an empty own list (2026-08-11 filing). Includes are
+      # expanded into this tree, so a partial's declarations resolve under
+      # the includer's namespaces — matching the generated-view face.
+      def process_json_file(json_file)
+        Helpers::StringManagerHelper.for_layout(json_file) { super }
+      end
+
+      # Skip files with "mode": "uikit" (SwiftUI data models don't need UIKit-only files)
+      def skip_layout_file_extra?(file)
+        json_content = JSON.parse(File.read(file))
+        file_mode = json_content['mode']
+        !!(file_mode && file_mode.downcase == 'uikit')
+      rescue JSON::ParserError
+        false
+      end
+
+      def expand_styles(json_data, _json_file)
+        StyleLoader.load_and_merge(json_data, @styles_dir)
+      end
+
+      def expand_includes(json_data, dir)
+        IncludeExpander.process_includes(json_data, dir, nil, @layouts_dir)
+      end
+
+      def event_binding_attrs
+        %w[onClick onValueChange onToggle onTextChange onChange onLongPress]
+      end
+
+      # onClick carries the callback in binding format: @{functionName}. An
+      # empty or blank one names no callback (TapAccessibility.handler?) — it
+      # declared `var : (() -> Void)? = nil`.
+      def onclick_action_name(node)
+        return nil unless JsonUIShared::TapAccessibility.handler?(node['onClick']) && node['onClick'].is_a?(String)
+        node['onClick'].gsub(/^@\{|\}$/, '')
+      end
+
+      def data_platform_filter
+        'swift'
+      end
+
+      # Historical: the data[] mode filter accepts 'swiftui' regardless of
+      # the constructor mode (this updater is only run for SwiftUI builds).
+      def data_mode_filter
+        'swiftui'
+      end
+
+      def boolean_class
+        'Bool'
+      end
+
+      # Event conversion runs on the RAW item BEFORE TypeConverter
+      # normalization to avoid double-wrapping the converted signature.
+      def finalize_data_property(data_item, event_bindings)
+        prop_name = data_item['name']
+        raw_class = data_item['class'].to_s
+
+        modified_item = data_item.dup
+        if event_bindings[prop_name] && raw_class.include?('Event')
+          # Get event type from type_mapping.json
+          binding_info = event_bindings[prop_name]
+          event_type = Core::TypeConverter.get_event_type(
+            binding_info[:component],
+            binding_info[:attribute],
+            'swiftui'
+          )
+
+          if event_type
+            # Convert Event to platform-specific type in the function signature
+            # event_type is an array like ["String", "Bool"] for swiftui
+            if event_type.is_a?(Array)
+              # Convert to tuple type: String, Bool (without extra parens)
+              # Replace (Event) with (String, Bool) - the parens are already there
+              converted_type = event_type.join(', ')
+              modified_item['class'] = raw_class.gsub('(Event)', "(#{converted_type})")
+            else
+              modified_item['class'] = raw_class.gsub('Event', event_type)
+            end
+          end
+        end
+
+        # Normalize type using TypeConverter (mode: swiftui) after Event replacement
+        Core::TypeConverter.normalize_data_property(modified_item, 'swiftui', source: @current_layout)
+      end
+
+      def data_file_extension
+        'swift'
+      end
+
+      def extract_type_name(content)
+        if match = content.match(/struct\s+(\w+Data)\s*{/)
+          match[1]
+        else
+          nil
+        end
+      end
+
+      def generate_data_content(view_name, data_properties, onclick_actions = [], json_base_name: nil)
+        needs_combine = data_properties.any? { |p| p['class'].to_s.include?('PassthroughSubject') || p['class'].to_s.include?('CurrentValueSubject') }
+        combine_import = needs_combine ? "\nimport Combine" : ""
+        marker_source = json_base_name ? "Layouts/#{json_base_name}.json" : "#{view_name}Data"
+        marker_header = Core::GeneratedMarker.comment_header(
+          source: marker_source,
+          generator: "sjui build"
+        )
+        content = <<~SWIFT
+        #{marker_header}
+
+        import Foundation
+        import SwiftUI
+        import SwiftJsonUI#{combine_import}
+
+        struct #{view_name}Data {
+            // Data properties from JSON
+        SWIFT
+
+        if data_properties.empty?
+          content += "    // No data properties defined in JSON\n"
+        else
+          # Add each property with correct type and default value
+          data_properties.each do |prop|
+            name = prop['name']
+            # Class names are emitted as written — they are the project's own
+            # model types — EXCEPT the JSON container spellings, which name a
+            # shape and have no Swift type of their own to emit.
+            class_type = swift_data_type(prop['class'])
+            default_value = prop['defaultValue']
+
+            # If no default value or nil, make it optional
+            if default_value.nil? || default_value == 'nil'
+              # Check if type already ends with '?' (already optional)
+              if class_type.end_with?('?')
+                content += "    var #{name}: #{class_type} = nil\n"
+              else
+                content += "    var #{name}: #{class_type}? = nil\n"
+              end
+            else
+              formatted_value = format_default_value(default_value, class_type)
+              content += "    var #{name}: #{class_type} = #{formatted_value}\n"
+            end
+          end
+        end
+
+        # Add onclick action properties as closures (skip if already in data_properties)
+        data_prop_names = data_properties.map { |p| p['name'] }
+        extra_onclick_actions = onclick_actions.reject { |action| data_prop_names.include?(action) }
+        if !extra_onclick_actions.empty?
+          content += "\n"
+          content += "    // onClick action callbacks\n"
+          extra_onclick_actions.each do |action|
+            content += "    var #{action}: (() -> Void)? = nil\n"
+          end
+        end
+
+        # Add update function to allow dynamic property updates
+        content += "\n"
+        content += "    // Update properties from dictionary\n"
+        content += "    mutating func update(dictionary: [String: Any]) {\n"
+
+        if !data_properties.empty?
+          data_properties.each do |prop|
+            name = prop['name']
+            class_type = prop['class']
+
+            # Generate update code based on type
+            content += "        if let value = dictionary[\"#{name}\"] {\n"
+
+            case class_type
+            when 'String'
+              content += "            if let stringValue = value as? String {\n"
+              content += "                self.#{name} = stringValue\n"
+              content += "            }\n"
+            when 'Int'
+              content += "            if let intValue = value as? Int {\n"
+              content += "                self.#{name} = intValue\n"
+              content += "            }\n"
+            when 'Double'
+              content += "            if let doubleValue = value as? Double {\n"
+              content += "                self.#{name} = doubleValue\n"
+              content += "            }\n"
+            when 'Bool'
+              content += "            if let boolValue = value as? Bool {\n"
+              content += "                self.#{name} = boolValue\n"
+              content += "            }\n"
+            when 'CGFloat'
+              content += "            if let floatValue = value as? CGFloat {\n"
+              content += "                self.#{name} = floatValue\n"
+              content += "            } else if let doubleValue = value as? Double {\n"
+              content += "                self.#{name} = CGFloat(doubleValue)\n"
+              content += "            }\n"
+            when 'Color'
+              # Runtime String tokens/hex are legal Color-field values (the
+              # declared defaults are token strings) — `as? Color` alone
+              # silently dropped them while the dynamic path resolved them
+              # (a downstream detail screen, 2026-08-08). Token first, then hex via the
+              # shared configuration fallback.
+              content += "            if let typedValue = value as? Color {\n"
+              content += "                self.#{name} = typedValue\n"
+              content += "            } else if let spelling = value as? String,\n"
+              content += "                      let resolved = ColorManager.swiftui.color(for: spelling)\n"
+              content += "                          ?? SwiftJsonUIConfiguration.shared.getColor(for: spelling) {\n"
+              content += "                self.#{name} = resolved\n"
+              content += "            }\n"
+            else
+              # For custom types, try to cast directly
+              content += "            if let typedValue = value as? #{class_type} {\n"
+              content += "                self.#{name} = typedValue\n"
+              content += "            }\n"
+            end
+
+            content += "        }\n"
+          end
+        else
+          # No properties, but still include empty function body
+          content += "        // No properties to update\n"
+        end
+
+        content += "    }\n"
+
+        # The test bridge's apply / snapshot (jsonui-test-runner spec section 10.3-10.4).
+        # Only the Data the layout DECLARES (plan decision 1): fields the
+        # generator adds itself — <id>IsFocused, a Radio group's selection —
+        # and object-form data are not, so an initialState naming one gets
+        # `not a data field`, as on Android and in validate
+        # (shared/core/layout_data_fields_vectors.json).
+        bridge_props = data_properties.select { |prop| declared_data_properties.key?(prop) }.map do |prop|
+          swift_type = swift_data_type(prop['class']).to_s
+          default_value = prop['defaultValue']
+          {
+            name: prop['name'],
+            declared: (prop['declaredClass'] || prop['class']).to_s,
+            swift_type: swift_type,
+            swift_optional: swift_type.end_with?('?') || default_value.nil? || default_value == 'nil'
+          }
+        end
+        content += TestBridgeCode.apply_function(bridge_props)
+        content += TestBridgeCode.snapshot_function(bridge_props)
+
+        # Add toDictionary function
+        content += "\n"
+        content += "    // Convert properties to dictionary for Dynamic mode\n"
+        content += "    func toDictionary() -> [String: Any] {\n"
+        # A layout without data adds nothing: `let`, or swiftc warns
+        # "variable 'dict' was never mutated" (ticket sjui-data-struct-empty-layout-swift-warnings).
+        adds_to_dict = !data_properties.empty? || !extra_onclick_actions.empty?
+        content += "        #{adds_to_dict ? 'var' : 'let'} dict: [String: Any] = [:]\n"
+
+        # Add data properties
+        if !data_properties.empty?
+          content += "        \n"
+          content += "        // Data properties\n"
+          data_properties.each do |prop|
+            name = prop['name']
+            class_type = prop['class']
+            default_value = prop['defaultValue']
+
+            # If it's optional, check for nil
+            if default_value.nil? || default_value == 'nil'
+              content += "        if let value = #{name} {\n"
+              content += "            dict[\"#{name}\"] = value\n"
+              content += "        }\n"
+            else
+              content += "        dict[\"#{name}\"] = #{name}\n"
+            end
+          end
+        end
+
+        # Add onclick actions not already in data_properties
+        if !extra_onclick_actions.empty?
+          content += "        \n"
+          content += "        // Add onclick action callbacks\n"
+          extra_onclick_actions.each do |action|
+            content += "        if let #{action} = #{action} {\n"
+            content += "            dict[\"#{action}\"] = #{action}\n"
+            content += "        }\n"
+          end
+        end
+
+        if data_properties.empty? && onclick_actions.empty?
+          content += "        // No properties to add\n"
+        end
+
+        content += "        \n"
+        content += "        return dict\n"
+        content += "    }\n"
+
+        # Add toDictionary(binding:) for Dynamic mode reactivity
+        content += "\n"
+        content += "    #if DEBUG\n"
+        content += "    // Convert properties to binding dictionary for Dynamic mode reactivity\n"
+        content += "    // SwiftUI.Binding<T> values enable automatic re-rendering on changes\n"
+        content += "    func toDictionary(binding dataBinding: SwiftUI.Binding<#{view_name}Data>) -> [String: Any] {\n"
+        content += "        #{adds_to_dict ? 'var' : 'let'} dict: [String: Any] = [:]\n"
+
+        if !data_properties.empty?
+          content += "        \n"
+          content += "        // Data properties as SwiftUI.Binding for reactivity\n"
+          data_properties.each do |prop|
+            name = prop['name']
+            class_type = prop['class']
+            default_value = prop['defaultValue']
+            # A declared `?` is optional whatever the default: the property is
+            # emitted `String?` either way, and binding it as Binding<String>
+            # did not compile (a `String?` with a defaultValue).
+            is_optional = default_value.nil? || default_value == 'nil' || class_type.to_s.end_with?('?')
+
+            # Determine if type is bindable (primitive types)
+            binding_type = case class_type.gsub('?', '')
+              when 'String' then 'String'
+              when 'Bool' then 'Bool'
+              when 'Int' then 'Int'
+              when 'Double' then 'Double'
+              when 'CGFloat' then 'CGFloat'
+              else nil
+            end
+
+            # Skip closure types
+            if class_type.include?('->') || class_type.include?('Void')
+              # Closure: keep as plain value
+              content += "        if let #{name} = #{name} {\n"
+              content += "            dict[\"#{name}\"] = #{name}\n"
+              content += "        }\n"
+            elsif binding_type
+              # Bindable primitive type
+              default_for_type = case binding_type
+                when 'String' then '""'
+                when 'Bool' then 'false'
+                when 'Int' then '0'
+                when 'Double' then '0.0'
+                when 'CGFloat' then '0.0'
+                else '""'
+              end
+
+              # Through the field's own Binding (`dataBinding.<name>`), never closures over
+              # `dataBinding`: a Data with a callback field is not Sendable, and Binding(get:set:)'s
+              # @Sendable closures capturing it warned once per accessor in Swift 6 without MainActor
+              # (ticket 2026-10-23-sjui-swift6-nonisolated-colormanager-and-binding-dict).
+              if is_optional
+                content += "        if #{name} != nil {\n"
+                content += "            let #{name}Field = dataBinding.#{name}\n"
+                content += "            dict[\"#{name}\"] = SwiftUI.Binding<#{binding_type}>(\n"
+                content += "                get: { #{name}Field.wrappedValue ?? #{default_for_type} },\n"
+                content += "                set: { #{name}Field.wrappedValue = $0 }\n"
+                content += "            )\n"
+                content += "        }\n"
+              else
+                content += "        dict[\"#{name}\"] = dataBinding.#{name}\n"
+              end
+            else
+              # Non-bindable type (custom struct, array, etc.): keep as plain value
+              if is_optional
+                content += "        if let value = #{name} {\n"
+                content += "            dict[\"#{name}\"] = value\n"
+                content += "        }\n"
+              else
+                content += "        dict[\"#{name}\"] = #{name}\n"
+              end
+            end
+          end
+        end
+
+        # Add onclick callbacks (same as toDictionary)
+        if !extra_onclick_actions.empty?
+          content += "        \n"
+          content += "        // Add onclick action callbacks\n"
+          extra_onclick_actions.each do |action|
+            content += "        if let #{action} = #{action} {\n"
+            content += "            dict[\"#{action}\"] = #{action}\n"
+            content += "        }\n"
+          end
+        end
+
+        if data_properties.empty? && onclick_actions.empty?
+          content += "        // No properties to add\n"
+        end
+
+        content += "        \n"
+        content += "        return dict\n"
+        content += "    }\n"
+        content += "    #endif\n"
+
+        content += "}\n"
+        content += "\n"
+        content += Core::GeneratedMarker.comment_footer + "\n"
+        content
+      end
+
+      def format_default_value(value, json_class)
+        # An empty container written as a string ("{}" / "[]") takes the
+        # declared collection's kind, not its own characters: a
+        # `[String: Int]` given "{}" drew `{}` (a closure) and given "[]" drew
+        # `[]`, neither of which a dictionary declaration accepts — Swift's
+        # empty dictionary is `[:]` (TypeConverterCore#collection_kind).
+        if ['[]', '{}'].include?(value) && (kind = Core::TypeConverter.collection_kind(json_class))
+          return kind == :map ? '[:]' : '[]'
+        end
+
+        if json_class.to_s.chomp('?') == 'String'
+          # The text the layout's spelling means ('' / "…" / '…' / bare,
+          # StringLiterals.default_text), for a String and a String? alike.
+          # Until 1.9.0 the spelling was wrapped in quotes as it stood, so
+          # `"Test"` became the value `"Test"` with its quotes — and a
+          # String? default was written as it stood, as code (`= Hello`).
+          text = JsonUIShared::StringLiterals.default_text(value)
+          if text.empty?
+            '""'
+          else
+            # Use StringManager for localized strings. warnings: false —
+            # a defaultValue is not declared display text (it can be
+            # sentinel vocabulary like a DateSelectBox's "today"), so this
+            # face resolves best-effort and never gates the build.
+            get_text_with_string_manager("\"#{text}\"", warnings: false)
+          end
+        elsif value.is_a?(Hash) || value.is_a?(Array)
+          # ANY declared dictionary/array default, not just the classes that
+          # happen to fail today. What decides is the SHAPE of the value:
+          # `{"name"=>"Grace"}` is Hash#to_s and not Swift, while
+          # `["alpha", "beta"]` is Array#to_s that happens to READ as Swift —
+          # so an array of scalars was passing by coincidence, on the same
+          # broken path, and would not have reported a regression in it.
+          # Routing every container through the emitter removes the
+          # coincidence.
+          if json_class == 'CollectionDataSource'
+            collection_data_source_literal(value)
+          else
+            swift_json_literal(value)
+          end
+        elsif false
+          # Materialize the declared defaultValue (INTERACTIVE_HOST_CONTRACT
+          # §4 shapes: shorthand cell array / explicit sections object) into
+          # a real initializer — passing the raw Ruby value through emitted
+          # invalid Swift and dropped declared cells (31 F4 Phase 2).
+          collection_data_source_literal(value)
+        else
+          # Check if default value contains a type constructor that needs mode conversion
+          # e.g., "CollectionDataSource()" -> "UIKitCollectionDataSource()" in UIKit mode
+          val_str = value.to_s
+          Core::TypeConverter::MODE_TYPE_MAPPING.each do |generic_type, mode_map|
+            mode = @mode || 'swiftui'
+            mapped_type = mode_map[mode]
+            if mapped_type && mapped_type != generic_type && val_str.include?(generic_type)
+              return val_str.gsub(generic_type, mapped_type)
+            end
+          end
+          value
+        end
+      end
+
+      # The declared class as Swift spells it. Only JSON container classes are
+      # translated; a name the project defines is its own type.
+      def swift_data_type(raw_class)
+        return raw_class unless raw_class.is_a?(String)
+
+        base = raw_class.end_with?('?') ? raw_class[0...-1] : raw_class
+        return raw_class unless Core::TypeConverter::JSON_CONTAINER_CLASSES.include?(base)
+
+        mapped = Core::TypeConverter::TYPE_MAPPING[base]
+        raw_class.end_with?('?') ? "#{mapped}?" : mapped
+      end
+
+      # A JSON value as a Swift literal.
+      def swift_json_literal(value)
+        case value
+        when Hash
+          return '[:]' if value.empty?
+
+          pairs = value.map { |k, v| "#{swift_string_literal(k.to_s)}: #{swift_json_literal(v)}" }
+          "[#{pairs.join(', ')}]"
+        when Array
+          return '[]' if value.empty?
+
+          "[#{value.map { |v| swift_json_literal(v) }.join(', ')}]"
+        when String then swift_string_literal(value)
+        when true, false then value.to_s
+        when nil
+          # NOT `nil`. A dictionary or array default lands in `[String: Any]`
+          # / `[Any]`, and `Any` is not optional: `["z": nil]` is "'nil' is
+          # not compatible with expected dictionary value type 'Any'".
+          # `NSNull()` is how Foundation represents a JSON null, and
+          # JsonUIBindingPath already reads it as unresolved, so the runtime
+          # meaning is unchanged.
+          #
+          # Measured 2026-09-05, after the fact: the unit example pinned
+          # `nil` and passed, because the swiftc arm had no null in it. The
+          # compile gate only covers the shapes it is given.
+          'NSNull()'
+        when Numeric then value.to_s
+        else swift_string_literal(value.to_s)
+        end
+      end
+
+      # A Swift string literal (the shared escaper).
+      def swift_string_literal(str)
+        JsonUIShared::StringLiterals.swift(str)
+      end
+
+      # CollectionDataSource defaultValue → Swift initializer literal.
+      # Shapes (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]`
+      # (one section holding these cell dicts) or explicit
+      # `{"sections" => [{"cell" => name?, "cells" => [ {...} ],
+      # "header" => {...}?, "footer" => {...}?}]}`. Cell dicts emit as
+      # [String: Any] literals with string/number/bool values only; a
+      # section's header / footer dict is its header / footer data, the view
+      # named by the node's own `sections` declaration (from jsonui-cli 1.9.0;
+      # until then the header and footer were dropped, and a declared header
+      # drew nothing on the codegen paths).
+      def collection_data_source_literal(value)
+        sections =
+          if value.is_a?(Array)
+            [{ 'cell' => nil, 'cells' => value }]
+          elsif value.is_a?(Hash) && value['sections'].is_a?(Array)
+            value['sections']
+          else
+            []
+          end
+        return 'CollectionDataSource()' if sections.empty?
+
+        section_literals = sections.map do |section|
+          next nil unless section.is_a?(Hash)
+          cells = section['cells'].is_a?(Array) ? section['cells'] : []
+          cell_dicts = cells.select { |c| c.is_a?(Hash) }.map { |cell| swift_cell_dict_literal(cell) }
+          view_name = section['cell'].is_a?(String) ? swift_string_literal(section['cell']) : '""'
+          # The initializer's order: header, cells, footer.
+          arguments = []
+          arguments << "header: (viewName: \"\", data: #{swift_cell_dict_literal(section['header'])})" if section['header'].is_a?(Hash)
+          arguments << "cells: (viewName: #{view_name}, data: [#{cell_dicts.join(', ')}])"
+          arguments << "footer: (viewName: \"\", data: #{swift_cell_dict_literal(section['footer'])})" if section['footer'].is_a?(Hash)
+          "CollectionDataSection(#{arguments.join(', ')})"
+        end.compact
+
+        "CollectionDataSource(sections: [#{section_literals.join(', ')}])"
+      end
+
+      # One cell's (or a header's, a footer's) data: a [String: Any] literal of
+      # its string / number / bool values.
+      def swift_cell_dict_literal(cell)
+        pairs = cell.map do |k, v|
+          literal =
+            case v
+            when String then swift_string_literal(v)
+            when true, false, Numeric then v.to_s
+            end
+          literal && "#{swift_string_literal(k.to_s)}: #{literal}"
+        end.compact
+        pairs.empty? ? '[:]' : "[#{pairs.join(', ')}]"
+      end
+    end
+  end
+end

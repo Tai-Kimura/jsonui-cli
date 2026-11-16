@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/flowOverflow__fill.layout.json"
+  },
+  "metadata": {
+    "name": "conformance flowOverflow__fill",
+    "description": "A matchParent flow Collection with lazy in effect, holding 12 cells inside a finite 150x100 parent, is bounded by that parent and scrolls inside it: the cells are clipped at the box. A platform that decides the scroll from the node's own declaration alone renders this like its lazy \"none\" control.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flowOverflow__fill",
+      "description": "A matchParent flow Collection with lazy in effect, holding 12 cells inside a finite 150x100 parent, is bounded by that parent and scrolls inside it: the cells are clipped at the box. A platform that decides the scroll from the node's own declaration alone renders this like its lazy \"none\" control.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_flowOverflow__fill"
+        }
+      ]
+    }
+  ]
+}

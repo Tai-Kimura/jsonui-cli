@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/fontScaling__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.fontScaling (true)",
+    "description": "Conformance fixture for 'fontScaling' on Segment (section: Segment, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "fontScaling__true",
+      "description": "Conformance fixture for 'fontScaling' on Segment (section: Segment, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_fontScaling__true"
+        }
+      ]
+    }
+  ]
+}

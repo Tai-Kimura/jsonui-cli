@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/fontScaling__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.fontScaling (true)",
+    "description": "Conformance fixture for 'fontScaling' on SelectBox (section: SelectBox, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontScaling__true",
+      "description": "Conformance fixture for 'fontScaling' on SelectBox (section: SelectBox, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_fontScaling__true"
+        }
+      ]
+    }
+  ]
+}

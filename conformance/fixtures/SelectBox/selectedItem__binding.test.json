@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/selectedItem__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.selectedItem (binding)",
+    "description": "Conformance fixture for 'selectedItem' on SelectBox (section: SelectBox, class: visual). Value under test: \"@{boundSelectedItem}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "selectedItem__binding",
+      "description": "Conformance fixture for 'selectedItem' on SelectBox (section: SelectBox, class: visual). Value under test: \"@{boundSelectedItem}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_selectedItem__binding"
+        }
+      ]
+    }
+  ]
+}

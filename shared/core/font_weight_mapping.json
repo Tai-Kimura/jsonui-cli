@@ -1,0 +1,51 @@
+{
+  "_comment": "JSON layout の `font` (weight) attribute の string 値から、各プラットフォームの weight 表現への mapping。generator (sjui_tools / kjui_tools / rjui_tools) が共通参照する。未知の値は `regular` フォールバック + warning。",
+  "weights": {
+    "ultraLight": {
+      "swift": ".ultraLight",
+      "kotlin": "FontWeight.ExtraLight",
+      "css": "200"
+    },
+    "thin": {
+      "swift": ".thin",
+      "kotlin": "FontWeight.Thin",
+      "css": "100"
+    },
+    "light": {
+      "swift": ".light",
+      "kotlin": "FontWeight.Light",
+      "css": "300"
+    },
+    "regular": {
+      "swift": ".regular",
+      "kotlin": "FontWeight.Normal",
+      "css": "normal"
+    },
+    "medium": {
+      "swift": ".medium",
+      "kotlin": "FontWeight.Medium",
+      "css": "500"
+    },
+    "semibold": {
+      "swift": ".semibold",
+      "kotlin": "FontWeight.SemiBold",
+      "css": "600"
+    },
+    "bold": {
+      "swift": ".bold",
+      "kotlin": "FontWeight.Bold",
+      "css": "bold"
+    },
+    "heavy": {
+      "swift": ".heavy",
+      "kotlin": "FontWeight.Black",
+      "css": "900"
+    },
+    "black": {
+      "swift": ".black",
+      "kotlin": "FontWeight.Black",
+      "css": "900"
+    }
+  },
+  "default_on_unknown": "regular"
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/contentType__name.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.contentType (name)",
+    "description": "Conformance fixture for 'contentType' on TextField (section: TextField, class: visual). Value under test: \"name\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentType__name",
+      "description": "Conformance fixture for 'contentType' on TextField (section: TextField, class: visual). Value under test: \"name\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_contentType__name"
+        }
+      ]
+    }
+  ]
+}

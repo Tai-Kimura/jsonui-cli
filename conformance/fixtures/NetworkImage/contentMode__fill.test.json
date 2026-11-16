@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/contentMode__fill.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.contentMode (fill)",
+    "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"fill\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__fill",
+      "description": "Conformance fixture for 'contentMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"fill\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_contentMode__fill"
+        }
+      ]
+    }
+  ]
+}

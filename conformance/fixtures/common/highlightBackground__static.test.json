@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/highlightBackground__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.highlightBackground (static)",
+    "description": "Conformance fixture for 'highlightBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "highlightBackground__static",
+      "description": "Conformance fixture for 'highlightBackground' on Button (section: common, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_highlightBackground__static"
+        }
+      ]
+    }
+  ]
+}

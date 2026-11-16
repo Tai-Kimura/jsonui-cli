@@ -1,0 +1,149 @@
+"""Which top-level keys `jui.config.json` has meaning for.
+
+A misspelled key does nothing and says nothing. That is how `extends` was
+found to fail twice in one day: first a value that named no file, reported in
+v1.7.9, and then the key itself written `extend` — which is not a broken
+declaration, it is no declaration, and the tools have never had an opinion
+about keys they do not recognise.
+
+The visible effect is that the settings simply do not arrive. For `extends`
+that means the naming convention is not read and parameter names come out
+spelled the API document's way; for `mockDir` it would mean the contract check
+does not run. In both cases the run is green and the output is exactly what a
+project that never configured the thing would produce. Only A/B finds it.
+
+The set is a declaration, not logic: each key is read by exactly one tool
+(`test` by two). A key added to a reader and not here is a warning on every
+config that uses it — `infra` (read since 2.3.9), `db` and `build` (since 1.1.0) were, and the warning
+said the settings never arrived when they did. The readers' keys are collected
+from their code and held to this set (document_tools/tests/
+test_config_keys_readers.py), so that gap is a failing test.
+
+Keys beginning with `_` are notes. Two consumer configs already carry `_note`
+and `_comment`, and a config is a reasonable place to explain itself.
+"""
+
+from __future__ import annotations
+
+#: Defaults for keys a project may leave out, named ONCE.
+#:
+#: 🚨 Added 2026-09-08 after a consumer measured the cost of not having them.
+#: `component_spec_directory`'s default was written as a literal in THREE
+#: places — `config_manager.DEFAULTS`, `config_manager.component_spec_directory`
+#: (the same file, twice), and `init_cmd` which writes it into new configs —
+#: while a fourth reader, `jsonui-test`'s ownership check, used a bare `.get()`
+#: with no default at all. So a project initialised before `init_cmd` started
+#: writing the key had `jui` working from the default and the ownership check
+#: silently reporting that it could not resolve the component source. The face
+#: that found it had the right directory layout the whole time.
+#:
+#: ⚠️ A default belongs here rather than in any one reader, because the cost
+#: is asymmetric: a reader that forgets to APPLY the default degrades quietly,
+#: and quiet degradation is what took a day to notice.
+DEFAULTS = {
+    "component_spec_directory": "docs/components/json",
+}
+
+
+def default_for(key: str):
+    """The default for *key*, or None when it has none.
+
+    Returns None rather than raising: a caller asking about a key with no
+    default is asking a legitimate question, and every call site here already
+    has to handle "the project did not say".
+    """
+    return DEFAULTS.get(key)
+
+
+#: Read by `jui` itself (see jui_tools/jui_cli/core/config_manager.py).
+_JUI = frozenset({
+    "project_name", "platforms", "api", "api_directory",
+    "spec_directory", "component_spec_directory", "layouts_directory",
+    "styles_directory", "images_directory", "strings_file", "type_map_file",
+    "document_tools_path", "lint", "verify", "test",
+    "build",                # build.normalizeLayouts (build_cmd._normalize_layouts_enabled)
+})
+
+#: Read by `jsonui-doc`. `infra`: the server room's folder, icons and exclude (infra/room.py, check/infra_check.py);
+#: `db`: the one database a project declared before `databases` (project_config.py reads it still).
+_DOC = frozenset({"checks", "databases", "infra", "db"})
+
+#: Read by `jsonui-test`.
+_TEST = frozenset({"mock", "test"})
+
+#: Read by shared/core, on behalf of both.
+_SHARED = frozenset({"spec", "extends"})
+
+#: Generated trees the TEST tooling writes, relative to a platform root or
+#: the project root.
+#:
+#: `jui build` records which version wrote each generated file, and finds
+#: them by walking a platform root for directories named `generated`. That
+#: walk also reaches trees another command owns, and the rule that records
+#: a file with no entry yet then stamped them with the running version of
+#: `jui build` — which never writes them. Measured across three faces: 215
+#: mocks and 16 branch tests on one, 53 and 10 on another, 14 on a third,
+#: all claimed by a command that has no step writing into a test tree
+#: (checked: zero writes in build_cmd, none in the platform build it
+#: shells out to).
+#:
+#: The mock directory is per-project and declared as `mock.mockDir`; this
+#: is the one the test tooling defaults to without asking the config
+#: (`branch_tests.py`'s `out_dir`). Both are pruned from the walk.
+TEST_OWNED_GENERATED = (
+    "tests/unit/generated",
+)
+
+KNOWN_TOP_LEVEL = _JUI | _DOC | _TEST | _SHARED
+
+#: A key that begins with this is a note to a reader, not a setting.
+NOTE_PREFIX = "_"
+
+
+def unknown_keys(config) -> list:
+    """Top-level keys no tool reads, sorted. Empty for a correct config."""
+    if not isinstance(config, dict):
+        return []
+    return sorted(
+        key for key in config
+        if isinstance(key, str)
+        and not key.startswith(NOTE_PREFIX)
+        and key not in KNOWN_TOP_LEVEL
+    )
+
+
+def message(path, keys) -> str:
+    listed = ", ".join(repr(k) for k in keys)
+    near = _nearest(keys)
+    hint = f" Did you mean {near!r}?" if near else ""
+    return (
+        f"{path}: no tool reads {listed}.{hint} A key nothing recognises is "
+        "silently ignored, so the settings under it never arrive and the run "
+        "looks like one that never configured them. Prefix a key with '_' if "
+        "it is a note."
+    )
+
+
+def _nearest(keys):
+    """The known key one edit away, when there is exactly one.
+
+    Deliberately narrow. A suggestion that is usually wrong trains readers to
+    skip the whole message, and the message is useful without it.
+    """
+    for key in keys:
+        matches = [k for k in KNOWN_TOP_LEVEL if _one_edit_apart(key, k)]
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
+def _one_edit_apart(a: str, b: str) -> bool:
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    for i in range(len(long)):
+        if long[:i] + long[i + 1:] == short:
+            return True
+    return False

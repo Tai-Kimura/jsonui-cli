@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/uncheckedColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.uncheckedColor (static)",
+    "description": "Conformance fixture for 'uncheckedColor' on Radio (section: Radio, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "uncheckedColor__static",
+      "description": "Conformance fixture for 'uncheckedColor' on Radio (section: Radio, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_uncheckedColor__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/effectStyle__thin.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.effectStyle (thin)",
+    "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Thin\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "effectStyle__thin",
+      "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Thin\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_effectStyle__thin"
+        }
+      ]
+    }
+  ]
+}

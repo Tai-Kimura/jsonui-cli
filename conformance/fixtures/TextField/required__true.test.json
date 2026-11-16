@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/required__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.required (true)",
+    "description": "Conformance fixture for 'required' on TextField (section: TextField, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "required__true",
+      "description": "Conformance fixture for 'required' on TextField (section: TextField, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_required__true"
+        }
+      ]
+    }
+  ]
+}

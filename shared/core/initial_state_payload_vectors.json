@@ -1,0 +1,1023 @@
+{
+  "version": 1,
+  "title": "initialState: test file -> launches and their payloads, or errors",
+  "description": [
+    "Shared vector for building the JSONUI_TEST_INITIAL_STATE payload (spec section 10.2). Run by the three drivers and by `jsonui-test validate`.",
+    "test is the file as written; files holds the screen test files a flow references, by the path the flow writes.",
+    "expect.launches: the launches the driver makes, in order. before is 'file' (once, before the first case) or 'case:<name>' (reopen, before that case). screens is the payload's screens object, or null when that launch carries no payload. A launch that carries a payload also carries version 1 and a fresh launchId; neither is compared here.",
+    "expect.caseFailures: cases the driver fails without running their steps, with failureReason and a code. expect.warnings: driver warnings by code. expect.validateErrors: errors `jsonui-test validate` reports, by code. A driver reads only launches / caseFailures / warnings; the CLI reads only validateErrors and warnings.",
+    "Codes are the contract; each implementation writes its own message from the code. Field order inside screens is not compared.",
+    "Drivers do not judge values: an unknown key, a null or a mistyped value travels in the payload and is rejected by the app (initial-state-coercion.json)."
+  ],
+  "cases": [
+    {
+      "name": "screen id is the layout basename, verbatim (no case change)",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/ProductDetail.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "initialState": {
+          "viewModel": {
+            "title": "x"
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "ProductDetail": {
+                "title": "x"
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "a size-class variant normalizes to its base id; directories do not count",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/settings/notification_settings@regular.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "initialState": {
+          "viewModel": {
+            "enabled": true
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "notification_settings": {
+                "enabled": true
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "shared, file initialState: one launch carries it, before the first case",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "initialState": {
+          "viewModel": {
+            "email": "a@example.com",
+            "password": ""
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          },
+          {
+            "name": "b",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "login": {
+                "email": "a@example.com",
+                "password": ""
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "shared, nothing to deliver and no launch / mocks: no launch at all",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "shared, launch only: one launch, no payload",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "launch": {
+          "clearState": true
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": null
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "shared, mocks only: one launch, no payload",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "mocks": {
+          "login": "ok"
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": null
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "an empty viewModel is the same as no initialState: no payload, and not a reason to launch",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "initialState": {
+          "viewModel": {}
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "values are passed as written, null included (the app judges them, not the driver)",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "initialState": {
+          "viewModel": {
+            "nickname": null,
+            "count": 1.5,
+            "unknownKey": "x"
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "login": {
+                "nickname": null,
+                "count": 1.5,
+                "unknownKey": "x"
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "shared, a case-level initialState fails that case (setup) and only that case; the file payload still goes",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "initialState": {
+          "viewModel": {
+            "email": "a"
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          },
+          {
+            "name": "b",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "email": "b"
+              }
+            }
+          },
+          {
+            "name": "c",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "login": {
+                "email": "a"
+              }
+            }
+          }
+        ],
+        "caseFailures": [
+          {
+            "case": "b",
+            "failureReason": "setup",
+            "code": "case-initial-state-needs-reopen"
+          }
+        ],
+        "warnings": [],
+        "validateErrors": [
+          {
+            "code": "case-initial-state-needs-reopen",
+            "case": "b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "caseIsolation absent means shared",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "email": "b"
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "launches": [],
+        "caseFailures": [
+          {
+            "case": "a",
+            "failureReason": "setup",
+            "code": "case-initial-state-needs-reopen"
+          }
+        ],
+        "warnings": [],
+        "validateErrors": [
+          {
+            "code": "case-initial-state-needs-reopen",
+            "case": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reopen: one launch per case, file merged with case, key by key",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "caseIsolation": "reopen",
+        "initialState": {
+          "viewModel": {
+            "email": "a",
+            "password": "p"
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          },
+          {
+            "name": "b",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "email": "b"
+              }
+            }
+          },
+          {
+            "name": "c",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "remember": true
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "case:a",
+            "screens": {
+              "login": {
+                "email": "a",
+                "password": "p"
+              }
+            }
+          },
+          {
+            "before": "case:b",
+            "screens": {
+              "login": {
+                "email": "b",
+                "password": "p"
+              }
+            }
+          },
+          {
+            "before": "case:c",
+            "screens": {
+              "login": {
+                "email": "a",
+                "password": "p",
+                "remember": true
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "reopen: the merge is shallow — a case's object value replaces the file's whole, it is not merged into it",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "caseIsolation": "reopen",
+        "initialState": {
+          "viewModel": {
+            "filters": {
+              "a": 1,
+              "b": 2
+            }
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "filters": {
+                  "a": 3
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "case:a",
+            "screens": {
+              "login": {
+                "filters": {
+                  "a": 3
+                }
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "reopen: a case's null overrides the file's value (null is a value, not 'unset')",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "caseIsolation": "reopen",
+        "initialState": {
+          "viewModel": {
+            "nickname": "n"
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "nickname": null
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "case:a",
+            "screens": {
+              "login": {
+                "nickname": null
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "reopen: a case with nothing to deliver still reopens, without a payload",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "caseIsolation": "reopen",
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          },
+          {
+            "name": "b",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "initialState": {
+              "viewModel": {
+                "email": "b"
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "case:a",
+            "screens": null
+          },
+          {
+            "before": "case:b",
+            "screens": {
+              "login": {
+                "email": "b"
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "reopen: a case gated out opens nothing",
+      "test": {
+        "type": "screen",
+        "source": {
+          "layout": "Layouts/login.json"
+        },
+        "metadata": {
+          "name": "t"
+        },
+        "caseIsolation": "reopen",
+        "initialState": {
+          "viewModel": {
+            "email": "a"
+          }
+        },
+        "cases": [
+          {
+            "name": "a",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          },
+          {
+            "name": "b",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ],
+            "skip": true
+          },
+          {
+            "name": "c",
+            "steps": [
+              {
+                "assert": "visible",
+                "id": "title_label"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "case:a",
+            "screens": {
+              "login": {
+                "email": "a"
+              }
+            }
+          },
+          {
+            "before": "case:c",
+            "screens": {
+              "login": {
+                "email": "a"
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "flow: viewModels is the payload's screens as written, keyed by screen id",
+      "test": {
+        "type": "flow",
+        "sources": [
+          {
+            "layout": "Layouts/login.json"
+          },
+          {
+            "layout": "Layouts/home.json"
+          }
+        ],
+        "metadata": {
+          "name": "f"
+        },
+        "initialState": {
+          "viewModels": {
+            "login": {
+              "email": "a"
+            },
+            "home": {
+              "tab": 1
+            }
+          }
+        },
+        "steps": [
+          {
+            "screen": "login",
+            "action": "tap",
+            "id": "sign_in_button"
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "login": {
+                "email": "a"
+              },
+              "home": {
+                "tab": 1
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "flow: a referenced file's / case's initialState is not applied inside the flow — warned, never delivered",
+      "test": {
+        "type": "flow",
+        "sources": [
+          {
+            "layout": "Layouts/login.json"
+          },
+          {
+            "layout": "Layouts/home.json"
+          }
+        ],
+        "metadata": {
+          "name": "f"
+        },
+        "steps": [
+          {
+            "file": "screens/login"
+          },
+          {
+            "file": "screens/home",
+            "case": "b"
+          }
+        ]
+      },
+      "files": {
+        "screens/login": {
+          "type": "screen",
+          "source": {
+            "layout": "Layouts/login.json"
+          },
+          "metadata": {
+            "name": "t"
+          },
+          "initialState": {
+            "viewModel": {
+              "email": "a"
+            }
+          },
+          "cases": [
+            {
+              "name": "a",
+              "steps": [
+                {
+                  "assert": "visible",
+                  "id": "title_label"
+                }
+              ]
+            }
+          ]
+        },
+        "screens/home": {
+          "type": "screen",
+          "source": {
+            "layout": "Layouts/home.json"
+          },
+          "metadata": {
+            "name": "t"
+          },
+          "cases": [
+            {
+              "name": "a",
+              "steps": [
+                {
+                  "assert": "visible",
+                  "id": "title_label"
+                }
+              ]
+            },
+            {
+              "name": "b",
+              "steps": [
+                {
+                  "assert": "visible",
+                  "id": "title_label"
+                }
+              ],
+              "initialState": {
+                "viewModel": {
+                  "tab": 2
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "launches": [],
+        "caseFailures": [],
+        "warnings": [
+          {
+            "code": "referenced-initial-state-ignored",
+            "file": "screens/login"
+          },
+          {
+            "code": "referenced-initial-state-ignored",
+            "file": "screens/home",
+            "case": "b"
+          }
+        ],
+        "validateErrors": []
+      }
+    },
+    {
+      "name": "flow: initialState.screen is removed from the schema",
+      "test": {
+        "type": "flow",
+        "sources": [
+          {
+            "layout": "Layouts/login.json"
+          },
+          {
+            "layout": "Layouts/home.json"
+          }
+        ],
+        "metadata": {
+          "name": "f"
+        },
+        "initialState": {
+          "screen": "login",
+          "viewModels": {
+            "login": {
+              "email": "a"
+            }
+          }
+        },
+        "steps": [
+          {
+            "screen": "login",
+            "action": "tap",
+            "id": "sign_in_button"
+          }
+        ]
+      },
+      "expect": {
+        "launches": [
+          {
+            "before": "file",
+            "screens": {
+              "login": {
+                "email": "a"
+              }
+            }
+          }
+        ],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": [
+          {
+            "code": "flow-initial-state-screen-removed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "flow: an empty viewModels is the same as none",
+      "test": {
+        "type": "flow",
+        "sources": [
+          {
+            "layout": "Layouts/login.json"
+          },
+          {
+            "layout": "Layouts/home.json"
+          }
+        ],
+        "metadata": {
+          "name": "f"
+        },
+        "initialState": {
+          "viewModels": {}
+        },
+        "steps": [
+          {
+            "screen": "login",
+            "action": "tap",
+            "id": "sign_in_button"
+          }
+        ]
+      },
+      "expect": {
+        "launches": [],
+        "caseFailures": [],
+        "warnings": [],
+        "validateErrors": []
+      }
+    }
+  ]
+}

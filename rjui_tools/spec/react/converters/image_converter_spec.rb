@@ -1,0 +1,377 @@
+# frozen_string_literal: true
+
+require_relative '../../spec_helper'
+require 'react/converters/image_converter'
+
+RSpec.describe RjuiTools::React::Converters::ImageConverter do
+  let(:default_config) { { 'use_tailwind' => true } }
+
+  def create_converter(json_data, config = nil)
+    described_class.new(json_data, config || default_config)
+  end
+
+  describe '#convert' do
+    context 'with basic image' do
+      it 'renders an img tag with src' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/path/to/image.png'
+        })
+        result = converter.convert
+        expect(result).to include('<img')
+        expect(result).to include('src="/path/to/image.png"')
+        expect(result).to include('/>')
+      end
+    end
+
+    context 'with srcName' do
+      it 'uses srcName with images path prefix' do
+        converter = create_converter({
+          'type' => 'Image',
+          'srcName' => 'logo'
+        })
+        result = converter.convert
+        expect(result).to include('src="/images/logo.svg"')
+      end
+    end
+
+    # Inverted in 2.3.22: Image declares `src`; the `url` fallback is retired
+    # (retired_attribute_spellings.json). NetworkImage declares url.
+    context 'with url instead of src' do
+      it 'does not read the retired url spelling' do
+        converter = create_converter({
+          'type' => 'Image',
+          'url' => 'https://example.com/image.jpg'
+        })
+        result = converter.convert
+        expect(result).not_to include('src="https://example.com/image.jpg"')
+      end
+    end
+
+    context 'with defaultImage' do
+      it 'uses defaultImage as fallback' do
+        converter = create_converter({
+          'type' => 'Image',
+          'defaultImage' => 'default.png'
+        })
+        result = converter.convert
+        expect(result).to include('src="/images/default.png"')
+      end
+    end
+
+    context 'with no source specified' do
+      it 'uses placeholder image' do
+        converter = create_converter({
+          'type' => 'Image'
+        })
+        result = converter.convert
+        expect(result).to include('src="/images/placeholder.png"')
+      end
+    end
+
+    context 'with binding expression' do
+      it 'converts src binding to JSX expression' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '@{imageUrl}'
+        })
+        result = converter.convert
+        expect(result).to include('src={data.imageUrl}')
+      end
+    end
+
+    context 'with alt text' do
+      it 'includes alt attribute' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'alt' => 'Test Image'
+        })
+        result = converter.convert
+        expect(result).to include('alt="Test Image"')
+      end
+    end
+
+    context 'with accessibilityLabel' do
+      it 'uses accessibilityLabel as alt' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'accessibilityLabel' => 'Accessible Image'
+        })
+        result = converter.convert
+        expect(result).to include('alt="Accessible Image"')
+      end
+
+      # The other declared alias of alt (the spelling kjui used to read).
+      it 'uses contentDescription as alt' do
+        converter = create_converter({ 'type' => 'Image', 'src' => '/image.png', 'contentDescription' => 'Described Image' })
+        expect(converter.convert).to include('alt="Described Image"')
+      end
+    end
+
+    # A bound alt is text, "" when the value is unset — decorative then, as
+    # an absent alt is (shared/core/image_accessibility.rb). It used to be
+    # pasted into the attribute as the characters `@{photoLabel}`.
+    context 'with a bound alt' do
+      it 'reads the value as text' do
+        result = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => '@{photoLabel}' }).convert
+        expect(result).to include('alt={`${data.photoLabel ?? ""}`}')
+        expect(result).not_to include('@{photoLabel}')
+      end
+    end
+
+    # Regression: rjui-image-src-bare-name-string-key-collision — a src that
+    # matches a strings.json key must NEVER be resolved through the string
+    # table (the img src silently became UI text the moment the key was
+    # registered), and bare names get a build warning steering to srcName.
+    context 'src string-key collision guard' do
+      it 'never resolves src through the string table and warns on collision' do
+        converter = create_converter({ 'type' => 'Image', 'src' => 'close' })
+        allow(converter).to receive(:convert_string_key)
+          .with('close')
+          .and_return('{StringManager.currentLanguage.reservationsClose}')
+        expect(RjuiTools::Core::Logger).to receive(:warn)
+          .with(/collides with a strings\.json key/)
+        result = converter.convert
+        expect(result).to include('src="close"')
+        expect(result).not_to include('StringManager')
+      end
+
+      it 'warns on a bare name without a key collision' do
+        converter = create_converter({ 'type' => 'Image', 'src' => 'check' })
+        allow(converter).to receive(:convert_string_key).and_return(nil)
+        expect(RjuiTools::Core::Logger).to receive(:warn)
+          .with(/bare name.*srcName/m)
+        result = converter.convert
+        expect(result).to include('src="check"')
+      end
+
+      it 'does not warn for paths, URLs, or bindings' do
+        expect(RjuiTools::Core::Logger).not_to receive(:warn)
+        expect(create_converter({ 'type' => 'Image', 'src' => '/images/close.svg' }).convert).to include('src="/images/close.svg"')
+        expect(create_converter({ 'type' => 'Image', 'src' => 'https://x.test/a.png' }).convert).to include('src="https://x.test/a.png"')
+        expect(create_converter({ 'type' => 'Image', 'src' => '@{imageUrl}' }).convert).to include('src={data.imageUrl}')
+      end
+    end
+
+    # Regression companion: alt is user-visible text, so it resolves
+    # strings.json keys exactly like text/hint.
+    context 'alt string-key resolution' do
+      it 'resolves a registered key to a StringManager reference' do
+        converter = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => 'hourly_rule_row_locked' })
+        allow(converter).to receive(:convert_string_key)
+          .with('hourly_rule_row_locked')
+          .and_return('{StringManager.currentLanguage.hourlyRuleRowLocked}')
+        result = converter.convert
+        expect(result).to include('alt={StringManager.currentLanguage.hourlyRuleRowLocked}')
+      end
+
+      it 'keeps unregistered literals and empty decorative alt raw' do
+        converter = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => 'Plain alt' })
+        allow(converter).to receive(:convert_string_key).and_return(nil)
+        expect(converter.convert).to include('alt="Plain alt"')
+
+        decorative = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => '' })
+        expect(decorative.convert).to include('alt=""')
+      end
+    end
+  end
+
+  describe '#build_class_name' do
+    context 'with contentMode' do
+      it 'maps aspectFit to object-contain' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'contentMode' => 'AspectFit'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-contain')
+      end
+
+      it 'maps AspectFill to object-cover' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'contentMode' => 'AspectFill'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-cover')
+      end
+
+      it 'maps center to object-none object-center' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'contentMode' => 'center'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-none')
+        expect(classes).to include('object-center')
+      end
+
+      it 'maps ScaleToFill to object-fill' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'contentMode' => 'ScaleToFill'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-fill')
+      end
+
+      # Canonical rulings (shared/core/attribute_semantics.json, 2026-08-03):
+      # the default contentMode is fit on every platform, and fill is the
+      # stretch (scaleToFill synonym) — AspectFill is the crop.
+      it 'defaults to object-contain (canonical default = fit)' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-contain')
+        expect(classes).not_to include('object-cover')
+      end
+
+      it 'maps fill to object-fill (stretch, not crop)' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'contentMode' => 'fill'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('object-fill')
+        expect(classes).not_to include('object-cover')
+      end
+    end
+
+    context 'with CircleImage type' do
+      it 'adds rounded-full class' do
+        converter = create_converter({
+          'type' => 'CircleImage',
+          'src' => '/avatar.png'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('rounded-full')
+      end
+    end
+
+    context 'with canTap' do
+      it 'adds cursor-pointer class' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'canTap' => true
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('cursor-pointer')
+      end
+    end
+
+    context 'with onclick' do
+      it 'adds cursor-pointer class' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'onclick' => 'handleClick'
+        })
+        classes = converter.send(:build_class_name)
+        expect(classes).to include('cursor-pointer')
+      end
+    end
+  end
+
+  describe '#build_style_attr' do
+    context 'with cornerRadius' do
+      it 'adds borderRadius style' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'cornerRadius' => 8
+        })
+        converter.send(:build_class_name)
+        result = converter.send(:build_style_attr)
+        expect(result).to include("borderRadius: '8px'")
+      end
+
+      it 'does not add borderRadius for CircleImage' do
+        converter = create_converter({
+          'type' => 'CircleImage',
+          'src' => '/avatar.png',
+          'cornerRadius' => 8
+        })
+        converter.send(:build_class_name)
+        result = converter.send(:build_style_attr)
+        expect(result).not_to include('borderRadius')
+      end
+    end
+  end
+
+  # The click is BaseConverter#build_onclick_attr's, as on every type (the
+  # Image's own replaced it and wrote the selector bare, `{handleImageClick}`,
+  # and read `canTap` on no spelling — can_tap_gates_every_tap_spec).
+  describe '#build_onclick_attr' do
+    context 'with onclick' do
+      it 'calls the selector on the data' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'canTap' => true,
+          'onclick' => 'handleImageClick'
+        })
+        result = converter.convert
+        expect(result).to include('onClick={() => data.handleImageClick?.()}')
+      end
+    end
+
+    # `name:` is UIKit's sender mark; the web's sender is the event the
+    # handler is handed. It was `() => handleImageClick(this)`.
+    context 'with onclick using colon syntax' do
+      it 'hands the handler the event' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'canTap' => true,
+          'onclick' => 'handleImageClick:'
+        })
+        result = converter.convert
+        expect(result).to include('onClick={(e) => data.handleImageClick?.(e)}')
+      end
+    end
+
+    context 'without canTap' do
+      it 'adds onClick (no canTap is no gate)' do
+        converter = create_converter({
+          'type' => 'Image',
+          'src' => '/image.png',
+          'onclick' => 'handleImageClick'
+        })
+        result = converter.convert
+        expect(result).to include('onClick={() => data.handleImageClick?.()}')
+      end
+    end
+  end
+
+  describe 'testId and tag attributes' do
+    it 'includes data-testid when testId is present' do
+      converter = create_converter({
+        'type' => 'Image',
+        'src' => '/image.png',
+        'testId' => 'hero-image'
+      })
+      result = converter.convert
+      expect(result).to include('data-testid="hero-image"')
+    end
+
+    it 'includes data-tag when tag is present' do
+      converter = create_converter({
+        'type' => 'Image',
+        'src' => '/image.png',
+        'tag' => 'product-image'
+      })
+      result = converter.convert
+      expect(result).to include('data-tag="product-image"')
+    end
+  end
+end

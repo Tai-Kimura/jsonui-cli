@@ -1,0 +1,16 @@
+{
+  "name": "jsonui",
+  "owner": {
+    "name": "Tai-Kimura"
+  },
+  "metadata": {
+    "description": "Claude Code plugins of the JsonUI toolchain"
+  },
+  "plugins": [
+    {
+      "name": "jui-viz",
+      "source": "./plugins/jui-viz",
+      "description": "Forward Claude Code activity to the local jui viz page"
+    }
+  ]
+}

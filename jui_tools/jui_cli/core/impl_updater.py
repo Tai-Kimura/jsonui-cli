@@ -1,0 +1,590 @@
+"""In-place rewrites of ViewModel Impl source files.
+
+Two responsibilities:
+
+1. **Inheritance list completion** — ensure ``<Name>ViewModelProtocol`` is
+   present in the class's inheritance list. Handles multi-line declarations,
+   ``where`` clauses, Kotlin ``@Annotation constructor`` / primary
+   constructor parentheses, Swift generic parameters.
+2. **Override modifier injection (Kotlin only)** — any method paired with a
+   ``@jui:protocol`` marker *or* auto-imported from ``spec.event_handlers``
+   must carry ``override``. We don't touch Swift — protocol conformance in
+   Swift doesn't require an override keyword.
+
+All writes go through ``atomic_write_text``.
+
+All operations are idempotent: a second run against the output of the first
+yields a zero diff.
+"""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+from .class_scope import member_filter, member_lines
+
+
+# --------------------------------------------------------------------------- #
+# Atomic write
+# --------------------------------------------------------------------------- #
+
+def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> bool:
+    """Write *content* to *path* atomically via a tmp file + ``os.replace``.
+
+    Returns True if content actually changed on disk, False otherwise (the
+    caller can use this for log output). Skips the write entirely when the
+    new content matches what's already there — preserving idempotency and
+    avoiding needless filesystem churn.
+    """
+    if path.exists():
+        try:
+            existing = path.read_text(encoding=encoding)
+        except OSError:
+            existing = None
+        if existing == content:
+            return False
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(content, encoding=encoding)
+    os.replace(tmp_path, path)
+    return True
+
+
+# --------------------------------------------------------------------------- #
+# Swift
+# --------------------------------------------------------------------------- #
+
+#: Balanced parentheses, three levels deep: a primary constructor's default
+#: arguments (`x: Foo = foo(bar(baz()))`) and an annotation's arguments.
+_PARENS = r"\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)"
+#: One annotation / attribute: `@Inject`, `@param:Named("a")`, `@objc(Name)`,
+#: `@MainActor`. Kotlin's use-site target (`param:`) is optional.
+_ANNOTATION = r"@(?:\w+:)?[\w.]+(?:" + _PARENS + r")?"
+
+# Match `class <Name> [: <inheritance>] [where <clause>] {`
+# - inheritance captures a comma list that can span lines
+# - where clause optional, captured separately so we can keep its body intact
+SWIFT_CLASS_HEADER_RE = re.compile(
+    r"(?P<prefix>"
+    r"(?:(?:^|\n)[ \t]*)"
+    # Attributes on the class's own line (`@MainActor final class …`) and
+    # every access / inheritance modifier, in any order (ticket
+    # jui-protocol-sync-kotlin-class-header-…: the same shape on both sides).
+    r"(?:(?:" + _ANNOTATION + r"|public|package|internal|private|fileprivate|open|final)\s+)*"
+    r"class\s+(?P<name>\w+)(?:<[^>{]+>)?"
+    r")"
+    r"(?P<inherit>\s*:\s*[\s\S]+?)?"
+    r"(?P<where>\s+where\s+[\s\S]+?)?"
+    r"(?P<brace>\s*\{)",
+    re.MULTILINE,
+)
+
+
+def ensure_swift_inheritance(
+    source: str,
+    class_name: str,
+    protocol_name: str,
+) -> str:
+    """Add *protocol_name* to *class_name*'s inheritance list if missing.
+
+    Preserves:
+    - existing inheritance entries and their order
+    - leading indentation of the inheritance continuation
+    - ``where`` clauses (appended *after* the inheritance list)
+    """
+    matched = {"value": False}
+
+    def _replace(m: re.Match[str]) -> str:
+        if m.group("name") != class_name:
+            return m.group(0)
+        matched["value"] = True
+        prefix = m.group("prefix")
+        inherit = m.group("inherit") or ""
+        where = m.group("where") or ""
+        brace = m.group("brace")
+
+        entries = _split_inheritance(inherit)
+        if protocol_name in entries:
+            return m.group(0)
+
+        entries.append(protocol_name)
+        new_inherit = ": " + ", ".join(entries)
+        return f"{prefix} {new_inherit}{where}{brace}"
+
+    new_source = SWIFT_CLASS_HEADER_RE.sub(_replace, source)
+    if not matched["value"]:
+        raise ValueError(
+            f"Swift class '{class_name}' not found in source "
+            "(tried multi-line class header with optional where clause)."
+        )
+    return new_source
+
+
+def _split_inheritance(raw: str) -> list[str]:
+    """Split an inheritance clause like ``: Foo, Bar,\n    Baz`` into
+    ``["Foo", "Bar", "Baz"]``.
+
+    Preserves comma-separated entries but drops whitespace + the leading ``:``.
+    """
+    if not raw:
+        return []
+    # Drop leading whitespace + ':'
+    body = raw.lstrip()
+    if body.startswith(":"):
+        body = body[1:]
+    return [e.strip() for e in body.split(",") if e.strip()]
+
+
+# --------------------------------------------------------------------------- #
+# Kotlin
+# --------------------------------------------------------------------------- #
+
+# Kotlin class header: class <Name>[<Generics>] [modifiers constructor] [(...)]
+# [: Super(...) [, Iface...]] [where ...] {
+#
+# The primary constructor is Kotlin's grammar: any annotations and at most a
+# visibility modifier, then `constructor` (`@Inject constructor`, `internal
+# constructor`, `@Inject internal constructor`, a bare `constructor`). Only
+# `@Ann constructor` was accepted, so a class written with a visibility on its
+# constructor — the usual way to give a test its own dependencies — failed
+# protocol sync with "Kotlin class '…' not found in source" (a consumer lane,
+# 2026-09-25).
+KOTLIN_CLASS_HEADER_RE = re.compile(
+    r"(?P<prefix>"
+    r"(?:(?:^|\n)[ \t]*)"
+    r"(?:(?:" + _ANNOTATION + r"|public|internal|private|protected|abstract|open|sealed"
+    r"|data|value|inner|final|expect|actual)\s+)*"
+    r"class\s+(?P<name>\w+)(?:<[^>{]+>)?"
+    r"(?:\s*(?:" + _ANNOTATION + r"\s+)*(?:(?:public|internal|private|protected)\s+)?"
+    r"(?:" + _ANNOTATION + r"\s+)*constructor\b)?"
+    r"(?:\s*" + _PARENS + r")?"
+    r")"
+    r"(?P<inherit>\s*:\s*[\s\S]+?)?"
+    r"(?P<where>\s+where\s+[\s\S]+?)?"
+    r"(?P<brace>\s*\{)",
+    re.MULTILINE,
+)
+
+
+def ensure_kotlin_inheritance(
+    source: str,
+    class_name: str,
+    protocol_name: str,
+) -> str:
+    """Add *protocol_name* to *class_name*'s inheritance list if missing."""
+    matched = {"value": False}
+
+    def _replace(m: re.Match[str]) -> str:
+        if m.group("name") != class_name:
+            return m.group(0)
+        matched["value"] = True
+        prefix = m.group("prefix")
+        inherit = m.group("inherit") or ""
+        where = m.group("where") or ""
+        brace = m.group("brace")
+
+        entries = _split_kotlin_inheritance(inherit)
+        # Compare against the plain identifier (strip ctor args / generics).
+        simple_names = [_strip_kotlin_entry_suffix(e) for e in entries]
+        if protocol_name in simple_names:
+            return m.group(0)
+
+        entries.append(protocol_name)
+        new_inherit = " : " + ", ".join(entries)
+        return f"{prefix}{new_inherit}{where}{brace}"
+
+    new_source = KOTLIN_CLASS_HEADER_RE.sub(_replace, source)
+    if not matched["value"]:
+        raise ValueError(
+            f"Kotlin class '{class_name}' not found in source."
+        )
+    return new_source
+
+
+_KOTLIN_PACKAGE_RE = re.compile(r"^package[ \t]+(\S+)[ \t]*$", re.MULTILINE)
+_KOTLIN_IMPORT_RE = re.compile(r"^import[ \t]+(\S+)[ \t]*$", re.MULTILINE)
+
+
+_TS_IMPORT_LINE_RE = re.compile(r"^import[^\n]*;[ \t]*$", re.MULTILINE)
+
+
+_TS_NAMED_IMPORT_RE = re.compile(r"^import\s+(?:type\s+)?\{\s*([A-Za-z_$][\w$]*)\s*\}")
+
+
+def _ts_has_name(source: str, name: str) -> bool:
+    """The file already imports or declares *name* (any module, any form)."""
+    word = re.compile(rf"\b{re.escape(name)}\b")
+    imports = "\n".join(m.group(0) for m in re.finditer(r"^import[^;]*;", source, re.MULTILINE))
+    declared = re.search(rf"^\s*(?:export\s+)?(?:declare\s+)?(?:interface|type|class|enum)\s+{re.escape(name)}\b",
+                         source, re.MULTILINE)
+    return bool(word.search(imports) or declared)
+
+
+def ensure_ts_imports(source: str, lines: list[str]) -> str:
+    """Insert each missing TypeScript import line after the last existing import,
+    or after the file's leading comment lines when it has none. A line naming one
+    type (``import type { X } from "…"``) is skipped when the file already imports
+    or declares ``X`` some other way: a second binding of a name does not compile."""
+    def wanted(line: str) -> bool:
+        if not line or line in source.splitlines():
+            return False
+        m = _TS_NAMED_IMPORT_RE.match(line)
+        return not (m and _ts_has_name(source, m.group(1)))
+    missing = [line for line in lines if wanted(line)]
+    if not missing:
+        return source
+    block = "\n".join(missing)
+    last = None
+    for m in _TS_IMPORT_LINE_RE.finditer(source):
+        last = m
+    if last is not None:
+        return f"{source[:last.end()]}\n{block}{source[last.end():]}"
+    head = 0
+    for line in source.splitlines(keepends=True):
+        if not line.lstrip().startswith("//"):
+            break
+        head += len(line)
+    return f"{source[:head]}{block}\n{source[head:]}"
+
+
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
+
+
+def name_used_in_body(source: str, name: str) -> bool:
+    """*name* appears as a word in the file outside its ``package`` / ``import``
+    lines and its comments: an import for it would be used. An old Impl may hold
+    only some of the spec's methods, and an import for a type no method of the
+    file names is an unused import the author's linter reports."""
+    body = _BLOCK_COMMENT_RE.sub(" ", source)
+    body = _LINE_COMMENT_RE.sub(" ", body)
+    body = "\n".join(line for line in body.splitlines()
+                     if not re.match(r"^\s*(?:import|package)\b", line))
+    return re.search(rf"(?<![\w$.]){re.escape(name)}(?![\w$])", body) is not None
+
+
+def import_line_name(line: str) -> str | None:
+    """The one name a Kotlin (``import a.b.Name``) or TypeScript
+    (``import type { Name } from "…"``) import line brings in."""
+    m = _TS_NAMED_IMPORT_RE.match(line)
+    if m:
+        return m.group(1)
+    m = re.match(r"^import[ \t]+(\S+)[ \t]*$", line)
+    return m.group(1).rsplit(".", 1)[-1] if m else None
+
+
+def kotlin_has_simple_name(source: str, fqn: str) -> bool:
+    """The file already imports a type of that simple name (from any package,
+    or under an alias) or declares one: importing *fqn* too would clash."""
+    name = fqn.rsplit(".", 1)[-1]
+    for m in _KOTLIN_IMPORT_RE.finditer(source):
+        imported = m.group(1)
+        if imported != fqn and imported.rsplit(".", 1)[-1] == name:
+            return True
+    if re.search(rf"^import[ \t]+\S+[ \t]+as[ \t]+{re.escape(name)}\b", source, re.MULTILINE):
+        return True
+    return bool(re.search(rf"^\s*(?:\w+\s+)*(?:class|interface|object|typealias)\s+{re.escape(name)}\b",
+                          source, re.MULTILINE))
+
+
+def ensure_kotlin_import(source: str, fqn: str) -> str:
+    """Insert ``import <fqn>`` into a Kotlin source file if missing.
+
+    Placed after the last existing ``import`` line, or after the
+    ``package`` declaration if no imports exist yet. Uses the same
+    fully-qualified form that the existing imports use, so duplicate
+    detection is exact-match only.
+    """
+    if not fqn:
+        return source
+
+    existing = {m.group(1) for m in _KOTLIN_IMPORT_RE.finditer(source)}
+    if fqn in existing:
+        return source
+
+    new_line = f"import {fqn}"
+
+    # Append after the last existing import (preserves grouping).
+    last_import = None
+    for m in _KOTLIN_IMPORT_RE.finditer(source):
+        last_import = m
+    if last_import is not None:
+        insert_at = last_import.end()
+        return f"{source[:insert_at]}\n{new_line}{source[insert_at:]}"
+
+    # No imports yet — drop the line right after the package declaration.
+    pkg = _KOTLIN_PACKAGE_RE.search(source)
+    if pkg is not None:
+        insert_at = pkg.end()
+        return f"{source[:insert_at]}\n\n{new_line}{source[insert_at:]}"
+
+    # No package either — prepend.
+    return f"{new_line}\n{source}"
+
+
+def _split_kotlin_inheritance(raw: str) -> list[str]:
+    if not raw:
+        return []
+    body = raw.lstrip()
+    if body.startswith(":"):
+        body = body[1:]
+
+    # Commas inside `Super(args)` must not split — walk the string tracking
+    # paren depth.
+    entries: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in body:
+        if ch == "(":
+            depth += 1
+            buf.append(ch)
+        elif ch == ")":
+            depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            entries.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    tail = "".join(buf).strip()
+    if tail:
+        entries.append(tail)
+    return [e for e in entries if e]
+
+
+def _strip_kotlin_entry_suffix(entry: str) -> str:
+    """``SuperClass(arg)`` → ``SuperClass``, ``Foo<T>`` → ``Foo``."""
+    entry = entry.strip()
+    # Strip trailing call args.
+    paren = entry.find("(")
+    if paren != -1:
+        entry = entry[:paren]
+    # Strip generic params.
+    angle = entry.find("<")
+    if angle != -1:
+        entry = entry[:angle]
+    return entry.strip()
+
+
+# --------------------------------------------------------------------------- #
+# Kotlin override injection
+# --------------------------------------------------------------------------- #
+
+# Match a Kotlin function declaration line, capturing the prefix (visibility +
+# suspend/inline/operator/etc.) and confirming `fun` follows. We reconstruct
+# the line with `override` injected just before `fun`.
+KOTLIN_FUN_LINE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)"
+    r"(?P<modifiers>(?:(?:public|internal|private|protected)\s+)?"
+    r"(?:override\s+)?"
+    r"(?:(?:suspend|inline|operator|infix|tailrec|abstract|open|final)\s+)*)"
+    r"fun\s+(?P<rest>.+)$"
+)
+
+
+def extract_swift_method_labels(
+    impl_source: str, method_name: str, class_name: str | None = None,
+) -> list[tuple[str, str]] | None:
+    """Return ``[(external_label, internal_name), ...]`` for *method_name*.
+
+    Returns ``None`` if no matching ``func`` declaration is found. An entry's
+    external label is:
+    - the internal name itself when Impl writes ``name: Type`` (Swift default)
+    - ``"_"`` when Impl writes ``_ name: Type`` (suppressed)
+    - the leading identifier when Impl writes ``ext name: Type``
+    """
+    func_re = re.compile(
+        r"func\s+(\w+)\s*(?:<[^>]+>)?\s*\((?P<params>[^)]*)\)",
+    )
+    # *class_name*: only the class's (and its extensions') own functions — a local function of the same name read
+    # first gave its labels instead (ticket jui-kotlin-override-inserted-on-local-val, the Swift side).
+    is_member = member_filter(impl_source, class_name, "swift")
+    for m in func_re.finditer(impl_source):
+        if m.group(1) != method_name or not is_member(m.start()):
+            continue
+        return _parse_swift_param_labels(m.group("params"))
+    return None
+
+
+def _parse_swift_param_labels(params_str: str) -> list[tuple[str, str]]:
+    """Split the param block and extract each (label, name) pair."""
+    labels: list[tuple[str, str]] = []
+    for part in _split_top_level_commas(params_str):
+        stripped = part.strip()
+        if not stripped:
+            continue
+        m = re.match(r"^\s*(?:(_|\w+)\s+)?(\w+)\s*:\s*", stripped)
+        if not m:
+            continue
+        maybe_label = m.group(1)
+        inner_name = m.group(2)
+        if maybe_label is None:
+            labels.append((inner_name, inner_name))
+        elif maybe_label == "_":
+            labels.append(("_", inner_name))
+        else:
+            labels.append((maybe_label, inner_name))
+    return labels
+
+
+def _split_top_level_commas(s: str) -> list[str]:
+    """Split on commas that are not inside nested ``<>`` / ``()`` / ``[]``."""
+    parts: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    openers = set("([{<")
+    closers = set(")]}>")
+    for ch in s:
+        if ch in openers:
+            depth += 1
+            buf.append(ch)
+        elif ch in closers:
+            depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    tail = "".join(buf)
+    if tail.strip():
+        parts.append(tail)
+    return parts
+
+
+def extract_expected_labels_from_swift_sig(
+    signature: str,
+) -> list[tuple[str, str]]:
+    """Extract expected labels from a generated Swift Protocol signature
+    like ``func foo(_ x: T, label y: U)`` → ``[("_", "x"), ("label", "y")]``.
+    """
+    m = re.search(r"\((?P<params>[^)]*)\)", signature)
+    if not m:
+        return []
+    return _parse_swift_param_labels(m.group("params"))
+
+
+def _kotlin_members(source: str, class_name: str | None) -> set[int] | None:
+    """Lines declaring a member of *class_name* (None: no restriction — no class named, or not found; the
+    inheritance step that runs first already halts on a class it cannot find)."""
+    if class_name is None:
+        return None
+    return member_lines(source, class_name, "kotlin")
+
+
+def inject_kotlin_override(
+    source: str,
+    method_names: list[str],
+    class_name: str | None = None,
+) -> str:
+    """Ensure every function declaration in *method_names* is prefixed with
+    ``override``; one that already has it is left alone.
+
+    *class_name*: only a ``fun`` declared directly in that class (see
+    :mod:`class_scope`) — a local function, or a member of a nested class,
+    companion or anonymous object, cannot override the class's protocol and
+    Kotlin refuses ``override`` there. None: every line, as before.
+    """
+    if not method_names:
+        return source
+
+    name_set = set(method_names)
+    members = _kotlin_members(source, class_name)
+    lines = source.splitlines(keepends=True)
+    for idx, line in enumerate(lines):
+        if members is not None and idx not in members:
+            continue
+        m = KOTLIN_FUN_LINE_RE.match(line.rstrip("\r\n"))
+        if not m:
+            continue
+        rest = m.group("rest")
+        # Extract the method name: `[<Generics>]? <name>(`
+        nm = re.match(r"(?:<[^>]+>\s+)?(\w+)", rest)
+        if not nm:
+            continue
+        method_name = nm.group(1)
+        if method_name not in name_set:
+            continue
+        modifiers = m.group("modifiers")
+        if "override" in modifiers.split():
+            continue
+
+        indent = m.group("indent")
+        # Insert override just before fun, after existing modifiers.
+        new_modifiers = modifiers + "override " if modifiers.strip() else "override "
+        new_line_body = f"{indent}{new_modifiers}fun {rest}"
+        # Preserve trailing newline.
+        newline = ""
+        if line.endswith("\r\n"):
+            newline = "\r\n"
+        elif line.endswith("\n"):
+            newline = "\n"
+        lines[idx] = new_line_body + newline
+    return "".join(lines)
+
+
+# Match a Kotlin var/val declaration line. Property wrappers (@JvmField,
+# @Volatile etc.) and modifiers are captured so we can reconstruct with
+# ``override`` prefixed in the right position.
+KOTLIN_VAR_LINE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)"
+    r"(?P<annotations>(?:@\w+(?:\([^)]*\))?\s+)*)"
+    r"(?P<modifiers>(?:(?:public|internal|private|protected)\s+)?"
+    r"(?:override\s+)?"
+    r"(?:(?:lateinit|abstract|open|final)\s+)*)"
+    r"(?P<keyword>var|val)\s+(?P<rest>.+)$"
+)
+
+
+def inject_kotlin_var_override(
+    source: str,
+    var_names: list[str],
+    class_name: str | None = None,
+) -> str:
+    """Ensure every ``var``/``val`` declaration in *var_names* is prefixed
+    with ``override``.
+
+    Same idempotency and *class_name* scope as ``inject_kotlin_override``: a
+    local ``val plan = …`` in a function body became ``override val plan``
+    and Kotlin refused it ("Modifier 'override' is not applicable to 'local
+    variable'"; ticket jui-kotlin-override-inserted-on-local-val). A Kotlin
+    primary constructor's ``val``/``var`` parameters are the class's
+    properties and are kept.
+    """
+    if not var_names:
+        return source
+
+    name_set = set(var_names)
+    members = _kotlin_members(source, class_name)
+    lines = source.splitlines(keepends=True)
+    for idx, line in enumerate(lines):
+        if members is not None and idx not in members:
+            continue
+        m = KOTLIN_VAR_LINE_RE.match(line.rstrip("\r\n"))
+        if not m:
+            continue
+        rest = m.group("rest")
+        nm = re.match(r"(\w+)", rest)
+        if not nm:
+            continue
+        var_name = nm.group(1)
+        if var_name not in name_set:
+            continue
+        modifiers = m.group("modifiers")
+        if "override" in modifiers.split():
+            continue
+
+        indent = m.group("indent")
+        annotations = m.group("annotations")
+        keyword = m.group("keyword")
+        new_modifiers = modifiers + "override " if modifiers.strip() else "override "
+        new_line_body = f"{indent}{annotations}{new_modifiers}{keyword} {rest}"
+        newline = ""
+        if line.endswith("\r\n"):
+            newline = "\r\n"
+        elif line.endswith("\n"):
+            newline = "\n"
+        lines[idx] = new_line_body + newline
+    return "".join(lines)

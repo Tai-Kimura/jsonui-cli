@@ -1,0 +1,21 @@
+{
+  "Resources": {
+    "OrdersTable5A7D1B2C": {
+      "Type": "AWS::DynamoDB::Table",
+      "Metadata": {"aws:cdk:path": "AppStack/Orders/Resource"}
+    },
+    "PaymentWebhookHandlerServiceRole3C1A9F2B": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {"aws:cdk:path": "AppStack/PaymentWebhookHandler/ServiceRole/Resource"}
+    },
+    "ApiHandlerF00DCAFE": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Role": {"Fn::GetAtt": ["PaymentWebhookHandlerServiceRole3C1A9F2B", "Arn"]},
+        "Environment": {"Variables": {"TABLE": {"Ref": "OrdersTable5A7D1B2C"}}}
+      },
+      "Metadata": {"aws:cdk:path": "AppStack/ApiHandler/Resource"}
+    },
+    "CDKMetadata": {"Type": "AWS::CDK::Metadata"}
+  }
+}

@@ -1,0 +1,160 @@
+# frozen_string_literal: true
+
+require_relative 'base_converter'
+
+module RjuiTools
+  module React
+    module Converters
+      class WebConverter < BaseConverter
+        # A replaced element (<iframe>) has no ::after: a declared border falls
+        # back to an outline (BaseConverter#pseudo_border_supported?).
+        def pseudo_border_supported?
+          false
+        end
+
+        def convert(indent = 2)
+          class_name = build_class_name
+          style_attr = build_style_attr
+          id_attr = build_id_attr
+          testid_attr = build_testid_attr
+          tag_attr = build_tag_attr
+
+          # Build iframe attributes
+          src = build_src_attr
+          sandbox_attr = build_sandbox_attr
+          allow_attr = build_allow_attr
+          title_attr = build_title_attr
+          loading_attr = build_loading_attr
+
+          jsx = "#{indent_str(indent)}<iframe#{id_attr} className=\"#{class_name}\"#{src}#{title_attr}#{sandbox_attr}#{allow_attr}#{loading_attr}#{style_attr}#{testid_attr}#{tag_attr} />"
+
+          wrap_with_visibility(jsx, indent)
+        end
+
+        protected
+
+        def build_class_name
+          classes = [super]
+
+          # Default border none for iframe
+          classes << 'border-0'
+
+          # Scrolling behavior
+          scrolling = attributes['scrollEnabled']
+          classes << 'overflow-hidden' if scrolling == false
+
+          finalize_classes(classes)
+        end
+
+        def build_src_attr
+          url = attributes['url']
+          html = attributes['html']
+
+          if url
+            if has_binding?(url)
+              # One expression (attribute_expression): extract_binding_property
+              # reads a whole-value binding only, and text around one came
+              # out as `src={data.}`.
+              " src={#{attribute_expression(url)}}"
+            else
+              jsx_attr_text('src', url)
+            end
+          elsif html
+            # For HTML content, use srcdoc
+            if has_binding?(html)
+              " srcDoc={#{attribute_expression(html)}}"
+            else
+              jsx_attr_text('srcDoc', html)
+            end
+          else
+            ''
+          end
+        end
+
+        def build_sandbox_attr
+          # Check if sandbox should be disabled entirely
+          return '' if attributes['sandbox'] == false
+
+          # Build sandbox permissions based on JSON config
+          permissions = []
+
+          # JavaScript enabled
+          permissions << 'allow-scripts' if attributes['javaScriptEnabled'] != false
+
+          # Allow same origin for most functionality
+          permissions << 'allow-same-origin'
+
+          # Allow popups if JavaScript can open windows
+          permissions << 'allow-popups' if attributes['javaScriptCanOpenWindowsAutomatically']
+
+          # Allow popups to escape sandbox
+          permissions << 'allow-popups-to-escape-sandbox' if attributes['allowPopupsToEscapeSandbox']
+
+          # Allow forms
+          permissions << 'allow-forms'
+
+          # Allow modals
+          permissions << 'allow-modals' if attributes['allowModals']
+
+          # Allow downloads
+          permissions << 'allow-downloads' if attributes['allowDownloads']
+
+          return '' if permissions.empty?
+
+          " sandbox=\"#{permissions.join(' ')}\""
+        end
+
+        def build_allow_attr
+          allows = []
+
+          # The declared `allow` attribute: a raw feature-policy string, and the
+          # only one of these an author can find in the definitions. It goes
+          # first, then the convenience flags top it up — a policy is a token
+          # list, so the union is well-formed and nothing an author asked for
+          # gets dropped.
+          # A bound policy is the data's string at run time, ahead of the flags.
+          bound_allow = has_binding?(attributes['allow']) && bound_value_expr(attributes['allow'])
+          if bound_allow
+            allows << (bound_allow.start_with?('`') ? bound_allow[1..-2] : "${#{bound_allow} ?? ''}")
+          elsif attributes['allow'].is_a?(String) && !attributes['allow'].empty?
+            allows.concat(attributes['allow'].split(';').map(&:strip).reject(&:empty?))
+          end
+
+          # Inline media playback
+          allows << 'autoplay' if attributes['allowsInlineMediaPlayback']
+
+          # Fullscreen
+          allows << 'fullscreen' if attributes['allowsFullScreen'] != false
+
+          # Camera/Microphone
+          allows << 'camera' if attributes['allowCamera']
+          allows << 'microphone' if attributes['allowMicrophone']
+
+          # Geolocation
+          allows << 'geolocation' if attributes['allowGeolocation']
+
+          allows = allows.uniq
+          return '' if allows.empty?
+
+          return " allow={`#{allows.join('; ')}`}" if bound_allow
+
+          " allow=\"#{allows.join('; ')}\""
+        end
+
+        def build_title_attr
+          title = attributes['title']
+          return '' unless title
+
+          jsx_attr_text('title', title)
+        end
+
+        def build_loading_attr
+          lazy = attributes['lazyLoad']
+          return '' unless lazy
+
+          ' loading="lazy"'
+        end
+      end
+    end
+  end
+end

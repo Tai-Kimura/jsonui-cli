@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/GradientView/gradientType__linear.layout.json"
+  },
+  "metadata": {
+    "name": "conformance GradientView.gradientType (linear)",
+    "description": "Conformance fixture for 'gradientType' on GradientView (section: GradientView, class: visual). Value under test: \"linear\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "GradientView"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "gradientType__linear",
+      "description": "Conformance fixture for 'gradientType' on GradientView (section: GradientView, class: visual). Value under test: \"linear\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "GradientView_gradientType__linear"
+        }
+      ]
+    }
+  ]
+}

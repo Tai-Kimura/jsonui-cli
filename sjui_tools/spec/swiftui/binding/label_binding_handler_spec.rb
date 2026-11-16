@@ -1,0 +1,201 @@
+# frozen_string_literal: true
+
+require 'swiftui/binding/handlers/label_binding_handler'
+
+RSpec.describe SjuiTools::SwiftUI::Binding::LabelBindingHandler do
+  let(:handler) { described_class.new }
+
+  describe '#handle_specific_binding' do
+    it 'returns nil for text binding' do
+      component = { 'type' => 'Label', 'text' => '@{labelText}' }
+      result = handler.handle_specific_binding(component, 'text', '@{labelText}')
+
+      expect(result).to be_nil
+    end
+
+    it 'handles fontColor binding' do
+      component = { 'type' => 'Label', 'fontColor' => '@{textColor}' }
+      result = handler.handle_specific_binding(component, 'fontColor', '@{textColor}')
+
+      expect(result).to include('.foregroundColor(')
+    end
+
+    it 'adds nothing for a fontSize binding (PartialAttributedText draws the bound size)' do
+      component = { 'type' => 'Label', 'fontSize' => '@{size}' }
+      result = handler.handle_specific_binding(component, 'fontSize', '@{size}')
+
+      expect(result).to be_nil
+    end
+
+    it 'handles font binding' do
+      component = { 'type' => 'Label', 'font' => '@{fontWeight}' }
+      result = handler.handle_specific_binding(component, 'font', '@{fontWeight}')
+
+      expect(result).to include('.fontWeight(')
+    end
+
+    it 'returns nil for unknown key' do
+      component = { 'type' => 'Label' }
+      result = handler.handle_specific_binding(component, 'unknown', '@{value}')
+
+      expect(result).to be_nil
+    end
+  end
+
+  describe '#get_text_content' do
+    it 'returns interpolated string for binding' do
+      component = { 'text' => '@{userName}' }
+      result = handler.get_text_content(component)
+
+      expect(result).to include('userName')
+      expect(result).to include('\\(')
+    end
+
+    it 'returns quoted string for static text' do
+      component = { 'text' => 'Hello World' }
+      result = handler.get_text_content(component)
+
+      expect(result).to eq('"Hello World"')
+    end
+
+    it 'handles text with embedded bindings' do
+      component = { 'text' => 'Hello @{name}!' }
+      result = handler.get_text_content(component)
+
+      expect(result).to include('Hello')
+      expect(result).to include('data.name')
+    end
+
+    it 'escapes quotes in text' do
+      component = { 'text' => 'Say "Hello"' }
+      result = handler.get_text_content(component)
+
+      expect(result).to include('\\"')
+    end
+
+    it 'escapes newlines in text' do
+      component = { 'text' => "Line1\nLine2" }
+      result = handler.get_text_content(component)
+
+      expect(result).to include('\\n')
+    end
+
+    it 'returns empty string for nil text' do
+      component = {}
+      result = handler.get_text_content(component)
+
+      expect(result).to eq('""')
+    end
+
+    it 'handles multiple embedded bindings' do
+      component = { 'text' => '@{firstName} @{lastName}' }
+      result = handler.get_text_content(component)
+
+      expect(result).to include('firstName')
+      expect(result).to include('lastName')
+    end
+
+    context 'with data_definitions for optional/non-optional' do
+      after(:each) do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+      end
+
+      it 'returns binding with ?? "" for optional property (no defaultValue)' do
+        # Property without defaultValue is optional
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'userName' => { 'name' => 'userName', 'class' => 'String' }
+        }
+        component = { 'text' => '@{userName}' }
+        result = handler.get_text_content(component)
+
+        expect(result).to include('data.userName ?? ""')
+      end
+
+      it 'returns binding without ?? for non-optional property (with defaultValue)' do
+        # Property with defaultValue is non-optional
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'userName' => { 'name' => 'userName', 'class' => 'String', 'defaultValue' => 'Guest' }
+        }
+        component = { 'text' => '@{userName}' }
+        result = handler.get_text_content(component)
+
+        expect(result).to include('data.userName')
+        expect(result).not_to include('?? ""')
+      end
+
+      it 'handles embedded binding with ?? "" for optional' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'name' => { 'name' => 'name', 'class' => 'String' }
+        }
+        component = { 'text' => 'Hello @{name}!' }
+        result = handler.get_text_content(component)
+
+        # Intended diff (renderer-ssot-15-4): quotes that are part of the
+        # emitted Swift expression stay unescaped inside \(...) — only
+        # literal text segments are escaped
+        expect(result).to eq('"Hello \\(data.name ?? "")!"')
+      end
+
+      it 'handles embedded binding without ?? for non-optional' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'name' => { 'name' => 'name', 'class' => 'String', 'defaultValue' => 'World' }
+        }
+        component = { 'text' => 'Hello @{name}!' }
+        result = handler.get_text_content(component)
+
+        expect(result).to include('data.name)')
+        expect(result).not_to include('?? ""')
+      end
+    end
+
+    context 'canonical ?? defaults (renderer-ssot-15-4)' do
+      after(:each) do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+      end
+
+      it 'converts a single-quoted default to a double-quoted Swift literal' do
+        component = { 'text' => "@{userName ?? 'Guest'}" }
+        expect(handler.get_text_content(component)).to eq('"\\(data.userName ?? "Guest")"')
+      end
+
+      it 'keeps a double-quoted default as a double-quoted Swift literal' do
+        component = { 'text' => '@{userName ?? "Guest"}' }
+        expect(handler.get_text_content(component)).to eq('"\\(data.userName ?? "Guest")"')
+      end
+
+      it 'emits a bare literal for number defaults' do
+        component = { 'text' => '@{count ?? 42}' }
+        expect(handler.get_text_content(component)).to eq('"\\(data.count ?? 42)"')
+      end
+
+      it 'emits a bare literal for bool defaults' do
+        component = { 'text' => '@{flag ?? true}' }
+        expect(handler.get_text_content(component)).to eq('"\\(data.flag ?? true)"')
+      end
+
+      it 'treats a null default as no default (text fallback "")' do
+        component = { 'text' => '@{userName ?? null}' }
+        expect(handler.get_text_content(component)).to eq('"\\(data.userName ?? "")"')
+      end
+
+      it 'drops the inline default for non-optional properties (data-section defaultValue wins)' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'userName' => { 'name' => 'userName', 'class' => 'String', 'defaultValue' => 'Guest' }
+        }
+        component = { 'text' => "@{userName ?? 'Inline'}" }
+        expect(handler.get_text_content(component)).to eq('"\\(data.userName)"')
+      end
+
+      it 'emits defaults inside mixed text interpolation' do
+        component = { 'text' => "Hi @{name ?? 'there'}!" }
+        expect(handler.get_text_content(component)).to eq('"Hi \\(data.name ?? "there")!"')
+      end
+
+      it 'never emits the broken whole-inner-as-property form' do
+        component = { 'text' => "@{userName ?? 'Guest'}" }
+        expect(handler.get_text_content(component)).not_to include("?? 'Guest' ??")
+        expect(handler.get_text_content(component)).not_to include("'")
+      end
+    end
+  end
+end

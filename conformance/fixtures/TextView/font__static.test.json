@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/font__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.font (static)",
+    "description": "Conformance fixture for 'font' on TextView (section: TextView, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "font__static",
+      "description": "Conformance fixture for 'font' on TextView (section: TextView, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_font__static"
+        }
+      ]
+    }
+  ]
+}

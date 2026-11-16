@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/width__matchparent.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.width (matchparent)",
+    "description": "Conformance fixture for 'width' on View (section: common, class: visual). Value under test: \"matchParent\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "width__matchparent",
+      "description": "Conformance fixture for 'width' on View (section: common, class: visual). Value under test: \"matchParent\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_width__matchparent"
+        }
+      ]
+    }
+  ]
+}

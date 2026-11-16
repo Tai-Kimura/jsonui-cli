@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TabView/tintColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TabView.tintColor (binding)",
+    "description": "Conformance fixture for 'tintColor' on TabView (section: TabView, class: visual). Value under test: \"@{boundTintColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TabView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tintColor__binding",
+      "description": "Conformance fixture for 'tintColor' on TabView (section: TabView, class: visual). Value under test: \"@{boundTintColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TabView_tintColor__binding"
+        }
+      ]
+    }
+  ]
+}

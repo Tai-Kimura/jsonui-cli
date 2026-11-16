@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/fontScaling__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.fontScaling (false)",
+    "description": "Conformance fixture for 'fontScaling' on Radio (section: Radio, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontScaling__false",
+      "description": "Conformance fixture for 'fontScaling' on Radio (section: Radio, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_fontScaling__false"
+        }
+      ]
+    }
+  ]
+}

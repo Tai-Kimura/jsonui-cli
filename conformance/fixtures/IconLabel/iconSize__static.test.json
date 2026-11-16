@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/iconSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.iconSize (static)",
+    "description": "Conformance fixture for 'iconSize' on IconLabel (section: IconLabel, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "iconSize__static",
+      "description": "Conformance fixture for 'iconSize' on IconLabel (section: IconLabel, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_iconSize__static"
+        }
+      ]
+    }
+  ]
+}

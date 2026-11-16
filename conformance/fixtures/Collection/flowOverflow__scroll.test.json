@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/flowOverflow__scroll.layout.json"
+  },
+  "metadata": {
+    "name": "conformance flowOverflow__scroll",
+    "description": "A flow Collection with lazy in effect (undeclared) holding 12 cells in a 150x100 box scrolls inside its own bounds: the cells are clipped at the box.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flowOverflow__scroll",
+      "description": "A flow Collection with lazy in effect (undeclared) holding 12 cells in a 150x100 box scrolls inside its own bounds: the cells are clipped at the box.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_flowOverflow__scroll"
+        }
+      ]
+    }
+  ]
+}

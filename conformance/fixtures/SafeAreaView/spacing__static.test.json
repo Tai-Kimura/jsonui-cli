@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SafeAreaView/spacing__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SafeAreaView.spacing (static)",
+    "description": "Conformance fixture for 'spacing' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SafeAreaView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "spacing__static",
+      "description": "Conformance fixture for 'spacing' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SafeAreaView_spacing__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2540 @@
+"""Declare hand-written unit test cases in the spec; check the sets match.
+
+The spec's job here is not to generate a test body — that was tried and
+measured: generating branch tests from ``branchContracts`` moves the covered
+line count on the contracted methods by 4.3 points, and the untested
+declared-method bodies across 32 uncontracted screens are 331 lines, 3.3% of
+one face's untouched total. Reaching 80% needs the ViewModel and Model
+bodies written by hand, which is roughly 6,000 lines on one face and 8,500
+on another.
+
+So the bodies are hand-written, and what the spec carries is the *set*:
+which cases exist, and on which platforms. Two faces implementing the same
+screen from the same spec otherwise drift apart silently — a case gets
+written on one side, renamed on the other, and nothing compares them,
+because the only thing that could is a person reading both trees.
+
+Three behaviours, and no more:
+
+1. ``generate`` writes stubs for declared cases that have no implementation,
+   in each platform's own convention. It only ever ADDS to the marker
+   region: a case already present there — stub or hand-written body — is
+   left exactly as it is, and nothing is ever removed, including a case the
+   spec no longer declares. Removing one is the author's edit to make.
+2. ``check`` fails when the sets disagree: declared but unimplemented,
+   implemented but undeclared, or declared for two platforms and present on
+   one. A case is declared FOR a target, so the sets are of (target, case)
+   pairs: a test implements a case for the target its class, outermost
+   describe or file is named after (`_owner`, the names ``generate`` gives a
+   target's stubs), and a name several targets declare is implemented for
+   each only by a test of its own (`_resolve_pairs`).
+3. Both name a denominator. "0 drifted" over an empty scan and "0 drifted"
+   over forty cases are the same sentence and opposite facts, and this
+   project has shipped wrong findings from instruments that could not tell
+   those apart.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
+from .branch_tests import (
+    BranchTestGenerationError,
+    _is_sub_spec_of_a_parent,
+    _load_spec,
+    SpecTextsError,
+    _load_spec_result,
+    _read_spec_texts,
+    _texts_refusal,
+    _parent_declaring,
+    _screen_of,
+    _spec_files,
+    load_project_config,
+    _prefer_sibling_jui_cli,
+    APP_CONTRACTS_SPEC_TYPE,
+    PARENT_SPEC_TYPE,
+)
+
+
+#: Why a declaration site cannot be judged, when it cannot. Never folded
+#: into "the site is fine": the whole point of the rule is that an
+#: unanswered question is not a permission.
+OWNERSHIP_UNAVAILABLE = (
+    "the ownership rule could not be loaded (shared/core/"
+    "unit_target_ownership.py), so app-level declaration sites were NOT "
+    "checked. This is a tool/distribution problem, not a spec error."
+)
+
+#: Stated on every run, because both declaration-site directions carry the
+#: same unresolved source — and carry it to OPPOSITE conclusions.
+#:
+#: ⚠️ `owner_screens` is a UNION over four sources, so dropping one lowers
+#: owner counts. What that does depends on the count each direction reads:
+#:
+#:   app-level     reports `exactly 1 owner`. Lowering reaches 1 by descending
+#:                 FROM 2, so a correct app-level declaration can be named
+#:                 wrongly -> HINT, and it fails nothing.
+#:   screen-level  reports `2 or more owners`. Restoring the missing source
+#:                 only ADDS owners, so a count of 2 stays >= 2 -> sound, and
+#:                 it does fail the gate.
+#:
+#: Measured, not reasoned about: with the component source the specimen
+#: classifies APP_OWNED, without it SCREEN_OWNED. The first draft of the
+#: app-level caller argued that a dropped source can only LOWER an owner count
+#: and so could never manufacture the single owner it reports. Lowering is
+#: exactly how it manufactures one — and the same argument, applied to the
+#: other direction, is sound. One rule, two directions, two severities.
+#: Printed when the component source IS resolved, i.e. the normal case since
+#: the 2026-09-08 ruling. The old text said owner counts were a lower bound
+#: and that app-level sites were therefore hints; both halves had to move in
+#: the same commit as the promotion below. A message that still calls the
+#: count a lower bound while a finding fires on it tells the reader the tool
+#: does not trust its own result.
+#: ⚠️ Both strings begin with a STABLE machine-readable marker. Reported
+#: independently by two consumer faces on 2026-09-08: the constant names
+#: `OWNERSHIP_COMPLETE` / `OWNERSHIP_PARTIAL` live only in this file, so a
+#: consumer who greps for them gets 0 hits and reads that as "this check does
+#: not exist" — one face wrote exactly that before catching it. Matching the
+#: prose instead makes every consumer's gate depend on wording that moves
+#: between releases. So the discriminator is emitted, not merely intended.
+OWNERSHIP_MARKER_COMPLETE = "[ownership:complete]"
+OWNERSHIP_MARKER_PARTIAL = "[ownership:partial]"
+
+OWNERSHIP_COMPLETE = (
+    f"{OWNERSHIP_MARKER_COMPLETE} every ownership SOURCE was consulted — "
+    "ViewModel, repository, useCase and component. A component's identity is "
+    "its spec's `metadata.name` (required — see "
+    "shared/core/component_identity.py), so app-level sites are findings, not "
+    "hints. ⚠️ SOURCES complete is not TARGETS covered: a target that no "
+    "source resolves has zero owners, which is neither 'exactly one' nor 'two "
+    "or more', so NEITHER direction reports it. See the unowned count below."
+)
+
+#: Printed when the component source could NOT be resolved — no
+#: `component_spec_directory` in jui.config.json, or the identity module is
+#: absent from this tool tree. ⚠️ Kept as a SEPARATE string from the complete
+#: case on purpose: "the source was consulted and found nothing" and "the
+#: source could not be consulted" are different facts, and one string for
+#: both is how a distribution problem reads as a clean project.
+OWNERSHIP_PARTIAL = (
+    f"{OWNERSHIP_MARKER_PARTIAL} declaration sites were compared against "
+    "ViewModel, repository and "
+    "useCase ownership only — the component source could NOT be resolved "
+    "(no `component_spec_directory` in jui.config.json, or it does not "
+    "exist), so "
+    "every owner count below is a LOWER BOUND. App-level sites are therefore "
+    "HINTS and fail nothing — a target owned by one screen through a "
+    "component and another through dataFlow would appear there wrongly. "
+    "Screen-level sites naming two or more owners are still findings: adding "
+    "the missing source can only keep that count at two or more."
+)
+
+
+def _ownership_rule():
+    """`shared/core/unit_target_ownership`, or None when it is not there.
+
+    Loaded through the bootstrap this package already uses rather than a new
+    one, so `jsonui-test` and `jui` cannot end up on different copies of the
+    rule. None is returned, never a substitute: a tool tree synced without
+    `shared/` must say the check did not run.
+    """
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("unit_target_ownership")
+
+
+def _identity_rule():
+    """`shared/core/component_identity`, or None when it is not there.
+
+    Same loader as `_ownership_rule` for the same reason: the two modules
+    answer one question together, so they must come from one tool tree. None
+    is returned, never a substitute — a tree synced without this module must
+    say the component source was NOT consulted, which is what keeps
+    `OWNERSHIP_PARTIAL` distinguishable from `OWNERSHIP_COMPLETE`.
+    """
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("component_identity")
+
+
+def _ownership_keyed_screens(screen_specs):
+    """``(screens_keyed_as_the_generator_names_them, fallback_notes)``.
+
+    ⚠️ The fallback is ANNOUNCED, not silent. A spec with no `metadata.name`
+    is keyed by its file stem, which cannot match a generated ViewModel name
+    unless the stem happens to be what the generator was given — and a
+    handful of such specs would land in the unowned count indistinguishable
+    from misspelled targets and shared utilities. The whole-face version of
+    this defect only surfaced because one face showed 25 of 25; a two-of-
+    thirty version would have stayed invisible.
+    """
+    rule = _ownership_rule()
+    if rule is None or not hasattr(rule, "screen_name_from_spec"):
+        # An older shared/ tree: key as before rather than guess. The note
+        # below is not printed, because nothing fell back — the whole map is
+        # the old shape, which `OWNERSHIP_*` already describes.
+        return dict(screen_specs or {}), []
+    keyed = {}
+    fell_back = []
+    for stem, spec in sorted((screen_specs or {}).items()):
+        name, used_fallback = rule.screen_name_from_spec(spec, stem)
+        if used_fallback:
+            fell_back.append(stem)
+        keyed[name] = spec
+    notes = []
+    if fell_back:
+        shown = ", ".join(fell_back[:6]) + ("…" if len(fell_back) > 6 else "")
+        notes.append(
+            f"{len(fell_back)} spec(s) declare no metadata.name, so their "
+            f"owner names came from the FILE STEM instead ({shown}). A stem "
+            f"cannot match a generated ViewModel name unless it happens to be "
+            f"what the generator was given, so targets owned only by those "
+            f"screens will appear in the unowned count above."
+        )
+    return keyed, notes
+
+
+def _config_keys():
+    """`shared/core/config_keys`, or None when it is not in this tool tree."""
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("config_keys")
+
+
+def _component_reader(project_root, config):
+    """``(read, component_dir)`` for this project, or ``(None, None)``.
+
+    ⚠️ The frame is `component_spec_directory`, NOT the screen spec's own
+    directory. Measured on both shapes that exist: one face keeps screens and
+    components in the same directory, and another keeps
+    `../docs/user/screens/json` apart from `../docs/user/components/json`
+    while still naming `headermenu.component.json` with no path. Resolving
+    against the screen's directory happens to work on the first and silently
+    finds nothing on the second — and finding nothing is indistinguishable
+    from a face with no components.
+    """
+    directory = (config or {}).get("component_spec_directory")
+    explicit = bool(directory)
+    if not directory:
+        # 🚨 Until 2026-09-08 this returned immediately, and the run went
+        # silently to PARTIAL. `jui` has applied a default for this key all
+        # along (config_manager), and `init_cmd` writes it into new configs —
+        # so a project created before that started had `jui` working from the
+        # default while THIS check alone reported it could not resolve the
+        # component source. The face that found it had the right directory
+        # layout the whole time; only the config key was absent.
+        #
+        # The default now comes from shared/core, where it is named once
+        # instead of being a literal in three places.
+        keys = _config_keys()
+        directory = keys.default_for("component_spec_directory") if keys else None
+        if not directory:
+            return None, None
+    base = (Path(project_root) / directory).resolve()
+    if not base.is_dir():
+        # ⚠️ Only an EXPLICIT directory that is missing is a configuration
+        # error worth a problem line. A project that simply has no components
+        # would otherwise be told its config is broken every run, for a key it
+        # never wrote — noise that arrived with the default, not before it.
+        return None, (base if explicit else None)
+
+    def read(spec_file):
+        candidate = base / spec_file
+        try:
+            candidate.resolve().relative_to(base)
+        except ValueError:
+            # `../` in a declaration must not reach outside the configured
+            # directory: the frame is the config's, and a declaration cannot
+            # widen it.
+            return None
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    return read, base
+
+
+def _declared_component_identities(screen_specs, project_root, config):
+    """``(components_declared_by_screen, problems)``; the map is None if unresolved.
+
+    None means "the component source could not be consulted", and callers must
+    keep that apart from an empty map, which means "consulted, and no screen
+    declares a component". Folding them together is exactly the failure this
+    whole rule was held back to avoid: a distribution missing `shared/` would
+    read as a project whose screens declare nothing.
+    """
+    identity = _identity_rule()
+    if identity is None:
+        return None, []
+    read, base = _component_reader(project_root, config)
+    if read is None:
+        problems = []
+        if base is not None:
+            problems.append(
+                f"component_spec_directory is configured but not a directory "
+                f"({base}) — component ownership was NOT consulted."
+            )
+        return None, problems
+    declared, raw = identity.resolve_declared_identities(screen_specs, read)
+    problems = []
+    for kind, screen, spec_file, detail in raw:
+        if kind == identity.NO_IDENTITY:
+            problems.append(
+                f"{screen}: component '{spec_file}' declares no "
+                f"metadata.name. A component's identity IS that field and it "
+                f"is required — no default is substituted, because an unnamed "
+                f"component would merge onto every other unnamed one. Add "
+                f"metadata.name to {spec_file}."
+            )
+        elif kind == identity.DISAGREES:
+            entry_name, real = detail
+            problems.append(
+                f"{screen}: declares component '{entry_name}' but "
+                f"{spec_file} names itself '{real}'. The component spec is "
+                f"the identity; the screen's entry must match it, or the two "
+                f"spellings drift and ownership is computed from the wrong one."
+            )
+        elif kind == identity.UNREADABLE:
+            problems.append(
+                f"{screen}: component spec '{spec_file}' could not be read, "
+                f"so its ownership contribution is missing from this run."
+            )
+        elif kind == identity.NO_SPEC_FILE:
+            problems.append(
+                f"{screen}: a customComponents entry ({detail!r}) names no "
+                f"specFile, so no identity could be resolved for it."
+            )
+    return declared, problems
+
+
+def _app_declarations_in_the_wrong_place(cases, screen_specs, components=None):
+    """``(problems, hints)`` for the app-level declaration sites.
+
+    Only one direction is examined: an app-level declaration that a single
+    screen appears to own. The mirror defect belongs to the check that owns
+    screen-level sites; two tools reporting the same pair from opposite ends
+    hands a consumer one fact twice with two different remedies.
+
+    ⚠️ Every finding is a HINT until `components_declared_by_screen` is
+    resolved, and this caller does not resolve it yet. Ownership is a UNION
+    over four sources, so an unconsulted source lowers owner counts -- and it
+    can lower one from 2 to 1, which is precisely the count read as "a single
+    screen owns this". A correct app-level declaration would be rejected.
+    Verified with a specimen rather than argued; see the arm named for it.
+
+    Only `OWNERSHIP_UNAVAILABLE` is a problem, and it is one because it says
+    the check did NOT run -- the opposite claim from a clean result.
+    """
+    rule = _ownership_rule()
+    if rule is None:
+        return [OWNERSHIP_UNAVAILABLE], []
+    findings = []
+    hints = []
+    seen = set()
+    for case in cases:
+        if not case.app or case.target in seen:
+            continue
+        seen.add(case.target)
+        kind, owners = rule.classify(case.target, screen_specs, components)
+        if kind != rule.SCREEN_OWNED:
+            continue
+        if components is None:
+            # The component source was NOT consulted, so this count is a lower
+            # bound and `1` may really be `2`. A hint, exactly as before.
+            hints.append(
+                f"{case.app}: '{case.target}' may belong in {owners[0]}'s "
+                f"spec -- that screen appears to be its only owner, and an "
+                f"app spec records that no single screen is. UNVERIFIED: "
+                f"component-declared ownership was not consulted, and it is "
+                f"the source that would add the second owner."
+            )
+        else:
+            # Promoted 2026-09-08, in the same commit as the wiring and the
+            # wording. The count is no longer a lower bound: every source the
+            # rule knows about was supplied, so `1` is `1`.
+            findings.append(
+                f"{case.app}: '{case.target}' belongs in {owners[0]}'s spec "
+                f"-- that screen is its only owner (ViewModel, dataFlow and "
+                f"component ownership were all consulted), and an app spec "
+                f"records that no single screen is."
+            )
+    return findings, hints
+
+
+def _targets_no_source_resolves(cases, screen_specs, components=None) -> list[str]:
+    """One line naming how many declared targets NO source owns, or [].
+
+    ⚠️ This exists because a face measured what the two directions above are
+    blind to and got a number nobody expected: 14 of its 26 declared targets
+    resolved to ZERO owners, and neither direction says a word about them.
+    The app-level direction speaks for `exactly one owner`, the screen-level
+    one for `two or more`; zero is neither.
+
+    📌 The face reached that number by reading its specs by hand after the
+    note claimed owner counts were "complete". The note meant every SOURCE was
+    consulted. It was read as every TARGET being covered — a fair reading of
+    what it said, and the reason both the wording and this line changed
+    together. A count the tool refuses to print is a count someone computes by
+    hand, or never.
+
+    ⚠️ Deliberately NOT a finding, and not a hint that suggests an action.
+    A target no source resolves may be a shared utility that legitimately
+    belongs nowhere, or a typo, and this rule cannot tell those apart without
+    `known_targets`, which no caller supplies. Reporting a number is honest;
+    reporting a verdict would invent one.
+    """
+    rule = _ownership_rule()
+    if rule is None:
+        return []
+    seen = set()
+    unowned = []
+    for case in cases:
+        if case.target in seen:
+            continue
+        seen.add(case.target)
+        _kind, owners = rule.classify(case.target, screen_specs, components)
+        if not owners:
+            unowned.append(case.target)
+    if not unowned:
+        return []
+    shown = ", ".join(sorted(unowned)[:6]) + ("…" if len(unowned) > 6 else "")
+    return [
+        f"{len(unowned)} of {len(seen)} declared target(s) resolve to NO owner "
+        f"({shown}) — no ViewModel name, dataFlow entry or component identity "
+        f"matches them. Neither declaration-site direction reports these: one "
+        f"speaks for exactly-one-owner and the other for two-or-more, and zero "
+        f"is neither. This is a count, not a finding — a shared utility that "
+        f"belongs nowhere and a misspelled target both land here."
+    ]
+
+
+def _screen_declarations_in_the_wrong_place(cases, screen_specs, components=None) -> list[str]:
+    """Screen-level declarations that no single screen owns.
+
+    The mirror of `_app_declarations_in_the_wrong_place`, and the reason the
+    app contracts spec was added: a target several screens own had nowhere to
+    live, so it was filed under whichever screen happened to declare it and
+    was then reported as that screen's. This is the direction that finds the
+    ones already sitting in the wrong place.
+
+    ⚠️ ONLY the two-or-more case is reported, and that restriction is forced
+    rather than cautious. The component source is not resolved by this caller
+    either, so every owner count here is a LOWER BOUND, and only a claim that
+    survives adding owners is sound:
+
+        `>= 2 owners`     adding an owner keeps it >= 2   -> safe
+        `exactly 1 owner` adding an owner makes it 2      -> NOT safe
+
+    So "declared in A's spec but B owns it" is deliberately NOT reported: the
+    full rule might have answered `{A, B}`, which is app-owned and correctly
+    declared nowhere near B.
+
+    📌 That asymmetry runs the other way for the app-level direction, whose
+    docstring argues the opposite -- that an unconsulted source "can only
+    LOWER an owner count, and a lower count never manufactures the single
+    owner this reports". A lower count reaches 1 by descending FROM 2, which
+    is exactly how it is manufactured. Measured on the shared corpus: two
+    targets there have 2 owners and one has 9, so the descent is not
+    hypothetical. Left as it stands here because fixing it belongs to that
+    function, and correcting the same rule from two sides at once is how two
+    tools end up disagreeing about one fact.
+    """
+    rule = _ownership_rule()
+    if rule is None:
+        return [OWNERSHIP_UNAVAILABLE]
+    # ⚠️ Every screen that DECLARES the target, not just the first one seen.
+    # The line is folded to one per target, and the first cut named the screen
+    # of whichever case reached it first -- so a consumer who moved that one
+    # declaration left the others behind, and the check passed. Reported by
+    # the face that hit it: four targets were declared across seven screens,
+    # and the message named four.
+    declared_in: dict[str, list[str]] = {}
+    for case in cases:
+        if case.app or not case.screen:
+            continue
+        sites = declared_in.setdefault(case.target, [])
+        if case.screen not in sites:
+            sites.append(case.screen)
+
+    out = []
+    for target, sites in sorted(declared_in.items()):
+        kind, owners = rule.classify(target, screen_specs, components)
+        if kind != rule.APP_OWNED or len(owners) < 2:
+            continue
+        shown = ", ".join(owners[:4]) + ("…" if len(owners) > 4 else "")
+        where = ", ".join(sorted(sites))
+        out.append(
+            f"{where}: '{target}' is declared in {len(sites)} screen spec(s) "
+            f"({where}), but {len(owners)} screens own it ({shown}) — filing "
+            f"it under any of them records an ownership that does not exist. "
+            f"Move ALL {len(sites)} declaration(s) to the app contracts spec, "
+            f"which is where a target no single screen owns belongs."
+        )
+    return out
+
+
+class UnitContractError(RuntimeError):
+    """Raised when the contract cannot be evaluated (bad inputs, no config)."""
+
+
+#: Platforms a case may name, and the file extension its tests live in.
+PLATFORM_TEST_SUFFIX = {"ios": ".swift", "android": ".kt", "web": ".ts"}
+
+#: Every test-method name a file declares, used to find implementations the
+#: spec does not know about. Deliberately per-platform: a regex that matched
+#: all three would also match things that are not tests in two of them.
+#:
+#: ⚠️ ios is NOT a bare `func` scan. The first cut was, and it flagged a
+#: consumer's file-scope helper `func settle()` as a mis-named test that
+#: "never runs" — always wrong for that shape, which is worse than silence:
+#: a line that is always wrong teaches the reader to skip it, and the next
+#: real finding on it is skipped too. Only functions inside an XCTestCase
+#: subclass can be test methods, so only those are scanned.
+_ALL_TESTS_PATTERNS = {
+    "android": re.compile(r"@Test[\s\S]{0,200}?\bfun\s+`?(?P<name>[^`(\s]+)`?\s*\("),
+}
+
+#: Where a web test's title STARTS. The title itself is not matched here --
+#: `_web_test_names` reads the literal that follows, because a regex that
+#: also spans the literal cannot both respect quote pairing and step over an
+#: `it.each(TABLE)` argument without nesting quantifiers.
+#:
+#: `(?<![.\w$])` is what keeps `url.test("x")` from being read as a test.
+#: The modifier chain is what keeps `it.each(...)("title")` from being
+#: skipped: reported 2026-09-08, a project had 21 executing tests behind 3
+#: `it.each` calls and the scan saw 3 titles, so 18 tests were invisible to
+#: BOTH columns -- not "undeclared", simply absent, which is the one state
+#: this check cannot report.
+_WEB_TEST_HEAD = re.compile(r"(?<![.\w$])(?:it|test)\b")
+#: Where a `describe` block starts: read the same way, so a title a test
+#: reader can see is a title a block reader can see.
+_WEB_DESCRIBE_HEAD = re.compile(r"(?<![.\w$])describe\b")
+_WEB_MODIFIER = re.compile(r"\s*\.\s*(?P<mod>[A-Za-z_$][\w$]*)")
+
+#: The one modifier that TAKES an argument list of its own. `it.skip("x")`
+#: and `it.each(TABLE)("x")` look alike up to the first `(`, and consuming
+#: that `(` for every modifier swallows the title of every skipped and
+#: focused test -- which is how the first cut of this scanner lost them.
+_WEB_TABLE_MODIFIERS = {"each"}
+
+#: Platforms whose scan runs over source with comments blanked out first.
+#: MEMBERSHIP decides that; the VALUE is Kotlin's nested-block rule
+#: (`/* /* */ */` closes once, not twice) and says nothing about whether
+#: stripping happens.
+#:
+#: It used to be called `_COMMENT_STRIPPED`, and a reader took `"web": False`
+#: to mean web comments are NOT stripped — they are. Two readings of one
+#: line, which is what this release is named for; the name now describes the
+#: value it holds.
+#:
+#: ios is not here: it does not regex the raw text — `_swift_test_methods`
+#: brace-matches a class body — and adding it would need its own measurement.
+_NESTED_COMMENT_BLOCKS = {"web": False, "android": True}
+
+
+def _without_comments(text: str, *, nested_blocks: bool = False) -> str:
+    r"""*text* with `//` and `/* */` comments replaced by spaces.
+
+    Reported 2026-09-07: a comment EXPLAINING this scan was counted by it —
+    `// names are written as it("x")` produced `UNDECLARED x (implemented,
+    declared nowhere)` and a non-zero exit, for a case that exists in no file
+    as a test. The harm points at "always red", and the name it reports cannot
+    be found by the person who receives it, so the search it starts has no end.
+    Worse, the comment that triggers it is the one a careful author writes:
+    documenting the scan is what breaks the scan.
+
+    String literals are stepped over rather than skipped by regex, because
+    blanking `//` inside one would silently delete the REST OF THE LINE —
+    `it("https://…")` is a real case name, and losing it would turn a false
+    positive into a false negative, which is the direction that goes green.
+
+    Length and line breaks are preserved (comment bytes become spaces), so
+    the android pattern's bounded `[\s\S]{0,200}` window still spans what it
+    spanned before.
+
+    `nested_blocks` is Kotlin's rule — `/* /* */ */` closes once, not twice.
+    """
+    out = list(text)
+    i, n = 0, len(text)
+    depth = 0
+    while i < n:
+        ch = text[i]
+        if depth:
+            if nested_blocks and text.startswith("/*", i):
+                depth += 1
+                out[i] = out[i + 1] = " "
+                i += 2
+                continue
+            if text.startswith("*/", i):
+                depth -= 1
+                out[i] = out[i + 1] = " "
+                i += 2
+                continue
+            if ch != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        if text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if text.startswith("/*", i):
+            depth = 1
+            out[i] = out[i + 1] = " "
+            i += 2
+            continue
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            i = n if end < 0 else end + 3
+            continue
+        if ch in "\"'`":
+            quote, i = ch, i + 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    i += 1
+                    break
+                if text[i] == "\n" and quote != "`":
+                    break  # unterminated: a quote in prose, not a literal
+                i += 1
+            continue
+        i += 1
+    return "".join(out)
+
+
+def _swift_code_only(text: str) -> str:
+    r"""*text* with comments AND string literals blanked, same length.
+
+    Brace counting needs both gone. `_without_comments` deliberately keeps
+    string CONTENTS — the web and android scans read case names out of
+    `it("name")`, and blanking them would erase the thing being counted —
+    so it cannot be reused here: a triple-quoted block holding three unmatched `{`
+    would push the depth three levels down for the rest of the file, and
+    every method after it would drop out of the scan. Silently, and in the
+    direction that reports nothing.
+
+    Swift's raw strings are handled because Swift has them and this file did
+    not: `#"a { b"#` and `##"…"##` end only at a quote followed by the same
+    number of `#`, and inside one `\` is not an escape. Measured before use
+    rather than assumed — `_without_comments` steps over `#"…"#` as a plain
+    `"` literal, which ends at the wrong quote.
+
+    Newlines survive so line numbers and the android pattern's bounded
+    window still line up.
+    """
+    out = list(text)
+    i, n = 0, len(text)
+
+    def blank(a: int, b: int) -> None:
+        for j in range(a, min(b, n)):
+            if out[j] != "\n":
+                out[j] = " "
+
+    while i < n:
+        if text.startswith("//", i):
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            blank(i, end)
+            i = end
+            continue
+        if text.startswith("/*", i):
+            # Swift nests them: `/* /* */ */` closes once, not twice.
+            level, j = 1, i + 2
+            while j < n and level:
+                if text.startswith("/*", j):
+                    level += 1
+                    j += 2
+                elif text.startswith("*/", j):
+                    level -= 1
+                    j += 2
+                else:
+                    j += 1
+            blank(i, j)
+            i = j
+            continue
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            end = n if end < 0 else end + 3
+            blank(i, end)
+            i = end
+            continue
+        if text[i] == "#":
+            hashes = 0
+            while i + hashes < n and text[i + hashes] == "#":
+                hashes += 1
+            if text.startswith('"', i + hashes):
+                close = '"' + "#" * hashes
+                end = text.find(close, i + hashes + 1)
+                end = n if end < 0 else end + len(close)
+                blank(i, end)
+                i = end
+                continue
+            i += hashes
+            continue
+        if text[i] == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    j += 1
+                    break
+                if text[j] == "\n":
+                    break  # unterminated: prose, not a literal
+                j += 1
+            blank(i, j)
+            i = j
+            continue
+        i += 1
+    return "".join(out)
+
+
+#: `class Foo: XCTestCase {` / `final class Foo : XCTestCase, Bar {`
+_SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+(?P<cls>\w+)\s*:[^{]*\bXCTestCase\b[^{]*\{")
+#: a method declaration inside one, with the modifiers that precede it and
+#: whether its parameter list is empty.
+#:
+#: The parameter list is deliberately probed one character deep — `\(\s*\)?`
+#: — rather than matched. An earlier pattern used `[^)]*`, which stops at the
+#: first `)` and so skipped any function with a closure parameter, which made
+#: a false positive look as though it depended on arity. Emptiness is all
+#: that is needed and it cannot be fooled by nesting.
+_SWIFT_FUNC_RE = re.compile(
+    r"(?P<mods>(?:\b(?:private|fileprivate|internal|public|open|final|static|class|override|mutating|nonisolated)\b\s+|@\w+(?:\([^)]*\))?\s+)*)"
+    r"\bfunc\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*(?P<empty>\))?"
+)
+
+#: Modifiers that put a method outside XCTest's reach whatever it is called.
+#: XCTest enumerates NO-ARGUMENT INSTANCE methods through the ObjC runtime, so
+#: `private` hides it and `static`/`class` makes it not an instance method.
+_UNREACHABLE_MODIFIERS = ("private", "fileprivate", "static", "class")
+
+#: XCTest's own lifecycle hooks. They take no arguments and are not private,
+#: so the reachability test above admits them — and they legitimately carry no
+#: `test` prefix, which would make every file that overrides one report a
+#: method that "never runs" while XCTest calls it on every single case. Found
+#: by reading the predicate rather than from a report: it is the same false
+#: positive as the three already fixed here, one shape further along.
+_XCTEST_LIFECYCLE = frozenset({
+    "setUp", "setUpWithError", "tearDown", "tearDownWithError",
+    "addTeardownBlock", "record", "invokeTest", "perform",
+    "continueAfterFailure", "setUpTestCaseWithError", "tearDownTestCaseWithError",
+})
+
+
+def _could_ever_run(mods: str, empty_params: bool) -> bool:
+    """Could XCTest discover this method if it were named `test…`?
+
+    Reported by a consumer on the third false positive from this one warning:
+    a method taking parameters, or marked `private`, CANNOT be a mis-named
+    test — the name is not what stops it — so telling its author that it
+    "never runs" gives them nothing they can act on. They declined to rename
+    round it, correctly: renaming would not change the predicate, only make
+    the source worse to suit the tool.
+
+    So the warning now covers exactly the set it was written for: methods that
+    WOULD run if they carried the prefix, and do not.
+    """
+    if not empty_params:
+        return False
+    return not any(re.search(rf"\b{m}\b", mods) for m in _UNREACHABLE_MODIFIERS)
+
+
+def _swift_test_methods(text: str) -> list[str]:
+    """Method names declared inside XCTestCase subclasses, in order."""
+    return [name for _cls, name in _swift_tests(text)]
+
+
+def _swift_tests(text: str) -> list[tuple[str, str]]:
+    """``(class, method)`` for the methods `_swift_test_methods` returns.
+
+    Only methods XCTest could actually execute are returned: brace-matched
+    to the class body (a regex cannot tell where the body ends and the
+    file-scope helpers begin), restricted to the body's own level, then
+    filtered by `_could_ever_run`.
+
+    Reported 2026-09-07: a LOCAL function inside a method body was reported
+    as "method exists but the runner will not discover it". It carries no
+    modifiers and takes no arguments, so `_could_ever_run` — which reads
+    modifiers and arity — said it would run if it were renamed. XCTest does
+    not enumerate local functions at all, so the warning named something
+    that cannot be fixed, on a file where nothing was wrong. That was the
+    fourth false-positive shape for this one line, and this file's own
+    docstring says a line that is always wrong teaches its reader to skip
+    the next real one.
+
+    Depth is what separates them: a method is declared at the class body's
+    own level, a local function is deeper. Counting is done on
+    `_swift_code_only`, because a brace inside a comment or a string counts
+    exactly as much as a real one to a character scan and neither opens a
+    scope.
+    """
+    names: list[tuple[str, str]] = []
+    code = _swift_code_only(text)
+    for match in _SWIFT_TESTCASE_RE.finditer(code):
+        depth, i = 0, match.end() - 1
+        start = None
+        spans: list[tuple[int, int]] = []   # regions at the class body level
+        level_start = None
+        while i < len(code):
+            ch = code[i]
+            if ch == "{":
+                depth += 1
+                if start is None:
+                    start = level_start = i + 1
+                elif depth == 2:
+                    # entering a method body: the class level pauses here
+                    if level_start is not None:
+                        spans.append((level_start, i))
+                    level_start = None
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+                if depth == 1:
+                    level_start = i + 1
+            i += 1
+        if start is None:
+            continue
+        if level_start is not None:
+            spans.append((level_start, i))
+        for span_start, span_end in spans:
+            names.extend(
+                (match.group("cls"), m.group("name"))
+                for m in _SWIFT_FUNC_RE.finditer(text[span_start:span_end])
+                if m.group("name") not in _XCTEST_LIFECYCLE
+                and _could_ever_run(m.group("mods"), m.group("empty") is not None)
+            )
+    return names
+
+
+@dataclass(frozen=True)
+class UnitCase:
+    """One declared case: a name, and the platforms that must carry it."""
+
+    screen: str
+    target: str
+    name: str
+    platforms: tuple[str, ...]
+    intent: str = ""
+    #: Path of the spec this case was read from, relative to the spec root
+    #: and POSIX-separated. For a split screen this is the PARENT: the cases
+    #: arrive through the merged view, which is also the page a reader has to
+    #: get back to. A screen id cannot stand in for it — the docs site builds
+    #: spec URLs from the path, so a nested spec is unreachable from the id.
+    spec_file: str = ""
+    #: The app whose contracts spec declared this case, when it came from one.
+    #: Empty for a case declared by a screen. A case has an `app` or a
+    #: `screen`, never both: an app-level declaration exists precisely because
+    #: no single screen owns the target, so filing it under one would put back
+    #: the false ownership the app spec was added to remove.
+    app: str = ""
+
+
+#: What a declared (target, case) pair is on one platform.
+PAIR_IMPLEMENTED = "implemented"
+PAIR_MISSING = "missing"
+#: A test implements the name, but nothing says which of the targets that
+#: declare it the test is for — neither its class or outermost describe nor
+#: its file carries a target's name (`_owner`), and more than one target
+#: declares the name.
+PAIR_UNATTRIBUTED = "unattributed"
+
+
+@dataclass
+class UnitContractReport:
+    """What the scan found, with both halves of every count."""
+
+    cases: list[UnitCase] = field(default_factory=list)
+    scanned_specs: list[str] = field(default_factory=list)
+    #: platform -> declared case names
+    declared: dict[str, set[str]] = field(default_factory=dict)
+    #: platform -> case names found in that platform's test sources
+    implemented: dict[str, set[str]] = field(default_factory=dict)
+    #: platform -> the files that were actually read
+    scanned_files: dict[str, list[str]] = field(default_factory=dict)
+    #: platforms named by a case but with no configured test root
+    unscannable: dict[str, str] = field(default_factory=dict)
+    #: Limits of THIS run that are not defects. Printed, never counted:
+    #: `ok` must not turn red because a check truthfully named its own
+    #: blind spot, and the blind spot must not be silent either.
+    notes: list[str] = field(default_factory=list)
+    #: SCREENS whose merged view carries a `unitContracts` key. Kept because
+    #: `declared_in_sub` compares against it to catch a sub-spec block that
+    #: never reached its parent. Not the reported denominator — see below.
+    declaring_specs: list[str] = field(default_factory=list)
+    #: FILES whose raw JSON carries a `unitContracts` key, spec-root-relative.
+    #: This is what the summary line reports, because it is the count a reader
+    #: can check independently: `grep -l unitContracts` over the spec tree
+    #: returns exactly these. The screen count cannot be checked that way — it
+    #: folds a parent and its sub-specs into one, so reproducing it means
+    #: knowing the folding rule, and a reader who does not ends up comparing
+    #: two different units and reading the difference as a missing block.
+    declaring_files: list[str] = field(default_factory=list)
+    #: input this scan could not read, one line each
+    problems: list[str] = field(default_factory=list)
+    #: FILES that could not be parsed, spec-root-relative. Collected at the
+    #: parse site, NOT derived from `problems`: `problems` also carries
+    #: malformed-block and never-landed-sub-spec lines, so its length answers
+    #: a different question and would drift the moment any other problem is
+    #: reported. These files stay in `scanned` — unreadable is not "declares
+    #: nothing" — which is exactly why they need naming somewhere: otherwise
+    #: they widen `scanned - declaring` silently.
+    unreadable_files: list[str] = field(default_factory=list)
+    #: platform -> method names that exist but the runner will never execute
+    undiscoverable: dict[str, list[str]] = field(default_factory=dict)
+    #: platform -> case name -> the file(s) that implement it
+    implemented_files: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    #: platform -> how many test calls have a title this check cannot read.
+    #: A count, not names: these have no static name to report, which is
+    #: exactly why they were invisible. Absent when zero, so the common run
+    #: gains no line -- a line that always prints is a line nobody reads, and
+    #: the next real finding on it is skipped with it.
+    unreadable_titles: dict[str, int] = field(default_factory=dict)
+    #: platform -> the (target, case) pairs declared for it. A case is
+    #: declared FOR a target, and implemented when a test of that target
+    #: implements it: `declared` / `implemented` above are sets of names, and
+    #: a name several targets declare is one name there, so one test anywhere
+    #: answered for all of them.
+    declared_pairs: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
+    #: platform -> case name -> [(file, class or outermost describe)]
+    implemented_sites: dict[str, dict[str, list[tuple[str, str | None]]]] = field(
+        default_factory=dict)
+    #: platform -> (target, case) -> PAIR_IMPLEMENTED / PAIR_MISSING /
+    #: PAIR_UNATTRIBUTED (`_resolve_pairs`)
+    pair_status: dict[str, dict[tuple[str, str], str]] = field(default_factory=dict)
+    #: platform -> (target, case) -> the files of the tests that implement it
+    pair_files: dict[str, dict[tuple[str, str], list[str]]] = field(default_factory=dict)
+    #: platform -> case name -> (targets no test of their own implements it
+    #: for, the tests that implement it but that no target's name places):
+    #: the names whose tests cannot be told apart
+    unplaced: dict[str, dict[str, tuple[list[str], list[tuple[str, str | None]]]]] = field(
+        default_factory=dict)
+    #: platform -> case name -> how many of `unplaced`'s targets have no test
+    #: whichever way the tests are placed (fewer tests than targets)
+    short: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: platform -> (target, case): a test in that target's tests implements a
+    #: case the target does not declare — another target does
+    misplaced: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
+
+    def missing_pairs(self, platform: str) -> list[tuple[str, str]]:
+        """(target, case) declared for this platform that no test of the
+        target implements, while the tests can be placed."""
+        return sorted(pair for pair, status in self.pair_status.get(platform, {}).items()
+                      if status == PAIR_MISSING)
+
+    def missing(self, platform: str) -> list[str]:
+        """Case names declared for this platform that some declaring target
+        has no implementation of — a missing pair, or fewer tests than the
+        targets that declare the name."""
+        return sorted({name for _target, name in self.missing_pairs(platform)}
+                      | set(self.short.get(platform, {})))
+
+    def missing_count(self, platform: str) -> int:
+        """Pairs known to have no implementation: the missing pairs, plus,
+        for a name whose tests cannot be placed, targets minus tests."""
+        return len(self.missing_pairs(platform)) + sum(self.short.get(platform, {}).values())
+
+    def unattributed(self, platform: str) -> list[str]:
+        """Case names whose tests cannot be told apart by target."""
+        return sorted(self.unplaced.get(platform, {}))
+
+    def unattributed_count(self, platform: str) -> int:
+        """Pairs whose implementation may exist but cannot be placed."""
+        return sum(min(len(targets), len(tests))
+                   for targets, tests in self.unplaced.get(platform, {}).values())
+
+    def implemented_count(self, platform: str) -> int:
+        return sum(1 for status in self.pair_status.get(platform, {}).values()
+                   if status == PAIR_IMPLEMENTED)
+
+    def undeclared(self, platform: str) -> list[str]:
+        """Implemented on this platform, declared nowhere."""
+        return sorted(self.implemented.get(platform, set()) - self.declared.get(platform, set()))
+
+    @property
+    def platforms(self) -> list[str]:
+        return sorted(set(self.declared) | set(self.implemented) | set(self.unscannable))
+
+    @property
+    def ok(self) -> bool:
+        # Input we could not read fails, and so does a block that declared
+        # nothing readable: "0 declared" over specs that DO carry the key is
+        # the shape a single misspelling produces, and it is indistinguishable
+        # from a clean run unless it is called out here.
+        if self.problems or self.unscannable or self.undiscoverable:
+            return False
+        if self.declaring_specs and not self.cases:
+            return False
+        return all(
+            not self.missing(p) and not self.undeclared(p) and not self.misplaced.get(p)
+            for p in self.platforms
+        )
+
+
+def discover_unit_contracts(
+    project_root: Path, spec_dir: str | None = None
+) -> tuple[list[UnitCase], list[str], list[str], list[str], list[str],
+           list[str], list[str], list[str]]:
+    """``(cases, scanned, declaring, problems, declaring_files, unreadable,
+    app_specs, notes)``.
+
+    Both halves, for the same reason ``discover_branch_screens`` returns
+    both: a caller that reports "0 declared" has to be able to say whether
+    it read forty specs or none.
+    """
+    project_root = Path(project_root)
+    if spec_dir is None:
+        spec_dir = load_project_config(project_root).get("spec_directory")
+    if not spec_dir:
+        raise UnitContractError(
+            "spec_directory is not declared in jui.config.json — cannot "
+            "enumerate screens to read unitContracts from"
+        )
+    spec_path = (project_root / spec_dir).resolve()
+    if not spec_path.is_dir():
+        raise UnitContractError(f"spec directory not found: {spec_path}")
+
+    cases: list[UnitCase] = []
+    scanned: list[str] = []
+    declaring: list[str] = []
+    declaring_files: list[str] = []
+    unreadable_files: list[str] = []
+    app_specs: list[str] = []
+    #: screen -> its spec AS READ, for the ownership rule below.
+    screen_specs: dict[str, dict] = {}
+    problems: list[str] = []
+    #: Specs whose `{"md": ...}` prose could not be resolved. Refused as a
+    #: WHOLE run, not as a problem line: `generate` writes stubs despite
+    #: problems, and it would write the unresolved intent's repr into a
+    #: test's failure message. Every command reading this — `--check`,
+    #: `generate`, the unit pages — stops with the resolver's words.
+    texts_refusals: list[str] = []
+    # Sub-specs that declare a block, by the parent that owns them. They are
+    # skipped AS SCREENS (parent + subs is one screen), and their blocks are
+    # meant to arrive through the parent's merged view. When they do not, the
+    # loss used to be silent — the reported defect — so the two are compared
+    # after the sweep and a block that never landed is named.
+    declared_in_sub: dict[str, list[str]] = {}
+    for path in _spec_files(spec_path):
+        screen = _screen_of(path)
+        try:
+            rel_file = path.resolve().relative_to(spec_path).as_posix()
+        except ValueError:
+            rel_file = path.name
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw, raw_texts_errors = _read_spec_texts(json.load(f), path)
+        except (OSError, json.JSONDecodeError) as e:
+            # Unreadable is not "declares nothing". Keeping it in `scanned`
+            # keeps the denominator honest, and saying so keeps a spec that
+            # cannot be parsed from reading as one that declares nothing.
+            #
+            # Counted as a screen even though the type was never read: the
+            # alternative is to drop it, and a file that might have been a
+            # screen must not leave the denominator on the strength of a type
+            # nobody could see.
+            scanned.append(screen)
+            problems.append(f"{screen}: spec could not be read ({e})")
+            unreadable_files.append(rel_file)
+            continue
+        if raw_texts_errors:
+            # Collected, then refused as a whole after the sweep (below).
+            texts_refusals.append(_texts_refusal(path, raw_texts_errors))
+            continue
+        if raw.get("type") == APP_CONTRACTS_SPEC_TYPE:
+            # NOT a screen, so it never enters `scanned` or `declaring`.
+            # Those two are the denominator and numerator of "screens
+            # carrying a block"; an app spec in either makes the ratio
+            # describe a population that has one more member than the
+            # project has screens.
+            app_specs.append(rel_file)
+            if raw.get("unitContracts") is not None:
+                declaring_files.append(rel_file)
+            found, issues = _cases_of(raw, "", rel_file, app=screen)
+            cases.extend(found)
+            problems.extend(issues)
+            continue
+        scanned.append(screen)
+        # Counted off the RAW file, before the sub-spec skip and before the
+        # merge: a file declares a block or it does not, and that is the fact
+        # `grep -l` reproduces. A parent that only RECEIVES blocks from its
+        # subs does not carry one itself, so it is not counted here — its subs
+        # are. A file that could not be parsed is not counted either; it is
+        # still in `scanned`, because unreadable is not "declares nothing".
+        if raw.get("unitContracts") is not None:
+            declaring_files.append(rel_file)
+        if raw.get("type") != PARENT_SPEC_TYPE and _is_sub_spec_of_a_parent(path, spec_path):
+            if raw.get("unitContracts") is not None:
+                parent = _parent_declaring(path, spec_path)
+                if parent is not None:
+                    declared_in_sub.setdefault(_screen_of(parent), []).append(screen)
+            continue
+        try:
+            spec, refusal = _load_spec_result(path)
+        except SpecTextsError as e:
+            texts_refusals.append(str(e))
+            continue
+        if refusal is not None:
+            # The merger REFUSED this parent, and `spec` is therefore the raw
+            # file — including the block that was refused. Counting it is how
+            # `--check` came to print "declared 65, missing 0, undeclared 0"
+            # and exit 0 on a tree where `jui verify` exits 1: 34 of those 65
+            # were written in the parent and discarded by the merge.
+            #
+            # The mirror of the sub-spec message below, and the same promise:
+            # a declaration nobody reads is NOT being checked, and a gate that
+            # says otherwise is worse than no gate.
+            problems.append(
+                f"{screen}: the parent spec was refused by the merger, so the "
+                f"declaration below is NOT being checked — the cases counted "
+                f"here are read from the raw parent and discarded by the "
+                f"merge. {refusal}"
+            )
+        try:
+            rel = path.resolve().relative_to(spec_path).as_posix()
+        except ValueError:
+            rel = path.name
+        found, issues = _cases_of(spec, screen, rel)
+        cases.extend(found)
+        problems.extend(issues)
+        # Read off the spec AS READ, not the raw file. A parent spec may not
+        # declare `unitContracts`; its sub-specs must, and the merger builds
+        # the parent's block from them. Counting RAW declarations therefore
+        # reported "0 carrying" for a split screen whose sub-specs had just
+        # contributed every case in `cases` — a summary line contradicting its
+        # own numerator.
+        screen_specs[screen] = spec
+        if spec.get("unitContracts") is not None:
+            declaring.append(screen)
+    if texts_refusals:
+        raise UnitContractError(
+            f"{len(texts_refusals)} spec(s) carry a text reference that could "
+            f"not be resolved — nothing is compared or written until it is:\n  "
+            + "\n  ".join(texts_refusals))
+    for parent_screen, subs in sorted(declared_in_sub.items()):
+        if parent_screen in declaring:
+            continue
+        problems.append(
+            f"{parent_screen}: {len(subs)} sub-spec(s) declare unitContracts "
+            f"({', '.join(sorted(subs))}) but the merged parent carries none "
+            f"— the declaration was not read. This is a tool defect, not a "
+            f"spec error; the cases are NOT being checked."
+        )
+    # Seeded, not conditional: the screen-level direction runs on every
+    # project and carries the same unresolved source, so tying the limit to
+    # `app_specs` would state it only for projects that already have the spec
+    # type — the readers least likely to be surprised by it.
+    # 🚨 The ownership rule must be keyed the way the GENERATOR names screens,
+    # not the way this module names them for humans. `screen_specs` is keyed
+    # by file stem — right for `scanned`, `declaring` and every message a
+    # reader matches against a filename — and WRONG for deriving a ViewModel
+    # name, because `jui build` derives it from `metadata.name`. Two faces
+    # measured the consequence: 25 of 25 and 36 of 44 declared targets
+    # resolving to no owner, with 0 of 56 file stems equal to their
+    # `metadata.name`.
+    ownership_screens, stem_fallbacks = _ownership_keyed_screens(screen_specs)
+    # Resolved once and handed to BOTH directions: two call sites computing
+    # the same map is how one rule becomes two implementations, and the
+    # ownership module is pure precisely so this stays the caller's job.
+    components, component_problems = _declared_component_identities(
+        ownership_screens, project_root, load_project_config(project_root))
+    problems.extend(component_problems)
+    # ⚠️ Which sentence gets printed is the honest report of whether the
+    # source was consulted — `None` is not an empty map. A face where every
+    # screen declares no component and a face whose tool tree has no
+    # `shared/core/component_identity.py` produce the same EMPTY map and must
+    # not produce the same sentence.
+    hints: list[str] = [
+        OWNERSHIP_PARTIAL if components is None else OWNERSHIP_COMPLETE]
+    # Printed on every run, app spec or not: the targets this names are
+    # invisible to BOTH directions, so gating it on either one would hide it
+    # exactly where the reader has least other information.
+    hints.extend(_targets_no_source_resolves(
+        cases, ownership_screens, components))
+    hints.extend(stem_fallbacks)
+    if app_specs:
+        found, app_hints = _app_declarations_in_the_wrong_place(
+            cases, ownership_screens, components)
+        problems.extend(found)
+        hints.extend(app_hints)
+    # Not gated on `app_specs`: this direction finds the declarations that are
+    # in the wrong place BECAUSE no app spec exists yet, so requiring one first
+    # would silence the check exactly where it has something to say.
+    for problem in _screen_declarations_in_the_wrong_place(
+            cases, ownership_screens, components):
+        # `OWNERSHIP_UNAVAILABLE` is one sentence about one cause, and both
+        # directions raise it. Printed twice it reads as two faults, and a
+        # reader counting problems would see the tool's own outage as the
+        # larger half of their result.
+        if problem == OWNERSHIP_UNAVAILABLE and problem in problems:
+            continue
+        problems.append(problem)
+    return (cases, scanned, declaring, problems, declaring_files,
+            unreadable_files, app_specs, hints)
+
+
+#: Keys a unitContracts block and a case may carry. Anything else is a
+#: typo, and a typo used to make the declaration disappear.
+_BLOCK_KEYS = {"target", "cases"}
+_CASE_KEYS = {"name", "intent", "platforms"}
+
+
+def _cases_of(spec: dict, screen: str, spec_file: str = "",
+              app: str = "") -> tuple[list[UnitCase], list[str]]:
+    """``(cases, problems)`` for one spec.
+
+    Every path that drops input reports it. The first cut silently skipped
+    anything it could not read, so ``"caes"`` for ``"cases"`` made the whole
+    declaration vanish and both gates went green: `unit-stubs --check` printed
+    "0 case(s) declared" and `validate spec` printed 0 errors. Neither output
+    was a lie — the block really did declare nothing the reader could see —
+    and that is precisely why it was dangerous. A mechanism whose entire
+    purpose is stopping drift must not be removable by one misspelling.
+    """
+    raw = spec.get("unitContracts")
+    if raw is None:
+        return [], []
+    blocks = [raw] if isinstance(raw, dict) else raw
+    if not isinstance(blocks, list):
+        return [], [f"{screen}: 'unitContracts' must be an object or an array, got {type(raw).__name__}"]
+
+    out: list[UnitCase] = []
+    problems: list[str] = []
+    for i, block in enumerate(blocks):
+        where = f"{screen}: unitContracts[{i}]"
+        if not isinstance(block, dict):
+            problems.append(f"{where} must be an object, got {type(block).__name__}")
+            continue
+        for key in sorted(set(block) - _BLOCK_KEYS):
+            problems.append(
+                f"{where}: unknown key {key!r} (expected one of {sorted(_BLOCK_KEYS)}) "
+                f"— a misspelling here drops the declaration"
+            )
+        target = str(block.get("target") or "").strip()
+        if not target:
+            problems.append(f"{where}: 'target' is missing or empty")
+        cases = block.get("cases")
+        if cases is None:
+            problems.append(f"{where}: 'cases' is missing — this block declares nothing")
+            continue
+        if not isinstance(cases, list):
+            problems.append(f"{where}: 'cases' must be an array, got {type(cases).__name__}")
+            continue
+        for j, case in enumerate(cases):
+            spot = f"{where}.cases[{j}]"
+            if not isinstance(case, dict):
+                problems.append(f"{spot} must be an object, got {type(case).__name__}")
+                continue
+            for key in sorted(set(case) - _CASE_KEYS):
+                problems.append(
+                    f"{spot}: unknown key {key!r} (expected one of {sorted(_CASE_KEYS)})"
+                )
+            name = str(case.get("name") or "").strip()
+            if not name:
+                problems.append(f"{spot}: 'name' is missing or empty — the case cannot be compared")
+                continue
+            platforms = case.get("platforms")
+            if platforms is not None and not isinstance(platforms, list):
+                problems.append(f"{spot}: 'platforms' must be an array, got {type(platforms).__name__}")
+                platforms = None
+            if not platforms:
+                # Unstated means every platform the project builds; the
+                # caller resolves that, because this module does not know
+                # which platforms a project has.
+                platforms = []
+            out.append(
+                UnitCase(
+                    screen=screen,
+                    target=target,
+                    name=name,
+                    platforms=tuple(str(p) for p in platforms),
+                    # Not `str(...)` on a string: that drops `MarkdownText`,
+                    # and the unit page renders a texts-file intent as
+                    # Markdown only because it still is one.
+                    intent=_intent_of(case.get("intent")),
+                    spec_file=spec_file,
+                    app=app,
+                )
+            )
+    return out, problems
+
+
+def _intent_of(value) -> str:
+    """The intent as text: a string AS IS (a `MarkdownText` stays one), and
+    anything else — an unresolved `{"md": ...}` above all — as nothing, so
+    a stub falls back to the case name. Never `str()` of a dict: its repr
+    was written into a generated test. `discover_unit_contracts` refuses an
+    unresolved reference before it gets here; this is the second fence."""
+    return value if isinstance(value, str) else ""
+
+
+def _test_roots(project_root: Path, config: dict) -> dict[str, list[Path] | None]:
+    """``platform -> unit-test directories``, or None when not declared.
+
+    A LIST per platform, because `unitTestsDir` accepts either one directory
+    or several. Every listed directory is scanned; new stubs are written to
+    the FIRST, so a project that declares a single string keeps exactly the
+    behaviour it had.
+
+    None rather than a guess: scanning the wrong directory finds nothing and
+    reports every declared case as unimplemented, which reads like drift and
+    is a configuration error.
+    """
+    roots: dict[str, list[Path] | None] = {}
+    platforms = config.get("platforms") or {}
+    if isinstance(platforms, list):
+        # The test_tools readers (coverage, branch tests) accept a list of
+        # names. A list has no place for `unitTestsDir`, so every platform it
+        # names is undeclared; `check_unit_contracts` says the list is why,
+        # rather than "not declared".
+        return {str(p): None for p in platforms if isinstance(p, str) and p}
+    if not isinstance(platforms, dict):
+        return roots
+    for platform, entry in platforms.items():
+        if not isinstance(entry, dict):
+            continue
+        unit_dir = entry.get("unitTestsDir")
+        if unit_dir is None or unit_dir == "":
+            roots[platform] = None
+            continue
+        # A list is the same declaration, spelled for a project that keeps
+        # hand-written tests in more than one place. It is a LIST rather than
+        # a pattern deliberately: the alternative was to scan one directory
+        # and exclude the generated one, and an exclusion has to guess what
+        # to skip, while a list is what the project already knows.
+        names = unit_dir if isinstance(unit_dir, list) else [unit_dir]
+        base = project_root / (entry.get("root") or "")
+        # An empty list is not "not declared": someone wrote `[]`. Kept
+        # distinguishable so the message can say which of the two it is.
+        roots[platform] = [(base / str(n)).resolve() for n in names if str(n)]
+    return roots
+
+
+#: `\n` and friends, as the JS runtime reads them out of a string literal.
+_JS_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "b": "\b",
+               "f": "\f", "v": "\v", "0": "\0"}
+
+
+def _unescape_js(text: str) -> str:
+    r"""A JS string literal's BODY, decoded to the characters it denotes.
+
+    The spec declares the character; the source spells the escape. Comparing
+    the two as written makes `it("an escaped \" inside")` a name that cannot
+    be declared at all -- the same shape as the trailing-space case in
+    `_as_declared`, reached by a different route.
+
+    An escape this does not know decodes to the character after the
+    backslash, which is what JS does for every escape that is not special.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c != "\\" or i + 1 >= n:
+            out.append(c)
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt == "u" and i + 2 < n and text[i + 2] == "{":
+            end = text.find("}", i + 3)
+            if end != -1:
+                try:
+                    out.append(chr(int(text[i + 3:end], 16)))
+                    i = end + 1
+                    continue
+                except ValueError:
+                    pass
+        if nxt in ("u", "x"):
+            width = 4 if nxt == "u" else 2
+            digits = text[i + 2:i + 2 + width]
+            if len(digits) == width:
+                try:
+                    out.append(chr(int(digits, 16)))
+                    i += 2 + width
+                    continue
+                except ValueError:
+                    pass
+        out.append(_JS_ESCAPES.get(nxt, nxt))
+        i += 2
+    return "".join(out)
+
+
+def _as_declared(platform: str, found: str) -> str:
+    r"""A scanned name, spelled the way a spec would have to declare it.
+
+    `_cases_of` strips the declared name; the scan did not strip what it
+    captured, and the two are compared as strings. A name whose source
+    spelling has a leading or trailing space was therefore IMPOSSIBLE to
+    declare: write it with the space and the spec strips it back off, write
+    it without and the scan never matches.
+
+    That is not hypothetical. Reported 2026-09-08: the old web pattern cut
+    `it("says 'until entry' for zero hours")` at the inner quote, leaving
+    `says ` with a trailing space, and the same case then stood in BOTH
+    columns of one run --
+
+        MISSING     says   (declared, no implementation)
+        UNDECLARED  says   (implemented, declared nowhere)
+
+    -- two lines that are the same string on screen and differ by one byte.
+    Fixing only the pattern rescues the other 13 truncated titles and leaves
+    this one undeclarable, so both sides are made symmetric here.
+
+    ⚠️ This used to run `_unescape_js` for web as well, and `_read_js_literal`
+    ALREADY unescapes -- so the sequence was applied twice. A declared name
+    `a\b` was emitted correctly as `a\\b`, read back correctly as `a\b`, and
+    then turned into a backspace, landing in both the missing and undeclared
+    columns. It stayed invisible because it needs a name carrying a backslash,
+    and because the only escape both halves see in practice is `\'`, which is
+    idempotent: unescaping it a second time changes nothing. The reader owns
+    the literal's syntax; this function owns the strip, and nothing else.
+    `platform` stays in the signature because the caller has it and a future
+    per-platform normalisation belongs here, not in the reader.
+    """
+    return found.strip()
+
+
+def _read_js_literal(text: str, i: int) -> tuple[str | None, bool, int]:
+    r"""``(value, dynamic, index after the literal)`` for the literal at *i*.
+
+    ``value`` is None when there is no literal there, or when the literal is a
+    template with an interpolation -- a title assembled at run time has no
+    static spelling, so no spec can declare it. ``dynamic`` separates those two
+    cases: one is "not a title", the other is "a title this check cannot see",
+    and only the second is worth reporting.
+    """
+    if i >= len(text):
+        return None, False, i
+    quote = text[i]
+    if quote not in "'\"`":
+        return None, False, i
+    j = i + 1
+    body: list[str] = []
+    while j < len(text):
+        c = text[j]
+        if c == "\\" and j + 1 < len(text):
+            body.append(c)
+            body.append(text[j + 1])
+            j += 2
+            continue
+        if c == quote:
+            raw = "".join(body)
+            if quote == "`" and "${" in raw:
+                return None, True, j + 1
+            return _unescape_js(raw), False, j + 1
+        body.append(c)
+        j += 1
+    # Unterminated: the file does not parse, and guessing where the title ends
+    # would invent a name that exists nowhere.
+    return None, False, len(text)
+
+
+def _skip_call_args(text: str, i: int) -> int:
+    """Index just past the ``)`` matching the ``(`` at *i*.
+
+    Literals are stepped over rather than scanned, so a `)` inside a string in
+    an `it.each([...])` table does not end the argument list early.
+    """
+    depth = 0
+    while i < len(text):
+        c = text[i]
+        if c in "'\"`":
+            _, _, i = _read_js_literal(text, i)
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return i
+
+
+def _web_test_names(text: str) -> tuple[list[str], int]:
+    """``(static titles, calls whose title could not be read)``.
+
+    Replaces the regex this used to be. A single expression cannot both pair
+    the title's quotes and step over an `it.each(TABLE)` argument, and the
+    version that tried did three separate wrong things, all reported
+    2026-09-08:
+
+      `it("... the app's own wording")`  ended the title at the apostrophe
+      `it.each(TABLE)("%s ...")`         matched nothing at all
+      `/^a/.test("abc")`                 captured `abc` as a test title
+
+    The first two are silent in opposite directions and the third is the
+    "always wrong" shape this file already refuses for ios: a line that is
+    always wrong teaches the reader to skip the next real one.
+
+    The second element is a COUNT, not names, because the things it counts
+    have no name to give -- that is what makes them invisible today. A caller
+    that prints it only when it is non-zero turns "18 tests are absent from
+    both columns" into something the reader can see without knowing to look.
+    """
+    calls, unreadable = _web_calls(text, _WEB_TEST_HEAD)
+    return [title for _start, _paren, title in calls], unreadable
+
+
+def _web_calls(text: str, head: re.Pattern) -> tuple[list[tuple[int, int, str]], int]:
+    """``([(start, index of its '(', static title)], unreadable)`` for every
+    call of *head* — `it`/`test` for `_web_test_names`, `describe` for the
+    describes that `_web_tests` places them in. One reader for both, so the
+    rules above hold for a block's title exactly as for a test's."""
+    calls: list[tuple[int, int, str]] = []
+    unreadable = 0
+    for m in head.finditer(text):
+        i = m.end()
+        while True:
+            mod = _WEB_MODIFIER.match(text, i)
+            if not mod:
+                break
+            i = mod.end()
+            if mod.group("mod") not in _WEB_TABLE_MODIFIERS:
+                continue
+            while i < len(text) and text[i] in " \t\r\n":
+                i += 1
+            if i < len(text) and text[i] == "(":
+                i = _skip_call_args(text, i)
+            elif i < len(text) and text[i] == "`":
+                # `it.each` also takes a tagged template table.
+                _, _, i = _read_js_literal(text, i)
+        while i < len(text) and text[i] in " \t\r\n":
+            i += 1
+        if i >= len(text) or text[i] != "(":
+            # `it` that is not called: a variable, a property, a word in a
+            # string. Not a test, and not something we failed to read.
+            continue
+        paren = i
+        i += 1
+        while i < len(text) and text[i] in " \t\r\n":
+            i += 1
+        value, dynamic, after = _read_js_literal(text, i)
+        if value is None:
+            unreadable += 1
+            continue
+        # The literal has to BE the argument, not start it. `it("a" + b, fn)`
+        # otherwise yields `a` — a truncated title entering `implemented`,
+        # which is the exact shape this commit exists to remove, reached by a
+        # different route. Reported by the triage lane against this scanner
+        # before it shipped; no consumer face writes one today (0 across
+        # three trees, against 2998/3287/10072 plain literals), so this is
+        # closing the class rather than fixing a live break.
+        while after < len(text) and text[after] in " \t\r\n":
+            after += 1
+        if after < len(text) and text[after] not in ",)":
+            unreadable += 1
+            continue
+        calls.append((m.start(), paren, value))
+    return calls, unreadable
+
+
+def _web_tests(text: str) -> list[tuple[str | None, str]]:
+    """``(outermost describe title, or None, test title)`` for every test
+    `_web_test_names` reads — the block a stub file puts a target's cases in
+    (`describe('<target>', …)`) is the outermost one."""
+    suites = [(start, _skip_call_args(text, paren), title)
+              for start, paren, title in _web_calls(text, _WEB_DESCRIBE_HEAD)[0]]
+    out: list[tuple[str | None, str]] = []
+    for start, _paren, title in _web_calls(text, _WEB_TEST_HEAD)[0]:
+        around = [b for b in suites if b[0] < start < b[1]]
+        out.append((min(around)[2] if around else None, title))
+    return out
+
+
+def _discoverable(platform: str, found: str) -> str | None:
+    """Map a found method name back to the declared case name it implements.
+
+    Returns None when the method exists but the platform's runner will never
+    execute it — an XCTest method without the `test` prefix compiles, reads
+    as present to any name-matching scan, and silently never runs.
+    """
+    if platform != "ios":
+        return found
+    if found.startswith(IOS_TEST_PREFIX):
+        return found[len(IOS_TEST_PREFIX):]
+    if found.startswith("test"):
+        return found
+    return None
+
+
+_KOTLIN_CLASS = re.compile(r"\bclass\s+(?P<cls>\w+)")
+
+
+def _kotlin_tests(text: str) -> list[tuple[str | None, str]]:
+    """``(class, test name)``: the class is the nearest one declared above the
+    test. A test in a nested class takes the nested class's name, which is no
+    target's stub class, so it is placed by its file (`_owner`)."""
+    classes = [(m.start(), m.group("cls")) for m in _KOTLIN_CLASS.finditer(text)]
+    out: list[tuple[str | None, str]] = []
+    for m in _ALL_TESTS_PATTERNS["android"].finditer(text):
+        above = [name for start, name in classes if start < m.start()]
+        out.append((above[-1] if above else None, m.group("name")))
+    return out
+
+
+def _implemented_names(
+    root: Path, platform: str
+) -> tuple[set[str], list[str], set[str], dict[str, list[str]], int,
+           dict[str, list[tuple[str, str | None]]]]:
+    """``(names, files read, undiscoverable, name -> files, unreadable titles,
+    name -> [(file, class or outermost describe)])``.
+
+    The last one is what places a test in a target (`_owner`): the same
+    name implemented in two targets' test classes is two implementations,
+    and one set of names cannot tell them apart.
+
+    The name -> files map is what lets a caller link a case to the file that
+    implements it. The scan used to collapse every file into one set of names
+    and return only a flat list of files read, so "which file carries this
+    case" was not answerable from the result at all -- a doc page could only
+    have guessed it from the filename convention, which is exactly the guess
+    that breaks for a project that does not follow it.
+    """
+    suffix = PLATFORM_TEST_SUFFIX.get(platform)
+    pattern = _ALL_TESTS_PATTERNS.get(platform)
+    if (suffix is None or not root.is_dir()
+            or (platform not in ("ios", "web") and pattern is None)):
+        # Four elements, like every other exit. This one returned three, and
+        # the sole caller unpacks four — so reaching it raises ValueError
+        # rather than returning "nothing found". It is unreachable from that
+        # caller today (`root is None` and `not root.is_dir()` are both
+        # answered above it), which is why it survived: nothing that runs
+        # today can tell a correct early exit from a crash here. The next
+        # platform added to PLATFORM_TEST_SUFFIX without a pattern is what
+        # finds it, and it would find it as a traceback in a --check run.
+        return set(), [], set(), {}, 0, {}
+    names: set[str] = set()
+    unreadable_titles = 0
+    undiscoverable: set[str] = set()
+    read: list[str] = []
+    by_name: dict[str, list[str]] = {}
+    sites: dict[str, list[tuple[str, str | None]]] = {}
+    for path in sorted(root.rglob(f"*{suffix}")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        read.append(str(path))
+        if platform in _NESTED_COMMENT_BLOCKS:
+            text = _without_comments(
+                text, nested_blocks=_NESTED_COMMENT_BLOCKS[platform])
+        if platform == "web":
+            _titles, unreadable = _web_test_names(text)
+            unreadable_titles += unreadable
+            raws = _web_tests(text)
+        else:
+            raws = (_swift_tests(text) if platform == "ios" else _kotlin_tests(text))
+        for container, found in raws:
+            raw = _as_declared(platform, found)
+            mapped = _discoverable(platform, raw)
+            if mapped is None:
+                undiscoverable.add(raw)
+            else:
+                names.add(mapped)
+                where = by_name.setdefault(mapped, [])
+                if str(path) not in where:
+                    where.append(str(path))
+                site = (str(path), container)
+                if site not in sites.setdefault(mapped, []):
+                    sites[mapped].append(site)
+    return names, read, undiscoverable, by_name, unreadable_titles, sites
+
+
+def _owner(platform: str, path: str, container: str | None, targets) -> str | None:
+    """The target a test belongs to, read from the names `generate` gives a
+    target's stubs: its class (`{target}ContractTests` on ios,
+    `{target}ContractTest` on android) or outermost describe
+    (`describe('{target}')` on web) first, else its file (`_STUB_FILENAME`).
+    None when neither names one of *targets*."""
+    by_container = {_STUB_CONTAINER[platform].format(target=t): t for t in targets}
+    if container in by_container:
+        return by_container[container]
+    by_file = {_STUB_FILENAME[platform].format(target=t): t for t in targets}
+    return by_file.get(Path(path).name)
+
+
+def _resolve_pairs(report: "UnitContractReport", platform: str) -> None:
+    """Judge each declared (target, case) pair of *platform*.
+
+    A test belongs to the target its class, outermost describe or file names
+    (`_owner`). A test no target's name places still belongs to the one
+    target that declares its case name, when only one does — the name then
+    says which. For a name several targets declare, a test no name places
+    could be any of theirs: the targets with no test of their own are then
+    `unplaced`, and when there are fewer such tests than targets, the
+    difference has none whichever way they are placed (`short`).
+
+    A test that a target's name places, implementing a case that target does
+    not declare while another does, is `misplaced`: it is that target's test,
+    not the declaring one's.
+    """
+    pairs = report.declared_pairs.get(platform, set())
+    targets = {target for target, _name in pairs}
+    declarers: dict[str, set[str]] = {}
+    for target, name in pairs:
+        declarers.setdefault(name, set()).add(target)
+    placed: dict[tuple[str, str], list[str]] = {}
+    loose: dict[str, list[tuple[str, str | None]]] = {}
+    misplaced: set[tuple[str, str]] = set()
+    for name, found in report.implemented_sites.get(platform, {}).items():
+        declaring = declarers.get(name, set())
+        for path, container in found:
+            owner = _owner(platform, path, container, targets)
+            if owner is not None and owner in declaring:
+                placed.setdefault((owner, name), []).append(path)
+            elif owner is not None and declaring:
+                misplaced.add((owner, name))
+            elif len(declaring) == 1:
+                placed.setdefault((next(iter(declaring)), name), []).append(path)
+            elif declaring:
+                loose.setdefault(name, []).append((path, container))
+            # A name no target declares is `undeclared` by name, as before.
+    status: dict[tuple[str, str], str] = {}
+    files: dict[tuple[str, str], list[str]] = {}
+    for name, declaring in declarers.items():
+        rest = sorted(t for t in declaring if (t, name) not in placed)
+        for target in declaring - set(rest):
+            status[(target, name)] = PAIR_IMPLEMENTED
+            files[(target, name)] = sorted(set(placed[(target, name)]))
+        free = loose.get(name, [])
+        for target in rest:
+            status[(target, name)] = PAIR_UNATTRIBUTED if free else PAIR_MISSING
+            files[(target, name)] = sorted({path for path, _container in free})
+        if rest and free:
+            report.unplaced.setdefault(platform, {})[name] = (
+                rest, sorted(free, key=lambda site: (site[0], site[1] or "")))
+            if len(free) < len(rest):
+                report.short.setdefault(platform, {})[name] = len(rest) - len(free)
+    report.pair_status[platform] = status
+    report.pair_files[platform] = files
+    if misplaced:
+        report.misplaced[platform] = sorted(misplaced)
+
+
+def check_unit_contracts(
+    project_root: Path,
+    spec_dir: str | None = None,
+    project_platforms: list[str] | None = None,
+) -> UnitContractReport:
+    """Compare declared cases against implemented ones, per platform."""
+    project_root = Path(project_root)
+    config = load_project_config(project_root)
+    (cases, scanned, declaring, problems, declaring_files,
+     unreadable_files, app_specs, notes) = discover_unit_contracts(
+        project_root, spec_dir)
+    roots = _test_roots(project_root, config)
+    if project_platforms is None:
+        project_platforms = sorted(roots)
+
+    report = UnitContractReport(
+        cases=cases, scanned_specs=scanned,
+        declaring_specs=declaring, problems=problems,
+        declaring_files=declaring_files,
+        unreadable_files=unreadable_files,
+        notes=notes,
+    )
+    for case in cases:
+        # ⚠️ The check lives HERE and not in `_cases_of`, which is where a
+        # reader looks for it, because `_cases_of` reads one spec and has no
+        # project platform list — and the omitted `platforms` is exactly the
+        # dangerous case. A name is judged against the platforms it actually
+        # reaches, which for an omitted declaration is all of them.
+        targets = case.platforms or tuple(project_platforms)
+        for platform in targets:
+            report.declared.setdefault(platform, set()).add(case.name)
+            report.declared_pairs.setdefault(platform, set()).add((case.target, case.name))
+            why = identifier_problem(platform, case.name)
+            if why:
+                # Reported per platform on purpose: android accepts names ios
+                # refuses, so one line naming both would be wrong for one of
+                # them, and the fix ("declare platforms without ios") differs.
+                report.problems.append(f"{case.spec_file or case.screen}: {why}")
+
+    for platform in sorted(set(report.declared) | set(project_platforms)):
+        dirs = roots.get(platform)
+        if dirs is None:
+            if report.declared.get(platform) and isinstance(config.get("platforms"), list):
+                report.unscannable[platform] = (
+                    f"jui.config.json writes `platforms` as a list, which has no "
+                    f"place for unitTestsDir, so the {len(report.declared[platform])} "
+                    f"case(s) declared for {platform} cannot be compared against "
+                    f"anything — write `platforms` as an object, the shape `jui init` "
+                    f"writes, and declare platforms.<platform>.unitTestsDir"
+                )
+            elif report.declared.get(platform):
+                report.unscannable[platform] = (
+                    f"platforms.{platform}.unitTestsDir is not declared in "
+                    f"jui.config.json, so the {len(report.declared[platform])} case(s) "
+                    f"declared for it cannot be compared against anything "
+                    f"(it takes a directory, or a list of directories)"
+                )
+            continue
+        if not dirs:
+            if report.declared.get(platform):
+                report.unscannable[platform] = (
+                    f"platforms.{platform}.unitTestsDir is an empty list in "
+                    f"jui.config.json, so the {len(report.declared[platform])} case(s) "
+                    f"declared for it cannot be compared against anything — "
+                    f"name at least one directory, or remove the key"
+                )
+            continue
+        # EVERY listed directory must exist. Scanning the ones that do and
+        # skipping the rest would let a typo shrink the denominator while the
+        # surviving directories kept the count going up, which reads as
+        # working. The whole platform is unscannable, and the message names
+        # the entries that are missing.
+        missing = [d for d in dirs if not d.is_dir()]
+        if missing:
+            if report.declared.get(platform):
+                names = ", ".join(str(d) for d in missing)
+                report.unscannable[platform] = (
+                    f"unit test directory not found: {names} — declared cases for "
+                    f"{platform} cannot be compared against anything"
+                    + (f" (of {len(dirs)} declared for this platform)"
+                       if len(dirs) > 1 else "")
+                    + f". This is also what a project looks like before its "
+                    f"first stub is generated (git does not track empty "
+                    f"directories), so check that before suspecting the path"
+                )
+            continue
+        found: set[str] = set()
+        read: list[str] = []
+        undiscoverable: set[str] = set()
+        by_name: dict[str, list[str]] = {}
+        sites: dict[str, list[tuple[str, str | None]]] = {}
+        unreadable_titles = 0
+        for root in dirs:
+            (d_found, d_read, d_undiscoverable, d_by_name,
+             d_unreadable, d_sites) = _implemented_names(root, platform)
+            found |= d_found
+            read.extend(d_read)
+            undiscoverable |= d_undiscoverable
+            for name, files in d_by_name.items():
+                by_name.setdefault(name, []).extend(files)
+            for name, found_at in d_sites.items():
+                sites.setdefault(name, []).extend(found_at)
+            unreadable_titles += d_unreadable
+        report.implemented[platform] = found
+        report.scanned_files[platform] = read
+        report.implemented_files[platform] = by_name
+        report.implemented_sites[platform] = sites
+        _resolve_pairs(report, platform)
+        if undiscoverable:
+            report.undiscoverable[platform] = sorted(undiscoverable)
+        if unreadable_titles:
+            report.unreadable_titles[platform] = unreadable_titles
+    return report
+
+
+def summary_line_for(cases: int, scanned: int, declaring: int) -> str:
+    """The denominator sentence, from counts alone.
+
+    Takes numbers rather than a report because the docs index says the same
+    thing about a whole RUN — several scans, one line — and it has no report
+    to hand. Composing that sentence there would put the wording in two
+    places, which is the shape this line was extracted to avoid: the index and
+    `--check` would then be able to disagree about how a count is phrased
+    while agreeing about the count.
+    """
+    return (
+        f"unit contracts: {cases} case(s) declared across "
+        f"{scanned} spec file(s) scanned "
+        f"({declaring} spec file(s) carrying a unitContracts block)"
+    )
+
+
+def summary_line(report: UnitContractReport) -> str:
+    """The denominator line for one scan.
+
+    `--check` prints it and the generated docs index shows it. Requirement 3
+    of the docs ticket is that the two carry the SAME numbers, and the only
+    way two call sites cannot drift is for there to be one call site.
+    """
+    return summary_line_for(
+        len(report.cases), len(report.scanned_specs), len(report.declaring_files)
+    )
+
+
+#: Keys `aggregate_unit_totals` adds up. Named so a new total added to
+#: `unit_contract_pages` fails loudly here rather than being dropped from an
+#: aggregate that silently keeps reporting the old set.
+_SUMMABLE_TOTALS = ("cases", "specs_scanned", "specs_declaring",
+                    "specs_unreadable", "targets")
+
+
+def aggregate_unit_totals(totals_list: list[dict]) -> dict:
+    """One run's totals from several scans' totals.
+
+    A multi-app site scans once per app and shows ONE denominator. Summing
+    those in the docs generator would mean composing the sentence there too,
+    so the sum and its wording both live here.
+
+    `targets` is summed like the rest: each scan reads a different app's
+    specs, so two scans naming a target the same way are two targets, not one
+    seen twice. `unreadable_files` is concatenated rather than counted again,
+    so the names survive into the warning the generator prints.
+    """
+    out = {key: 0 for key in _SUMMABLE_TOTALS}
+    unreadable: list[str] = []
+    for totals in totals_list:
+        for key in _SUMMABLE_TOTALS:
+            out[key] += totals.get(key, 0)
+        unreadable.extend(totals.get("unreadable_files", []))
+    out["unreadable_files"] = unreadable
+    out["summary_line"] = summary_line_for(
+        out["cases"], out["specs_scanned"], out["specs_declaring"]
+    )
+    return out
+
+
+def format_report(report: UnitContractReport) -> list[str]:
+    """Human-readable lines, always naming the denominator."""
+    lines = [summary_line(report)]
+    for problem in report.problems:
+        lines.append(f"  PROBLEM  {problem}")
+    # Printed next to the problems and counted with neither: a limit that
+    # only exists in a docstring is a limit the reader never learns about,
+    # and one that fails the gate is a limit nobody can ship past.
+    for note in report.notes:
+        lines.append(f"  NOTE  {note}")
+    if report.declaring_specs and not report.cases:
+        lines.append(
+            f"  PROBLEM  {len(report.declaring_specs)} spec(s) carry a "
+            f"'unitContracts' block but no case could be read from any of them "
+            f"— a misspelled key drops the declaration silently, which is the "
+            f"one failure this mechanism must not have"
+        )
+    if not report.platforms:
+        lines.append("  no platforms to compare — nothing was checked (not: nothing drifted)")
+        return lines
+    for platform in report.platforms:
+        if platform in report.unscannable:
+            lines.append(f"  {platform}: NOT CHECKED — {report.unscannable[platform]}")
+            continue
+        # Counted in (target, case) pairs: a case is declared for a target,
+        # and a name several targets declare is several declarations. The
+        # names are given alongside, because they are what was counted before.
+        pairs = len(report.declared_pairs.get(platform, set()))
+        names = len(report.declared.get(platform, set()))
+        undeclared = report.undeclared(platform)
+        misplaced = report.misplaced.get(platform, [])
+        unattributed = report.unattributed_count(platform)
+        lines.append(
+            f"  {platform}: declared {pairs}, implemented {report.implemented_count(platform)}, "
+            f"missing {report.missing_count(platform)}, "
+            f"undeclared {len(undeclared) + len(misplaced)}"
+            + (f", unattributed {unattributed}" if unattributed else "")
+            + f" ((target, case) pairs, over {names} case name(s); "
+            f"{len(report.scanned_files.get(platform, []))} file(s) read)"
+        )
+        unplaced = report.unplaced.get(platform, {})
+        for target, name in report.missing_pairs(platform):
+            lines.append(f"    MISSING     {name}  (declared for {target}, no test of "
+                         f"{target} implements it)")
+        for name, short in sorted(report.short.get(platform, {}).items()):
+            targets, tests = unplaced[name]
+            lines.append(
+                f"    MISSING     {name}  (declared for {', '.join(targets)} with no test of "
+                f"their own; {len(tests)} test(s) implement it that no target's name "
+                f"places, so at least {short} of them have none)")
+        for name in undeclared:
+            lines.append(f"    UNDECLARED  {name}  (implemented, declared nowhere)")
+        for target, name in misplaced:
+            lines.append(f"    UNDECLARED  {name}  (implemented in {target}'s tests, which "
+                         f"does not declare it — another target does)")
+        for name in report.unattributed(platform):
+            if name in report.short.get(platform, {}):
+                continue
+            targets, tests = unplaced[name]
+            where = ", ".join(sorted({Path(path).name + (f" ({c})" if c else "")
+                                      for path, c in tests}))
+            lines.append(
+                f"    UNATTRIBUTED  {name}  (declared for {', '.join(targets)}; implemented "
+                f"by {len(tests)} test(s) that no target's name places — {where}. Which "
+                f"target each is for cannot be told, so this is not checked; put each "
+                f"target's case in its {_STUB_CONTAINER[platform].format(target='<target>')} "
+                f"{'describe' if platform == 'web' else 'class'} or "
+                f"{_STUB_FILENAME[platform].format(target='<target>')})")
+        for name in report.undiscoverable.get(platform, []):
+            lines.append(
+                f"    NEVER RUNS  {name}  (method exists but the runner will not "
+                f"discover it — XCTest needs a 'test' prefix; it compiles, reads "
+                f"as present, and executes zero times)"
+            )
+        # Only when non-zero. `declared/implemented/missing/undeclared` are
+        # four numbers that cannot say "and N tests are in neither column":
+        # a test whose title is built at run time is absent from BOTH, so the
+        # run reads as complete. This does not fail the check — a project may
+        # legitimately generate titles — it just stops the absence from being
+        # silent.
+        unreadable = report.unreadable_titles.get(platform, 0)
+        if unreadable:
+            lines.append(
+                f"    NOTE  {unreadable} test call(s) have a title this check "
+                f"cannot read (a template with an interpolation, or a name "
+                f"passed as a variable). They are counted in neither column, "
+                f"so 'undeclared 0' does not cover them."
+            )
+    return lines
+
+
+#: Per-case status on one face. `missing` and `not_declared_for_face` are
+#: kept apart deliberately: a case declared for ios only is NOT an android
+#: failure, and collapsing the two makes a correct project's page read red.
+CASE_IMPLEMENTED = "implemented"
+CASE_MISSING = "missing"
+CASE_NOT_DECLARED_FOR_FACE = "not_declared_for_face"
+#: Written, compiles, reads as present -- and executes zero times, because
+#: the runner will not discover it (XCTest needs a `test` prefix). It is NOT
+#: `missing`: a reader told "missing" goes and writes a test that already
+#: exists, and it still will not run. `--check` has a dedicated NEVER RUNS
+#: line for it, so collapsing it here would lose on the site what the CLI
+#: already says.
+CASE_NEVER_RUNS = "never_runs"
+#: A test implements the case name, but not one this target's name places,
+#: and other targets declare the name too (`PAIR_UNATTRIBUTED`).
+CASE_UNATTRIBUTED = "unattributed"
+
+
+def _relative_to_project(path: str, project_root: Path) -> str:
+    """A project-relative, POSIX path — never an absolute one.
+
+    `_test_roots` resolves its roots, so every implementing file arrives here
+    absolute even when the caller passed a relative project root. Handing that
+    to the docs generator bakes the developer's home directory — username and
+    all — into a generated site that consumers commit. `spec_file` is already
+    relativised at its source; this is the same rule for the other half.
+
+    A root configured outside the project still relativises (`../sibling/...`),
+    which keeps the link usable without naming anyone's home. Only a path with
+    no relative expression at all (a different Windows drive) falls back, and
+    it falls back to the bare filename rather than to something absolute.
+    """
+    try:
+        return Path(os.path.relpath(Path(path), project_root)).as_posix()
+    except ValueError:
+        return Path(path).name
+
+
+def unit_contract_pages(
+    project_root: Path,
+    spec_dir: str | None = None,
+    project_platforms: list[str] | None = None,
+) -> dict:
+    """The `unit-stubs --check` judgment, grouped by target, as plain data.
+
+    For `document_tools`, which generates one page per target and needs the
+    per-face implementation state on it. Returns JSON-safe values only (no
+    sets; every list sorted) so the caller can serialise or template it
+    directly.
+
+    The judgment itself is NOT reimplemented here -- this calls
+    `check_unit_contracts` and regroups its result. Two generations of
+    "is this case implemented" is exactly the drift the unitContracts
+    mechanism exists to prevent, and a second copy living in the docs
+    generator would be invisible to `--check`'s own tests.
+
+    `undeclared` is returned at the TOP LEVEL, not under a target: a case
+    that is implemented but declared nowhere has no target by definition,
+    so there is no page it could belong to.
+    """
+    project_root = Path(project_root)
+    report = check_unit_contracts(project_root, spec_dir, project_platforms)
+    platforms = report.platforms
+
+    by_target: dict[str, dict] = {}
+    for case in report.cases:
+        entry = by_target.setdefault(
+            case.target,
+            {"target": case.target, "screens": [], "cases": [],
+             "spec_files": [],
+             "faces": {p: {"declared": [], "implemented": [], "missing": [],
+                           "never_runs": [], "unattributed": [], "files": []}
+                       for p in platforms}},
+        )
+        if case.screen and case.screen not in entry["screens"]:
+            entry["screens"].append(case.screen)
+        if case.spec_file and case.spec_file not in entry["spec_files"]:
+            entry["spec_files"].append(case.spec_file)
+        faces = case.platforms or tuple(platforms)
+        status = {}
+        for platform in platforms:
+            if platform not in faces:
+                status[platform] = CASE_NOT_DECLARED_FOR_FACE
+                continue
+            # The pair's judgment, not the name's: a name several targets
+            # declare is implemented for this one only by a test of its own.
+            pair = report.pair_status.get(platform, {}).get((case.target, case.name))
+            implemented = pair == PAIR_IMPLEMENTED
+            unattributed = pair == PAIR_UNATTRIBUTED
+            never_runs = case.name in report.undiscoverable.get(platform, [])
+            if implemented:
+                status[platform] = CASE_IMPLEMENTED
+            elif unattributed:
+                status[platform] = CASE_UNATTRIBUTED
+            elif never_runs:
+                status[platform] = CASE_NEVER_RUNS
+            else:
+                status[platform] = CASE_MISSING
+            bucket = entry["faces"][platform]
+            bucket["declared"].append(case.name)
+            if implemented:
+                bucket["implemented"].append(case.name)
+            elif unattributed:
+                bucket["unattributed"].append(case.name)
+            elif never_runs:
+                bucket["never_runs"].append(case.name)
+            else:
+                bucket["missing"].append(case.name)
+            for path in report.pair_files.get(platform, {}).get((case.target, case.name), []):
+                rel = _relative_to_project(path, project_root)
+                if rel not in bucket["files"]:
+                    bucket["files"].append(rel)
+        entry["cases"].append({
+            "name": case.name,
+            "intent": case.intent,
+            "platforms": sorted(faces),
+            "status": status,
+        })
+
+    targets = []
+    for target in sorted(by_target):
+        entry = by_target[target]
+        entry["screens"] = sorted(entry["screens"])
+        entry["spec_files"] = sorted(entry["spec_files"])
+        entry["cases"] = sorted(entry["cases"], key=lambda c: c["name"])
+        for bucket in entry["faces"].values():
+            for key in ("declared", "implemented", "missing", "never_runs", "unattributed",
+                        "files"):
+                bucket[key] = sorted(set(bucket[key]))
+        targets.append(entry)
+
+    return {
+        "totals": {
+            "cases": len(report.cases),
+            "specs_scanned": len(report.scanned_specs),
+            "specs_declaring": len(report.declaring_files),
+            "specs_unreadable": len(report.unreadable_files),
+            "unreadable_files": sorted(report.unreadable_files),
+            "targets": len(targets),
+            "summary_line": summary_line(report),
+        },
+        "platforms": platforms,
+        "ok": report.ok,
+        "problems": list(report.problems),
+        "unscannable": dict(report.unscannable),
+        "undiscoverable": {p: list(v) for p, v in sorted(report.undiscoverable.items())},
+        "unreadableTitles": dict(sorted(report.unreadable_titles.items())),
+        "undeclared": {p: report.undeclared(p) for p in platforms if report.undeclared(p)},
+        "misplaced": {p: [list(pair) for pair in pairs]
+                      for p, pairs in sorted(report.misplaced.items())},
+        "targets": targets,
+    }
+
+
+#: Marker pair a generated stub file carries. Everything outside it is the
+#: author's, and regeneration preserves it — the same contract the kjui view
+#: scaffold uses, for the same reason: the body is the part a person wrote.
+STUB_BEGIN = "// >>> GENERATED_STUBS_START"
+STUB_END = "// <<< GENERATED_STUBS_END"
+
+#: ⚠️ ios method names are prefixed. XCTest discovers only `test`-prefixed
+#: methods, so a stub named exactly as declared compiles, is counted by a
+#: naive scan, and never runs — the mechanism manufacturing the failure it
+#: exists to prevent. Declared names stay platform-neutral; the prefix is
+#: added here and understood by the scanner.
+IOS_TEST_PREFIX = "test_"
+
+# ── a declared name reaches the emitted file in one of two positions ──────
+#
+# `web` puts it inside a string literal, so it is DATA and is escaped here.
+# `ios` and `android` put it in an identifier position, so it is CODE: a name
+# that is not a legal identifier there has no spelling that both compiles and
+# still matches the declaration `--check` compares against, and the only
+# honest answer is to refuse it. That asymmetry is the whole of this section.
+#
+# ⚠️ "web is a string literal, therefore safe" is not a claim until the
+# literal's QUOTE is named. The template is single-quoted, and the intent used
+# to be run through `.replace('"', "'")` — written for the double-quoted
+# platforms and exactly backwards here, because it turns a character this
+# literal accepts into the one that closes it. Measured with `node --check`:
+# an intent reading `has "quotes"` emitted a file that did not parse.
+
+#: Swift `identifier-character`, reconciled against the compiler.
+#:
+#: The CHARACTER rule, never the HEAD rule: `IOS_TEST_PREFIX` puts `t` in
+#: front, so a declared name may open with a digit. Measured with
+#: `swiftc -parse` (Xcode 26.5): `func test_1を返す()` parses, and so does an
+#: emoji name — U+1F389 falls in U+10000–U+1FFFD, which is why "restrict it
+#: to ASCII" is the wrong rule and would reject legal Japanese names.
+#:
+#: ⚠️ The table was TRANSCRIBED from the published grammar and then checked
+#: against swiftc itself: 240 code points — every printable ASCII character
+#: and both sides of every range boundary — one file each, one compile.
+#: 238 agreed and **two did not**, and both are kept here in the compiler's
+#: favour, because what ships has to compile, not to match a document:
+#:
+#:   U+0024 `$`   the grammar omits it; swiftc accepts it all the way to an
+#:                object file (`-parse`, `-typecheck` and `-emit-object` all
+#:                exit 0). Following the grammar would REJECT A LEGAL NAME,
+#:                which is the direction this check must never fail in.
+#:   U+FFFD       the grammar's range ends here; swiftc answers "invalid
+#:                character in source file" (`-emit-object` exits 1). So the
+#:                range ends one earlier. Following the grammar would let an
+#:                uncompilable file be written, which is the defect itself.
+#:
+#: Re-run that sweep if the range table is ever edited: a transcription error
+#: inside a range is invisible to every test written from the same table.
+_SWIFT_IDENT_RANGES = (
+    (0x24, 0x24), (0x30, 0x39), (0x41, 0x5A), (0x5F, 0x5F), (0x61, 0x7A),
+    (0xA8, 0xA8), (0xAA, 0xAA), (0xAD, 0xAD), (0xAF, 0xAF),
+    (0xB2, 0xB5), (0xB7, 0xBA), (0xBC, 0xBE), (0xC0, 0xD6),
+    (0xD8, 0xF6), (0xF8, 0xFF),
+    (0x100, 0x2FF), (0x300, 0x36F), (0x370, 0x167F), (0x1681, 0x180D),
+    (0x180F, 0x1DBF), (0x1DC0, 0x1DFF), (0x1E00, 0x1FFF),
+    (0x200B, 0x200D), (0x202A, 0x202E), (0x203F, 0x2040), (0x2054, 0x2054),
+    (0x2060, 0x206F), (0x2070, 0x20CF), (0x20D0, 0x20FF), (0x2100, 0x218F),
+    (0x2460, 0x24FF), (0x2776, 0x2793), (0x2C00, 0x2DFF), (0x2E80, 0x2FFF),
+    (0x3004, 0x3007), (0x3021, 0x302F), (0x3031, 0x303F), (0x3040, 0xD7FF),
+    (0xF900, 0xFD3D), (0xFD40, 0xFDCF), (0xFDF0, 0xFE1F), (0xFE20, 0xFE2F),
+    (0xFE30, 0xFE44), (0xFE47, 0xFFFC),
+    (0x10000, 0x1FFFD), (0x20000, 0x2FFFD), (0x30000, 0x3FFFD),
+    (0x40000, 0x4FFFD), (0x50000, 0x5FFFD), (0x60000, 0x6FFFD),
+    (0x70000, 0x7FFFD), (0x80000, 0x8FFFD), (0x90000, 0x9FFFD),
+    (0xA0000, 0xAFFFD), (0xB0000, 0xBFFFD), (0xC0000, 0xCFFFD),
+    (0xD0000, 0xDFFFD), (0xE0000, 0xEFFFD),
+)
+
+#: What a Kotlin ESCAPED (backticked) identifier cannot carry.
+#:
+#: MEASURED, not read off a spec: kotlinc 2.1.20 under JDK 17, one name per
+#: file, with the `@Test` annotation and `fail()` removed so an unresolved
+#: reference could not be mistaken for an illegal identifier — the same
+#: separation `swiftc -parse` gives on the other side. Every other ASCII
+#: punctuation mark, the space, the tab, a leading digit and every Japanese
+#: name compiled, so android is far more permissive than ios and a rule
+#: shared between them would reject names android accepts.
+_KOTLIN_ESCAPED_IDENT_ILLEGAL = frozenset("/.;[]<>:\\`\n\r")
+
+#: Platforms whose stub puts the declared name in an identifier position.
+#: `web` is deliberately absent: there the name is data, and data is escaped
+#: rather than refused.
+IDENTIFIER_PLATFORMS = ("ios", "android")
+
+
+def _in_swift_identifier(cp: int) -> bool:
+    return any(lo <= cp <= hi for lo, hi in _SWIFT_IDENT_RANGES)
+
+
+def identifier_problem(platform: str, name: str) -> str | None:
+    """Why *name* cannot be an identifier on *platform*, or None.
+
+    None for `web` and for any platform with no stub convention: absent is
+    not the same as legal, and this answers only the question it can.
+    """
+    if platform not in IDENTIFIER_PLATFORMS or not name:
+        return None
+    if platform == "ios":
+        bad = sorted({c for c in name if not _in_swift_identifier(ord(c))})
+        where = f"`func {IOS_TEST_PREFIX}{name}()`"
+        rule = ("Swift identifier. Letters of any script are legal — the "
+                "characters below are not")
+    else:
+        bad = sorted({c for c in name if c in _KOTLIN_ESCAPED_IDENT_ILLEGAL})
+        where = f"`fun `{name}`()`"
+        rule = ("Kotlin escaped identifier. Spaces and punctuation are legal "
+                "there — the characters below are not")
+    if not bad:
+        return None
+    shown = " ".join(repr(c) for c in bad)
+    return (
+        f"case name {name!r} cannot be a {rule}: {shown}. "
+        f"The {platform} stub emits it as {where}, so this name has no "
+        f"spelling that both compiles and matches the declaration. Rename "
+        f"the case, or declare 'platforms' without {platform}"
+    )
+
+
+def _escape_swift(text: str) -> str:
+    """*text*, safe inside a Swift double-quoted literal."""
+    return (text.replace("\\", "\\\\").replace('"', '\\"')
+                .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+def _escape_kotlin(text: str) -> str:
+    """*text*, safe inside a Kotlin double-quoted literal.
+
+    `$` is escaped because it opens a string template. Measured (kotlinc
+    2.1.20): an intent reading `costs $total yen` and one reading `${x}` are
+    both compile errors, while `"` and `\\b` are not — so the old
+    `.replace('"', "'")` was fixing the character that was not the problem.
+    """
+    return (text.replace("\\", "\\\\").replace("$", "\\$").replace('"', '\\"')
+                .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+def _escape_js_single(text: str) -> str:
+    """*text*, safe inside a single-quoted JavaScript literal.
+
+    This is an escape, not a sanitisation, and the difference is what makes
+    it safe to apply to the NAME: `_unescape_js` reverses it, so the name
+    `--check` scans back out of the file is the declared one, verbatim. A
+    transformation without that inverse would make a run write a file whose
+    every case is reported `missing` and `undeclared` at once.
+    """
+    return (text.replace("\\", "\\\\").replace("'", "\\'")
+                .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+#: Per platform, because the literal's quote differs and a shared escaper is
+#: wrong for two of the three.
+_STUB_ESCAPE = {
+    "ios": _escape_swift,
+    "android": _escape_kotlin,
+    "web": _escape_js_single,
+}
+
+
+_STUB_BODY = {
+    # The attribute: a filled-in body calls the app, MainActor wherever the
+    # app builds @MainActor (swift_isolation).
+    "ios": '    ' + TEST_METHOD_ISOLATION + ' func ' + IOS_TEST_PREFIX
+           + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
+    "android": '    @Test\n    fun `{name}`() {{\n        fail("not implemented: {intent}")\n    }}',
+    "web": "  it('{name}', () => {{\n    throw new Error('not implemented: {intent}');\n  }});",
+}
+
+#: ⚠️ `@testable import` takes the MODULE, and a Kotlin file needs its
+#: package. Neither is derivable from `target`, which is a class name — an
+#: earlier cut emitted `@testable import <ClassName>` and did not compile.
+#: These come from config, and generation refuses without them rather than
+#: emitting a file that cannot build.
+_STUB_FILE = {
+    # The class line is written once, when the file is created (it is
+    # outside the markers), by swift_isolation — the declaration branch-tests
+    # writes, so a test target whose default isolation is MainActor compiles
+    # it as generated. Existing files keep the line they have: merge_stubs
+    # replaces only the marker region.
+    "ios": "import XCTest\n@testable import {module}\n\n{ios_class}\n"
+           + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}}\n",
+    "android": "package {package}\n\nimport org.junit.Test\nimport org.junit.Assert.fail\n\n"
+               "class {target}ContractTest {{\n"
+               + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}}\n",
+    "web": "describe('{target}', () => {{\n" + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}});\n",
+}
+
+
+def stub_text(
+    platform: str, target: str, cases: list[UnitCase],
+    module: str | None = None, package: str | None = None,
+) -> str:
+    """A stub file for *cases*, in *platform*'s convention.
+
+    The body is a deliberate failure, not a pass: a stub that passes is a
+    case that reports success without having been written, which is worse
+    than a missing one because it is counted.
+    """
+    template = _STUB_FILE.get(platform)
+    body_template = _STUB_BODY.get(platform)
+    if template is None or body_template is None:
+        raise UnitContractError(f"no stub convention for platform {platform!r}")
+    if platform == "ios" and not module:
+        raise UnitContractError(
+            "ios stubs need the module for `@testable import`; declare "
+            "platforms.ios.testModule in jui.config.json. Emitting the class "
+            "name there produces a file that does not compile"
+        )
+    if platform == "android" and not package:
+        raise UnitContractError(
+            "android stubs need a package; declare platforms.android.testPackage "
+            "in jui.config.json. Without it the class lands in the default "
+            "package and drops out of package-scoped test filters"
+        )
+    # Refuse BEFORE writing anything, the same way the missing module and
+    # package are refused above: a file that does not compile is worse than
+    # no file, because it is committed, and the next person reads the error
+    # as a fault in their toolchain rather than in a case name.
+    for c in cases:
+        why = identifier_problem(platform, c.name)
+        if why:
+            raise UnitContractError(why)
+    escape = _STUB_ESCAPE[platform]
+    body = "\n\n".join(
+        body_template.format(
+            # An identifier is not escapable — it was validated instead, just
+            # above. A string literal is, and must be: the name reaches `web`
+            # as data.
+            name=c.name if platform in IDENTIFIER_PLATFORMS else escape(c.name),
+            intent=escape(c.intent or c.name),
+        )
+        for c in cases
+    )
+    return template.format(
+        target=target or "Unit", body=body, module=module or "", package=package or "",
+        ios_class=xctest_class_header(_STUB_CONTAINER["ios"].format(target=target or "Unit")),
+    )
+
+
+def merge_stubs(existing: str, generated: str) -> str:
+    """Append the generated stubs to the marker region; remove nothing.
+
+    This REPLACED the region with whatever the run generated, and the run
+    generates only the cases that are missing. So a run that added one case
+    deleted every case already there — including hand-written bodies, which
+    the first generation puts inside the markers and therefore invites.
+
+    It also could not converge. The cases it deleted were missing on the
+    next run and came back, and the case it had just written was then
+    implemented and dropped out, so the file oscillated with period two and
+    ``--check`` never reached 0. Reading only every other run showed a file
+    that agreed with itself.
+
+    Appending makes the operation idempotent for the reason the oscillation
+    existed: a case present in the region is found by the scanner, so it is
+    never missing again, so it is never regenerated. A second run has
+    nothing to add and reports ``unchanged``.
+
+    Nothing is removed, and that includes a case the spec no longer
+    declares. ``check`` already reports those as ``undeclared``; deleting a
+    test because a spec edit stopped naming it is a different act from
+    filling in a stub, and it is the author's.
+
+    A file whose markers are gone is returned untouched: the author removed
+    them, and overwriting on that basis would delete work.
+    """
+    if STUB_BEGIN not in existing or STUB_END not in existing:
+        return existing
+    head = existing.split(STUB_BEGIN)[0]
+    tail = existing.split(STUB_END, 1)[1]
+    kept = existing.split(STUB_BEGIN, 1)[1].split(STUB_END, 1)[0].strip("\n")
+    added = generated.split(STUB_BEGIN, 1)[1].split(STUB_END, 1)[0].strip("\n")
+    if kept and added:
+        body = kept + "\n\n" + added
+    else:
+        body = kept or added
+    return head + STUB_BEGIN + "\n" + body + "\n" + STUB_END + tail
+
+
+#: The class (ios, android) or outermost describe (web) a target's stubs are
+#: written in — what `stub_text` writes and `_owner` reads a test's target
+#: from.
+_STUB_CONTAINER = {
+    "ios": "{target}ContractTests",
+    "android": "{target}ContractTest",
+    "web": "{target}",
+}
+
+#: Where a target's stub file lives, per platform. A convention rather than a
+#: declaration: the spec says which cases exist, not where a face keeps its
+#: files, and asking it to would put the same fact in two places.
+_STUB_FILENAME = {
+    "ios": "{target}ContractTests.swift",
+    "android": "{target}ContractTest.kt",
+    "web": "{target}.contract.test.ts",
+}
+
+
+def write_stubs(
+    project_root: Path,
+    report: UnitContractReport,
+    dry_run: bool = False,
+) -> list[tuple[str, str, int]]:
+    """Write or refresh stub files for cases with no implementation.
+
+    Returns ``(path, action, case_count)`` per file touched, where the count
+    is the number of stubs ADDED. Missing stubs are appended to the marker
+    region and nothing in it is removed, so the count is the whole change; a
+    file without markers is left alone, because the author removed them and
+    overwriting would delete work.
+    """
+    config = load_project_config(project_root)
+    roots = _test_roots(Path(project_root), config)
+    written: list[tuple[str, str, int]] = []
+
+    by_platform_target: dict[tuple[str, str], list[UnitCase]] = {}
+    for case in report.cases:
+        for platform in case.platforms or tuple(report.platforms):
+            if platform in report.unscannable or roots.get(platform) is None:
+                continue
+            # Only a pair KNOWN to have no test: a name implemented for
+            # another target is not this target's implementation, and a pair
+            # whose tests cannot be placed may have one.
+            if report.pair_status.get(platform, {}).get(
+                    (case.target, case.name)) != PAIR_MISSING:
+                continue
+            by_platform_target.setdefault((platform, case.target or "Unit"), []).append(case)
+
+    # Refuse the whole run before touching the first file. `stub_text` refuses
+    # too, but it is called once per (platform, target) inside the loop below,
+    # so a refusal there would land after the earlier files were already
+    # written -- and a half-generated run is the state hardest to reason about
+    # afterwards, because the files that DID appear look like the command
+    # succeeded. Collected rather than raised on the first hit: a run stopped
+    # at name one sends the author back N times for a fault they could have
+    # been shown all of.
+    refusals = [
+        why
+        for (platform, _target), cases in sorted(by_platform_target.items())
+        for case in cases
+        for why in (identifier_problem(platform, case.name),)
+        if why
+    ]
+    if refusals:
+        raise UnitContractError(
+            f"{len(refusals)} declared case name(s) cannot be written as an "
+            f"identifier on the platform they target, so no stub was written:"
+            + "".join(f"\n  - {why}" for why in refusals)
+        )
+
+    for (platform, target), cases in sorted(by_platform_target.items()):
+        # The FIRST declared directory is where new stubs go. A project that
+        # lists several keeps its hand-written tests in the others; writing
+        # into all of them would create the same stub N times, and choosing
+        # by any other rule would move where a single-string project's stubs
+        # have always landed.
+        dirs = roots[platform]
+        if not dirs:
+            continue
+        root = dirs[0]
+        filename = _STUB_FILENAME.get(platform)
+        if filename is None:
+            continue
+        path = root / filename.format(target=target)
+        entry = (config.get("platforms") or {}).get(platform) or {}
+        generated = stub_text(
+            platform, target, sorted(cases, key=lambda c: c.name),
+            module=entry.get("testModule"), package=entry.get("testPackage"),
+        )
+        if path.exists():
+            existing = path.read_text(encoding="utf-8")
+            merged = merge_stubs(existing, generated)
+            action = "unchanged" if merged == existing else "updated"
+        else:
+            merged = generated
+            action = "created"
+        if not dry_run and action != "unchanged":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(merged, encoding="utf-8")
+        written.append((str(path), action, len(cases)))
+    return written

@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/strokeWidth__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.strokeWidth (static)",
+    "description": "Conformance fixture for 'strokeWidth' on Indicator (section: Indicator, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "android",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "strokeWidth__static",
+      "description": "Conformance fixture for 'strokeWidth' on Indicator (section: Indicator, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_strokeWidth__static"
+        }
+      ]
+    }
+  ]
+}

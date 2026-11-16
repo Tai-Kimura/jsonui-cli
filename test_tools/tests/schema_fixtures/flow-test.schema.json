@@ -1,0 +1,319 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/flow-test.schema.json",
+  "title": "JsonUI Flow Test",
+  "description": "Schema for multi-screen flow test cases (N:1 mapping with layout JSONs)",
+  "type": "object",
+  "definitions": {
+    "fileStep": {
+      "type": "object",
+      "description": "Reference to a screen test file to execute",
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to screen test file (e.g., 'screens/login' resolves to 'screens/login.test.json')"
+        },
+        "case": {
+          "type": "string",
+          "description": "Specific test case name to run (optional, runs all cases if not specified)"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of test case names to run (optional)"
+        },
+        "args": {
+          "type": "object",
+          "description": "Arguments overriding the screen test's default args for @{varName} substitution",
+          "additionalProperties": true
+        },
+        "when": {
+          "$ref": "actions.schema.json#/definitions/condition"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false
+    },
+    "blockStep": {
+      "type": "object",
+      "description": "Grouped inline steps with a name (rendered as one unit in docs/reports)",
+      "properties": {
+        "block": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Block name"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this block does"
+        },
+        "descriptionFile": {
+          "type": "string",
+          "description": "Path to external description JSON file (relative to test file)"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "actions.schema.json#/definitions/step"
+          },
+          "minItems": 1,
+          "description": "Action/assertion steps in this block (no nested blocks or file references; no screen prefix)"
+        },
+        "when": {
+          "$ref": "actions.schema.json#/definitions/condition"
+        }
+      },
+      "required": [
+        "block",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "inlineStep": {
+      "allOf": [
+        {
+          "type": "object",
+          "properties": {
+            "screen": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Screen identifier (matches source layout name without extension)"
+            }
+          },
+          "required": [
+            "screen"
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "$ref": "actions.schema.json#/definitions/action"
+            },
+            {
+              "$ref": "actions.schema.json#/definitions/assertion"
+            }
+          ]
+        }
+      ]
+    },
+    "flowStep": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/fileStep"
+        },
+        {
+          "$ref": "#/definitions/blockStep"
+        },
+        {
+          "$ref": "#/definitions/inlineStep"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reference to this schema"
+    },
+    "type": {
+      "const": "flow",
+      "description": "Test type identifier"
+    },
+    "sources": {
+      "type": "array",
+      "description": "Source files involved in this flow",
+      "items": {
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "string",
+            "description": "Path to the JsonUI layout file"
+          },
+          "document": {
+            "type": "string",
+            "description": "Path to the specification document file. Canonical key since 2026-08-01, aligned with screen-test source.document (the two schemas used different spellings for the same concept). Provenance metadata: drivers decode it but never open it, and the doc generator currently links only screen-test source.document."
+          },
+          "spec": {
+            "type": "string",
+            "description": "DEPRECATED alias of 'document' (the pre-2026-08-01 spelling). Validators read it as 'document' and warn; providing both is an error. Removed in the next schema version."
+          },
+          "alias": {
+            "type": "string",
+            "description": "Short alias for referencing this screen in steps"
+          }
+        },
+        "required": [
+          "layout"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Test metadata",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable test name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the user flow being tested"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when this test was generated"
+        },
+        "generatedBy": {
+          "type": "string",
+          "description": "Agent or tool that generated this test"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags for filtering tests"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "platform": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ios",
+            "android",
+            "web",
+            "all"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android",
+              "web"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      ],
+      "default": "all",
+      "description": "Target platform(s) for this test"
+    },
+    "orientation": {
+      "x-requires-driver": {
+        "android": "1.12.0",
+        "ios": "1.12.0",
+        "web": "1.12.0"
+      },
+      "type": "string",
+      "enum": ["portrait", "landscape"],
+      "description": "Orientation this file runs in, applied once when the run starts. Overrides the project-wide default in jui.config.json `test.orientation`; a `setOrientation` step still wins for the rotation it performs, so the order is step > this field > config default. Declared in the file rather than resolved at install time because one installed bundle is shared by every lane — phone and tablet run the same files against different devices — so a value baked in per file could only be right for one of them."
+    },
+    "launch": {
+      "x-requires-driver": {
+        "web": "1.15.0"
+      },
+      "$ref": "actions.schema.json#/definitions/launch"
+    },
+    "mocks": {
+      "$ref": "actions.schema.json#/definitions/mocksScenarioMap"
+    },
+    "initialState": {
+      "x-requires-driver": {
+        "android": "1.17.0",
+        "ios": "1.15.0",
+        "web": "1.15.0"
+      },
+      "type": "object",
+      "description": "Values put into screens' Data for this flow, delivered with the flow's one launch. Each screen applies its entry once, the first time the flow reaches it, and the driver checks the app's confirmation there (a screen the flow never reaches is a warning). Files and cases the flow references run without their own initialState — warned, not applied. Spec: specs/2026-07-08-advanced-test-features.md §10.",
+      "properties": {
+        "viewModels": {
+          "type": "object",
+          "description": "Screen id -> (Data name -> value). Keys are screen ids: the layout basename without .json — the same values the flow's steps write in `screen`. Each inner object follows the screen test's initialState.viewModel rules (Data names only, values fitting the Data's class, null only for an optional class). An empty object is the same as none.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "setup": {
+      "type": "array",
+      "description": "Steps to execute before the flow test",
+      "items": {
+        "$ref": "#/definitions/flowStep"
+      }
+    },
+    "teardown": {
+      "type": "array",
+      "description": "Steps to execute after the flow test",
+      "items": {
+        "$ref": "#/definitions/flowStep"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Flow test steps with screen context",
+      "items": {
+        "$ref": "#/definitions/flowStep"
+      },
+      "minItems": 1
+    },
+    "checkpoints": {
+      "type": "array",
+      "description": "Named checkpoints for debugging and reporting",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Checkpoint name"
+          },
+          "afterStep": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Step index (0-based) after which this checkpoint occurs"
+          },
+          "screenshot": {
+            "type": "boolean",
+            "default": false,
+            "description": "Take screenshot at this checkpoint"
+          }
+        },
+        "required": [
+          "name",
+          "afterStep"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "descriptionFile": {
+      "type": "string",
+      "description": "Path to external description JSON file (relative to test file)"
+    }
+  },
+  "required": [
+    "type",
+    "metadata",
+    "steps"
+  ],
+  "additionalProperties": false
+}

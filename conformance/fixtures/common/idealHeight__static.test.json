@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/idealHeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.idealHeight (static)",
+    "description": "Conformance fixture for 'idealHeight' on View (section: common, class: visual). Value under test: 120.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "idealHeight__static",
+      "description": "Conformance fixture for 'idealHeight' on View (section: common, class: visual). Value under test: 120.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_idealHeight__static"
+        }
+      ]
+    }
+  ]
+}

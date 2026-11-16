@@ -1,0 +1,419 @@
+"""Configuration manager for jui.config.json."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+
+DEFAULT_CONFIG = {
+    "project_name": "",
+    "spec_directory": "docs/screens/json",
+    "layouts_directory": "docs/screens/layouts",
+    "styles_directory": "docs/screens/styles",
+    "images_directory": "docs/screens/images",
+    "component_spec_directory": "docs/components/json",
+    "strings_file": "",
+    "type_map_file": ".jsonui-type-map.json",
+    "document_tools_path": "",
+    "api_directory": "docs/api",
+    "api": {},
+    "platforms": {},
+}
+
+
+# Per-platform defaults for ``api.platforms.<platform>``. Each generator
+# also accepts a ``None`` argument and falls back to its own defaults, but
+# centralizing them here keeps ``jui build --verbose`` output predictable.
+API_PLATFORM_DEFAULTS = {
+    "ios": {
+        "model_dir": "Model",
+        "dto_subdir": "Generated",
+    },
+    "android": {
+        "model_package": "model",
+        "dto_subpackage": "generated",
+        "serializer": "moshi",      # moshi | kotlinx | none
+    },
+    "web": {
+        "model_dir": "models",
+        "dto_subdir": "generated",
+        "case_convention": "snake_case",   # snake_case | camelCase
+    },
+}
+
+
+#: Where each platform keeps its distributed Layouts, by convention.
+#:
+#: One list, because there were two ideas of this and only one of them was
+#: written down. `jui init` wrote no `layoutsDir` at all, so a project made
+#: by it had every distribution step silently skip — eight places read this
+#: key and most of them `continue` without a word — while `jui migrate`
+#: carried its own candidate list to guess with. A project could therefore
+#: be migrated from a directory that the build would never distribute to.
+#:
+#: The values are relative to the PLATFORM ROOT, which is the directory the
+#: user named at init.
+DEFAULT_LAYOUTS_DIR = {
+    "ios": "Layouts",
+    "android": "app/src/main/assets/Layouts",
+    "web": "src/Layouts",
+}
+
+
+#: The platforms jui generates and builds for — the keys `jui init` writes.
+KNOWN_PLATFORMS = ("ios", "android", "web")
+
+
+class ConfigShapeError(ValueError):
+    """``jui.config.json`` parsed, but a key jui reads has the wrong shape.
+
+    Raised by :meth:`ConfigManager.load` and turned into one ``ERROR:`` line
+    and exit 1 at the CLI entry, so a bad config reads as a bad config and
+    not as a crash in whichever command happened to touch it first.
+    """
+
+
+def validate_platforms(config: Any, path: Path | str = "jui.config.json") -> None:
+    """Refuse a ``platforms`` value jui cannot read, in one sentence.
+
+    ``jui init`` writes ``platforms`` as an object keyed by platform name,
+    each entry carrying the ``root`` every command resolves paths against.
+    The sibling test tools also accept a bare list of names, and a project
+    written for them reached ``jui g project`` / ``jui build`` / ``jui
+    verify`` as an ``AttributeError: 'list' object has no attribute
+    'items'``. A list cannot simply be read as names here: jui needs each
+    platform's ``root``, and ``{"web": {}}`` crashed the same way with a
+    ``KeyError: 'root'``. So both shapes are refused up front, naming the
+    key and the shape ``jui init`` writes.
+    """
+    if not isinstance(config, dict):
+        raise ConfigShapeError(
+            f"{path}: the config must be a JSON object as written by "
+            f"`jui init`; got {_shape_name(config)}."
+        )
+    if "platforms" not in config:
+        return
+    platforms = config["platforms"]
+    if not isinstance(platforms, dict):
+        raise ConfigShapeError(
+            f"{path}: `platforms` must be an object like "
+            '{"web": {"root": "web"}} as written by `jui init`; '
+            f"got {_shape_name(platforms)} ({json.dumps(platforms)})."
+        )
+    # Only the platforms jui builds for are held to the entry shape. An
+    # unknown key is skipped by every reader that looks platforms up by name
+    # (the scan-root helpers plant one on purpose to prove it), so refusing
+    # it here would turn a tolerated extra into a new failure.
+    for name in KNOWN_PLATFORMS:
+        if name not in platforms:
+            continue
+        pconfig = platforms[name]
+        if not isinstance(pconfig, dict):
+            raise ConfigShapeError(
+                f"{path}: `platforms.{name}` must be an object with a "
+                f'`root`, like {{"{name}": {{"root": "{name}"}}}} as written '
+                f"by `jui init`; got {_shape_name(pconfig)}."
+            )
+        root = pconfig.get("root")
+        if not isinstance(root, str) or not root:
+            raise ConfigShapeError(
+                f"{path}: `platforms.{name}` has no `root` (the platform "
+                f"project directory); write it like "
+                f'{{"{name}": {{"root": "{name}"}}}} as `jui init` does.'
+            )
+
+
+def _shape_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    return {
+        list: "a list", str: "a string", bool: "a boolean",
+        int: "a number", float: "a number", dict: "an object",
+    }.get(type(value), type(value).__name__)
+
+
+def walked_up_note(config_path) -> str:
+    """Said by an ERROR about a named platform when the config read is not in the current directory: jui walked up to it."""
+    if Path(config_path).resolve().parent == Path.cwd().resolve():
+        return ""
+    return (" That config is above this directory — jui walked up to it; if this directory is a "
+            "submodule, it may not be initialised.")
+
+
+def named_platforms(args) -> list[str]:
+    """The platforms a command line names: `--platform X` and / or `--X-only`."""
+    named = []
+    platform = getattr(args, "platform", None)
+    if platform:
+        named.append(platform)
+    for p in ("ios", "android", "web"):
+        if getattr(args, f"{p}_only", False) and p not in named:
+            named.append(p)
+    return named
+
+
+def absent_platform_message(named, config_path, platforms) -> str | None:
+    """The ERROR text (no "ERROR:" prefix) when a named platform is not in the config read, else None.
+
+    One sentence for every command that takes a platform by name. Until
+    jsonui-cli 1.9.9 each answered on its own: build and generate project ran
+    with nothing selected and said "successfully", verify skipped every screen
+    (when a top-level layouts_directory let it resolve), and sync_tool said
+    "nothing to sync" — all rc 0 (tickets
+    jui-platform-asked-by-name-and-absent-from-config-exits-0 and
+    jui-verify-and-others-platform-asked-by-name-absent-exits-0).
+    """
+    absent = [p for p in named if p not in (platforms or {})]
+    if not absent:
+        return None
+    have = ", ".join(platforms) if platforms else "none"
+    return (f"{', '.join(absent)} was asked for, and {config_path} has no such platform "
+            f"(its platforms: {have}).{walked_up_note(config_path)}")
+
+
+class ConfigManager:
+    """Manages jui.config.json read/write."""
+
+    CONFIG_FILENAME = "jui.config.json"
+
+    def __init__(self, config_path: Path | None = None):
+        if config_path:
+            self._path = Path(config_path)
+        else:
+            self._path = self._find_config()
+
+    def _find_config(self) -> Path:
+        """Search upward for jui.config.json."""
+        current = Path.cwd()
+        while True:
+            candidate = current / self.CONFIG_FILENAME
+            if candidate.exists():
+                return candidate
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+        return Path.cwd() / self.CONFIG_FILENAME
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
+    def project_root(self) -> Path:
+        return self._path.parent
+
+    def exists(self) -> bool:
+        return self._path.exists()
+
+    def load(self) -> dict[str, Any]:
+        """Load config. Returns default if file doesn't exist."""
+        if not self._path.exists():
+            return dict(DEFAULT_CONFIG)
+        with open(self._path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        validate_platforms(config, self._path)
+        return config
+
+    def save(self, config: dict[str, Any]) -> None:
+        """Save config to file."""
+        with open(self._path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+
+    # --- Convenience properties ---
+
+    def _platform_config(self, platform: str) -> dict[str, Any] | None:
+        config = self.load()
+        return config.get("platforms", {}).get(platform)
+
+    @property
+    def ios_root(self) -> Path | None:
+        p = self._platform_config("ios")
+        return self.project_root / p["root"] if p and "root" in p else None
+
+    @property
+    def android_root(self) -> Path | None:
+        p = self._platform_config("android")
+        return self.project_root / p["root"] if p and "root" in p else None
+
+    @property
+    def web_root(self) -> Path | None:
+        p = self._platform_config("web")
+        return self.project_root / p["root"] if p and "root" in p else None
+
+    @property
+    def layouts_directory(self) -> Path:
+        config = self.load()
+        return self.project_root / config.get("layouts_directory", "docs/screens/layouts")
+
+    @property
+    def spec_directory(self) -> Path:
+        config = self.load()
+        return self.project_root / config.get("spec_directory", "docs/screens/json")
+
+    @property
+    def images_directory(self) -> Path:
+        config = self.load()
+        return self.project_root / config.get("images_directory", "docs/screens/images")
+
+    @property
+    def styles_directory(self) -> Path:
+        config = self.load()
+        return self.project_root / config.get("styles_directory", "docs/screens/styles")
+
+    @property
+    def component_spec_directory(self) -> Path:
+        config = self.load()
+        # The literal used to be written here AND in DEFAULTS above — the
+        # same fact twice in one file, and a third time in init_cmd. Read the
+        # shared default so a fourth reader cannot disagree with the other
+        # three (one already did: jsonui-test's ownership check had none).
+        return self.project_root / config.get(
+            "component_spec_directory",
+            DEFAULT_CONFIG.get("component_spec_directory", "docs/components/json"))
+
+    @property
+    def strings_file(self) -> Path | None:
+        config = self.load()
+        sf = config.get("strings_file", "")
+        return self.project_root / sf if sf else None
+
+    @property
+    def type_map_file(self) -> Path | None:
+        config = self.load()
+        tmf = config.get("type_map_file", "")
+        return self.project_root / tmf if tmf else None
+
+    @property
+    def api_directory(self) -> Path:
+        """Directory containing swagger / OpenAPI JSON files.
+
+        Default: ``docs/api`` under the project root. Override via the
+        top-level ``api_directory`` key in ``jui.config.json``.
+        """
+        config = self.load()
+        return self.project_root / config.get("api_directory", "docs/api")
+
+    def api_platform_config(self, platform: str) -> dict[str, Any]:
+        """Return ``api.platforms.<platform>`` merged with defaults.
+
+        Always returns a dict — missing user config falls back to the
+        builtin defaults defined in :data:`API_PLATFORM_DEFAULTS`.
+        Generators consume this via :meth:`load` + this method.
+        """
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        per_platform = (api_cfg.get("platforms") or {}).get(platform) or {}
+        defaults = API_PLATFORM_DEFAULTS.get(platform, {})
+        return {**defaults, **per_platform}
+
+    def api_format_mapping(self) -> tuple[bool, frozenset[str]]:
+        """Return ``(enabled, excluded_docs)`` for format-aware mapping.
+
+        ``api.format_mapping`` (default ``False``) opts the project into
+        mapping OpenAPI string formats (``date-time`` / ``uuid`` /
+        ``binary``) to native DTO types. ``api.format_mapping_exclude``
+        is a per-doc opt-out: a list of swagger file names (basenames,
+        e.g. ``"legacy.json"``) whose DTOs keep plain strings even when
+        the project flag is on — so one legacy API that lies about its
+        formats doesn't force the whole project off.
+        """
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        enabled = bool(api_cfg.get("format_mapping", False))
+        exclude = api_cfg.get("format_mapping_exclude") or []
+        if not isinstance(exclude, list):
+            exclude = []
+        return enabled, frozenset(str(name) for name in exclude)
+
+    def api_enum_unknown_case(self) -> bool:
+        """``api.enum_unknown_case`` (default ``True``): generated iOS and Android enums take a value they do not know
+        (Swift ``case unknown(<raw>)``, Kotlin ``UNKNOWN``) instead of failing the whole response's decode, so a value
+        the server adds later does not break an app already out (ticket
+        jui-api-model-enum-unknown-value-fails-whole-decode). ``false``: the enums as before. Web is the same either
+        way (its enums are types only, read without a check)."""
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        return api_cfg.get("enum_unknown_case", True) is not False
+
+    def api_schemas_config(self) -> dict[str, Any]:
+        """Return the raw ``api.schemas`` block from ``jui.config.json``.
+
+        Returns an empty dict when unset. The caller (typically
+        :class:`SchemaFilterConfig.from_dict`) normalizes missing keys
+        and ``[]`` values to "filter not in effect" per v2 plan §2.4.
+        """
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        return api_cfg.get("schemas") or {}
+
+    @property
+    def document_tools_path(self) -> Path | None:
+        config = self.load()
+        dtp = config.get("document_tools_path", "")
+        if not dtp:
+            return None
+        p = Path(dtp)
+        if p.is_absolute():
+            return p
+        return self.project_root / p
+
+    def document_tools_path_notes(self, applied: bool = True) -> list[str]:
+        """What `ensure_document_tools_importable` is about to do, or did not.
+
+        🚨 BOTH OUTCOMES WERE SILENT. Reported 2026-09-08 by a consumer lane
+        after finding three faces configured with a path that does not exist:
+
+            set but missing -> the setting had no effect, and nobody is told
+            set and present -> `document_tools` is imported from a WORKING
+                               COPY instead of the installed distribution,
+                               and nobody is told that either
+
+        ⚠️ The second is the dangerous one. A dirty working copy silently
+        displaces the distribution while `jui --version` keeps naming the
+        distribution — the same shape as reporting a face's behaviour from a
+        version string that no longer describes what runs.
+
+        Notes, never errors: a missing path is a gap in the record, and an
+        intentional development override is a real thing to want.
+        """
+        dtp = self.document_tools_path
+        if not dtp:
+            return []
+        if not dtp.exists():
+            where = ("the setting had no effect, and `document_tools` will be "
+                     "imported from the installed CLI instead."
+                     if applied else
+                     "the setting has no effect anywhere — nothing can be "
+                     "imported from a path that is not there. This command "
+                     "does not use it; the setting itself is broken.")
+            return [f"document_tools_path is set to {dtp} but does not exist — "
+                    f"{where}"]
+        if not applied:
+            # ⚠️ The present-and-used note belongs to the command that USES the
+            # path. Saying "is prepended to sys.path" from a command that never
+            # prepends it would be a false report — the same shape as naming a
+            # face's behaviour from a version string that does not describe what
+            # ran. Only the broken-state half is command-independent.
+            return []
+        return [f"document_tools_path {dtp} is prepended to sys.path — "
+                f"`document_tools` now resolves to that working copy, not the "
+                f"installed distribution, so `jui --version` no longer "
+                f"describes what runs."]
+
+    def ensure_document_tools_importable(self) -> None:
+        """Add document_tools_path to sys.path if configured AND it exists.
+
+        ⚠️ The docstring used to say "if configured", which is not the
+        condition — `dtp.exists()` is also required, and its failure was
+        silent. See `document_tools_path_notes` for why both branches now
+        report.
+        """
+        import sys
+        dtp = self.document_tools_path
+        for note in self.document_tools_path_notes():
+            print(f"NOTE [tools]: {note}", file=sys.stderr)
+        if dtp and dtp.exists() and str(dtp) not in sys.path:
+            sys.path.insert(0, str(dtp))

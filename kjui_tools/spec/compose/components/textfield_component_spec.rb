@@ -1,0 +1,1143 @@
+# frozen_string_literal: true
+
+require 'compose/components/textfield_component'
+require 'compose/components/textview_component'
+require 'compose/helpers/modifier_builder'
+require 'compose/helpers/resource_resolver'
+
+RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
+  let(:required_imports) { Set.new }
+
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    # Clear data definitions before each test
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  describe '.generate' do
+    it 'generates CustomTextField component' do
+      json_data = { 'type' => 'TextField' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('CustomTextField(')
+      expect(required_imports).to include(:custom_textfield)
+    end
+
+    it 'generates TextField with placeholder' do
+      json_data = { 'type' => 'TextField', 'placeholder' => 'Enter text' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('placeholder')
+      expect(result).to include('Enter text')
+    end
+
+    it 'generates TextField with hint (same as placeholder)' do
+      json_data = { 'type' => 'TextField', 'hint' => 'Search...' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('placeholder')
+      expect(result).to include('Search...')
+    end
+
+    it 'generates TextField with data binding' do
+      json_data = { 'type' => 'TextField', 'text' => '@{searchQuery}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      # Value should be direct data reference (not string interpolation)
+      expect(result).to include('initialText = data.searchQuery')
+    end
+
+    it 'generates TextField with nested data binding' do
+      json_data = { 'type' => 'TextField', 'text' => '@{user.email}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      # Should use direct data reference for nested properties
+      expect(result).to include('initialText = data.user.email')
+    end
+
+    it 'generates TextField with data binding and default value' do
+      json_data = { 'type' => 'TextField', 'text' => '@{email ?? ""}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      # Should extract the variable name before ??
+      expect(result).to include('initialText = data.email')
+    end
+
+    it 'generates secure TextField with isSecure flag' do
+      json_data = { 'type' => 'TextField', 'secure' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('isSecure = true')
+      expect(required_imports).to include(:secure_text_field)
+    end
+
+    it 'generates TextField with cornerRadius' do
+      json_data = { 'type' => 'TextField', 'cornerRadius' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('RoundedCornerShape(8.dp)')
+      expect(required_imports).to include(:shape)
+    end
+
+    it 'generates TextField with background color' do
+      json_data = { 'type' => 'TextField', 'background' => '#FFFFFF' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('backgroundColor')
+    end
+
+    # highlightBackground is the colour while `highlighted` holds, which only a
+    # View declares (jsonui-cli 1.9.0) — not the focused background it was
+    # read as here.
+    it 'does not read highlightBackground as the focused background' do
+      json_data = { 'type' => 'TextField', 'highlightBackground' => '#E0E0E0' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('highlightBackgroundColor')
+    end
+
+    it 'generates TextField with borderColor' do
+      json_data = { 'type' => 'TextField', 'borderColor' => '#000000' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('borderColor')
+      expect(result).to include('isOutlined = true')
+    end
+
+    it 'generates outlined TextField' do
+      json_data = { 'type' => 'TextField', 'outlined' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('isOutlined = true')
+    end
+
+    it 'generates TextField with fontSize routed through FontSpec resolve' do
+      json_data = { 'type' => 'TextField', 'fontSize' => 16 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Configuration.Font.resolve(FontSpec(')
+      expect(result).to include('size = 16.sp')
+      expect(result).to match(/fontSize = jsonUIFontSize\(resolved_textfield\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
+    end
+
+    it 'generates TextField with fontColor' do
+      json_data = { 'type' => 'TextField', 'fontColor' => '#333333' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('textStyle = TextStyle')
+      expect(result).to include('color')
+    end
+
+    # A field with no hint AND no fontColor is the only shape that reaches the
+    # Configuration fallback alone: the placeholder branch registers the same
+    # import, so every fixture that declared a hint hid this. The generated
+    # view then failed to compile — `Unresolved reference 'Configuration'` —
+    # and took the whole android-codegen conformance host down with it.
+    it 'imports Configuration when the text colour falls back to it' do
+      json_data = { 'type' => 'TextField' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Configuration.TextField.defaultTextColor')
+      expect(required_imports).to include(:configuration)
+    end
+
+    it 'imports Configuration when the font size falls back to it' do
+      json_data = { 'type' => 'TextField', 'fontColor' => '#333333' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Configuration.TextField.defaultFontSize.sp')
+      expect(required_imports).to include(:configuration)
+    end
+
+    it 'generates TextField with textAlign center' do
+      json_data = { 'type' => 'TextField', 'textAlign' => 'center' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('TextAlign.Center')
+      expect(required_imports).to include(:text_align)
+    end
+
+    it 'generates TextField with textAlign right' do
+      json_data = { 'type' => 'TextField', 'textAlign' => 'right' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('TextAlign.End')
+    end
+
+    it 'generates TextField with textAlign left' do
+      json_data = { 'type' => 'TextField', 'textAlign' => 'left' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('TextAlign.Start')
+    end
+
+    it 'generates TextField with onFocus handler' do
+      json_data = { 'type' => 'TextField', 'onFocus' => 'handleFocus' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onFocus = { data.handleFocus?.invoke() }')
+    end
+
+    it 'generates TextField with onBlur handler' do
+      json_data = { 'type' => 'TextField', 'onBlur' => 'handleBlur' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onBlur = { data.handleBlur?.invoke() }')
+    end
+
+    it 'generates TextField with onBeginEditing handler' do
+      json_data = { 'type' => 'TextField', 'onBeginEditing' => 'startEdit' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onBeginEditing = { data.startEdit?.invoke() }')
+    end
+
+    it 'generates TextField with onEndEditing handler' do
+      json_data = { 'type' => 'TextField', 'onEndEditing' => 'endEdit' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onEndEditing = { data.endEdit?.invoke() }')
+    end
+
+    it 'generates TextField with email keyboard type' do
+      json_data = { 'type' => 'TextField', 'input' => 'email' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('KeyboardType.Email')
+      expect(required_imports).to include(:keyboard_type)
+    end
+
+    it 'generates TextField with password keyboard type' do
+      json_data = { 'type' => 'TextField', 'input' => 'password' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('KeyboardType.Password')
+    end
+
+    it 'generates TextField with number keyboard type' do
+      json_data = { 'type' => 'TextField', 'input' => 'number' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('KeyboardType.Number')
+    end
+
+    it 'generates TextField with decimal keyboard type' do
+      json_data = { 'type' => 'TextField', 'input' => 'decimal' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('KeyboardType.Decimal')
+    end
+
+    # Every Compose KeyboardType member, transcribed from the SDK.
+    #
+    # THIS IS NOT A COMPILE. Nothing in this repository compiles Kotlin that
+    # names a KeyboardType: the emitted-Kotlin leg builds what branch-tests
+    # emit, not what the components emit, and CI has no Android job at all. The
+    # only real compiler is KotlinJsonUI's own build, in another repository and
+    # still pinned to Compose 2026.05.01 (ui-text 1.11.2, which has none of the
+    # four new members). So the strongest arm available here is agreement with
+    # a transcribed table, and it is worth saying plainly that transcription is
+    # what it is.
+    #
+    # Why it exists: the emitter, the declaration and the arms above all AGREED
+    # on DecimalSigned, and agreement is internal. Nothing asked whether the
+    # member exists. Mutating the implementation and its arm together to
+    # KeyboardType.Datetime left the suite fully green.
+    #
+    # Transcribed twice, by two lanes, javap -p on
+    # androidx.compose.ui.text.input.KeyboardType$Companion: an independent check from the
+    # 1.12.0 aar (md5 343361cd…), this lane from 1.12.1 (2a172948…).
+    #
+    # An independent check did not compare by eye. It dumped javap to a file, parsed
+    # the %w[] below out of the commit, and ran comm: only-in-list 0 and
+    # only-in-javap 0, against 1.12.0 AND against 1.12.1. So what is
+    # established is that THIS LIST EQUALS THE ARTIFACT'S MEMBER SET, with no
+    # human transcription on that side — which is stronger than "neither of us
+    # mistyped". What is NOT established is that the members exist
+    # independently of androidx: two releases of one library are still one
+    # window, and there is no compiler here to close it.
+    #
+    # The floor comes from the same window: 1.11.0 lists 10 members and has none
+    # of the four; 1.10.0 also 10. Text, which dynamic falls back to, is in both.
+    COMPOSE_KEYBOARD_TYPES = %w[
+      Ascii Date DateTime Decimal DecimalPassword DecimalPasswordSigned
+      DecimalSigned Email EmailSubject Filter LongMessage Number NumberPassword
+      NumberPasswordSigned NumberSigned Password PasswordVisible PersonName
+      Phone Phonetic PostalAddress ShortMessage Text Time Unspecified Uri
+    ].freeze
+
+    it 'only emits KeyboardType members that exist in Compose' do
+      # Reads the implementation table, not a copy of it kept here — a spelling
+      # this spec repeated would agree with itself.
+      emitted = (described_class::INPUT_KEYBOARD.values +
+                 described_class::CONTENT_TYPE_KEYBOARD.values)
+                .map { |v| v.sub('KeyboardType.', '') }.uniq
+      expect(emitted - COMPOSE_KEYBOARD_TYPES).to be_empty
+    end
+
+    it 'transcribes the SDK rather than echoing what we emit' do
+      # If the list were built from the emitter it would agree by construction.
+      # These members exist in Compose and this repo emits none of them, so the
+      # list has to have come from somewhere else.
+      emitted = (described_class::INPUT_KEYBOARD.values +
+                 described_class::CONTENT_TYPE_KEYBOARD.values)
+                .map { |v| v.sub('KeyboardType.', '') }
+      expect((COMPOSE_KEYBOARD_TYPES - emitted).size).to be >= 3
+      expect(COMPOSE_KEYBOARD_TYPES).to include('NumberPasswordSigned')
+    end
+
+    it 'does not emit the near-miss spellings' do
+      # SignedDecimal is the one the plan named and this lane shipped in the
+      # declaration; the rest are the shapes a later edit reaches for.
+      emitted = (described_class::INPUT_KEYBOARD.values +
+                 described_class::CONTENT_TYPE_KEYBOARD.values).join(' ')
+      %w[SignedDecimal Datetime DateAndTime SignedNumber].each do |wrong|
+        expect(emitted).not_to include(wrong)
+      end
+    end
+
+    # The four values added to the SSoT in 1.8.8x. Each is asserted against the
+    # Compose member that actually exists rather than the one the plan named:
+    # the plan said KeyboardType.SignedDecimal, and javap on ui-text 1.12.1 has
+    # DecimalSigned. Emitting the planned spelling would reach the Kotlin
+    # compiler, not this spec, so the arm pins the spelling that compiles.
+    #
+    # signedDecimal is also where the declared vocabulary and the platform
+    # vocabulary disagree in ORDER, which is the kind of difference that reads
+    # as a typo and gets "fixed" later.
+    {
+      'signedDecimal' => 'KeyboardType.DecimalSigned',
+      'date' => 'KeyboardType.Date',
+      'time' => 'KeyboardType.Time',
+      'datetime' => 'KeyboardType.DateTime'
+    }.each do |value, member|
+      it "maps input #{value} to #{member}" do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'input' => value }, 0, required_imports
+        )
+        expect(result).to include(member)
+        expect(required_imports).to include(:keyboard_type)
+      end
+    end
+
+    # Negative control for the pair the SSoT says web cannot tell apart. On
+    # Android they ARE distinguishable, and that is the whole reason the value
+    # exists -- if these two ever emit the same member, the declared
+    # signedDecimal has quietly become an alias of decimal on every face.
+    it 'keeps decimal and signedDecimal on different Compose members' do
+      plain = described_class.generate(
+        { 'type' => 'TextField', 'input' => 'decimal' }, 0, required_imports
+      )
+      signed = described_class.generate(
+        { 'type' => 'TextField', 'input' => 'signedDecimal' }, 0, required_imports
+      )
+      expect(plain).to include('KeyboardType.Decimal')
+      expect(signed).to include('KeyboardType.DecimalSigned')
+      expect(plain).not_to include('KeyboardType.DecimalSigned')
+    end
+
+    # The Compose version floor on those four members.
+    #
+    # DECLARED, not detected: `compose_version` in kjui.config.json. A project
+    # that declares nothing keeps the real members, so a consumer already on
+    # 1.12 does nothing, and the generator never has to read a dependency
+    # graph it cannot see.
+    #
+    # Gem::Version is required, and only two of these samples require it.
+    #
+    # A boundary pair does NOT: '1.11.9' and '1.12.0' have the same digit counts
+    # and compare correctly as strings, so arms built only on the boundary stay
+    # green against a String compare. Neither does '1.12.10' — measured against
+    # this floor, String and Gem::Version agree on it, because '1.12.10' sorts
+    # after '1.12.0' either way. The two that discriminate are:
+    #
+    #   '1.9.0'  String says NOT below the floor (it sorts after '1.12.0'),
+    #            Gem::Version says below  -> a String compare emits 1.12
+    #            members onto a 1.9 project, which is a build failure.
+    #   '1.12'   String says below the floor (it is a prefix of '1.12.0'),
+    #            Gem::Version says equal  -> a String compare degrades a
+    #            project that declared its Compose as major.minor.
+    #
+    # They fail in opposite directions, which is why both are here. '1.12.10'
+    # stays as a multi-digit sample, but it is not the arm that pins the
+    # comparison — the comment above it used to claim it was.
+    describe 'the declared Compose version floor' do
+      FLOORED_INPUT_MEMBERS = {
+        'signedDecimal' => 'KeyboardType.DecimalSigned',
+        'date' => 'KeyboardType.Date',
+        'time' => 'KeyboardType.Time',
+        'datetime' => 'KeyboardType.DateTime'
+      }.freeze
+
+      def declare(version)
+        config = version.nil? ? {} : { 'compose_version' => version }
+        allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return(config)
+      end
+
+      def emit(input)
+        described_class.generate(
+          { 'type' => 'TextField', 'input' => input }, 0, Set.new
+        )
+      end
+
+      [
+        [nil,       'no declaration at all (the default)',        false],
+        ['1.9.0',   'a version a String compare sorts ABOVE',     true],
+        ['1.11.9',  'the version just under the floor',           true],
+        ['1.12.0',  'the floor itself',                           false],
+        # Kept, but NOT load-bearing: against a fixed floor of '1.12.0' a
+        # String compare agrees with Gem::Version on this one. It was
+        # specified as the right-hand-digit killer and measured not to be.
+        ['1.12.10', 'a multi-digit patch above the floor',        false],
+        ['1.12',    'major.minor only, equal to the floor',       false],
+        ['1.12.1',  'a version above the floor',                  false]
+      ].each do |declared, shape, degraded|
+        verb = degraded ? 'degrades' : 'keeps'
+        it "#{verb} the four 1.12 members for #{shape}" do
+          declare(declared)
+          FLOORED_INPUT_MEMBERS.each do |value, member|
+            result = emit(value)
+            if degraded
+              expect(result).to include('keyboardType = KeyboardType.Text')
+              expect(result).not_to include("keyboardType = #{member}")
+            else
+              expect(result).to include("keyboardType = #{member}")
+            end
+          end
+        end
+      end
+
+      # The control on the floor's WIDTH. Every other declared value names a
+      # member 1.11 already has, so degrading any of them would be the floor
+      # reaching past what it is for.
+      it 'leaves every other declared value alone while degrading' do
+        declare('1.9.0')
+        {
+          'email' => 'KeyboardType.Email', 'number' => 'KeyboardType.Number',
+          'decimal' => 'KeyboardType.Decimal', 'phone' => 'KeyboardType.Phone',
+          'url' => 'KeyboardType.Uri', 'password' => 'KeyboardType.Password',
+          'alphabet' => 'KeyboardType.Text'
+        }.each do |value, member|
+          expect(emit(value)).to include("keyboardType = #{member}")
+        end
+      end
+
+      it 'moves exactly the floored keys, and invents no spelling doing it' do
+        declare('1.11.2')
+        degraded = described_class.input_keyboard_table
+        moved = described_class::INPUT_KEYBOARD.reject { |k, v| degraded[k] == v }.keys
+        expect(moved).to match_array(described_class::FLOORED_INPUT_VALUES)
+        expect(degraded.keys).to match_array(described_class::INPUT_KEYBOARD.keys)
+        expect(degraded.values - described_class::INPUT_KEYBOARD.values).to be_empty
+      end
+
+      it 'names floored keys that the table actually has' do
+        # FLOORED_INPUT_VALUES is a second spelling of keys that live in
+        # INPUT_KEYBOARD. If the two drift, the floor silently stops covering
+        # a value while every arm that does not use that value stays green.
+        expect(described_class::INPUT_KEYBOARD.keys)
+          .to include(*described_class::FLOORED_INPUT_VALUES)
+      end
+
+      it 'treats an unparseable compose_version as no declaration' do
+        # Degrading on a typo would cost a project on a new Compose four
+        # keyboards for a misspelling it can see in its own config file.
+        declare('latest')
+        expect(emit('date')).to include('keyboardType = KeyboardType.Date')
+      end
+
+      it 'reads the floor from config on every call, not once per process' do
+        # The table is a method, not a memoised constant: two projects in one
+        # `jui build` would otherwise share whichever config was read first.
+        declare('1.9.0')
+        expect(emit('time')).to include('keyboardType = KeyboardType.Text')
+        declare('1.12.1')
+        expect(emit('time')).to include('keyboardType = KeyboardType.Time')
+      end
+    end
+
+    it 'generates TextField with phone keyboard type' do
+      json_data = { 'type' => 'TextField', 'input' => 'phone' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('KeyboardType.Phone')
+    end
+
+    # TextField.input declares no `text` (TextView.keyboardType does): a value
+    # is its declared spelling (1.9.0), so it sets no keyboard, as the
+    # validator names it.
+    it 'sets no keyboard type for an input TextField does not declare' do
+      json_data = { 'type' => 'TextField', 'input' => 'text' }
+      expect(described_class.generate(json_data, 0, required_imports)).not_to include('keyboardType =')
+    end
+
+    it 'generates TextField with text keyboard type for alphabet' do
+      json_data = { 'type' => 'TextField', 'input' => 'alphabet' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('KeyboardType.Text')
+    end
+
+    # inputType is the Android-XML spelling, read only by the frozen XML mode
+    # until now — a layout migrated to Compose lost its keyboard silently.
+    context 'inputType (XML-mode migration fallback)' do
+      it 'maps the XML mapper vocabulary' do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'email' }, 0, required_imports
+        )
+        expect(result).to include('KeyboardType.Email')
+        expect(required_imports).to include(:keyboard_type)
+      end
+
+      it 'maps the raw android:inputType names the mapper passes through' do
+        expect(described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'textPassword' }, 0, required_imports
+        )).to include('KeyboardType.Password')
+        expect(described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'numberDecimal' }, 0, required_imports
+        )).to include('KeyboardType.Decimal')
+      end
+
+      it 'falls back to a text keyboard for anything else' do
+        expect(described_class.generate(
+          { 'type' => 'TextField', 'inputType' => 'textMultiLine' }, 0, required_imports
+        )).to include('KeyboardType.Text')
+      end
+
+      # `input` is the canonical cross-platform attribute and must win.
+      it 'yields to input' do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'input' => 'phone', 'inputType' => 'email' }, 0, required_imports
+        )
+        expect(result).to include('KeyboardType.Phone')
+        expect(result).not_to include('KeyboardType.Email')
+      end
+
+      # The keyboard comes from `input`, and from contentType only when input
+      # names none -- the order iOS and the web keep (they read `input` alone).
+      # Until 2.5.12 contentType came first, and a value with no keyboard
+      # dropped input's: `input: email` + `usernameWebauthn` lost the e-mail
+      # keyboard on Android only.
+      describe 'the keyboard: input first, contentType when input names none' do
+        let(:gen) { ->(j) { described_class.generate({ 'type' => 'TextField' }.merge(j), 0, required_imports) } }
+
+        %w[username usernameWebauthn name givenName familyName oneTimeCode streetAddress country].each do |ct|
+          it "keeps input's e-mail keyboard under contentType #{ct}" do
+            result = gen.call('input' => 'email', 'contentType' => ct)
+            expect(result).to include('keyboardType = KeyboardType.Email')
+          end
+        end
+
+        it 'lets input win over a contentType naming another keyboard' do
+          expect(gen.call('input' => 'number', 'contentType' => 'email')).to include('keyboardType = KeyboardType.Number')
+          expect(gen.call('input' => 'email', 'contentType' => 'URL')).to include('keyboardType = KeyboardType.Email')
+        end
+
+        it 'takes the keyboard from contentType when input is absent or default' do
+          expect(gen.call('contentType' => 'email')).to include('keyboardType = KeyboardType.Email')
+          expect(gen.call('input' => 'default', 'contentType' => 'tel')).to include('keyboardType = KeyboardType.Phone')
+        end
+
+        it 'keeps the autofill hint and the mask, which come from contentType alone' do
+          result = gen.call('input' => 'email', 'contentType' => 'usernameWebauthn')
+          expect(result).to include('.semantics { contentType = ContentType.Username }')
+          expect(gen.call('input' => 'text', 'contentType' => 'password')).to include('isSecure = true')
+        end
+      end
+
+      # A Compose field takes no Credential Manager request; usernameWebauthn
+      # is drawn as `username` (no keyboard of its own, not masked).
+      it 'draws usernameWebauthn as a username field' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => 'usernameWebauthn' }, 0, required_imports)
+        expect(result).not_to include('KeyboardType.')
+        expect(result).not_to include('PasswordVisualTransformation')
+      end
+
+      # The Autofill framework is told what the field holds (Compose's
+      # semantics contentType); until 2.5.11 only the keyboard was.
+      {
+        'username' => 'ContentType.Username', 'usernameWebauthn' => 'ContentType.Username',
+        'password' => 'ContentType.Password', 'newPassword' => 'ContentType.NewPassword',
+        'oneTimeCode' => 'ContentType.SmsOtpCode', 'email' => 'ContentType.EmailAddress',
+        'telephoneNumber' => 'ContentType.PhoneNumber', 'postalCode' => 'ContentType.PostalCode'
+      }.each do |value, hint|
+        it "gives the Autofill framework #{hint} for contentType #{value}" do
+          result = described_class.generate({ 'type' => 'TextField', 'contentType' => value }, 0, required_imports)
+          expect(result).to include(".semantics { contentType = #{hint} }")
+          expect(required_imports).to include(:autofill_content_type)
+        end
+      end
+
+      it 'gives no autofill hint for URL, which has no autofill type' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => 'URL' }, 0, required_imports)
+        expect(result).not_to include('contentType =')
+      end
+
+      it 'looks a bound contentType up at run time, with no hint for an unknown value' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => '@{kind}' }, 0, required_imports)
+        expect(result).to include('.semantics { (when (data.kind')
+        expect(result).to include('"usernameWebauthn" -> ContentType.Username')
+        expect(result).to include('else -> null })?.let { contentType = it } }')
+      end
+
+      it 'gives the hint to the field inside a margined box' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => 'username', 'topMargin' => 8 }, 0, required_imports)
+        expect(result).to match(/textFieldModifier = Modifier[^,]*\.semantics \{ contentType = ContentType\.Username \}/m)
+      end
+
+      it 'yields to contentType' do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'contentType' => 'emailAddress', 'inputType' => 'phone' },
+          0, required_imports
+        )
+        expect(result).to include('KeyboardType.Email')
+        expect(result).not_to include('KeyboardType.Phone')
+      end
+    end
+
+    it 'generates TextField with Done return key' do
+      json_data = { 'type' => 'TextField', 'returnKeyType' => 'Done' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ImeAction.Done')
+      expect(required_imports).to include(:ime_action)
+    end
+
+    it 'generates TextField with Next return key' do
+      json_data = { 'type' => 'TextField', 'returnKeyType' => 'Next' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ImeAction.Next')
+    end
+
+    it 'generates TextField with Search return key' do
+      json_data = { 'type' => 'TextField', 'returnKeyType' => 'Search' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ImeAction.Search')
+    end
+
+    it 'generates TextField with Send return key' do
+      json_data = { 'type' => 'TextField', 'returnKeyType' => 'Send' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ImeAction.Send')
+    end
+
+    it 'generates TextField with Go return key' do
+      json_data = { 'type' => 'TextField', 'returnKeyType' => 'Go' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ImeAction.Go')
+    end
+
+    it 'generates TextField with Default return key' do
+      json_data = { 'type' => 'TextField', 'returnKeyType' => 'Default' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('ImeAction.Default')
+    end
+
+    it 'generates TextField with onTextChange handler' do
+      json_data = { 'type' => 'TextField', 'onTextChange' => 'handleTextChange' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('data.handleTextChange?.invoke()')
+    end
+
+    it 'strips @{} binding syntax from onTextChange' do
+      json_data = { 'type' => 'TextField', 'onTextChange' => '@{onEmailChange}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('data.onEmailChange?.invoke()')
+      expect(result).not_to include('@{')
+    end
+
+    it 'generates TextField with margins using CustomTextFieldWithMargins' do
+      json_data = { 'type' => 'TextField', 'margins' => [10, 10, 10, 10] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('CustomTextFieldWithMargins(')
+      expect(result).to include('boxModifier')
+      expect(required_imports).to include(:box)
+    end
+
+    it 'generates TextField with topMargin' do
+      json_data = { 'type' => 'TextField', 'topMargin' => 16 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('CustomTextFieldWithMargins(')
+    end
+
+    it 'generates TextField with width and height' do
+      json_data = { 'type' => 'TextField', 'width' => 200, 'height' => 50 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.requiredWidth(200.dp)')
+      expect(result).to include('.requiredHeight(50.dp)')
+    end
+
+    it 'generates TextField with styled placeholder' do
+      json_data = {
+        'type' => 'TextField',
+        'placeholder' => 'Hint text',
+        'hintColor' => '#999999',
+        'hintFontSize' => 14,
+        'hintFont' => 'bold'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('placeholder = { Text(')
+      expect(result).to include('14.sp')
+      expect(result).to include('FontWeight.Bold')
+    end
+
+    # Regression: kjui-textfield-onsubmit-helper-arity-mismatch.
+    # `get_event_handler_invocation` requires 3 positional args
+    # (handler, view_id, value_expr). The onSubmit binding-form caller
+    # was passing only 2, raising `ArgumentError: wrong number of
+    # arguments (given 2, expected 3)` mid-build and halting Compose
+    # generation for any layout that wires `onSubmit` to a @{handler}.
+    # Pass `nil` for value_expr — onSubmit carries no value to forward.
+    it 'generates TextField with onSubmit binding (no ArgumentError)' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => '@{onAddTap}'
+      }
+      expect {
+        described_class.generate(json_data, 0, required_imports)
+      }.not_to raise_error
+    end
+
+    it 'wires onSubmit binding into KeyboardActions.onDone/onGo/onSearch/onSend' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => '@{onAddTap}'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('keyboardActions = KeyboardActions(')
+      expect(result).to include('onDone = { data.onAddTap?.invoke() }')
+      expect(result).to include('onGo = { data.onAddTap?.invoke() }')
+      expect(result).to include('onSearch = { data.onAddTap?.invoke() }')
+      expect(result).to include('onSend = { data.onAddTap?.invoke() }')
+    end
+
+    it 'wires onSubmit raw method name into KeyboardActions' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => 'submitNewTag'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onDone = { data.submitNewTag?.invoke() }')
+    end
+
+    # Regression: kjui-keyboardactions-import-missing.
+    # The KeyboardActions emit path must also register the import key
+    # so import_manager actually writes the `import …KeyboardActions`
+    # line into the generated file. Previously the key was added but
+    # absent from IMPORTS_MAP, so it was silently dropped.
+    it 'registers :keyboard_actions import key when onSubmit emits' do
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'search_field',
+        'onSubmit' => '@{onAddTap}'
+      }
+      described_class.generate(json_data, 0, required_imports)
+      expect(required_imports).to include(:keyboard_actions)
+    end
+
+    # Focus chain refactor (paired with kjui-keyboardactions-import-missing).
+    # Before: the focus chain emitted a dead-code reference to a
+    # non-existent `FocusManager.requestFocus(...)` helper. After: each
+    # field with an `id` declares its own `FocusRequester` via `remember`,
+    # attaches it via the `.focusRequester(...)` modifier, and sibling
+    # fields look up the target by `focusRequester_<nextFocus>`. (The
+    # undeclared `fieldId` / `nextFocusId` are retired in 2.3.22.)
+    context 'an id emits FocusRequester declaration and modifier' do
+      let(:json_data) do
+        {
+          'type' => 'TextField',
+          'id' => 'email_field'
+        }
+      end
+
+      it 'emits `val focusRequester_<id> = remember { FocusRequester() }` before the component call' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
+      end
+
+      it 'attaches .focusRequester(...) to the component modifier' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('.focusRequester(focusRequester_email_field)')
+      end
+
+      it 'registers the :focus_requester and :remember import keys' do
+        described_class.generate(json_data, 0, required_imports)
+        expect(required_imports).to include(:focus_requester)
+        expect(required_imports).to include(:remember)
+      end
+    end
+
+    context 'nextFocus emits FocusRequester.requestFocus() in onNext/onDone' do
+      let(:json_data) do
+        {
+          'type' => 'TextField',
+          'id' => 'first_input',
+          'nextFocus' => 'password_field',
+          'returnKeyType' => 'Next'
+        }
+      end
+
+      it 'emits onNext = { focusRequester_<nextFocus>.requestFocus() }' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('onNext = { focusRequester_password_field.requestFocus() }')
+        expect(result).to include('onDone = { focusRequester_password_field.requestFocus() }')
+      end
+
+      it 'NEVER emits the legacy non-existent FocusManager.requestFocus reference' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).not_to include('FocusManager.requestFocus')
+      end
+    end
+
+    # Regression: kjui-textfield-weight-not-fillmaxwidth-inner.
+    # `CustomTextFieldWithMargins(boxModifier = Modifier.weight(N), textFieldModifier = Modifier)`
+    # leaves the inner BasicTextField at wrap-content — the Box's weighted
+    # slot does not propagate as a width/height constraint to its child.
+    # The codegen must auto-emit `.fillMaxWidth()` (Row parent) or
+    # `.fillMaxHeight()` (Column parent) on textFieldModifier when weight
+    # is set and a margin path forces the Box wrapper.
+    context 'weighted TextField with margins (forces Box wrap)' do
+      it 'emits .fillMaxWidth() on textFieldModifier when weight is set under a Row parent' do
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'search_field',
+          'weight' => 1,
+          'rightMargin' => 8,
+          'text' => '@{searchText}'
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Row')
+        expect(result).to include('CustomTextFieldWithMargins(')
+        expect(result).to include('boxModifier = Modifier')
+        expect(result).to include('.weight(1f)')
+        expect(result).to include('textFieldModifier = Modifier')
+        expect(result).to include('.fillMaxWidth()')
+      end
+
+      it 'emits .fillMaxHeight() on textFieldModifier when weight is set under a Column parent' do
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'tall_field',
+          'weight' => 1,
+          'topMargin' => 8,
+          'text' => '@{txt}'
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Column')
+        expect(result).to include('textFieldModifier = Modifier')
+        expect(result).to include('.fillMaxHeight()')
+      end
+
+      it 'does NOT duplicate .fillMaxWidth() when width: matchParent is already explicit' do
+        # build_size emits .fillMaxWidth() for matchParent; the weight
+        # auto-injection must dedupe to a single named modifier rather
+        # than producing `.fillMaxWidth().fillMaxWidth()`. The only emit
+        # site for `.fillMaxWidth()` in this generator is inside the
+        # textFieldModifier chain, so a global single-occurrence check
+        # is equivalent to per-chunk dedup verification.
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'sf',
+          'weight' => 1,
+          'width' => 'matchParent',
+          'rightMargin' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Row')
+        expect(result.scan('.fillMaxWidth()').size).to eq(1)
+      end
+
+      it 'does NOT emit fill modifier when weight is absent (e.g. fixed width field with margins)' do
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'sf',
+          'width' => 200,
+          'rightMargin' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports, 'Row')
+        expect(result).not_to include('.fillMaxWidth()')
+        expect(result).not_to include('.fillMaxHeight()')
+      end
+
+      it 'does NOT emit fill modifier when weight is set but parent is not Row/Column (e.g. nil parent)' do
+        # No-op safety: if parent isn't a Row/Column scope, `.weight()`
+        # itself wouldn't make sense (build_weight skips it via the
+        # truthy parent_orientation guard). Same logic for the inner
+        # fill — there's no axis to fill on.
+        json_data = {
+          'type' => 'TextField',
+          'id' => 'sf',
+          'weight' => 1,
+          'rightMargin' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports, nil)
+        expect(result).not_to include('.fillMaxWidth()')
+        expect(result).not_to include('.fillMaxHeight()')
+      end
+    end
+
+    context 'id + nextFocus + onSubmit combined' do
+      let(:json_data) do
+        {
+          'type' => 'TextField',
+          'id' => 'email_field',
+          'nextFocus' => 'password_field',
+          'onSubmit' => '@{onSubmitForm}'
+        }
+      end
+
+      it 'declares its own FocusRequester, references next field, and wires onSubmit handler' do
+        result = described_class.generate(json_data, 0, required_imports)
+        # own declaration
+        expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
+        # own modifier registration
+        expect(result).to include('.focusRequester(focusRequester_email_field)')
+        # focus chain to next
+        expect(result).to include('focusRequester_password_field.requestFocus()')
+        # onSubmit handler still wired into onGo/onSearch/onSend (onDone goes to focus chain when next_focus_id is set)
+        expect(result).to include('onGo = { data.onSubmitForm?.invoke() }')
+      end
+    end
+  end
+
+  describe '.extract_variable_name' do
+    it 'extracts simple variable name' do
+      result = described_class.send(:extract_variable_name, '@{name}')
+      expect(result).to eq('name')
+    end
+
+    it 'extracts nested variable name' do
+      result = described_class.send(:extract_variable_name, '@{user.name}')
+      expect(result).to eq('name')
+    end
+
+    it 'returns default for nil' do
+      result = described_class.send(:extract_variable_name, nil)
+      expect(result).to eq('value')
+    end
+  end
+
+  describe '.indent' do
+    it 'returns text unchanged for level 0' do
+      result = described_class.send(:indent, 'text', 0)
+      expect(result).to eq('text')
+    end
+
+    it 'adds indentation for level 1' do
+      result = described_class.send(:indent, 'text', 1)
+      expect(result).to eq('    text')
+    end
+  end
+
+  describe 'event handler invocation' do
+    it 'generates invoke() without arguments when handler type is () -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onTextChange' => { 'name' => 'onTextChange', 'class' => '(() -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'emailField',
+        'text' => '@{email}',
+        'onTextChange' => '@{onTextChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onTextChange?.invoke()')
+      expect(result).not_to include('invoke("emailField"')
+    end
+
+    it 'generates invoke(viewId, value) when handler type is (Event) -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onTextChange' => { 'name' => 'onTextChange', 'class' => '((Event) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'emailField',
+        'text' => '@{email}',
+        'onTextChange' => '@{onTextChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onTextChange?.invoke("emailField", newValue)')
+    end
+
+    it 'generates invoke(viewId, value) when handler type is (String, String) -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onTextChange' => { 'name' => 'onTextChange', 'class' => '((String, String) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'searchField',
+        'onTextChange' => '@{onTextChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onTextChange?.invoke("searchField", newValue)')
+    end
+
+    it 'includes both viewModel.updateData and handler invocation when both binding and handler exist' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onTextChange' => { 'name' => 'onTextChange', 'class' => '((String, String) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'TextField',
+        'id' => 'emailField',
+        'text' => '@{email}',
+        'onTextChange' => '@{onTextChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('viewModel.updateData')
+      expect(result).to include('data.onTextChange?.invoke("emailField", newValue)')
+    end
+
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onTextChange' => { 'name' => 'onTextChange', 'class' => '((Event) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'TextField',
+        'onTextChange' => '@{onTextChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onTextChange?.invoke("textField_0", newValue)')
+    end
+  end
+
+  describe 'id-less state var uniquing' do
+    it 'gives two id-less TextFields distinct state vars' do
+      json1 = { 'type' => 'TextField', 'text' => 'a' }
+      json2 = { 'type' => 'TextField', 'text' => 'b' }
+      code1 = described_class.generate(json1, 0, Set.new)
+      code2 = described_class.generate(json2, 0, Set.new)
+      var1 = code1[/val (textFieldState_\w+)/, 1]
+      var2 = code2[/val (textFieldState_\w+)/, 1]
+      expect(var1).not_to be_nil
+      expect(var2).not_to be_nil
+      expect(var1).not_to eq(var2)
+    end
+
+    it 'keeps the id-based name when an id is present' do
+      json = { 'type' => 'TextField', 'id' => 'email_field', 'text' => 'a' }
+      code = described_class.generate(json, 0, Set.new)
+      expect(code).to include('val textFieldState_email_field')
+    end
+  end
+  # kjui-textfield-isfocused-focus-binding-not-generated: sjui parity —
+  # every TextField with an id gets ViewModel-driven focus wiring.
+  describe 'focus-state binding (data.<id>IsFocused)' do
+    it 'emits FocusRequester + LaunchedEffect + keyboard show for an id-bearing field' do
+      json_data = { 'type' => 'TextField', 'id' => 'two_fa_hidden_input' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val focusRequester_two_fa_hidden_input = remember { FocusRequester() }')
+      expect(result).to include('val keyboardController_two_fa_hidden_input = LocalSoftwareKeyboardController.current')
+      expect(result).to include('LaunchedEffect(data.twoFaHiddenInputIsFocused) { if (data.twoFaHiddenInputIsFocused) { focusRequester_two_fa_hidden_input.requestFocus(); keyboardController_two_fa_hidden_input?.show() } }')
+      expect(result).to include('.focusRequester(focusRequester_two_fa_hidden_input)')
+      expect(required_imports).to include(:focus_requester)
+      expect(required_imports).to include(:software_keyboard_controller)
+    end
+
+    it 'reports focus changes back into data via viewModel.updateData (two-way)' do
+      json_data = { 'type' => 'TextField', 'id' => 'email_field' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.onFocusChanged { if (it.isFocused != data.emailFieldIsFocused) viewModel.updateData(mapOf("emailFieldIsFocused" to it.isFocused)) }')
+      expect(required_imports).to include(:focus_changed)
+    end
+
+    it 'wires the focus binding on the margins (Box-wrapped) variant too' do
+      json_data = { 'type' => 'TextField', 'id' => 'code_field', 'topMargin' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('CustomTextFieldWithMargins(')
+      expect(result).to include('.focusRequester(focusRequester_code_field)')
+      expect(result).to include('.onFocusChanged { if (it.isFocused != data.codeFieldIsFocused)')
+    end
+
+    it 'shares the requester with the id focus chain' do
+      json_data = { 'type' => 'TextField', 'id' => 'email_field' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
+      expect(result.scan('remember { FocusRequester() }').size).to eq(1)
+      expect(result).to include('LaunchedEffect(data.emailFieldIsFocused) { if (data.emailFieldIsFocused) { focusRequester_email_field.requestFocus()')
+    end
+
+    # The retired fieldId no longer names the requester (2.3.22)
+    it 'does not read the retired fieldId' do
+      result = described_class.generate({ 'type' => 'TextField', 'id' => 'email_field', 'fieldId' => 'email' }, 0, required_imports)
+      expect(result).not_to include('focusRequester_email ')
+      expect(result).to include('val focusRequester_email_field = remember')
+    end
+
+    it 'emits no focus binding for an id-less TextField' do
+      json_data = { 'type' => 'TextField' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('IsFocused')
+      expect(result).not_to include('FocusRequester()')
+    end
+  end
+end
+
+RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' do
+  let(:required_imports) { Set.new }
+
+  def field(extra)
+    described_class.generate(
+      { 'type' => 'TextField', 'id' => 'email', 'text' => '@{email}' }.merge(extra),
+      0, required_imports
+    )
+  end
+
+  # `nextFocus` is the declared attribute (and what the iOS converter reads);
+  # the legacy `nextFocusId` this file was written against is retired (2.3.22).
+  it 'wires the chain from the declared nextFocus' do
+    expect(field('nextFocus' => 'password')).to include('focusRequester_password')
+  end
+
+  it 'no longer reads the retired nextFocusId' do
+    expect(field('nextFocusId' => 'password')).not_to include('focusRequester_password')
+  end
+
+  it 'emits no chain when neither is set' do
+    expect(field({})).not_to include('KeyboardActions')
+  end
+
+  # Regression: sjui-kjui-textview-enabled-binding-gaps-after-common-enabled-fix
+  # — TextView passed `enabled` through to the composable; TextField never
+  # did, so the a11y `disabled()` from the common modifier path claimed a
+  # state the input didn't have (typing stayed possible).
+  describe 'enabled' do
+    it 'forwards a bound enabled to the composable' do
+      expect(field('enabled' => '@{isInputEnabled}')).to include('enabled = (data.isInputEnabled ?: false)')
+    end
+
+    it 'forwards a literal enabled' do
+      expect(field('enabled' => false)).to include('enabled = false')
+    end
+
+    it 'emits nothing when undeclared' do
+      expect(field({})).not_to include('enabled =')
+    end
+  end
+end
+
+# `autoFocus` (2.3.22, ticket rjui-textfield-autofocus-read-but-not-defined):
+# declared on TextField and TextView for every face; on Android the field's
+# FocusRequester is asked once it is composed. Compiled with every common
+# stage in common_stages_on_every_drawn_type_spec.rb.
+RSpec.describe 'kjui autoFocus (TextField and TextView)' do
+  def field(extra)
+    KjuiTools::Compose::Components::TextFieldComponent.generate({ 'type' => 'TextField', 'text' => '@{email}' }.merge(extra), 0, Set.new)
+  end
+
+  def text_view(extra)
+    KjuiTools::Compose::Components::TextViewComponent.generate({ 'type' => 'TextView', 'text' => '@{note}' }.merge(extra), 0, Set.new)
+  end
+
+  it 'asks the id requester of a TextField' do
+    code = field('id' => 'email_field', 'autoFocus' => true)
+    expect(code).to include('LaunchedEffect(Unit) { focusRequester_email_field.requestFocus(); autoFocusKeyboard_email_field?.show() }')
+    expect(code).to include('.focusRequester(focusRequester_email_field)')
+  end
+
+  it 'names a requester by position for a TextField with no id' do
+    code = field('autoFocus' => true)
+    name = code[/val focusRequester_(\w+) = remember \{ FocusRequester\(\) \}/, 1]
+    expect(name).not_to be_nil
+    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus(); autoFocusKeyboard_#{name}?.show() }")
+    expect(code).to include(".focusRequester(focusRequester_#{name})")
+  end
+
+  it 'asks the id requester of a TextView, and one by position without an id' do
+    expect(text_view('id' => 'note', 'autoFocus' => true)).to include('LaunchedEffect(Unit) { focusRequester_note.requestFocus(); autoFocusKeyboard_note?.show() }')
+    code = text_view('autoFocus' => true)
+    name = code[/val focusRequester_(\w+) = remember \{ FocusRequester\(\) \}/, 1]
+    expect(name).not_to be_nil
+    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus(); autoFocusKeyboard_#{name}?.show() }", ".focusRequester(focusRequester_#{name})")
+  end
+
+  it 'emits nothing for a field without it' do
+    expect(field({})).not_to include('requestFocus')
+    expect(text_view({})).not_to include('requestFocus')
+  end
+end

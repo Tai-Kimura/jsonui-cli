@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/selectedIndex__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.selectedIndex (static)",
+    "description": "Conformance fixture for 'selectedIndex' on Segment (section: Segment, class: visual). Value under test: 1.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedIndex__static",
+      "description": "Conformance fixture for 'selectedIndex' on Segment (section: Segment, class: visual). Value under test: 1.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_selectedIndex__static"
+        }
+      ]
+    }
+  ]
+}

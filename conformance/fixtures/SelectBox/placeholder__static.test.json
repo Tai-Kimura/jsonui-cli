@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/placeholder__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.placeholder (static)",
+    "description": "Conformance fixture for 'placeholder' on SelectBox (section: SelectBox, class: visual). Value under test: \"Conformance Hint\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "placeholder__static",
+      "description": "Conformance fixture for 'placeholder' on SelectBox (section: SelectBox, class: visual). Value under test: \"Conformance Hint\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_placeholder__static"
+        }
+      ]
+    }
+  ]
+}

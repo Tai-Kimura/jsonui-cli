@@ -1,0 +1,1049 @@
+{
+  "_doc": "Pairs of dataFlow.viewModel vars/methods and whether the generated protocol can hold them. Read by jui build (jui_cli.core.spec_validator.viewmodel_member_clashes) and by jsonui-doc validate spec; both must refuse exactly the `reject` cases. `rules` names which platform's rule refuses it. `measured` is what the compiler said for the emitted shape; the rule compares names and parameter counts only, so some `reject` cases compile. Ticket jui-protocol-var-and-setter-method-clash-on-jvm.",
+  "cases": [
+    {
+      "id": "c01_var_setX",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash",
+      "note": "the ticket's shape"
+    },
+    {
+      "id": "c02_setX_nullable_param",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String?"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c03_setX_other_type",
+      "vars": [
+        {
+          "name": "count",
+          "type": "Int",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setCount",
+          "params": [
+            {
+              "name": "c",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: compiles",
+      "note": "refused by the name+arity rule although it compiles"
+    },
+    {
+      "id": "c04_setX_Int_vs_IntQ",
+      "vars": [
+        {
+          "name": "count",
+          "type": "Int",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setCount",
+          "params": [
+            {
+              "name": "c",
+              "type": "Int?"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: compiles (int vs Integer)",
+      "note": "refused by the name+arity rule although it compiles"
+    },
+    {
+      "id": "c05_setX_erasure",
+      "vars": [
+        {
+          "name": "items",
+          "type": "[String]",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setItems",
+          "params": [
+            {
+              "name": "x",
+              "type": "[Int]"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash (List erasure)"
+    },
+    {
+      "id": "c06_val_getX",
+      "vars": [
+        {
+          "name": "title",
+          "type": "String",
+          "readOnly": true
+        }
+      ],
+      "methods": [
+        {
+          "name": "getTitle",
+          "params": [],
+          "returnType": "String"
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c07_val_getX_other_return",
+      "vars": [
+        {
+          "name": "title",
+          "type": "String",
+          "readOnly": true
+        }
+      ],
+      "methods": [
+        {
+          "name": "getTitle",
+          "params": [],
+          "returnType": "Int"
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: compiles",
+      "note": "refused by the name+arity rule although it compiles"
+    },
+    {
+      "id": "c08_getX_with_param",
+      "vars": [
+        {
+          "name": "title",
+          "type": "String",
+          "readOnly": true
+        }
+      ],
+      "methods": [
+        {
+          "name": "getTitle",
+          "params": [
+            {
+              "name": "x",
+              "type": "Int"
+            }
+          ],
+          "returnType": "String"
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "c09_bool_isX",
+      "vars": [
+        {
+          "name": "enabled",
+          "type": "Bool",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "isEnabled",
+          "params": [],
+          "returnType": "Bool"
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles",
+      "note": "a Boolean named without `is` has getEnabled, not isEnabled"
+    },
+    {
+      "id": "c10_bool_getX",
+      "vars": [
+        {
+          "name": "enabled",
+          "type": "Bool",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "getEnabled",
+          "params": [],
+          "returnType": "Bool"
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c11_is_prop_isX",
+      "vars": [
+        {
+          "name": "isOpen",
+          "type": "Bool",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "isOpen",
+          "params": [],
+          "returnType": "Bool"
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android",
+        "ios"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash; swiftc (Xcode default) -typecheck: invalid redeclaration"
+    },
+    {
+      "id": "c12_is_prop_setOpen",
+      "vars": [
+        {
+          "name": "isOpen",
+          "type": "Bool",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setOpen",
+          "params": [
+            {
+              "name": "v",
+              "type": "Bool"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c13_is_prop_setIsOpen",
+      "vars": [
+        {
+          "name": "isOpen",
+          "type": "Bool",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setIsOpen",
+          "params": [
+            {
+              "name": "v",
+              "type": "Bool"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "c14_readonly_setX",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "readOnly": true
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles (val has no setter)"
+    },
+    {
+      "id": "c15_setX_two_params",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "a",
+              "type": "String"
+            },
+            {
+              "name": "b",
+              "type": "Int"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "c16_suspend_setX",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ],
+          "isAsync": true
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles (suspend adds a Continuation)"
+    },
+    {
+      "id": "c17_lambda_var_setX",
+      "vars": [
+        {
+          "name": "onTap",
+          "type": "(() -> Void)?",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setOnTap",
+          "params": [
+            {
+              "name": "f",
+              "type": "(() -> Void)?"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c18_lowercase_url",
+      "vars": [
+        {
+          "name": "url",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setUrl",
+          "params": [
+            {
+              "name": "u",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c19_acronym_URL",
+      "vars": [
+        {
+          "name": "URL",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setURL",
+          "params": [
+            {
+              "name": "u",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "c20_same_name_android_only",
+      "vars": [
+        {
+          "name": "name",
+          "type": "String",
+          "platforms": [
+            "android"
+          ],
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "params": [],
+          "platforms": [
+            "android"
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles",
+      "note": "unscoped this is s04 and Swift refuses it"
+    },
+    {
+      "id": "c21_observable_setX",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String"
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles (val StateFlow has no setter)"
+    },
+    {
+      "id": "c22_observable_getX",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getMessageUuid",
+          "params": [],
+          "returnType": "String"
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash (same return type); name+arity refuses any return"
+    },
+    {
+      "id": "k01_island_getIsland",
+      "vars": [
+        {
+          "name": "island",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "getIsland",
+          "params": [],
+          "returnType": "String"
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "k02_island_setLand",
+      "vars": [
+        {
+          "name": "island",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setLand",
+          "params": [
+            {
+              "name": "v",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles",
+      "note": "`is` + lowercase is not the is-form"
+    },
+    {
+      "id": "k03_isLand_setLand",
+      "vars": [
+        {
+          "name": "isLand",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setLand",
+          "params": [
+            {
+              "name": "v",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "k04_is1_setIs1",
+      "vars": [
+        {
+          "name": "is1",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setIs1",
+          "params": [
+            {
+              "name": "v",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "k05_is1_set1",
+      "vars": [
+        {
+          "name": "is1",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "set1",
+          "params": [
+            {
+              "name": "v",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash",
+      "note": "a digit after `is` is the is-form"
+    },
+    {
+      "id": "k06_is_underscore_set",
+      "vars": [
+        {
+          "name": "is_open",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "set_open",
+          "params": [
+            {
+              "name": "v",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash"
+    },
+    {
+      "id": "k07_is_underscore_setIs",
+      "vars": [
+        {
+          "name": "is_open",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setIs_open",
+          "params": [
+            {
+              "name": "v",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "k08_is_prop_non_bool_getter",
+      "vars": [
+        {
+          "name": "isOpen",
+          "type": "String",
+          "readOnly": true,
+          "platforms": [
+            "android"
+          ]
+        }
+      ],
+      "methods": [
+        {
+          "name": "isOpen",
+          "params": [],
+          "returnType": "String",
+          "platforms": [
+            "android"
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "kotlinc 2.4.20: platform declaration clash",
+      "note": "the is-form does not depend on the type"
+    },
+    {
+      "id": "s01_setX_ios_only",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "platforms": [
+            "ios"
+          ],
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ],
+          "platforms": [
+            "ios"
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "swiftc (Xcode default) -typecheck: compiles"
+    },
+    {
+      "id": "s02_getX_ios_only",
+      "vars": [
+        {
+          "name": "title",
+          "type": "String",
+          "readOnly": true,
+          "platforms": [
+            "ios"
+          ]
+        }
+      ],
+      "methods": [
+        {
+          "name": "getTitle",
+          "params": [],
+          "returnType": "String",
+          "platforms": [
+            "ios"
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "swiftc (Xcode default) -typecheck: compiles"
+    },
+    {
+      "id": "s03_isOpen_same_ios",
+      "vars": [
+        {
+          "name": "isOpen",
+          "type": "Bool",
+          "platforms": [
+            "ios"
+          ],
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "isOpen",
+          "params": [],
+          "returnType": "Bool",
+          "platforms": [
+            "ios"
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "ios"
+      ],
+      "measured": "swiftc (Xcode default) -typecheck: invalid redeclaration"
+    },
+    {
+      "id": "s04_name_same",
+      "vars": [
+        {
+          "name": "name",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "params": []
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "ios"
+      ],
+      "measured": "swiftc (Xcode default) -typecheck: invalid redeclaration; kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "s05_name_with_param",
+      "vars": [
+        {
+          "name": "name",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "params": [
+            {
+              "name": "x",
+              "type": "Int"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "swiftc (Xcode default) -typecheck: compiles; kotlinc 2.4.20: compiles"
+    },
+    {
+      "id": "s06_name_async",
+      "vars": [
+        {
+          "name": "name",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "params": [],
+          "isAsync": true
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "swiftc (Xcode default) -typecheck: compiles (protocol and @Published class, async throws)"
+    },
+    {
+      "id": "s07_readonly_name_same",
+      "vars": [
+        {
+          "name": "name",
+          "type": "String",
+          "readOnly": true,
+          "platforms": [
+            "ios"
+          ]
+        }
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "String",
+          "platforms": [
+            "ios"
+          ]
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "ios"
+      ],
+      "measured": "swiftc (Xcode default) -typecheck: invalid redeclaration"
+    },
+    {
+      "id": "p01_split_platforms",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "platforms": [
+            "ios"
+          ],
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ],
+          "platforms": [
+            "android"
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "no protocol holds both",
+      "note": "rule: both members must reach the platform"
+    },
+    {
+      "id": "p02_method_platforms_empty_means_all",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "platforms": [
+            "android"
+          ],
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ],
+          "platforms": []
+        }
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "method platforms [] is every platform (protocol_sync)"
+    },
+    {
+      "id": "p03_var_platforms_empty_means_none",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "platforms": [],
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "setMessageUuid",
+          "params": [
+            {
+              "name": "messageUuid",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "var platforms [] reaches no protocol"
+    },
+    {
+      "id": "p04_string_method_getter",
+      "vars": [
+        {
+          "name": "title",
+          "type": "String",
+          "readOnly": true
+        }
+      ],
+      "methods": [
+        "getTitle"
+      ],
+      "expect": "reject",
+      "rules": [
+        "android"
+      ],
+      "measured": "a string method entry has no params"
+    },
+    {
+      "id": "p05_string_method_setter",
+      "vars": [
+        {
+          "name": "messageUuid",
+          "type": "String",
+          "observable": false
+        }
+      ],
+      "methods": [
+        "setMessageUuid"
+      ],
+      "expect": "accept",
+      "rules": [],
+      "measured": "a string method entry has no params, the setter takes one"
+    }
+  ]
+}

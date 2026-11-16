@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/contentMode__aspectfit.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.contentMode (aspectfit)",
+    "description": "Conformance fixture for 'contentMode' on Image (section: Image, class: visual). Value under test: \"AspectFit\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "contentMode__aspectfit",
+      "description": "Conformance fixture for 'contentMode' on Image (section: Image, class: visual). Value under test: \"AspectFit\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_contentMode__aspectfit"
+        }
+      ]
+    }
+  ]
+}

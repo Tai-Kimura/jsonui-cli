@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/direction__none.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.direction (none)",
+    "description": "Conformance fixture for 'direction' on View (section: View, class: visual). Value under test: \"none\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "direction__none",
+      "description": "Conformance fixture for 'direction' on View (section: View, class: visual). Value under test: \"none\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_direction__none"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,257 @@
+"""What moved between two tags, by consumer-visible surface.
+
+Written because the release notice kept saying things like "the generator
+did not move" and "stamps only" — true statements with a denominator the
+sentence does not name. Two lanes caught the same shape in one release:
+
+  "the generator did not move" — `branch_tests.py` was byte-identical, and
+      `mock/generate.py` moved in the same tag range. The consumer gets the
+      sentence and the diff together and has to split them.
+  "stamps only"                — `cli.py` gained 145 lines of printing. A
+      lane that publishes that output verbatim cannot take it as a stamp.
+
+Same defect as `copied 0` (fixed in c9c287ca) with numbers replaced by
+prose. So the notice's "what moved" section is DERIVED from the diff, and
+an unclassified path is printed as such rather than silently dropped —
+exit 1 until someone names its surface.
+
+A file is a stamp because its DIFF is version literals, not because of its
+name: `__init__.py` carries the fallback version AND the logic around it.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# `v?` because the sibling pin is spelled `...git@vX.Y.Z#...`: `\b` finds
+# no boundary between `v` and `1`, so the pin line failed the stamp test
+# and dragged document_tools/pyproject.toml into the jsonui-doc surface.
+#
+# 🔻 AND IT MUST BE *THIS* VERSION, NOT ANY VERSION. `.*` lets the literal sit
+# anywhere on the line, so a line of prose that merely MENTIONS some other
+# product's version satisfied it — and a one-line diff made of that prose came
+# out as "the whole diff is version literals". Measured 2026-09-15 on
+# v1.8.84..v1.8.85: the SSoT's only changed line is a `description` sentence
+# containing "NOT a v10.22.0 regression" (a LIBRARY version, in prose), so
+# `shared/core/attribute_definitions.json` — the widest surface this script
+# has — was announced as a stamp. The vendored table carrying the same
+# sentence went with it.
+#
+# ⚠️ That is this script's own docstring defect arriving from the other side:
+# "stamps only" as a true-sounding sentence whose denominator is wrong. So the
+# versions are DERIVED from `VERSION` at the two refs and the line has to carry
+# one of them. Nothing is pinned to a spelling: a range that bumps nothing has
+# no stamp versions and therefore no stamp lines, which is the honest answer.
+_ANY_VERSION = r"(?<![\w.])v?\d+\.\d+\.\d+(?![\w.])"
+STAMPS = "version stamps — the whole diff is version literals"
+
+SURFACES = [
+    ("branch-tests generator — REGENERATE (`branch-tests --check` will drift)",
+     r"^test_tools/jsonui_test_cli/(branch_tests|branch_runtime_prose)\.py$"),
+    ("mock generator — run `mock generate --check` (output may still be unchanged)",
+     r"^test_tools/jsonui_test_cli/mock/"),
+    ("validate PRINTING surface — quoted output changes even when gates do not",
+     r"^test_tools/jsonui_test_cli/(cli\.py|validation/)"),
+    ("test CLI — other", r"^test_tools/jsonui_test_cli/"),
+    # Outside the package dir but shipped with it: dependencies and entry
+    # points ride here, and so does pytest's own config. 1.9.31 changed only
+    # the pytest part (tmp_path retention), so read the diff before announcing.
+    ("test CLI packaging — dependencies, entry points, pytest config (read the diff)",
+     r"^test_tools/pyproject\.toml$"),
+    ("jsonui-doc", r"^document_tools/"),
+    ("vendored platform codegen — arrives via `jui sync_tool`",
+     r"^(sjui_tools|kjui_tools|rjui_tools)/"),
+    ("jui CLI — machine-shared, arrives via bootstrap", r"^jui_tools/"),
+    # The SSoT and the manifests that certify its emit. This is the widest
+    # surface there is — a declaration change reaches every face's vocabulary
+    # through three re-vendored tables — and it was unclassified until the
+    # v1.7.53 range put attribute_definitions.json through this script.
+    ("SSoT declaration + emit manifests — every face's vocabulary",
+     r"^(shared/core/|conformance/manifest\.json$|build/attr_codegen/manifest\.json$)"),
+    # Records which manifest hashes describe the same fixtures/ tree and id
+    # set, so the gate can tell a manifest that DRIFTED from one whose
+    # fixtures moved. No host reads it; it only ever removes a re-render.
+    ("conformance manifest lineage — maintainer side, removes re-renders only",
+     r"^conformance/manifest_lineage\.json$"),
+    # 🔻 BAKED PICTURE HASHES. A baseline is what one environment's renderer
+    # DREW, measured from a run's artifacts — not something a consumer
+    # resolves, and not a claim about any face's behaviour. It reaches nobody
+    # through bootstrap or sync_tool; the only reader is this repo's own gate.
+    # Unclassified until 2026-09-16, when baking twelve new fixtures' web
+    # entries made the release gate ask which audience they belong to. The
+    # honest answer is "none" — and saying so out loud is what keeps a
+    # baseline bake from being announced as if a face's pictures had changed.
+    ("conformance baselines — measured by a run, read only by this repo's gate",
+     r"^conformance/baselines/"),
+    # Fixture layouts/tests and the per-face ledgers beside them: generated
+    # from the SSoT, rendered by the hosts, judged here. Same audience as the
+    # baselines — this repo's gate — but a different kind of file, so it gets
+    # its own line rather than widening the one above.
+    ("conformance corpus + ledgers — the gate's own subject matter",
+     r"^conformance/(fixtures/|codegen/|hosts/|[a-z_]+\.json$)"),
+    # The conformance documents beside them: the host contract and the
+    # results schema the SwiftJsonUI / KotlinJsonUI / web hosts implement,
+    # and the coverage / report pages the gate prints. No face reads them.
+    # Unclassified until 2026-09-26 (jsonui-cli 1.9.0), when the host
+    # contract's §4 data shape grew a section's header / footer data. The
+    # frames schema (2026-10-05) is the same kind of contract, for the
+    # drivers, written as JSON Schema.
+    ("conformance documents — the hosts' contract and the gate's pages, maintainer side",
+     r"^conformance/([A-Za-z_]+\.md|[a-z_]+\.schema\.json)$"),
+    # install.sh (the clone-and-install script at the root) is the installer's
+    # other entry; unclassified until jsonui-cli 1.9.0 changed its Ruby floor.
+    ("release procedure / installer — maintainer side only",
+     r"^(dev-guide|installer)/|^install\.sh$"),
+    # CI config is maintainer-side too, but it is worth its own line: a face
+    # reading a notice needs to know a gate MOVED, not just that some
+    # maintainer file did. v1.7.52 turned on submodule checkout, without
+    # which the canonical guard had no subject to read.
+    ("CI configuration — a gate changed, nothing shipped changed",
+     r"^\.github/"),
+    # What git tracks, not what ships: neither bootstrap nor sync_tool copies
+    # it. First moved in the jui viz branch (/jui_tools/build/ ignored after a
+    # local `pip wheel .` had its output committed).
+    ("repository housekeeping (.gitignore) — nothing shipped",
+     r"^\.gitignore$"),
+    # Not copied by bootstrap into a face's tools: it reaches a user through
+    # `/plugin marketplace add Tai-Kimura/jsonui-cli` + `/plugin install
+    # jui-viz@jsonui`, at the version in plugin.json.
+    ("license — the terms changed, nothing shipped changed", r"^LICENSE$"),
+    ("Claude Code plugin (jui viz) — arrives via /plugin install; bump plugin.json's version",
+     r"^(\.claude-plugin|plugins)/"),
+    ("tests only — no shipped behaviour", r"^[^/]+/tests?/"),
+    # Docs are a shipped surface: a config key a face has to WRITE lives here
+    # before it lives anywhere else. v1.7.50 added `test.testDir` and the only
+    # place a consumer can read what it means is this file — announcing that
+    # release as code-only would have shipped a key nobody could look up.
+    ("consumer docs — a config key or behaviour a face has to read",
+     r"(^|/)(README|CHANGELOG)\.md$|^docs/"),
+]
+
+
+# The tree this script reads is the one it LIVES in (dev-guide/release/ ->
+# repo root), never the caller's cwd. Measured 2026-09-05 on 1.8.43: run
+# from a scratch directory, `git diff` raised CalledProcessError 128 on a
+# perfectly good clone — the same cwd dependence that made wait-for-ci.sh
+# report NO RUN for 1500s that morning. `git -C` removes the cwd from the
+# question.
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _run(*args: str) -> str:
+    if args and args[0] == "git":
+        args = ("git", "-C", str(REPO), *args[1:])
+    return subprocess.run(args, capture_output=True, text=True,
+                          check=True).stdout
+
+
+# This file is distributed: `dev-guide/` is copied into `~/.jsonui-cli` by
+# the installer, so every face HAS it. Measured 2026-09-01: `~/.jsonui-cli`
+# is not a git checkout, so every `git diff` below fails there. A consumer
+# asked to re-derive a notice would get a CalledProcessError traceback and
+# read it as the tool being broken, when the tool is fine and the tree is
+# not one it can read. Arriving and being runnable are different things —
+# say which one is missing.
+def _needs_a_git_tree() -> str | None:
+    proc = subprocess.run(("git", "-C", str(REPO), "rev-parse", "--git-dir"),
+                          capture_output=True, text=True)
+    if proc.returncode == 0:
+        return None
+    return ("CANNOT ATTEMPT: this is not a git checkout of jsonui-cli.\n"
+            "  `dev-guide/` is copied into ~/.jsonui-cli by the installer, "
+            "but that tree has no\n"
+            "  history to diff. Run this from a clone of the toolchain repo, "
+            "naming the two tags.")
+
+
+def _version_at(ref: str) -> str | None:
+    """Root `VERSION` at *ref*, or None when the ref has no such file."""
+    try:
+        return _run("git", "show", f"{ref}:VERSION").strip() or None
+    except subprocess.CalledProcessError:
+        return None
+
+
+def stamp_line_matcher(frm: str, to: str):
+    """A predicate for "this line is a version stamp for THIS bump".
+
+    Derived from the two refs rather than declared, so it follows the release
+    it is describing. When neither ref names a version — or the version did
+    not move — nothing is a stamp, and every file falls through to its real
+    surface. That is the safe direction: the failure mode this replaces was a
+    file being called a stamp when it was not.
+    """
+    versions = {v for v in (_version_at(frm), _version_at(to)) if v}
+    if len(versions) < 2:
+        return lambda _line: False
+    this_bump = "|".join(re.escape(v) for v in sorted(versions))
+    rx = re.compile(rf"^[+-].*(?<![\w.])v?({this_bump})(?![\w.])")
+    return lambda line: bool(rx.match(line))
+
+
+def stamp_only(frm: str, to: str, path: str, is_stamp_line=None) -> bool:
+    if is_stamp_line is None:
+        is_stamp_line = stamp_line_matcher(frm, to)
+    body = [l for l in _run("git", "diff", "-U0", frm, to, "--", path).splitlines()
+            if l[:1] in "+-" and not l.startswith(("+++", "---"))]
+    return bool(body) and all(is_stamp_line(l) for l in body)
+
+
+def main(frm: str, to: str) -> int:
+    problem = _needs_a_git_tree()
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+    paths = _run("git", "diff", "--name-only", frm, to).split()
+    if not paths:
+        print(f"no files changed between {frm} and {to}")
+        return 0
+
+    hit: dict[str, list[str]] = {}
+    unclassified: list[str] = []
+    is_stamp_line = stamp_line_matcher(frm, to)
+    for path in paths:
+        if stamp_only(frm, to, path, is_stamp_line):
+            hit.setdefault(STAMPS, []).append(path)
+            continue
+        for label, rx in SURFACES:
+            if re.search(rx, path):
+                hit.setdefault(label, []).append(path)
+                break
+        else:
+            unclassified.append(path)
+
+    print(f"what moved, {frm} -> {to}\n")
+    for label in [l for l, _ in SURFACES] + [STAMPS]:
+        if label in hit:
+            print(f"  {label}")
+            for path in sorted(hit[label]):
+                print(f"      {path}")
+    # What this cannot answer, said where its answer is read. "The
+    # generator did not move" became "so no regeneration is needed" in a
+    # notice, and a lane regenerated 38 files that same day: the ROUTES
+    # baked into a branch test are a copy of the mocks, so a backend
+    # declaring 426/429/503 drifts them with branch_tests.py byte-identical.
+    # A diff between two tags of THIS repo cannot see that — the input
+    # lives in the consumer's swagger and specs.
+    print("\n  this reads a diff of the toolchain, so it answers"
+          " \"did the generator move\" only.")
+    print("  whether the INPUT moved (swagger, specs, hand-written mocks)"
+          " is on the consumer side:")
+    print("  a byte-identical generator still drifts when its input moved."
+          " Say so in the notice.")
+    if unclassified:
+        print("\n  UNCLASSIFIED — name the surface before announcing:")
+        for path in sorted(unclassified):
+            print(f"      {path}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("usage: what_moved.py <from-tag> <to-tag>", file=sys.stderr)
+        raise SystemExit(2)
+    raise SystemExit(main(sys.argv[1], sys.argv[2]))

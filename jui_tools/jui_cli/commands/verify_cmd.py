@@ -1,0 +1,1266 @@
+"""`jui verify` — compare generated Layout JSON to on-disk implementation."""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from ..core import shared_core
+from ..core.screen_identity import is_layout_path
+
+
+# Identifiers that look like type names (PascalCase, no separators).
+_TYPE_IDENT_RE = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b")
+
+# Commonly-used names that should never be flagged as "custom type needing
+# registration" — includes Swift/Kotlin/TS primitives and TypeMapper
+# builtins.
+_STDLIB_TYPES = {
+    "String", "Int", "Double", "Float", "Bool", "Boolean", "Char", "Byte",
+    "Short", "Long", "Any", "Void", "Unit", "Nothing",
+    "Data", "URL", "Date",
+    "Array", "List", "Set", "Map", "Dictionary",
+    "MutableList", "MutableMap", "MutableSet", "Pair", "Triple",
+    "Visibility", "CollectionDataSource",
+    "Flow", "Promise", "Record", "Uint8Array", "ByteArray",
+    "AsyncThrowingStream", "AsyncIterable",
+}
+
+
+def register_verify_command(subparsers: argparse._SubParsersAction) -> None:
+    """Register ``jui verify``."""
+    parser = subparsers.add_parser(
+        "verify",
+        help="Compare generated Layout JSON to existing Layouts/*.json",
+    )
+    parser.add_argument(
+        "--file",
+        help="Verify a single spec file (e.g. 'login.spec.json')",
+    )
+    parser.add_argument(
+        "--detail",
+        action="store_true",
+        help="Include per-screen diff details in the report",
+    )
+    parser.add_argument(
+        "--fail-on-diff",
+        action="store_true",
+        help="Exit non-zero if any diff is detected (useful for CI)",
+    )
+    parser.add_argument(
+        "--platform",
+        default=None,
+        help="Target platform (defaults to the first platform in config)",
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        metavar="PATH",
+        help="Write the counts (verified / skipped / total, with reasons) "
+             "to PATH as JSON, for automation that cannot read the report",
+    )
+    parser.set_defaults(func=cmd_verify)
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    from ..core.config_manager import ConfigManager
+    from ..core.spec_extractor import extract_screen_spec
+    from ..core.type_mapper import TypeMapper
+    from ..core.parent_spec_merger import ParentSpecMerger
+    from ..core.view_diff_checker import ViewDiffChecker, render_report
+    from ..generators.layout_generator import LayoutGenerator
+
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        print("ERROR: jui.config.json not found. Run 'jui init' first.")
+        return 1
+
+    from ..core.spec_kind import missing_table_error
+    missing = missing_table_error("jui verify")
+    if missing:
+        print(missing)
+        return 1
+
+    config = config_mgr.load()
+    spec_dir = config_mgr.spec_directory
+    external_mode = (config.get("verify") or {}).get("external", "warn")
+    if external_mode not in EXTERNAL_MODES:
+        print(f"ERROR: jui.config.json verify.external is {external_mode!r}; it is one of "
+              f"{', '.join(repr(m) for m in EXTERNAL_MODES)} (warn: report the externally authored layouts' "
+              "findings; gate: also count them under --fail-on-diff)")
+        return 1
+
+    platforms = config.get("platforms") or {}
+    # A named platform the config does not have is an ERROR. With a
+    # top-level layouts_directory it used to resolve anyway and verify every
+    # screen as "skipped (layout not found on disk)", rc 0 (ticket
+    # jui-verify-and-others-platform-asked-by-name-absent-exits-0).
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        print(f"ERROR: {absent}")
+        return 1
+    platform = args.platform
+    if platform is None:
+        platform = next(iter(platforms), None)
+    if not platform:
+        print("ERROR: No platform configured. Specify --platform explicitly.")
+        return 1
+
+    # Prefer shared layouts_directory; fall back to per-platform path
+    layouts_root = config_mgr.layouts_directory
+    if not layouts_root.exists():
+        layouts_root = _resolve_layouts_root(config, platform, config_mgr)
+    if layouts_root is None:
+        print(f"ERROR: Could not resolve Layouts directory for platform '{platform}'")
+        return 1
+
+    if args.file:
+        spec_files = [spec_dir / args.file]
+        if not spec_files[0].exists():
+            print(f"ERROR: Spec file not found: {spec_files[0]}")
+            return 1
+    else:
+        spec_files = sorted(spec_dir.glob("*.spec.json"))
+
+    # Resolve sub_spec paths referenced by parent_spec
+    sub_spec_paths: set[Path] = set()
+    for sf in spec_files:
+        try:
+            with open(sf, "r", encoding="utf-8") as f:
+                head = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if head.get("type") != "screen_parent_spec":
+            continue
+        for entry in head.get("subSpecs", []) or []:
+            ref = entry.get("file")
+            if not ref:
+                continue
+            resolved = (sf.parent / ref).resolve()
+            if resolved.exists():
+                sub_spec_paths.add(resolved)
+
+    merger = ParentSpecMerger(spec_dir=spec_dir)
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+    layout_gen = LayoutGenerator(type_mapper)
+
+    # On normalizeLayouts projects (experimental), apply the same L1
+    # canonicalization to BOTH sides of every comparison so alias
+    # rewriting / the $jui marker can never register as drift.
+    normalizer = None
+    from .build_cmd import _normalize_layouts_enabled
+    if _normalize_layouts_enabled(config_mgr):
+        from ..core.app_component_types import project_app_component_types
+        from ..core.normalizer import AliasTable, Canonicalizer
+
+        # the project's own component types as written, as `jui build`
+        # distributes them (_distribute_layouts)
+        _canonicalizer = Canonicalizer(
+            AliasTable.from_file().with_app_types(project_app_component_types(config_mgr))
+        )
+
+        def normalizer(tree):
+            canonical, _warnings = _canonicalizer.canonicalize(tree)
+            return canonical
+
+    # ``layouts_root`` lets the checker follow cellClasses/include
+    # references into neighbouring cell Layout JSON files so the
+    # actual-layout view of ids matches the aggregated spec tree.
+    checker = ViewDiffChecker(
+        layouts_root=layouts_root, normalizer=normalizer,
+        styles_root=config_mgr.styles_directory,
+    )
+
+    results = []
+    missing_layouts: list[str] = []
+    skipped_external: list[str] = []
+    data_orphans: list[tuple[str, list[tuple[str, str]]]] = []
+    initial_values: list[str] = []
+    # The project's strings table: a layout's String initial value may be a
+    # strings key, and the value it stands for is what the app shows.
+    from .lint_strings_cmd import LintStringsSetupError, StringsTable, default_strings_path
+    try:
+        strings_table = StringsTable.load(default_strings_path(config_mgr))
+    except LintStringsSetupError as e:
+        print(f"NOTE: initial values compared without the strings table: {e}")
+        strings_table = StringsTable({})
+    unregistered_types: "OrderedDict[str, list[str]]" = OrderedDict()
+    external_checks: list[dict] = []
+    for sf in spec_files:
+        if sf.resolve() in sub_spec_paths:
+            continue
+        with open(sf, "r", encoding="utf-8") as f:
+            spec_data = json.load(f)
+        # ⚠️ Only a screen is verified against a layout. This loop read every
+        # `*.spec.json` as one, so an `app_contracts_spec` — no layoutFile, no
+        # layout, because it describes no screen — was counted in `verified N
+        # of M` and listed as "Layouts not found on disk: app_contracts.spec"
+        # (2026-09-25). `_check_spec_coverage` below had asked the type since
+        # 1.8.52; this loop had not. A known non-screen is not in the count at
+        # all. An unknown type is skipped too, and the coverage check names it
+        # in its NOTICE — said once, not twice.
+        spec_kind = _describes_a_screen(spec_data.get("type"))
+        if spec_kind is not True:
+            if args.file:
+                print(f"ERROR: {args.file} is not a screen spec (type: "
+                      f"{spec_data.get('type')!r}) — there is no layout to verify it against")
+                return 1
+            continue
+        if spec_data.get("type") == "screen_parent_spec":
+            merge_result = merger.merge_from_file(sf)
+            spec_data = merge_result.spec
+        screen_spec = extract_screen_spec(spec_data, sf)
+        actual_path = _resolve_actual_layout(
+            layouts_root, sf.stem, screen_spec.name,
+            layout_file=screen_spec.layout_file,
+        )
+
+        # The initial values the spec declares, against the layout's —
+        # every screen spec with a layout on disk, an externally authored
+        # one too: its data section is still the spec's to declare.
+        initial_values.extend(_initial_value_findings(
+            sf, screen_spec, actual_path, Path(layouts_root), config_mgr.project_root,
+            strings=strings_table, styles_root=config_mgr.styles_directory))
+
+        # Skip specs whose layout is authored externally (layoutFile mode
+        # with no components). Generating would produce an empty stub,
+        # causing a false diff against the real layout. What can still be
+        # compared is checked: the layout's bindings and its data section
+        # against what the spec declares (ticket 2026-10-21-jui-verify-skips-
+        # every-consumer-screen, the requester's plan A) — the rules pack
+        # makes every screen external, so without this nothing was.
+        if screen_spec.layout_file and not screen_spec.layout_components:
+            skipped_external.append(
+                f"{sf.stem} -> {screen_spec.layout_file}.json"
+            )
+            external_checks.append(_external_check(
+                sf.stem, spec_data, screen_spec, layout_gen, Path(layouts_root),
+                Path(config_mgr.styles_directory)))
+            continue
+
+        generated = layout_gen.generate(screen_spec)
+        if not actual_path or not actual_path.exists():
+            missing_layouts.append(_missing_layout_line(
+                layouts_root, sf.stem, screen_spec.name, screen_spec.layout_file))
+            continue
+        with open(actual_path, "r", encoding="utf-8") as f:
+            actual = json.load(f)
+
+        # Canonicalize both sides up front (idempotent — the checker also
+        # normalizes) so the data-section diff below sees the same trees.
+        if normalizer is not None:
+            generated = normalizer(generated)
+            actual = normalizer(actual)
+
+        diff = checker.compare(
+            generated, actual, screen=sf.stem.replace(".spec", "")
+        )
+        results.append(diff)
+
+        # Layout JSON `data[]` entries not declared in spec (not in
+        # uiVariables and not derived from displayLogic/collection/tabView).
+        orphans = _diff_data_section(generated, actual)
+        if orphans:
+            data_orphans.append((str(sf.stem), orphans))
+
+        # Custom types referenced by spec but not registered in the
+        # type-map. Flagging these lets authors fill in `.jsonui-type-map.json`
+        # with `imports` hints so iOS/Web codegen can emit the right
+        # import statements for Swift modules / TS paths.
+        for ident, location in _collect_custom_type_refs(screen_spec):
+            if type_mapper.is_registered(ident):
+                continue
+            bucket = unregistered_types.setdefault(ident, [])
+            bucket.append(f"{sf.stem}:{location}")
+
+    report = render_report(results, detail=args.detail)
+    print(report)
+
+    # What was actually compared, against what was there to compare.
+    #
+    # `match=0` and `has_diffs: false` are the same output whether every
+    # screen agreed or every screen was skipped, and a reader resolves that
+    # by believing the friendlier one — a downstream lane read a run that
+    # verified NOTHING as "no differences" (2026-09-03) and only caught it
+    # by running `jui build` separately. The exit code deliberately does not
+    # change: an all-skip run is legitimate where layouts are authored
+    # externally, and a gate that is permanently red is a gate that gets
+    # ignored. So the honesty lives in the count, which a face can floor at
+    # whatever it expects.
+    verified = len(results)
+    skips = _skip_counts(skipped_external, missing_layouts)
+    total = verified + sum(n for _, n in skips)
+    print()
+    print(_verified_line(verified, total, skips, spec_dir=spec_dir))
+    if external_checks:
+        print(_external_line(external_checks))
+
+    # Computed before the skip list is printed, so a name reported below as
+    # missing is not also listed above as an ordinary external skip. One
+    # consumer read the skip list as recognition — "it is in the list, so
+    # the tool knows about it" — and stopped there. Two lines about one
+    # name, saying opposite things, is the shape a reader resolves by
+    # believing the first.
+    coverage = _check_spec_coverage(config_mgr, config, spec_dir, layouts_root)
+    require_coverage = bool((config.get("verify") or {}).get("requireSpecPerScreen"))
+    unresolved = {f"{name}.json" for name in coverage.missing_layouts}
+    external = [n for n in skipped_external if n.split(" -> ")[-1] not in unresolved]
+    if external:
+        print("\n**Skipped (layout authored externally):**")
+        for name in external:
+            print(f"- {name}")
+
+    if missing_layouts:
+        print("\n**Layouts not found on disk (skipped):**")
+        for name in missing_layouts:
+            print(f"- {name}")
+
+    if unregistered_types:
+        print(
+            f"\n**WARNING: {len(unregistered_types)} custom type(s) "
+            "referenced but not registered in TypeMapper.** "
+            "If any live in a Swift Package / separate module, or need "
+            "explicit TS import paths, add entries to "
+            "`.jsonui-type-map.json`:"
+        )
+        print("```json")
+        print("{")
+        print("  \"types\": {")
+        for ident in unregistered_types:
+            print(f'    "{ident}": {{ "class": "{ident}", "imports": [] }},')
+        print("  }")
+        print("}")
+        print("```")
+        print("\n  Usage locations:")
+        for ident, locs in unregistered_types.items():
+            preview = ", ".join(locs[:3]) + ("..." if len(locs) > 3 else "")
+            print(f"  - {ident}: {preview}")
+
+    if data_orphans:
+        total = sum(len(entries) for _, entries in data_orphans)
+        print(
+            f"\n**WARNING: {total} data-section entries not declared in "
+            f"spec.uiVariables** across {len(data_orphans)} Layout JSON file(s):"
+        )
+        for stem, entries in data_orphans:
+            print(f"- {stem}:")
+            for name, klass in entries:
+                print(f"    - data.{name} ({klass})")
+        print(
+            "  → add each missing entry to stateManagement.uiVariables "
+            "(or remove it from the Layout JSON's data section) so "
+            "regeneration is idempotent."
+        )
+
+    external_findings = [c for c in external_checks if c["findings"] or not c["checked"]]
+    if external_findings:
+        counted = ("counted by `--fail-on-diff` (verify.external: \"gate\")" if external_mode == "gate"
+                   else "reported only — `verify.external: \"gate\"` in jui.config.json counts these under `--fail-on-diff`")
+        print(f"\n**WARNING: externally authored layouts against their specs** ({counted}):")
+        for c in external_findings:
+            print(f"- {c['screen']} -> {c['layout']}.json:")
+            if not c["checked"]:
+                print(f"    - not checked: {c['reason']}")
+            for f in c["findings"]:
+                print(f"    - {f['kind']} `{f['name']}`: {f['why']}")
+        print(
+            "  → declare each name in the screen's spec, in stateManagement.uiVariables — a handler "
+            "(onXxx, or a name bound to onClick and the like) with a callback type such as "
+            "\"(() -> Void)?\" — or remove it from the Layout JSON. A layout's bindings resolve against "
+            "the data section `jui g project` writes from uiVariables; stateManagement.eventHandlers "
+            "are view-local and never go there. A name bound inside an include with an id is the "
+            "including screen's, spelled with the include's id in front (pager + onNextTap -> "
+            "pagerOnNextTap, a camelCase variable name)."
+        )
+
+    value_gate = initial_value_gate_state()
+    if initial_values:
+        counted = {
+            "on": "counted by `--fail-on-diff`",
+            "announce": (f"reported only — from jsonui-cli {INITIAL_VALUE_GATE_FROM} "
+                         f"`--fail-on-diff` counts these"),
+            "unavailable": INITIAL_VALUE_GATE_UNREADABLE,
+        }.get(value_gate, "reported only — `--fail-on-diff` does not count these")
+        print(
+            f"\n**WARNING: {len(initial_values)} initial value(s) a spec declares that "
+            f"its layout does not carry** ({counted}):"
+        )
+        for line in initial_values:
+            print(f"- {line}")
+        print(
+            "  → make the two agree. `jui g project` writes the data section from "
+            "the spec, so the spec is where the value is declared; correct "
+            "whichever side is wrong."
+        )
+
+    for line in _coverage_lines(coverage, require_coverage):
+        print(line)
+
+    # A layout edit that moves the screen id space breaks references this
+    # command does not read. Advisory, never fatal: adding a layout is
+    # normal work, and a gate that fires on normal work gets switched off.
+    moved = _screen_id_space_changes(Path(layouts_root))
+    if moved:
+        print(f"\n**NOTICE: the screen id space moved in this working tree "
+              f"({len(moved)}):**")
+        for name in moved:
+            print(f"- {name}")
+        print(
+            "  → run `jsonui-test validate` as well. Flow steps name screens "
+            "by id, and that is the only gate reading those references — "
+            "build, verify and lint-strings all stay green while one goes "
+            "stale."
+        )
+
+    # API model drift — independent of Layout drift, gated by --fail-on-diff.
+    api_drift = _check_api_model_drift(config_mgr, config, args)
+    if api_drift:
+        print(
+            f"\n**API model drift detected ({len(api_drift)} file(s)):**"
+        )
+        for line in api_drift:
+            print(f"- {line}")
+        print(
+            "  → run `jui build` (or `jui g api` once available) to regenerate."
+        )
+
+    if args.json_out:
+        summary = _summary_payload(results, skips)
+        summary.update(_external_payload(external_checks))
+        out_path = Path(args.json_out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        print(f"\nCounts written to {out_path}")
+
+    coverage_gap = bool(coverage.missing_specs or coverage.missing_layouts)
+    if args.fail_on_diff and (
+        any(r.has_diff for r in results) or data_orphans or api_drift
+        or (external_mode == "gate" and external_findings)
+        or (initial_values and value_gate in ("on", "unavailable"))
+        or (require_coverage and coverage_gap)
+    ):
+        return 1
+    return 0
+
+
+# ---------------------------------------------------------------- externally authored layouts against their specs
+# Ticket 2026-10-21-jui-verify-skips-every-consumer-screen (the requester's plan A). The rules pack writes every screen
+# with `metadata.layoutFile` and an empty `structure.components`, so the comparison above skips every screen and, in
+# five consumers measured, compared none. What a hand-written layout can still be held to: each binding root (after
+# its includes expand, an include with an id prefixing what is inside it — layout_facts, the reader the validator and
+# the coverage axis use) is declared by the spec, and the file's own data section holds nothing the spec does not
+# (_diff_data_section, as for a compared screen). First a WARNING; `verify.external: "gate"` counts them.
+# Decided with the plan: an include's bindings are the INCLUDING screen's to declare (its view model receives them,
+# and `jui build` writes that view model's protocol from its spec); `stateManagement.cellData`, which no part of jui
+# reads, does not declare — a name found only there is named as such.
+# The requester's ruling (ticket 2026-10-21-names-declared-outside-uivariables-are-not-in-the-generated-data,
+# 「ビューで使わない値はdataに入っちゃダメよ」): only what goes into the data section declares — the ui variables and
+# what displayLogic, a collection and a tab view generate, the data section `jui g project` writes. A view model's
+# vars and methods and the screen's event handlers are the view model's and the view's own and never go into data;
+# a name the layout binds that is only there is named with its field.
+EXTERNAL_MODES = ("warn", "gate")
+
+
+def _named(group) -> set[str]:
+    return {x.get("name") for x in group or [] if isinstance(x, dict) and isinstance(x.get("name"), str) and x.get("name")}
+
+
+def _declared_names(spec_data: dict, generated: dict) -> set[str]:
+    """What a screen's spec declares a binding may name: the data section regenerating it would write (the ui
+    variables, and what displayLogic, a collection and a tab view generate)."""
+    return {e["name"] for e in layout_data_entries(generated) if e.get("name")}
+
+
+#: The spec's fields that hold names which never go into the data section, in the order a message names them.
+NOT_DATA_FIELDS = (("dataFlow", "viewModel", "vars"), ("dataFlow", "viewModel", "methods"), ("stateManagement", "eventHandlers"))
+
+
+def _declared_elsewhere(spec_data: dict) -> dict[str, str]:
+    """name -> the first field outside the data section that has it (`dataFlow.viewModel.vars` ...)."""
+    out: dict[str, str] = {}
+    for path in NOT_DATA_FIELDS:
+        node = spec_data
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+        for name in sorted(_named(node)):
+            out.setdefault(name, ".".join(path))
+    return out
+
+
+def _cell_data_names(spec_data: dict) -> set[str]:
+    """Names written under stateManagement.cellData.<section>.variables (a consumer's habit; jui reads none of it)."""
+    out: set[str] = set()
+    cell = (spec_data.get("stateManagement") or {}).get("cellData")
+    for section in (cell.values() if isinstance(cell, dict) else []):
+        for v in (section.get("variables") or []) if isinstance(section, dict) else []:
+            name = v.get("name") if isinstance(v, dict) else v
+            if isinstance(name, str) and name:
+                out.add(name)
+    return out
+
+
+def _only_in_cell_data(name: str, cell_names: set[str]) -> bool:
+    """The name, or the name with an include's id in front, is one written under cellData."""
+    return name in cell_names or any(
+        len(name) > len(c) and name.endswith(c[:1].upper() + c[1:]) for c in cell_names)
+
+
+def _external_check(stem: str, spec_data: dict, screen_spec, layout_gen, layouts_dir: Path, styles_dir: Path) -> dict:
+    """One externally authored screen: {screen, layout, checked, reason, findings: [{kind, name, why}]}."""
+    from ..core.layout_facts import layout_facts
+    from ..core.normalizer.include_expander import IncludeCycleError
+    out = {"screen": stem, "layout": screen_spec.layout_file, "checked": False, "reason": None, "findings": []}
+    try:
+        facts = layout_facts(spec_data, None, layouts_dir=layouts_dir, styles_dir=styles_dir)
+    except IncludeCycleError as exc:   # the initial-value check names the cycle; here the screen is not checked
+        out["reason"] = str(exc)
+        return out
+    except (OSError, ValueError) as exc:
+        out["reason"] = f"the layout could not be read ({type(exc).__name__})"
+        return out
+    if not facts.evaluated:
+        out["reason"] = facts.reason or "the layout could not be read"
+        return out
+    try:
+        generated = layout_gen.generate(screen_spec)
+        actual = json.loads(facts.path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        out["reason"] = f"the spec's data section could not be built ({type(exc).__name__})"
+        return out
+    out["checked"] = True
+    declared, cell_names = _declared_names(spec_data, generated), _cell_data_names(spec_data)
+    elsewhere = _declared_elsewhere(spec_data)
+    # The file's own data section (includes not opened, as _diff_data_section reads it) against the same declared
+    # names as the bindings: the data section the spec generates.
+    data = {}
+    for e in layout_data_entries(actual):
+        if e.get("name") and e["name"] not in declared:
+            data.setdefault(e["name"], e.get("class", "?"))
+    for name in sorted((facts.binding_roots - declared) | set(data)):
+        where = " and ".join(w for w, on in (("bound in the layout", name in facts.binding_roots),
+                                             (f"in its data section ({data.get(name)})", name in data)) if on)
+        if name in elsewhere:
+            why = (f"{where}; declared only in {elsewhere[name]}, which never goes into the data section: declare it "
+                   "in stateManagement.uiVariables")
+        elif _only_in_cell_data(name, cell_names):
+            why = (f"{where}; declared only under stateManagement.cellData, which jui does not read: declare it in "
+                   "stateManagement.uiVariables")
+        else:
+            why = f"{where}, not declared by the spec"
+        kind = "binding" if name in facts.binding_roots else "data"
+        out["findings"].append({"kind": kind, "name": name, "why": why})
+    return out
+
+
+def _external_line(checks: list[dict]) -> str:
+    """`checked against the spec's declarations: K of E externally authored layout(s) — F finding(s)`."""
+    checked = sum(1 for c in checks if c["checked"])
+    findings = sum(len(c["findings"]) for c in checks)
+    return (f"**checked against the spec's declarations: {checked} of {len(checks)} externally authored "
+            f"layout(s)** — {findings} finding(s)")
+
+
+def _external_payload(checks: list[dict]) -> dict:
+    return {
+        "externalChecked": sum(1 for c in checks if c["checked"]),
+        "externalTotal": len(checks),
+        "externalFindings": {c["screen"]: c["findings"] for c in checks if c["findings"]},
+        "externalNotChecked": {c["screen"]: c["reason"] for c in checks if not c["checked"]},
+    }
+
+
+#: Why a spec was not compared, in the wording the report already uses.
+#: A count with no reason answers "how many" and not "why it was zero",
+#: which is the question a reader asks first.
+SKIP_REASONS = (
+    ("layout authored externally", "external"),
+    ("layout not found on disk", "missing"),
+)
+
+
+def _skip_counts(skipped_external, missing_layouts) -> list[tuple[str, int]]:
+    """Non-zero skip reasons, paired with their counts."""
+    counts = {
+        "layout authored externally": len(skipped_external),
+        "layout not found on disk": len(missing_layouts),
+    }
+    return [(reason, n) for reason, n in counts.items() if n]
+
+
+def _summary_payload(results, skips: list[tuple[str, int]]) -> dict:
+    """The counts, for automation that never reads the report.
+
+    The MCP wrapper derives `has_diffs` from the exit code and passes the
+    report through as text, so a consumer without a parser has only a 0 that
+    an all-skip run also produces. These are what such a consumer can floor
+    on instead — and `verified + skipped == total` by construction, so a
+    reader can tell a quiet run from a complete one.
+    """
+    skipped = sum(n for _, n in skips)
+    return {
+        "verified": len(results),
+        "skipped": skipped,
+        "total": len(results) + skipped,
+        "skippedByReason": {reason: n for reason, n in skips},
+        "match": sum(r.match for r in results),
+        "missing": sum(len(r.missing) for r in results),
+        "extra": sum(len(r.extra) for r in results),
+        "typeMismatch": sum(len(r.type_mismatch) for r in results),
+        "hasDiffs": any(r.has_diff for r in results),
+    }
+
+
+def _verified_line(
+    verified: int, total: int, skips: list[tuple[str, int]],
+    spec_dir=None,
+) -> str:
+    """`verified 3 of 11 screen(s) — 8 skipped (...)`.
+
+    The shape is fixed so a face can floor it: a run that drops from 11
+    verified to 3 changes this line even though both exit 0.
+
+    An empty denominator gets DIFFERENT words. `verified 0 of 0 screen(s)`
+    reads as "all of them were skipped" when it means "there was nothing to
+    look at", and those need to be distinguishable for the same reason this
+    line exists at all — the two were confused once already while measuring
+    this very change, by pointing a run at a tree whose spec_directory was
+    unset. Naming the directory says which tree answered.
+    """
+    if total == 0:
+        where = f" (spec_directory: {spec_dir})" if spec_dir else ""
+        return f"**no screens found{where}** — nothing to verify"
+    # `screen(s)` is not laziness about plurals: the reported shape is what
+    # a face floors on (`verified # of # screen(s)`), so it stays fixed for
+    # one screen and for eleven.
+    line = f"**verified {verified} of {total} screen(s)**"
+    if not skips:
+        return line
+    skipped = sum(n for _, n in skips)
+    if len(skips) == 1:
+        detail = skips[0][0]
+    else:
+        detail = ", ".join(f"{n} {reason}" for reason, n in skips)
+    return f"{line} — {skipped} skipped ({detail})"
+
+
+def _coverage_lines(coverage, require_coverage) -> list[str]:
+    """The coverage paragraphs, as lines, so that they can be read by a test.
+
+    Extracted from `cmd_verify` for one reason: the `unknown_types` list was
+    written and then printed from inside a 300-line command, and there is no
+    way to reach that print without standing up a whole project. A field that
+    is collected but not reachably printed is a field that reports nothing,
+    and this file already carries one comment about a check going quiet.
+
+    The text is unchanged from when it was inline. `require_coverage` picks
+    ERROR vs WARNING for the two lists that can fail the run; the third is a
+    NOTICE in both modes, and does not move the exit code.
+    """
+    severity = "ERROR" if require_coverage else "WARNING"
+    out: list[str] = []
+
+    # Screens with no spec at all. Every other gate compares things that
+    # exist: build generates from the Layout, verify diffs declared against
+    # actual, validate checks the specs on disk. A screen shipped without a
+    # spec is absent from all three inputs, so nothing was ever in a
+    # position to notice it — one went five days unremarked.
+    if coverage.missing_specs:
+        out.append(
+            f"\n**{severity}: "
+            f"{len(coverage.missing_specs)} screen layout(s) have no spec:**"
+        )
+        out += [f"- {name}" for name in coverage.missing_specs]
+        out.append(
+            "  → author the spec (`jsonui-doc init spec`), or if the layout "
+            "is not a screen, declare that on the layout root with "
+            '`"role": "cell"` so the classification says so rather than a '
+            "list here having to."
+        )
+    if coverage.missing_layouts:
+        out.append(
+            f"\n**{severity}: "
+            f"{len(coverage.missing_layouts)} spec(s) name a layout that "
+            "does not exist:**"
+        )
+        out += [f"- {name}" for name in coverage.missing_layouts]
+        out.append(
+            "  → a rename that moved only one side leaves exactly this. "
+            "Fix `metadata.layoutFile` or restore the layout."
+        )
+    if (coverage.missing_specs or coverage.missing_layouts) and not require_coverage:
+        out.append(
+            '  (set `"verify": {"requireSpecPerScreen": true}` in '
+            "jui.config.json to make this fail `--fail-on-diff`)"
+        )
+
+    # Specs this tool could not classify. They were skipped, so they are in
+    # NEITHER list above — which is precisely why they have to be said out
+    # loud. The two lists are counts of judgments made; this is a count of
+    # judgments declined, and without it a spec that fell out of coverage
+    # entirely looks identical to one that passed.
+    #
+    # NOTICE, never fatal: reaching a spec type this build has not heard of is
+    # what happens when the doc tool ships a type first, and a gate that fires
+    # on the normal order of two releases gets switched off. The exit code is
+    # unchanged; the silence is what is being fixed.
+    if coverage.unknown_types:
+        out.append(
+            f"\n**NOTICE: {len(coverage.unknown_types)} spec(s) have a `type` "
+            "this build does not know, and were left out of the coverage "
+            "counts above:**"
+        )
+        out += [f"- {f} (type: {t})" for f, t in coverage.unknown_types]
+        out.append(
+            "  → they are neither counted as screens nor as containers. If "
+            "this build is older than the tool that wrote them, updating it "
+            "(`jui sync_tool`) is the fix; `<none>` means the file carries no "
+            "`type` at all, which every spec is expected to."
+        )
+    return out
+
+
+# The one wrapper every `jui` command reads — see core/spec_kind.py for why
+# there is exactly one.
+from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
+from ..core.layout_data import (  # noqa: E402
+    data_entries_with_includes, initial_value_key, layout_data_entries,
+)
+
+#: The release from which `--fail-on-diff` counts an initial value a spec
+#: declares that its layout does not carry. Below it the lines are a WARNING
+#: and one line names the release — faces holding `--fail-on-diff` green get
+#: a release to clear them in (measured 2026-09-26: 3 of 4 faces' gates run
+#: verify with it). A literal read by shared/core/gate_versions like every
+#: `*_GATE_FROM`: "withdrawn" or anything that is not a release number never
+#: gates.
+INITIAL_VALUE_GATE_FROM: str | None = "1.9.1"
+
+
+#: How the initial-value finding is labelled, and why `--fail-on-diff` fails
+#: on it, when this tree has no shared/core/gate_versions.py and so cannot say
+#: whether `--fail-on-diff` counts it. Until jsonui-cli 1.9.8 the state was
+#: "off" and the line said "reported only": the gate silently off (ticket
+#: gate-readers-without-shared-core-fall-silent-five-more).
+INITIAL_VALUE_GATE_UNREADABLE = (
+    "whether `--fail-on-diff` counts these cannot be decided — "
+    "shared/core/gate_versions.py is not in this tool tree — so `--fail-on-diff` FAILS: "
+    "run ~/.jsonui-cli/jui_tools/bin/jui, or install jui_tools editable")
+
+
+def initial_value_gate_state(version: str | None = None, literal: str | None = None) -> str:
+    """`on` (counted by --fail-on-diff), `announce` (a release is named, not
+    reached), `off` (undeclared, withdrawn, unreadable) or `unavailable` (no
+    gate_versions in this tree to read it with — --fail-on-diff fails). *version* defaults to this toolchain's, *literal* to
+    INITIAL_VALUE_GATE_FROM."""
+    from ..version import toolchain_version
+
+    gates = shared_core.load("gate_versions")
+    if gates is None:
+        # Not "off": this tree cannot say (ticket
+        # gate-readers-without-shared-core-fall-silent-five-more).
+        return "unavailable"
+    literal = INITIAL_VALUE_GATE_FROM if literal is None else literal
+    version = toolchain_version() if version is None else version
+    if gates.gate_is_on(version, literal):
+        return "on"
+    return "announce" if gates.gate_state(literal) == "release" else "off"
+
+
+@dataclass
+class SpecCoverage:
+    """Screens without a spec, and specs naming a layout that is not there."""
+
+    missing_specs: list[str] = field(default_factory=list)
+    missing_layouts: list[str] = field(default_factory=list)
+    #: `(file, type)` for every spec whose type this tool does not recognise.
+    #: They were NOT counted as screens, and saying so is the whole point:
+    #: silence here is what let `app_contracts_spec` be read as a screen.
+    unknown_types: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCoverage:
+    """Reconcile the set of screen layouts with the set of specs.
+
+    Correspondence runs through `metadata.layoutFile` rather than file
+    names, since that is what declares the link. Which layouts are screens
+    comes from the existing classification, so a fragment is excused by its
+    own `"role": "cell"` declaration rather than by an exclusion list here —
+    a list would go stale in the same silence this check exists to end.
+    Sub-specs are skipped: they inherit their parent's layout and claim none.
+    """
+    from ..core.screen_identity import (
+        build_screen_index, parse_app_owned_screens, screen_id_for_path,
+    )
+
+    coverage = SpecCoverage()
+    if layouts_root is None or not Path(layouts_root).is_dir():
+        return coverage
+
+    def as_id(value: str) -> str:
+        return screen_id_for_path(value if value.endswith(".json") else value + ".json")
+
+    declared_app_owned = (config.get("test") or {}).get("appOwnedScreens")
+    index = build_screen_index(layouts_root, declared_app_owned)
+    # An app-owned screen is written by hand and has no layout at all, so
+    # it is outside the class this check watches: the failure here is a
+    # Layout that generates a screen nobody declared. Requiring a spec for
+    # a page with no layout would also leave the project no way to comply —
+    # there is no layout root to carry `"role": "cell"`, and a spec for a
+    # screen with nothing to generate describes nothing. The declaration is
+    # already load-bearing elsewhere (the test driver verifies markers
+    # against it), so it goes stale loudly rather than quietly.
+    app_owned = {entry.screen_id for entry in parse_app_owned_screens(declared_app_owned)}
+    screens = set(index.screen_ids) - app_owned
+
+    claimed: set[str] = set()
+    for spec_file in sorted(Path(spec_dir).rglob("*.spec.json")):
+        try:
+            with open(spec_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        # ⚠️ Asked POSITIVELY, and that is the fix. This named the one type to
+        # SKIP, so 1.8.52 shipped a remedy (`app_contracts_spec`, the home for
+        # a unit target no single screen owns) that tripped this check: the new
+        # file has no `metadata.layoutFile` and no layout, so the `else` below
+        # read its FILENAME as a layout id and reported a layout that was never
+        # supposed to exist. The tool told the author to write a file and then
+        # failed them for writing it.
+        #
+        # An allow-list of skips has to be updated by whoever adds a type, and
+        # this one was not — while a screen table has to be updated by whoever
+        # adds a SCREEN type, which is the rarer edit and the one whose author
+        # is already editing this file's neighbourhood.
+        spec_type = data.get("type")
+        is_screen = _describes_a_screen(spec_type)
+        if is_screen is False:
+            continue
+        if is_screen is None:
+            # Neither guess is safe: treated as a screen it reddens
+            # `missing_layouts` exactly as above, and treated as not-a-screen it
+            # drops out of `missing_specs` and goes quiet. Skipped AND named.
+            coverage.unknown_types.append((
+                str(spec_file),
+                spec_type if isinstance(spec_type, str) and spec_type
+                # `<none>` is the spelling the printer explains. An absent
+                # `type` and an empty one are the same defect to the author,
+                # so they get the same word; any other non-string is a
+                # different mistake and keeps its own name.
+                else "<none>" if spec_type in (None, "")
+                else f"<{type(spec_type).__name__}>",
+            ))
+            continue
+        layout_file = (data.get("metadata") or {}).get("layoutFile")
+        if isinstance(layout_file, str) and layout_file:
+            claimed.add(as_id(layout_file))
+        else:
+            claimed.add(as_id(spec_file.name[: -len(".spec.json")]))
+
+    coverage.missing_specs = sorted(screens - claimed)
+    coverage.missing_layouts = sorted(
+        name for name in claimed - screens if not index.is_known(name)
+    )
+    return coverage
+
+
+def _layout_role(text: str) -> str | None:
+    """The `role` a layout document declares, if any."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    return data.get("role") if isinstance(data, dict) else None
+
+
+def _git(args: list[str], cwd: Path) -> str | None:
+    """Run git, returning stdout or None when git cannot answer."""
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), *args],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _screen_id_space_changes(layouts_root: Path) -> list[str]:
+    """Layout edits in this working tree that move the screen id space.
+
+    Adding, deleting or renaming a layout changes which ids exist; changing
+    a `role` declaration changes which of them are screens. Flow steps name
+    screens by id, and the gate that checks those references is
+    `jsonui-test validate` — which the author of a layout change has no
+    reason to run. A consumer declared one screen `"role": "cell"`, saw
+    build, verify and lint-strings stay green, and met the two resulting
+    errors later while suspecting an unrelated toolchain update.
+
+    This names that gate rather than repeating its check: the id vocabulary
+    is shared code already, but where a screen id may appear inside a test
+    file is the test tool's business, and a second implementation of that
+    would drift from the first.
+
+    git is the baseline, so nothing has to be stored and nothing goes
+    stale. Outside a repository, or with no git, this is silent.
+    """
+    top = _git(["rev-parse", "--show-toplevel"], layouts_root)
+    status = _git(["status", "--porcelain", "--", "."], layouts_root)
+    if not top or status is None:
+        return []
+    # Porcelain paths are relative to the repository root, not to -C.
+    repo_root = Path(top.strip())
+
+    try:
+        watched = layouts_root.resolve()
+    except OSError:
+        return []
+
+    changes: list[str] = []
+    for line in status.splitlines():
+        if len(line) < 4:
+            continue
+        code, path = line[:2], line[3:].strip()
+        # A rename is reported as `old -> new`; either half moves the space.
+        name = path.split(" -> ")[-1].strip('"')
+        if not name.endswith(".json"):
+            continue
+        absolute = (repo_root / name).resolve()
+        if watched not in absolute.parents:
+            continue
+        # A resource or style file (Layouts/Resources/defined_colors.json) is
+        # no screen: adding or deleting one moved no id.
+        if not is_layout_path(absolute, watched):
+            continue
+        base = absolute.name[: -len(".json")]
+        if code[0] == "R" or " -> " in path:
+            changes.append(f"{base} (renamed)")
+        elif code[0] == "A" or code == "??":
+            changes.append(f"{base} (added)")
+        elif code[0] == "D" or code[1] == "D":
+            changes.append(f"{base} (deleted)")
+        elif code[0] == "M" or code[1] == "M":
+            head = _git(["show", f"HEAD:{name}"], repo_root)
+            if head is None:
+                continue
+            try:
+                now = absolute.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if _layout_role(head) != _layout_role(now):
+                changes.append(f"{base} (role changed)")
+    return sorted(set(changes))
+
+
+def _check_api_model_drift(config_mgr, config, args) -> list[str]:
+    """Compare in-memory swagger regen output against on-disk DTOs.
+
+    Implements the §5.5 semantic: ``jui verify`` regenerates the DTO
+    bytes in memory and compares against the files written by the last
+    ``jui build``. Independent of the build pipeline — running
+    ``jui verify`` directly catches drift even when ``jui build``
+    hasn't been run.
+
+    Returns a list of human-readable drift descriptions (empty = no drift).
+    Schema errors (oneOf, multi-file ref, etc.) surface as drift entries
+    so the user sees them via the same report path.
+    """
+    from ..core.api_model_sync import (
+        collect_docs,
+        diff_plan,
+        has_planner,
+        plan_for,
+    )
+    from ..core.openapi_loader import OpenAPILoadError
+
+    platforms = config.get("platforms") or {}
+    selected_platforms = [args.platform] if args.platform else list(platforms.keys())
+
+    try:
+        docs = collect_docs(config_mgr)
+    except OpenAPILoadError as e:
+        return [f"swagger load error: {e}"]
+
+    if not docs:
+        return []
+
+    drift: list[str] = []
+    for platform in selected_platforms:
+        if platform not in platforms or not has_planner(platform):
+            continue
+        try:
+            plan = plan_for(platform, config_mgr, platforms[platform], docs)
+        except OpenAPILoadError as e:
+            drift.append(f"[{platform}] swagger error: {e}")
+            continue
+        drift.extend(f"[{platform}] {line}" for line in diff_plan(plan))
+    return drift
+
+
+def _collect_custom_type_refs(spec):
+    """Yield ``(type_identifier, location_path)`` for every capitalised
+    identifier that appears in a spec's type fields.
+
+    Built-in primitives (String/Int/Bool/Map/...) are filtered out so the
+    caller only sees names that *might* need a ``.jsonui-type-map.json``
+    entry.
+    """
+    def _walk_type(type_str: str, location: str):
+        if not isinstance(type_str, str):
+            return
+        for ident in _TYPE_IDENT_RE.findall(type_str):
+            if ident in _STDLIB_TYPES:
+                continue
+            yield ident, location
+
+    for v in spec.ui_variables:
+        yield from _walk_type(v.type or "", f"uiVariables.{v.name}")
+
+    vm = spec.view_model
+    for m in vm.methods:
+        for p in m.params:
+            yield from _walk_type(p.type, f"viewModel.methods.{m.name}.params.{p.name}")
+        yield from _walk_type(m.return_type, f"viewModel.methods.{m.name}.returnType")
+    for v in vm.vars:
+        yield from _walk_type(v.type, f"viewModel.vars.{v.name}")
+
+    for repo in spec.repositories:
+        for m in repo.methods:
+            for p in m.params:
+                yield from _walk_type(
+                    p.type, f"repositories.{repo.name}.{m.name}.params.{p.name}"
+                )
+            yield from _walk_type(
+                m.return_type, f"repositories.{repo.name}.{m.name}.returnType"
+            )
+
+    for uc in spec.use_cases:
+        for m in uc.methods:
+            for p in m.params:
+                yield from _walk_type(
+                    p.type, f"useCases.{uc.name}.{m.name}.params.{p.name}"
+                )
+            yield from _walk_type(
+                m.return_type, f"useCases.{uc.name}.{m.name}.returnType"
+            )
+
+
+def _diff_data_section(
+    generated: dict, actual: dict,
+) -> list[tuple[str, str]]:
+    """Return ``(name, class)`` tuples present in *actual*'s data entries
+    but missing from the spec-driven *generated* ones.
+
+    Both sides are read wherever they declare `data` (core/layout_data): until
+    jsonui-cli 1.9.0 only a root `data` section was, so a layout keeping its data in a
+    child — the form hand-written layouts use — reported nothing.
+
+    An `include` is not opened here, unlike the initial-value check: the
+    question is this file's own data section against what regenerating it
+    writes, and an included layout's entries are in that layout's file — the
+    remedy printed with them ("remove it from the Layout JSON's data
+    section") is not one an entry the included file declares has. Following
+    includes would also report, and count under --fail-on-diff, every such
+    entry a spec does not list, which 1.9.0 did not.
+    """
+    gen_names = {e["name"] for e in layout_data_entries(generated)}
+    orphans: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for e in layout_data_entries(actual):
+        name = e["name"]
+        if name and name not in gen_names and name not in seen:
+            seen.add(name)
+            orphans.append((name, e.get("class", "?")))
+    return orphans
+
+
+def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_root: Path,
+                            project_root: Path, strings=None, *, styles_root: Path) -> list[str]:
+    """One line per initial value a spec declares that its layout does not
+    carry: the variable, both values, both files.
+
+    Read: stateManagement.uiVariables against the screen's layout, and each
+    Collection cell / header / footer's uiVariables against its layout (the
+    file its section names, when the entry names or generates one). A value
+    is declared when `default` / `defaultValue` gives one that is not null
+    (null is the type's default — what `jui g project` writes for it). Two
+    spellings of one value agree (layout_data.initial_value_key). A layout
+    entry that gives no defaultValue, or no entry of that name, does not carry
+    the value either.
+
+    A String value that is a strings key stands for its text: the layout's
+    "home_title" and the spec's "Hello" agree when strings.json holds Hello
+    there, and a full key and the bare key of one entry agree (the
+    table's own resolution — lint-strings' StringsTable; a bare key resolves
+    in the sections the layout owns). A line that disagrees after resolving
+    says so: `has "…" (strings: "…")`.
+
+    Until jsonui-cli 1.9.0 nothing compared them: `_diff_data_section` reads names, in
+    one direction, and a value the spec declared and the layout dropped went
+    unreported.
+
+    A layout's entries are read with its includes expanded, as sjui / kjui
+    build the Data type from them (layout_data.data_entries_with_includes): an
+    include's entry is there under the include id's prefix (`card` + `title`
+    -> `cardTitle`). Until jsonui-cli 1.9.1 an include was not opened, and a
+    spec declaring `cardTitle` was told the layout declares no such entry. An
+    include that cannot be expanded (its file missing or unparsable, or a
+    cycle) is left out, and a variable not found says which one was not read.
+    """
+    from ..core.spec_extractor import slot_layout_ref
+
+    def rel(path: Path) -> str:
+        try:
+            return str(Path(path).resolve().relative_to(Path(project_root).resolve()))
+        except ValueError:
+            return str(path)
+
+    targets = [("stateManagement.uiVariables", screen_spec.ui_variables, layout_path)]
+    for coll in screen_spec.collections:
+        for slot in coll.slots.values():
+            if slot.ui_variables and (slot.layout_file or slot.generate):
+                targets.append((f"structure.collection.{slot.kind}.uiVariables", slot.ui_variables,
+                                layouts_root / f"{slot_layout_ref(coll.id, slot)}.json"))
+
+    from .lint_strings_cmd import namespace_candidates
+
+    def agree(spec_value, layout_value, klass, own) -> bool:
+        if initial_value_key(layout_value, klass) == initial_value_key(spec_value, klass):
+            return True
+        if strings is None or not (isinstance(spec_value, str) and isinstance(layout_value, str)):
+            return False
+        le, se = strings.entry(layout_value, own), strings.entry(spec_value, own)
+        return bool((le and se and le == se)
+                    or (le and spec_value in strings.texts(*le))
+                    or (se and layout_value in strings.texts(*se)))
+
+    def shown(value, own) -> str:
+        text = json.dumps(value, ensure_ascii=False)
+        entry = strings.entry(value, own) if strings is not None and isinstance(value, str) else None
+        if entry:
+            texts = sorted(strings.texts(*entry))
+            text += f" (strings: {', '.join(json.dumps(x, ensure_ascii=False) for x in texts) or 'no text'})"
+        return text
+
+    out: list[str] = []
+    for where, variables, path in targets:
+        declared = [v for v in variables if v.default is not None]
+        if not declared or path is None or not Path(path).exists():
+            continue
+        try:
+            layout = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        entries: dict[str, list[tuple[dict, str | None]]] = {}
+        read, unresolved = data_entries_with_includes(
+            layout, layouts_root=layouts_root, styles_root=styles_root, source=Path(path))
+        for e, declared_in in read:
+            entries.setdefault(e["name"], []).append((e, declared_in))
+        not_read = ", ".join(f"'{ref}' ({reason})" for ref, reason in unresolved)
+        try:
+            own = namespace_candidates(str(Path(path).resolve().relative_to(Path(layouts_root).resolve())))
+        except ValueError:
+            own = namespace_candidates(Path(path).name)
+        for var in declared:
+            head = (f"{rel(spec_file)}: {where} '{var.name}' is "
+                    f"{shown(var.default, own)} — {rel(path)}")
+            found = entries.get(var.name, [])
+            if not found:
+                out.append(f"{head} declares no data entry '{var.name}'"
+                           + (f" — include(s) not read: {not_read}" if not_read else ""))
+                continue
+            for e, declared_in in found:
+                klass = e.get("class") or var.type
+                on = f" (platform {e['platform']})" if isinstance(e.get("platform"), str) else ""
+                if declared_in is not None:
+                    on += f" (in include '{declared_in}')"
+                if "defaultValue" not in e:
+                    out.append(f"{head} gives it no defaultValue{on}")
+                elif not agree(var.default, e["defaultValue"], klass, own):
+                    out.append(f"{head} has {shown(e['defaultValue'], own)}{on}")
+    return out
+
+
+def _resolve_layouts_root(config: dict, platform: str, config_mgr) -> Path | None:
+    """Locate the Layouts/ directory for a given platform."""
+    platforms = config.get("platforms") or {}
+    pconfig = platforms.get(platform) or {}
+    layouts_rel = pconfig.get("layoutsDir") or pconfig.get("layouts_dir")
+    if layouts_rel:
+        return (config_mgr.project_root / layouts_rel).resolve()
+
+    # Fallback: common project-relative path
+    fallback = config_mgr.project_root / "Layouts"
+    if fallback.exists():
+        return fallback
+    return None
+
+
+def _layout_candidates(
+    layouts_root: Path, spec_stem: str, screen_name: str,
+    layout_file: str = "",
+) -> list[Path]:
+    """The files a spec's layout may be, in the order they are tried.
+
+    ``layout_file`` is ``metadata.layoutFile``, the declaration: when set it is
+    the only candidate — a spec can live under
+    ``json/learn/installation.spec.json`` and point at
+    ``layouts/learn/installation.json``, and a declared file that is not there
+    is reported, not replaced by a guess. Without it, two derivations that need
+    no table: the spec's file name, and ``metadata.name`` in snake_case.
+
+    Until 1.9.0 a third candidate came from a table of one downstream app's
+    screen names (spec stem -> layout name), consulted in every project and
+    after a declared layoutFile that did not exist. Measured 2026-09-26 on the
+    faces that app has: no screen spec resolved only through it (97 screen
+    specs over three faces, each resolved by layoutFile or the two
+    derivations). Ticket verify-carries-a-consumer-specific-name-map.
+    """
+    if layout_file:
+        return [layouts_root / f"{layout_file}.json"]
+    name = spec_stem.replace(".spec", "")
+    candidates = [layouts_root / f"{name}.json"]
+    derived = layouts_root / f"{_camel_to_snake(screen_name)}.json"
+    if screen_name and derived not in candidates:
+        candidates.append(derived)
+    return candidates
+
+
+def _resolve_actual_layout(
+    layouts_root: Path, spec_stem: str, screen_name: str,
+    layout_file: str = "",
+) -> Path | None:
+    """The Layout JSON that corresponds to a spec (see _layout_candidates)."""
+    for c in _layout_candidates(layouts_root, spec_stem, screen_name, layout_file):
+        if c.exists():
+            return c
+    return None
+
+
+def _missing_layout_line(layouts_root: Path, spec_stem: str, screen_name: str, layout_file: str) -> str:
+    """The line naming a screen spec with no layout, and what to do about it."""
+    tried = _layout_candidates(layouts_root, spec_stem, screen_name, layout_file)
+
+    def rel(p: Path) -> str:
+        try:
+            return str(p.relative_to(layouts_root))
+        except ValueError:
+            return str(p)
+    if layout_file:
+        return (f"{spec_stem}: metadata.layoutFile '{layout_file}' names {rel(tried[0])}, "
+                f"which is not in {layouts_root}")
+    return (f"{spec_stem}: no layout at {' or '.join(rel(p) for p in tried)} — declare it with "
+            f"metadata.layoutFile (its path under {layouts_root}, without .json)")
+
+
+def _camel_to_snake(name: str) -> str:
+    import re
+    return re.sub(r"([A-Z])", r"_\1", name).lower().lstrip("_")

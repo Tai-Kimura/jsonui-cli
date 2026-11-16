@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/maxLength__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.maxLength (static)",
+    "description": "Conformance fixture for 'maxLength' on TextField (section: TextField, class: visual). Value under test: 5.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxLength__static",
+      "description": "Conformance fixture for 'maxLength' on TextField (section: TextField, class: visual). Value under test: 5.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_maxLength__static"
+        }
+      ]
+    }
+  ]
+}

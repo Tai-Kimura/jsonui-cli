@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/opacity__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.opacity (static)",
+    "description": "Conformance fixture for 'opacity' on View (section: common, class: visual). Value under test: 0.5.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "opacity__static",
+      "description": "Conformance fixture for 'opacity' on View (section: common, class: visual). Value under test: 0.5.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_opacity__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,586 @@
+#!/usr/bin/env python3
+"""The daily watch over what we rely on in Claude Code (ticket 2026-10-19-claude-dependency-watch).
+
+    W=~/.jsonui-cli/jui_tools/tools/cc_watch/watch.py      # the installed copy (installer/bootstrap.sh)
+    python3 $W run --repo <jsonui-cli work tree> [--live]
+    python3 $W print-plist --repo <jsonui-cli work tree> [--no-live]
+    python3 $W install --repo <jsonui-cli work tree> [--no-live]   # refuses any copy but the installed one
+    python3 $W uninstall
+    python3 $W print-hook --repo <jsonui-cli work tree>
+    python3 $W add-hook --repo <jsonui-cli work tree> --settings <jsonui-cli work tree>/.claude/settings.local.json
+
+One run:
+  1. versions: the installed CLI's (`claude --version`) and the newest published one (the npm registry). Only when they
+     differ is the CHANGELOG fetched, and its lines between the two versions that name something in the ledger are kept.
+  2. probes: every probe of probes.py; with --live, after one short throwaway session (live_session) in a temporary
+     config folder (CLAUDE_CONFIG_DIR) with no setting source but its own (`--setting-sources ""`, `--settings`): the
+     user's hooks, plugins and statusLine do not run, so no robot appears in viz and nothing reaches session-recovery.
+     Each shape is compared with the one saved by the last run (the state folder); the first run only saves.
+  3. red (a shape changed, or a probe raised): a ticket in <repo>/docs/bugs, the orchestrator told (notify), the new
+     shapes saved (one ticket per change, not one a day); green: one log line, nothing else.
+Every temporary folder is removed whatever happens.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import plistlib
+import re
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+from typing import Callable
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+
+from cc_watch import probes as P  # noqa: E402
+from cc_watch.ledger import load  # noqa: E402
+
+LABEL = "dev.jsonui.cc-dependency-watch"
+#: SIGTERM runs per live session (probes.SAMPLED: red only when none of them saw its SessionEnd)
+SIGTERM_RUNS = 3
+REGISTRY = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest"
+CHANGELOG = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
+#: CHANGELOG words that touch the ledger (hooks, channels, transcripts, statusLine, plugins, the options we pass …).
+WORDS = re.compile(r"hook|SessionStart|SessionEnd|PreToolUse|PostToolUse|UserPromptSubmit|PermissionRequest|channel"
+                   r"|transcript|jsonl|statusLine|status line|plugin|marketplace|\bmcp\b|--name|\B-n\b|--resume|settings\.json"
+                   r"|SIGTERM|CLAUDE_|setting-sources|--print", re.I)
+def default_state() -> Path:
+    """Where shapes.json and watch.log live: outside the install folder, which bootstrap re-clones (that would wipe
+    the saved shapes and make every day look changed). The house rule of viz: $XDG_STATE_HOME when absolute, else
+    ~/.local/state."""
+    xdg = os.environ.get("XDG_STATE_HOME", "")
+    base = Path(xdg) if os.path.isabs(xdg) else Path.home() / ".local" / "state"
+    return base / "cc-dependency-watch"
+
+
+def install_dir() -> Path:
+    """Where installer/bootstrap.sh clones jsonui-cli, by its own rules: $JSONUI_CLI_DIR, else
+    $JSONUI_INSTALL_DIR/jsonui-cli, else ~/.jsonui-cli."""
+    if os.environ.get("JSONUI_CLI_DIR"):
+        return Path(os.environ["JSONUI_CLI_DIR"]).expanduser()
+    if os.environ.get("JSONUI_INSTALL_DIR"):
+        return Path(os.environ["JSONUI_INSTALL_DIR"]).expanduser() / "jsonui-cli"
+    return Path.home() / ".jsonui-cli"
+
+
+def _under(path: Path, folder: Path) -> bool:
+    try:
+        path.resolve().relative_to(folder.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _version(text: str) -> str | None:
+    m = re.search(r"(\d+\.\d+\.\d+)", text or "")
+    return m.group(1) if m else None
+
+
+def _vkey(v: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in v.split("."))
+
+
+def default_fetch(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=30) as r:   # noqa: S310 (fixed https URLs)
+        return r.read().decode("utf-8", "replace")
+
+
+def default_runner(cli: str, env: dict | None = None) -> Callable[[list[str]], tuple[int, str]]:
+    def run(argv: list[str]) -> tuple[int, str]:
+        p = subprocess.run([cli, *argv], capture_output=True, text=True, timeout=60, env=env, stdin=subprocess.DEVNULL)
+        return p.returncode, p.stdout + p.stderr
+    return run
+
+
+def changelog_lines(text: str, old: str, new: str) -> list[str]:
+    """The lines of the sections after *old* up to *new* that name something in the ledger."""
+    out, current = [], None
+    for line in text.splitlines():
+        m = re.match(r"^#+\s*\[?(\d+\.\d+\.\d+)", line)
+        if m:
+            current = m.group(1)
+            continue
+        if current and _vkey(old) < _vkey(current) <= _vkey(new) and WORDS.search(line):
+            out.append(f"{current}: {line.strip()}")
+    return out
+
+
+# ------------------------------------------------------------------ the throwaway session (--live)
+CAPTURE = r'''import json, os, sys, time
+d = sys.argv[1]; kind = sys.argv[2]
+data = sys.stdin.read()
+name = f"{kind}-{time.time_ns()}.json"
+with open(os.path.join(d, name), "w") as f:
+    # names only: the values include the login token and the CLI's own secrets, which must never reach a file
+    json.dump({"kind": kind, "stdin": data, "env": {k: "" for k in os.environ if k.startswith("CLAUDE")}}, f)
+if kind == "statusline":
+    print("ok")
+'''
+
+
+#: The Keychain item the watcher reads its login from (made once by the user, see token_from_keychain).
+TOKEN_SERVICE = "cc-dependency-watch"
+
+
+def token_from_keychain() -> str | None:
+    """The long-lived login for the throwaway session. Measured 10-19 22:00: with CLAUDE_CONFIG_DIR set to a temporary
+    folder the CLI does not find the user's login ("Not logged in · Please run /login", nothing spent), so the session
+    needs its own: `claude setup-token` once, stored by the user in the login Keychain under TOKEN_SERVICE, passed to
+    the session as CLAUDE_CODE_OAUTH_TOKEN (never written to a file)."""
+    if not shutil.which("security"):
+        return None
+    r = subprocess.run(["security", "find-generic-password", "-s", TOKEN_SERVICE, "-w"], capture_output=True, text=True)
+    return r.stdout.strip() or None if r.returncode == 0 else None
+
+
+#: How the user stores the login. `-w` comes last with no value, so `security` asks for the token at a prompt: the
+#: token never appears as an argument (shell history, `ps`). Printed by `watch.py token-help` and in a login ticket.
+TOKEN_HELP = (
+    "1. `claude setup-token` を撃ち、表示されたトークンを控える。\n"
+    f"2. `security add-generic-password -s {TOKEN_SERVICE} -a \"$USER\" -w` を撃ち、聞かれたらトークンを貼る"
+    "（-w は最後に値なしで書く。値を引数に書くと履歴と ps に残る）。\n"
+    f"3. 作り直すときは `security delete-generic-password -s {TOKEN_SERVICE}` の後に 2 をもう一度。"
+)
+
+
+def default_watched() -> list[Path]:
+    """The user's real state the throwaway session must not reach: session-recovery, sessions, projects, viz's state."""
+    home = Path.home()
+    viz = os.environ.get("JUI_VIZ_HOME") or (os.path.join(os.environ["XDG_STATE_HOME"], "jui-viz")
+                                             if os.environ.get("XDG_STATE_HOME") else str(home / ".local/state/jui-viz"))
+    return [home / ".claude/session-recovery", home / ".claude/sessions", home / ".claude/projects", Path(viz)]
+
+
+def watched_state(roots: list[Path]) -> dict[str, tuple[float, int]]:
+    """path -> (mtime, size) under each root; ~/.claude/projects only one level down (one folder per working folder)."""
+    out: dict[str, tuple[float, int]] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        entries = root.iterdir() if root.name == "projects" else root.rglob("*")
+        for f in entries:
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            out[str(f)] = (st.st_mtime, st.st_size if f.is_file() else -1)
+    return out
+
+
+def own_traces(before: dict, after: dict, marks: list[str]) -> list[str]:
+    """The added or changed paths whose name or content carries one of *marks* (the session id, the temporary path
+    and its folder-name form). Other lanes rewrite these folders all the time; only our own marks mean a leak."""
+    hits = []
+    for path, stamp in after.items():
+        if before.get(path) == stamp:
+            continue
+        if any(m in path for m in marks):
+            hits.append(path)
+            continue
+        if stamp[1] < 0 or stamp[1] > 20_000_000:
+            continue
+        try:
+            data = Path(path).read_bytes()
+        except OSError:
+            continue
+        if any(m.encode() in data for m in marks):
+            hits.append(path)
+    return sorted(hits)
+
+
+def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], str | None] = token_from_keychain,
+                 watched: Callable[[], list[Path]] = default_watched) -> P.Session:
+    """One short session in a temporary config folder and an empty working folder, its own hooks recording their input,
+    then SIGTERM_RUNS runs stopped with SIGTERM (only the processes started here). Uses a little of the account's quota.
+    Measured 10-19 22:00 (run 1): CLAUDE_CONFIG_DIR=<tmp> + --setting-sources "" + --settings <own> fired only the
+    hooks of <own> (SessionStart, UserPromptSubmit, SessionEnd captured); no robot in viz, nothing for the session in
+    session-recovery, ~/.claude/projects or ~/.claude/sessions.
+    The guard: the watched folders are read before and after the first run; if a path added or changed there carries
+    this session's id or temporary path, the SIGTERM runs are not fired and the session reports the leak (red).
+    The token reaches the CLI only through the child's environment, never its argv."""
+    config, cap, cwd = work / "config", work / "captured", work / "cwd"
+    for d in (config, cap, cwd):
+        d.mkdir()
+    script = work / "capture.py"
+    script.write_text(CAPTURE)
+    hook = lambda kind: [{"hooks": [{"type": "command", "command": f"{sys.executable} {script} {cap} {kind}"}]}]  # noqa: E731
+    settings = {"hooks": {e: hook(e) for e in ("SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop")},
+                "statusLine": {"type": "command", "command": f"{sys.executable} {script} {cap} statusline"}}
+    (work / "settings.json").write_text(json.dumps(settings))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    env.update(CLAUDE_CONFIG_DIR=str(config))
+    if (t := token()) is not None:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = t
+    base = [cli, "--setting-sources", "", "--settings", str(work / "settings.json")]
+    roots = watched()
+    before = watched_state(roots)
+    p = subprocess.run([*base, "-p", "Run the shell command `true`, then reply with the single word ok.",
+                        "--output-format", "stream-json", "--verbose", "--allowedTools", "Bash(true)"],
+                       cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    session = P.Session(config_dir=config)
+    out = {"is_error": True, "result": (p.stdout + p.stderr).strip()[-200:]}
+    for line in p.stdout.splitlines():   # stream-json: one record per line; system/init has the tools, result the outcome
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("type") == "system" and rec.get("subtype") == "init":
+            session.init = rec
+        elif rec.get("type") == "result":
+            out = rec
+    session.result = {"ok": not out.get("is_error", True), "result": str(out.get("result", ""))[:200],
+                      "terminal_reason": out.get("terminal_reason"), "cost_usd": out.get("total_cost_usd"),
+                      "usage": {k: (out.get("usage") or {}).get(k) for k in ("input_tokens", "output_tokens",
+                                "cache_creation_input_tokens", "cache_read_input_tokens")}}
+    marks = [str(work), re.sub(r"[^A-Za-z0-9-]", "-", str(work))] + ([out["session_id"]] if out.get("session_id") else [])
+    session.result["leaks"] = own_traces(before, watched_state(roots), marks)
+    after: set = set()
+    for _ in range(SIGTERM_RUNS if session.result["ok"] and not session.result["leaks"] else 0):
+        # SIGTERM: one more run, stopped once its SessionStart hook ran (only this process, which we started)
+        before = {f.name for f in cap.iterdir()}
+        proc = subprocess.Popen([*base, "-p", "Count from 1 to 200, one number per line."], cwd=cwd, env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        code = None
+        try:
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline and not any(n.startswith("SessionStart") for n in {f.name for f in cap.iterdir()} - before):
+                time.sleep(0.5)
+            proc.send_signal(signal.SIGTERM)
+            code = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        time.sleep(2)   # a SessionEnd hook may still be writing
+        new = {f.name for f in cap.iterdir()} - before
+        session.sigterm_runs.append({"exit": code, "session_end": any(n.startswith("SessionEnd") for n in new)})
+        after |= new
+    for f in sorted(cap.iterdir()):
+        if f.name in after:
+            continue
+        rec = json.loads(f.read_text())
+        if rec["kind"] == "statusline":
+            session.statusline = json.loads(rec["stdin"] or "null")
+        else:
+            try:
+                session.hook_inputs.append(json.loads(rec["stdin"]))
+            except ValueError:
+                pass
+            session.hook_env.update(rec["env"])
+    return session
+
+
+def own_transcripts() -> Path:
+    """This machine's transcripts (the talk probes read them, never write): the config folder's projects/."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+
+
+# ------------------------------------------------------------------ one run
+def run_probes(ctx: P.Context) -> dict:
+    out = {}
+    for name, fn in P.PROBES.items():
+        try:
+            out[name] = fn(ctx)
+        except Exception as e:  # a probe that raises is red, with what it raised
+            out[name] = {"error": f"{type(e).__name__}: {e}"[:300]}
+    return out
+
+
+def notice_text(ticket: Path) -> str:
+    """The desktop notice: the ticket's file name in one line the user can paste to cd."""
+    return f"Claude Code の依存の見張りが赤: docs/bugs/{ticket.name} を見て"
+
+
+def notify_route(ticket: Path) -> list[str]:
+    """Tell the orchestrator. Measured 10-19: a script has no way to send a cross-session message (the CLI has no such
+    command; that channel exists only inside a running session), and viz has no notice endpoint (its /hook would make
+    a robot). What reaches the orchestrator from a script: the ticket in docs/bugs (the orchestrator's queue), and the desktop notification the
+    user sees (they forward it). On top of both (10-19 ruling), red_ticket_hook.sh, a UserPromptSubmit hook cd installs
+    in its own session (`watch.py print-hook`), puts every unseen red ticket in the orchestrator's context at its next prompt.
+    Returns what was done."""
+    done = [f"ticket {ticket}"]
+    if shutil.which("osascript"):
+        msg = notice_text(ticket)
+        r = subprocess.run(["osascript", "-e", f'display notification {json.dumps(msg)} with title "cc-dependency-watch"'],
+                           capture_output=True, timeout=20)
+        done.append(f"desktop notification (exit {r.returncode})")
+    return done
+
+
+def write_ticket(repo: Path, today: str, installed: str | None, latest: str | None, changed: dict, lines: list[str]) -> Path:
+    folder = repo / "docs" / "bugs"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{today}-cc-dependency-watch-red.md"
+    n = 2
+    while path.exists():
+        path = folder / f"{today}-cc-dependency-watch-red-{n}.md"
+        n += 1
+    led = {"session_ran": {"name": "使い捨てのセッションが動いたか（ログイン）",
+                           "impact": "セッション系の probe（hooks・transcript・env・statusLine・SIGTERM・config）が測れない",
+                           "files": []},
+           **{e["probe"]: e for e in load()["entries"]}}
+    body = [
+        "---", "library: jsonui-cli", "component: Claude Code への依存（jui_tools/tools/cc_watch/ledger.json）",
+        "reported_by: cc-dependency-watch（毎日の見張り、自動）", f"reported_at: {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "kind: bug（依存の変化）", "status: open — 自動起票。cd が手の空いた JsonUI のセッションに振る", "severity: medium",
+        f"found_on: Claude Code {installed or '?'}（配布の最新 {latest or '?'}）", "---", "",
+        f"# Claude Code の頼りどころが変わった（{', '.join(sorted(changed))}）", "",
+        "## 落ちた probe（前回の形 → 今回の形）",
+    ]
+    for name, (old, new) in sorted(changed.items()):
+        e = led.get(name, {})
+        body += [f"### {name}（{e.get('name', '?')}）", f"- 影響: {e.get('impact', '?')}",
+                 f"- 使っている所: {', '.join(e.get('files', []))}",
+                 f"- 前回: `{json.dumps(old, ensure_ascii=False, sort_keys=True)}`",
+                 f"- 今回: `{json.dumps(new, ensure_ascii=False, sort_keys=True)}`", ""]
+    if "session_ran" in changed:
+        body += ["## ログインの入れ方（使い捨てのセッションが動かなかったとき）", TOKEN_HELP, ""]
+    body += ["## CHANGELOG の該当しそうな行", *(f"- {ln}" for ln in lines or ["（版が変わっていない、または該当なし）"]), ""]
+    path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    return path
+
+
+#: The shape words of probes._all_any, worst first: a key every record has, some have, none has.
+_RANK = {"none": 0, "some": 1, "all": 2}
+#: "unseen": no record of the kind in the window — no evidence either way.
+_NO_EVIDENCE = "unseen"
+
+
+def worse(old, new, sampled: bool = False) -> bool:
+    """Whether a probe's shape moved toward broken: all -> some -> none, true -> false, a key or a value gone, any
+    other value changed. Not worse: from / to "unseen" (no record of the kind in the window), toward all or true, a
+    probe or key seen for the first time (old None). An error shape is filed whatever it was before.
+    ``sampled`` (probes.SAMPLED, a probe of several runs): only a move to "none" or false is worse — all <-> some, and
+    a former true read as all or some, are not."""
+    if old == new or old is None:
+        return False
+    if new is None:
+        return True
+    if isinstance(old, dict) and isinstance(new, dict):
+        return any(worse(old.get(k), new.get(k), sampled) for k in old.keys() | new.keys())
+    if sampled and not isinstance(old, dict) and not isinstance(new, dict):
+        return new in ("none", False) and old not in ("none", False, _NO_EVIDENCE)
+    if _NO_EVIDENCE in (old, new):
+        return False
+    if old in _RANK and new in _RANK:
+        return _RANK[new] < _RANK[old]
+    if old == "seen" or new == "seen":
+        return new != "seen"
+    if isinstance(old, bool) and isinstance(new, bool):
+        return old and not new
+    return True
+
+
+def _last_installed(state: Path) -> str | None:
+    """The version the last run found installed (watch.log's last line), None without one."""
+    try:
+        last = (state / "watch.log").read_text(encoding="utf-8").strip().splitlines()[-1]
+        return _version(json.loads(last).get("installed") or "")
+    except (OSError, IndexError, ValueError, AttributeError):
+        return None
+
+
+def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, fetch=default_fetch, notify=notify_route,
+        session_maker=live_session, now: dt.datetime | None = None, transcripts=None) -> dict:
+    """One day's watch. Returns what it found (also written to the log)."""
+    now = now or dt.datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    state.mkdir(parents=True, exist_ok=True)
+    run_cli = runner or default_runner(cli)
+    installed = _version(run_cli(["--version"])[1])
+    try:
+        latest = _version(json.loads(fetch(REGISTRY)).get("version", ""))
+    except Exception:  # offline: the probes still run
+        latest = None
+    lines: list[str] = []
+    # the versions to read the CHANGELOG between: installed and latest, and the version the last run had (updated
+    # since, installed is latest again: 2.1.305 on 10-21 and 2.1.307 on 10-22 read no line — the ticket of 10-22)
+    versions = {v for v in (installed, latest, _last_installed(state)) if v}
+    if installed and len(versions) > 1:
+        try:
+            lines = changelog_lines(fetch(CHANGELOG), min(versions, key=_vkey), max(versions, key=_vkey))
+        except Exception as e:
+            lines = [f"（CHANGELOG を取れなかった: {type(e).__name__}）"]
+    work = Path(tempfile.mkdtemp(prefix="cc-watch-"))
+    try:
+        session = session_maker(cli, work) if live else None
+        shapes = run_probes(P.Context(run=run_cli, session=session, transcripts=(transcripts or own_transcripts)() if live else None))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    saved_path = state / "shapes.json"
+    saved = json.loads(saved_path.read_text()) if saved_path.exists() else None
+    moved = {} if saved is None else {k: (saved.get(k), v) for k, v in shapes.items() if saved.get(k) != v}
+    # Only a move toward worse is a change to file. The transcript probes count what this machine happened to do in
+    # the window — no denial, no Skill call, no message read on both sides is "unseen" or false, not broken — and
+    # their shapes went back and forth on 10-22 and 10-23 with nothing broken (ticket 2026-10-23-cc-dependency-watch-red).
+    changed = {k: ov for k, ov in moved.items() if worse(*ov, sampled=k in P.SAMPLED)}
+    errors = {k: v for k, v in shapes.items() if isinstance(v, dict) and "error" in v}
+    for k, v in errors.items():
+        changed.setdefault(k, (saved.get(k) if saved else None, v))
+    result = {"at": now.isoformat(timespec="seconds"), "installed": installed, "latest": latest,
+              "changelog_lines": len(lines), "changed": sorted(changed), "baseline": saved is None,
+              "improved": sorted(set(moved) - set(changed)),   # moved toward better (or to / from no evidence): logged
+              "session": session.result if session is not None else None}   # cost and tokens of the live run
+    if changed:
+        ticket = write_ticket(repo, today, installed, latest, changed, lines)
+        result["ticket"] = str(ticket)
+        result["notified"] = notify(ticket)
+        if saved is not None:
+            (state / f"shapes-{today}-before.json").write_text(json.dumps(saved, ensure_ascii=False, sort_keys=True, indent=1))
+    saved_path.write_text(json.dumps(shapes, ensure_ascii=False, sort_keys=True, indent=1))
+    with open(state / "watch.log", "a", encoding="utf-8") as log:
+        log.write(json.dumps(result, ensure_ascii=False) + "\n")
+    return result
+
+
+# ------------------------------------------------------------------ the orchestrator's side: the hook and "seen"
+HOOK = HERE / "red_ticket_hook.sh"
+UNSEEN = re.compile(r"^status: open\b.*$", re.M)
+
+
+def mark_seen(ticket: Path, now: dt.datetime | None = None) -> bool:
+    """Rewrite the ticket's status line from open to seen (the hook stops naming it). False if it was not open."""
+    text = ticket.read_text(encoding="utf-8")
+    stamp = (now or dt.datetime.now()).strftime("%Y-%m-%d %H:%M")
+    new, n = UNSEEN.subn(f"status: seen {stamp} — cd が読んだ。振り先と結果はこの票に書く", text, count=1)
+    if n:
+        ticket.write_text(new, encoding="utf-8")
+    return bool(n)
+
+
+def hook_settings(repo: Path) -> dict:
+    """The hook finds the tickets through *repo*, never the session's working folder (the orchestrator's session starts in another
+    project): the path is made absolute here, and both paths are shell-quoted (a folder name may hold a space)."""
+    repo = Path(repo).expanduser().resolve()
+    return {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command",
+                                                       "command": f"{shlex.quote(str(HOOK))} {shlex.quote(str(repo))}"}]}]}}
+
+
+def add_hook(settings_file: Path, repo: Path) -> bool:
+    """Merge the hook into *settings_file* (the orchestrator runs this; it is never run for the orchestrator). False if it is already there."""
+    data = json.loads(settings_file.read_text()) if settings_file.exists() else {}
+    entries = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+    command = hook_settings(repo)["hooks"]["UserPromptSubmit"][0]
+    if any(h.get("command") == command["hooks"][0]["command"] for e in entries for h in e.get("hooks", [])):
+        return False
+    entries.append(command)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    return True
+
+
+# ------------------------------------------------------------------ launchd
+def plist(repo: Path, state: Path, live: bool = True, python: str = sys.executable, hour: int = 8, minute: int = 30,
+          here: Path = HERE) -> bytes:
+    """The LaunchAgent. It runs with --live (the throwaway session) by default: measured green twice on 10-19 and
+    independently verified; the requester wants the checks against the real thing and accepted the cost (~0.03 USD a day).
+    `--no-live` leaves only the version compare and the help probes."""
+    return plistlib.dumps({
+        "Label": LABEL,
+        "ProgramArguments": [python, str(here / "watch.py"), "run", "--repo", str(repo), "--state", str(state),
+                             *(["--live"] if live else [])],
+        "StartCalendarInterval": {"Hour": hour, "Minute": minute},
+        "StandardOutPath": str(state / "launchd.out.log"), "StandardErrorPath": str(state / "launchd.err.log"),
+        "EnvironmentVariables": {"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+    })
+
+
+def plist_path() -> Path:
+    return Path("~/Library/LaunchAgents").expanduser() / f"{LABEL}.plist"
+
+
+def install_problems(repo: Path, state: Path, here: Path = HERE) -> list[str]:
+    """Why install must refuse: the agent would run a copy that goes away (a worktree is deleted, a work tree
+    switches branches), keep its state where bootstrap re-clones, or file tickets where cd does not read."""
+    home, out = install_dir(), []
+    if not _under(here, home):
+        out.append(f"this is not the installed copy ({here}); run the one bootstrap installed: "
+                   f"python3 {home}/jui_tools/tools/cc_watch/watch.py install --repo <jsonui-cli work tree>")
+    if _under(state, home):
+        out.append(f"--state {state} is inside the install folder {home}, which bootstrap re-clones; keep the default")
+    if _under(repo, home):
+        out.append(f"--repo {repo} is the install folder; give the jsonui-cli work tree whose docs/bugs cd reads")
+    return out
+
+
+def install(repo: Path, state: Path, live: bool, here: Path = HERE, any_copy: bool = False,
+            target: Path | None = None, launchctl=subprocess.run) -> int:
+    repo, state = Path(repo).expanduser().resolve(), Path(state).expanduser().resolve()
+    problems = [p for p in install_problems(repo, state, here) if not (any_copy and p.startswith("this is not"))]
+    if problems:
+        for p in problems:
+            print(f"refused: {p}", file=sys.stderr)
+        return 2
+    state.mkdir(parents=True, exist_ok=True)
+    path = target or plist_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(plist(repo, state, live, here=here))
+    return launchctl(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)]).returncode
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="the daily watch over what we rely on in Claude Code")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("run", "print-plist", "install"):
+        s = sub.add_parser(name)
+        s.add_argument("--repo", required=True, type=lambda p: Path(p).expanduser().resolve())
+        s.add_argument("--state", default=None, type=lambda p: Path(p).expanduser(),
+                       help="default: $XDG_STATE_HOME or ~/.local/state, /cc-dependency-watch")
+        if name == "install":
+            s.add_argument("--any-copy", action="store_true", help=argparse.SUPPRESS)   # tests only
+        if name == "run":
+            s.add_argument("--live", action="store_true", help="also run the throwaway session (uses a little quota)")
+        else:
+            s.add_argument("--no-live", dest="live", action="store_false",
+                           help="the LaunchAgent without the throwaway session (version and help probes only)")
+        if name == "run":
+            s.add_argument("--cli", default="claude")
+    sub.add_parser("uninstall")
+    sub.add_parser("token-help", help="how to store the login of the throwaway session")
+    s = sub.add_parser("seen", help="mark a red ticket as read (the hook stops naming it)")
+    s.add_argument("ticket", type=Path)
+    for name in ("print-hook", "add-hook"):
+        s = sub.add_parser(name, help="the UserPromptSubmit hook for cd's session (add-hook merges it; cd runs it)")
+        s.add_argument("--repo", required=True, type=lambda p: Path(p).expanduser().resolve())
+        if name == "add-hook":
+            s.add_argument("--settings", required=True, type=lambda p: Path(p).expanduser())
+    a = ap.parse_args(argv)
+    if getattr(a, "state", "unset") is None:
+        a.state = default_state()
+    if a.cmd == "token-help":
+        print(TOKEN_HELP)
+        return 0
+    if a.cmd == "seen":
+        return 0 if mark_seen(a.ticket) else 1
+    if a.cmd == "print-hook":
+        print(json.dumps(hook_settings(a.repo), ensure_ascii=False, indent=2))
+        return 0
+    if a.cmd == "add-hook":
+        print("added" if add_hook(a.settings, a.repo) else "already there")
+        return 0
+    if a.cmd == "run":
+        print(json.dumps(run(a.repo, a.state, a.live, a.cli), ensure_ascii=False))
+        return 0
+    if a.cmd == "print-plist":
+        sys.stdout.write(plist(a.repo, a.state, a.live).decode())
+        return 0
+    if a.cmd == "install":
+        return install(a.repo, a.state, a.live, any_copy=a.any_copy)
+    path = plist_path()
+    rc = subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"]).returncode
+    if path.exists():
+        path.unlink()
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

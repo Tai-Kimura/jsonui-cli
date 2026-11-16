@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/weight__binding_as_string.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.weight (binding_as_string)",
+    "description": "Conformance fixture for 'weight' on View (section: common, class: visual). Value under test: \"@{boundWeightStr}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "weight__binding_as_string",
+      "description": "Conformance fixture for 'weight' on View (section: common, class: visual). Value under test: \"@{boundWeightStr}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_weight__binding_as_string"
+        }
+      ]
+    }
+  ]
+}

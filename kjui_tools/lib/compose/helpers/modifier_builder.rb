@@ -1,0 +1,2405 @@
+# frozen_string_literal: true
+require 'set'
+
+require_relative 'effect_style_helper'
+require_relative 'binding_expression'
+require_relative 'bound_value'
+require_relative 'resource_resolver'
+require_relative 'safe_area_edges'
+require_relative '../../core/layout_path'
+require_relative '../../core/normalization'
+require_relative '../../core/tap_accessibility'
+require_relative '../../core/control_accessibility'
+require_relative '../../core/string_literals'
+require_relative '../../core/type_converter'
+require_relative '../../core/enum_spelling'
+require_relative '../../core/attribute_validator'
+
+module KjuiTools
+  module Compose
+    module Helpers
+      # Helper class to build Compose modifiers from JSON attributes
+      class ModifierBuilder
+        # Every `.dp` below comes out of BoundValue so a `@{...}` padding emits
+        # a real Dp expression instead of interpolating the binding text into
+        # code position (`.padding(top = @{v}.dp)` — plan 49 lane C, 29
+        # `bound-uncompilable`). Numeric declarations are untouched: BoundValue
+        # only leaves the literal path when the value actually carries a
+        # binding.
+        def self.build_padding(json_data)
+          modifiers = []
+
+          # Handle padding attribute (can be array [top, right, bottom, left] or single value)
+          modifiers.concat(padding_group(json_data['padding'])) if json_data['padding']
+
+          # Handle paddings attribute (same as padding)
+          modifiers.concat(padding_group(json_data['paddings'])) if json_data['paddings']
+
+          # Individual padding attributes (prefix form: paddingTop, and suffix form: topPadding/leftPadding)
+          modifiers << ".padding(top = #{BoundValue.dp(json_data['paddingTop'] || json_data['topPadding'])})" if json_data['paddingTop'] || json_data['topPadding']
+          modifiers << ".padding(bottom = #{BoundValue.dp(json_data['paddingBottom'] || json_data['bottomPadding'])})" if json_data['paddingBottom'] || json_data['bottomPadding']
+          modifiers << ".padding(start = #{BoundValue.dp(json_data['paddingLeft'] || json_data['leftPadding'])})" if json_data['paddingLeft'] || json_data['leftPadding']
+          modifiers << ".padding(end = #{BoundValue.dp(json_data['paddingRight'] || json_data['rightPadding'])})" if json_data['paddingRight'] || json_data['rightPadding']
+          # RTL-aware padding (canonical paddingStart/paddingEnd; suffix
+          # spellings accepted like the dynamic reader)
+          modifiers << ".padding(start = #{BoundValue.dp(json_data['paddingStart'] || json_data['startPadding'])})" if json_data['paddingStart'] || json_data['startPadding']
+          modifiers << ".padding(end = #{BoundValue.dp(json_data['paddingEnd'] || json_data['endPadding'])})" if json_data['paddingEnd'] || json_data['endPadding']
+
+          modifiers
+        end
+
+        # The shared array/scalar shape behind `padding` and `paddings`.
+        def self.padding_group(value)
+          unless value.is_a?(Array)
+            return [".padding(#{BoundValue.dp(value)})"]
+          end
+
+          case value.length
+          when 4
+            [".padding(top = #{BoundValue.dp(value[0])}, end = #{BoundValue.dp(value[1])}, " \
+             "bottom = #{BoundValue.dp(value[2])}, start = #{BoundValue.dp(value[3])})"]
+          when 2
+            [".padding(vertical = #{BoundValue.dp(value[0])}, horizontal = #{BoundValue.dp(value[1])})"]
+          when 1
+            [".padding(#{BoundValue.dp(value[0])})"]
+          else
+            []
+          end
+        end
+
+        def self.build_margins(json_data)
+          modifiers = []
+
+          # Handle margins attribute (can be array [top, right, bottom, left] or single value)
+          if json_data['margins']
+            margin_values = json_data['margins']
+            if margin_values.is_a?(Array)
+              if margin_values.length == 4
+                modifiers << ".padding(top = #{BoundValue.dp(margin_values[0])}, end = #{BoundValue.dp(margin_values[1])}, " \
+                             "bottom = #{BoundValue.dp(margin_values[2])}, start = #{BoundValue.dp(margin_values[3])})"
+              elsif margin_values.length == 1
+                modifiers << ".padding(#{BoundValue.dp(margin_values[0])})"
+              end
+            else
+              modifiers << ".padding(#{BoundValue.dp(margin_values)})"
+            end
+          end
+
+          # Individual margin attributes (with binding support)
+          modifiers << ".padding(top = #{margin_value(json_data['topMargin'])})" if json_data['topMargin']
+          modifiers << ".padding(bottom = #{margin_value(json_data['bottomMargin'])})" if json_data['bottomMargin']
+          modifiers << ".padding(start = #{margin_value(json_data['leftMargin'])})" if json_data['leftMargin']
+          modifiers << ".padding(end = #{margin_value(json_data['rightMargin'])})" if json_data['rightMargin']
+          # RTL aware margins
+          modifiers << ".padding(start = #{margin_value(json_data['startMargin'])})" if json_data['startMargin']
+          modifiers << ".padding(end = #{margin_value(json_data['endMargin'])})" if json_data['endMargin']
+
+          modifiers
+        end
+
+        # Convert margin value to Kotlin/Compose format with binding support.
+        # The old hand-rolled form (`data.#{property}.dp`) passed `??` through
+        # verbatim and ignored nullability, so `@{gap ?? 8}` emitted
+        # `data.gap ?? 8.dp`. BoundValue is the canonical emitter now.
+        def self.margin_value(value)
+          BoundValue.dp(value)
+        end
+
+        def self.build_weight(json_data, parent_orientation = nil)
+          modifiers = []
+
+          # Weight only works in Row/Column contexts
+          # Weight must be greater than 0 in Compose
+          #
+          # `heightWeight` is the vertical spelling and was consulted but never
+          # emitted: `build_size` reads it to decide that an explicit height is
+          # absent (line ~409) and that the node fills its slot, and then no
+          # `.weight(...)` was ever produced — so declaring it changed the
+          # layout's shape without ever distributing anything. In a Column it
+          # is the axis-specific spelling and wins over the shorthand; `weight`
+          # keeps its current meaning everywhere else, so no existing output
+          # moves (plan 49 lane C).
+          weight = if parent_orientation == 'Column' && json_data['heightWeight']
+                     json_data['heightWeight']
+                   else
+                     json_data['weight']
+                   end
+          return modifiers unless weight && parent_orientation
+
+          if BoundValue.bound?(weight)
+            # `"@{w}".to_f == 0.0`, so the static guard below dropped every
+            # bound weight. Lift the SAME guard to runtime instead: Compose
+            # throws on `weight <= 0`, so the zero case must stay unweighted.
+            expr = BoundValue.float(weight, fallback: 0)
+            modifiers << ".then(if (#{expr} > 0f) Modifier.weight(#{expr}) else Modifier)"
+          elsif weight.to_f > 0
+            modifiers << ".weight(#{weight}f)"
+          end
+
+          modifiers
+        end
+        
+        # Compose's `Row` / `Column` measure their cross axis with `wrapContent`
+        # by default, which means a child using `fillMaxHeight()` (Row) or
+        # `fillMaxWidth()` (Column) collapses to 0. iOS / HTML / Android Views
+        # treat "matchParent inside wrapContent siblings" as "match the tallest
+        # sibling", so generated code must ask Compose for the same behavior
+        # via `Modifier.height(IntrinsicSize.Min)` (or `width(...)` for Column).
+        # This mutates `size_modifiers` in place, replacing the wrap modifier
+        # with the intrinsic one when needed.
+        #
+        # Skip the intrinsic switch when either:
+        #   (a) the node is a weighted child of a Row/Column — the weight slot
+        #       provides a bounded constraint on the relevant axis, so the
+        #       matchParent child resolves through `.fillMaxWidth/Height()` on
+        #       its own. The intrinsic wrap is unnecessary AND, when a
+        #       SubcomposeLayout descendant exists, would crash anyway.
+        #   (b) any descendant emits a SubcomposeLayout (LazyColumn/LazyRow/
+        #       LazyVerticalGrid/LazyHorizontalGrid/HorizontalPager etc.).
+        #       `Modifier.width/height(IntrinsicSize.Min)` asks descendants for
+        #       `minIntrinsicWidth/Height`, and SubcomposeLayout throws on that
+        #       query. Falling back to `fillMax<axis>()` keeps the layout
+        #       intent (parent fills the parent's slot) without triggering the
+        #       intrinsic measurement cascade.
+        # Regression: kjui-intrinsicsize-min-cascades-to-lazy-descendant.
+        def self.adjust_for_intrinsic_size!(size_modifiers, json_data, children, layout, required_imports = nil, parent_type = nil)
+          return size_modifiers unless layout == 'Row' || layout == 'Column'
+          return size_modifiers unless children.is_a?(Array) && children.any?
+
+          frame = json_data['frame'].is_a?(Hash) ? json_data['frame'] : nil
+
+          if layout == 'Row'
+            parent_h = json_data['height'] || (frame ? frame['height'] : nil)
+            return size_modifiers if parent_h && parent_h != 'wrapContent'
+            return size_modifiers unless children.any? { |c| child_dimension(c, 'height') == 'matchParent' }
+
+            if weighted_on_axis?(json_data, parent_type, :height) || subcompose_descendant?(children)
+              replace_or_append!(size_modifiers, '.wrapContentHeight()', '.fillMaxHeight()')
+              return size_modifiers
+            end
+
+            required_imports&.add(:intrinsic_size)
+            replace_or_append!(size_modifiers, '.wrapContentHeight()', '.height(IntrinsicSize.Min)')
+          else
+            parent_w = json_data['width'] || (frame ? frame['width'] : nil)
+            return size_modifiers if parent_w && parent_w != 'wrapContent'
+            return size_modifiers unless children.any? { |c| child_dimension(c, 'width') == 'matchParent' }
+
+            if weighted_on_axis?(json_data, parent_type, :width) || subcompose_descendant?(children)
+              replace_or_append!(size_modifiers, '.wrapContentWidth()', '.fillMaxWidth()')
+              return size_modifiers
+            end
+
+            required_imports&.add(:intrinsic_size)
+            replace_or_append!(size_modifiers, '.wrapContentWidth()', '.width(IntrinsicSize.Min)')
+          end
+
+          size_modifiers
+        end
+
+        # `weight: N` set with a parent that distributes on the matching axis
+        # (Row → width, Column → height) means the parent already pins this
+        # node's axis to its allocated slot — no intrinsic measurement needed.
+        def self.weighted_on_axis?(json_data, parent_type, axis)
+          return false unless json_data['weight'] && json_data['weight'].to_f > 0
+          (axis == :width && parent_type == 'Row') ||
+            (axis == :height && parent_type == 'Column')
+        end
+
+        # Recursively scan for components that emit SubcomposeLayout-based
+        # Compose primitives. Those reject `IntrinsicSize.Min` ancestor
+        # queries with `Asking for intrinsic measurements of SubcomposeLayout
+        # layouts is not supported`.
+        def self.subcompose_descendant?(nodes)
+          return false unless nodes.is_a?(Array)
+          nodes.any? { |n| subcompose_node?(n) }
+        end
+
+        def self.subcompose_node?(node)
+          return false unless node.is_a?(Hash)
+
+          # The spellings the dispatch routes (ComposeBuilder#generate_component):
+          # a type answers as the component that draws it.
+          case node['type']
+          when 'ScrollView', 'Scroll'
+            # ScrollView always emits LazyRow/LazyColumn. Only `Scroll` was
+            # listed, so a ScrollView spelled canonically read as eager and
+            # its parent asked it for IntrinsicSize.Min — the shape that throws
+            # "Asking for intrinsic measurements of SubcomposeLayout layouts".
+            return true
+          when 'Collection', 'Table'
+            # A Table is drawn by CollectionComponent, so it answers as the
+            # Collection does (it was always Lazy here, whatever it drew).
+            # Collection emits a non-Lazy fallback when `lazy: "none"` or when
+            # vertical + `height: wrapContent`. Flow layout uses FlowRow
+            # (non-Lazy) — but a flow whose height is matchParent or bound, with
+            # `lazy` in effect, is a BoxWithConstraints (collection_component
+            # flow_scrolls_if_parent_bounded?), a SubcomposeLayout: under an
+            # IntrinsicSize.Min parent it threw "Asking for intrinsic
+            # measurements of SubcomposeLayout layouts is not supported"
+            # (measured on the Android codegen host, the orchestrator's round 13). Paging
+            # horizontal uses HorizontalPager which IS SubcomposeLayout-based.
+            # Everything else is Lazy.
+            layout = node['layout'] || node['orientation'] || 'vertical'
+            return flow_takes_box_with_constraints?(node) if %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
+            return false if node['lazy'] == 'none'
+            return false if layout != 'horizontal' && node['height'] == 'wrapContent'
+            return true
+          end
+
+          # `child` then `children`, as every other walk of the tree reads them
+          # (JsonUIShared::LayoutPath.children); only `child` was scanned.
+          subcompose_descendant?(%w[child children].flat_map { |key| node[key].is_a?(Hash) ? [node[key]] : Array(node[key]) })
+        end
+
+        # The flow Collection's BoxWithConstraints arm (collection_component
+        # flow_scrolls_if_parent_bounded?): `lazy` in effect, a height that is
+        # not a number (nor a numeric maxHeight), and matchParent or bound.
+        def self.flow_takes_box_with_constraints?(node)
+          return false if node['lazy'] == 'none'
+
+          finite = ->(value) { value.is_a?(Numeric) || (value.is_a?(String) && value.match?(/\A\d+(\.\d+)?\z/)) }
+          return false if finite.call(node['height']) || finite.call(node['maxHeight'])
+
+          node['height'] == 'matchParent' || is_binding?(node['height'])
+        end
+
+        def self.child_dimension(child, axis)
+          return nil unless child.is_a?(Hash)
+          return child[axis] if child[axis]
+          frame = child['frame']
+          frame.is_a?(Hash) ? frame[axis] : nil
+        end
+
+        def self.replace_or_append!(modifiers, old_modifier, new_modifier)
+          if (idx = modifiers.index(old_modifier))
+            modifiers[idx] = new_modifier
+          else
+            modifiers << new_modifier unless modifiers.include?(new_modifier)
+          end
+        end
+
+        # When `wrapContent<Axis>(Alignment.X)` coexists with `.fillMax<Axis>()`
+        # and an `.<axis>In(max = N.dp)` bound (the
+        # `width: matchParent` + `maxWidth: N` + `centerHorizontal/alignLeft/
+        # alignRight: true` combo in spec), the Compose chain must be
+        # ordered:
+        #
+        #   .fillMax<Axis>()              # claim full parent <axis> for the frame
+        #   .wrapContent<Axis>(Alignment) # align the (clamped) child within full frame
+        #   .<axis>In(max = N.dp)         # clamp the child to N
+        #
+        # The natural build_alignment-first / build_size-second emit produces
+        # `wrapContent<Axis>(...) → <axis>In → fillMax<Axis>()` instead. With
+        # that order, `wrapContent<Axis>` runs against the child's own
+        # (clamped) bounds — there is no surrounding full-parent frame for
+        # the alignment to offset against — so a maxWidth-clamped child
+        # sits at the left edge of the parent instead of centered. Mirrors
+        # the SwiftUI side which uses `.frame(maxWidth: N, alignment:
+        # .center)` as a single API and is unaffected.
+        #
+        # Regression: kjui-responsive-centerhorizontal-modifier-order-not-centered.
+        def self.reorder_alignment_anchor!(modifiers)
+          reorder_axis!(modifiers, 'Width', 'width')
+          reorder_axis!(modifiers, 'Height', 'height')
+          modifiers
+        end
+
+        def self.reorder_axis!(modifiers, pascal_axis, lower_axis)
+          fill = ".fillMax#{pascal_axis}()"
+          fill_idx = modifiers.index(fill)
+          return unless fill_idx
+
+          wrap_prefix = ".wrapContent#{pascal_axis}(Alignment."
+          wrap_idx = modifiers.index { |m| m.is_a?(String) && m.start_with?(wrap_prefix) }
+          return unless wrap_idx
+
+          # Only reorder when the bound is also present — that's the trigger
+          # for the misalignment. If `.<axis>In(...)` isn't there, the
+          # current order is fine.
+          in_prefix = ".#{lower_axis}In("
+          has_in = modifiers.any? { |m| m.is_a?(String) && m.start_with?(in_prefix) }
+          return unless has_in
+
+          # Already in correct order (fill < wrap).
+          return if fill_idx < wrap_idx
+
+          modifiers.delete_at(fill_idx)
+          wrap_idx = modifiers.index { |m| m.is_a?(String) && m.start_with?(wrap_prefix) }
+          modifiers.insert(wrap_idx, fill)
+        end
+
+        # Which axis a `.weight(..)` emitted by build_weight will OWN for this
+        # node, or nil. The weight slot defines that axis: web and the dynamic
+        # runtime both let the slot win over a declared size (measured on
+        # common_weight__static, run 31202080745), so build_size must not emit
+        # a requiredWidth/requiredHeight there — Compose would draw the
+        # declared box centered inside the slot instead of filling it.
+        # Mirrors build_weight's selection exactly (heightWeight wins over the
+        # shorthand in a Column; bound weights emit a runtime conditional and
+        # suppress statically, same as the slot they may claim).
+        def self.weighted_axis(json_data, parent_orientation)
+          return nil unless %w[Row Column].include?(parent_orientation)
+
+          weight = if parent_orientation == 'Column' && json_data['heightWeight']
+                     json_data['heightWeight']
+                   else
+                     json_data['weight']
+                   end
+          return nil unless weight
+          return nil unless BoundValue.bound?(weight) || weight.to_f > 0
+
+          parent_orientation == 'Row' ? :width : :height
+        end
+
+        # Where a Label's text sits in a frame taller than it (the orchestrator's ruling
+        # 2026-09-27, round 17; attribute_semantics.json gravityDefaults ->
+        # leafOwnFrameChannel): its gravity's vertical part — top, bottom, or
+        # the middle for center / centerVertical — and the middle when the
+        # gravity names none, as iOS places it (measured by subagent 4 on
+        # sjui codegen and SwiftJsonUI Dynamic). `.wrapContentHeight(align =
+        # …)` for the Label's chain to append inside its background and
+        # padding, or nil: top, or no frame of its own along the height (a
+        # height that wraps its text). Compose's Text has no vertical
+        # alignment; until jsonui-cli 1.9.0 a numeric height drew the text at
+        # the top whatever the gravity.
+        def self.label_vertical_alignment(json_data, parent_type)
+          height = json_data['height']
+          own_frame = (!height.nil? && height != 'wrapContent') || json_data['minHeight'] ||
+                      json_data['heightWeight'] || (parent_type == 'Column' && json_data['weight'])
+          return nil unless own_frame
+
+          gravity = json_data['gravity']
+          parts = (gravity.is_a?(Array) ? gravity : gravity.to_s.split('|')).map do |g|
+            JsonUIShared::EnumSpelling.lowered(g.to_s.strip, 'common', 'gravity')
+          end.compact
+          align = if parts.include?('bottom') then 'Alignment.Bottom'
+                  elsif parts.include?('top') && !(parts & %w[center centervertical center_vertical centerinparent center_in_parent]).any? then nil
+                  else 'Alignment.CenterVertically'
+                  end
+          align && ".wrapContentHeight(align = #{align})"
+        end
+
+        # The key a View container injects into a child that declares a
+        # numeric size: where, per axis, the container places that child
+        # ([h, v], bias −1 start / top, 0 centre, 1 end / bottom).
+        OVERFLOW_BIAS_KEY = '__overflowBias'
+
+        # A declared size is requiredWidth / requiredHeight, and an
+        # over-constrained required size is coerced and its content CENTRED,
+        # so a 300 child of a 200 Box drew at (−50, −50) whatever the
+        # container said (ticket kjui-oversized-child-is-centred-and-cut-to-
+        # its-parent; web puts it at the container's corner, or overflows both
+        # sides when centred). With the container's placement injected, an
+        # unbounded wrapContent in front places the declared box where the
+        # container puts the child; a child that fits reads the same size and
+        # place as before. KotlinJsonUI Dynamic emits the same chain
+        # (ModifierBuilder.declaredSize).
+        def self.overflow_wrapper(json_data, axis, required_imports = nil)
+          bias = json_data[OVERFLOW_BIAS_KEY]
+          return nil unless bias.is_a?(Array) && bias.size == 2
+
+          required_imports&.add(:bias_alignment)
+          name = imported_name('androidx.compose.ui.BiasAlignment', required_imports)
+          if axis == :width
+            ".wrapContentWidth(align = #{name}.Horizontal(#{bias[0].to_f}f), unbounded = true)"
+          else
+            ".wrapContentHeight(align = #{name}.Vertical(#{bias[1].to_f}f), unbounded = true)"
+          end
+        end
+
+        # A name the size stage emits, as the caller's file can read it. With
+        # an import set the import is registered and the short name used;
+        # without one — `build_size(json_data)`, the call an app converter
+        # made from the template before 2026-08-05, and a complete call by
+        # the signature — nothing would import it, so the name is written
+        # whole (ticket kjui-build-size-without-required-imports-emits-an-
+        # unimported-biasalignment: the build failed on `BiasAlignment`).
+        def self.imported_name(qualified, required_imports)
+          required_imports ? qualified.split('.').last : qualified
+        end
+
+        def self.build_size(json_data, parent_type = nil, required_imports = nil)
+          modifiers = []
+          dp_infinity = "#{imported_name('androidx.compose.ui.unit.Dp', required_imports)}.Infinity"
+          weight_axis = weighted_axis(json_data, parent_type)
+
+          # Handle 'frame' attribute - object with width/height
+          # frame: { width: 100, height: 50 }
+          if json_data['frame'].is_a?(Hash)
+            frame = json_data['frame']
+            if frame['width']
+              if frame['width'] == 'matchParent'
+                modifiers << ".fillMaxWidth()"
+              elsif frame['width'] == 'wrapContent'
+                modifiers << ".wrapContentWidth()"
+              else
+                overflow_wrapper(json_data, :width, required_imports)&.then { |w| modifiers << w }
+                modifiers << ".requiredWidth(#{process_dimension(frame['width'])})"
+              end
+            end
+            if frame['height']
+              if frame['height'] == 'matchParent'
+                modifiers << ".fillMaxHeight()"
+              elsif frame['height'] == 'wrapContent'
+                modifiers << ".wrapContentHeight()"
+              else
+                overflow_wrapper(json_data, :height, required_imports)&.then { |w| modifiers << w }
+                modifiers << ".requiredHeight(#{process_dimension(frame['height'])})"
+              end
+            end
+            # If frame is specified, skip individual width/height processing
+            return modifiers
+          end
+
+          # Where the min/max constraint goes depends on WHICH structural
+          # modifier follows it, and the three cases do not agree. This used
+          # to say "before the fill/wrap modifiers", which is right for fill
+          # and backwards for wrap — one sentence covering two cases, and the
+          # wrong half was silent (plan 49 lane C, G's 3-column measurement).
+          #
+          # FILL — constraint FIRST. An outer `.fillMaxWidth()` locks
+          # min == max == parent's maxWidth, so a later `.widthIn(max = N)`
+          # can no longer narrow it. Emitting widthIn first caps the bound and
+          # fillMaxWidth then fills WITHIN that cap.
+          # Regression: kjui-responsive-widthin-after-fillmaxwidth-no-op.
+          #
+          # WRAP — constraint LAST. `.wrapContentWidth()` deliberately measures
+          # its content ignoring the incoming minimum, so an earlier
+          # `.widthIn(min = N)` is exactly the constraint it discards: the node
+          # came out at its content's width with the floor thrown away
+          # (measured 40dp against dynamic's 150dp). The dynamic chain puts the
+          # bound after the wrap for the same reason — `applySize` runs
+          # `applyWidthConstraints` AFTER `applySingleDimension` unless the
+          # dimension is a fill.
+          #
+          # EXPLICIT numeric width — constraint LAST, for a different reason:
+          # the declared width wins over min/max bounds (all render paths
+          # agree — the dynamic chain is `.width(N).widthIn(...)`, where the
+          # fixed width pins the constraints and the bound is inert). Emitting
+          # widthIn first would clamp the declared width instead.
+          width_constraint =
+            if json_data['minWidth'] && json_data['maxWidth']
+              ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])}, max = #{BoundValue.dp(json_data['maxWidth'], null_expr: dp_infinity)})"
+            elsif json_data['minWidth']
+              ".widthIn(min = #{BoundValue.dp(json_data['minWidth'])})"
+            elsif json_data['maxWidth']
+              ".widthIn(max = #{BoundValue.dp(json_data['maxWidth'], null_expr: dp_infinity)})"
+            end
+          # A DISTRIBUTION-injected weight does not own the axis the way an
+          # author weight does: the declared size stays, start-aligned inside
+          # the slot (childSizePrecedence; the dynamic Box wrapper draws the
+          # same picture). wrapContentWidth resets the slot's exact
+          # constraints so the size after it can bind.
+          numeric_width = json_data['width'] &&
+                          json_data['width'] != 'matchParent' &&
+                          json_data['width'] != 'wrapContent'
+          distribution_sized_width = numeric_width &&
+                                     weight_axis == :width &&
+                                     json_data['__distributionWeight']
+          explicit_width = numeric_width &&
+                           !(json_data['weight'] && json_data['width'] == 0) &&
+                           (weight_axis != :width || distribution_sized_width)
+          wrap_width = json_data['width'] == 'wrapContent'
+          modifiers << width_constraint if width_constraint && !explicit_width && !wrap_width
+
+          # Width - skip if weight is present and width is 0
+          if json_data['width'] == 'matchParent'
+            modifiers << ".fillMaxWidth()"
+          elsif wrap_width
+            modifiers << ".wrapContentWidth()"
+            modifiers << width_constraint if width_constraint
+          elsif distribution_sized_width
+            # Inside a distribution slot: reset the slot's exact constraints,
+            # anchor at the start, and bind the declared size — the dynamic
+            # component's Box-wrapper picture (View_distribution__fillequally
+            # android parity d=15, run 31234163967).
+            modifiers << ".wrapContentWidth(align = Alignment.Start, unbounded = false)"
+            modifiers << ".width(#{process_dimension(json_data['width'])})"
+            modifiers << width_constraint if width_constraint
+          elsif explicit_width
+            # requiredWidth/requiredHeight, not width/height: a declared size
+            # WINS over the parent constraint (canonical size ruling; ios/web
+            # both draw the declared box). Modifier.width silently coerced an
+            # over-constrained child to the parent size, which made the
+            # clipToBounds overflow probes byte-identical on android — the
+            # child could never overflow, so the FALSE face was unexpressible
+            # at the measurement layer (2026-08-08, run 31160838024 pixels).
+            overflow_wrapper(json_data, :width, required_imports)&.then { |w| modifiers << w }
+            modifiers << ".requiredWidth(#{process_dimension(json_data['width'])})"
+            modifiers << width_constraint if width_constraint
+          end
+
+          # Same outside-in argument applies to height: heightIn must be
+          # before fillMaxHeight / height.
+          #
+          # A Label's text is placed vertically in a frame taller than it by
+          # its gravity — label_vertical_alignment, applied by the Label's own
+          # chain inside its background and padding (the orchestrator's ruling 2026-09-27,
+          # round 17). It was paired with the height here, before the
+          # background, so a Label with a minHeight drew its background only
+          # as tall as its text; and a numeric height was not paired at all.
+
+          # Same explicit-size rule as the width axis: a declared numeric
+          # height wins over the heightIn bounds (mirror of the dynamic
+          # `.height(N).heightIn(...)` chain, where the bound is inert).
+          height_constraint =
+            if json_data['minHeight'] && json_data['maxHeight']
+              ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])}, max = #{BoundValue.dp(json_data['maxHeight'], null_expr: dp_infinity)})"
+            elsif json_data['minHeight']
+              ".heightIn(min = #{BoundValue.dp(json_data['minHeight'])})"
+            elsif json_data['maxHeight']
+              ".heightIn(max = #{BoundValue.dp(json_data['maxHeight'], null_expr: dp_infinity)})"
+            end
+          numeric_height = json_data['height'] &&
+                           json_data['height'] != 'matchParent' &&
+                           json_data['height'] != 'wrapContent'
+          distribution_sized_height = numeric_height &&
+                                      weight_axis == :height &&
+                                      json_data['__distributionWeight']
+          explicit_height = numeric_height &&
+                            !(json_data['heightWeight'] && json_data['height'] == 0) &&
+                            (weight_axis != :height || distribution_sized_height)
+          # Same three cases as the width axis: constraint before a fill,
+          # after a wrap (which discards the incoming minimum), after an
+          # explicit height.
+          wrap_height = json_data['height'] == 'wrapContent'
+          modifiers << height_constraint if height_constraint && !explicit_height && !wrap_height
+
+          # Height - skip if heightWeight is present and height is 0
+          fills_height = false
+          if json_data['height'] == 'matchParent'
+            modifiers << ".fillMaxHeight()"
+            fills_height = true
+          elsif wrap_height
+            modifiers << ".wrapContentHeight()"
+            modifiers << height_constraint if height_constraint
+          elsif distribution_sized_height
+            # Same slot picture as the width axis: reset, anchor top, bind.
+            modifiers << ".wrapContentHeight(align = Alignment.Top, unbounded = false)"
+            modifiers << ".height(#{process_dimension(json_data['height'])})"
+            modifiers << height_constraint if height_constraint
+          elsif explicit_height
+            overflow_wrapper(json_data, :height, required_imports)&.then { |w| modifiers << w }
+            modifiers << ".requiredHeight(#{process_dimension(json_data['height'])})"
+            modifiers << height_constraint if height_constraint
+          elsif parent_type == 'Column' && (json_data['weight'] || json_data['heightWeight'])
+            # Weight in a vertical container fills the height slice (the
+            # `.weight(..)` modifier itself is emitted by build_weight); no
+            # explicit height modifier here, but it still fills for valign.
+            fills_height = true
+          end
+
+          
+          # Aspect ratio. A bound side cannot be divided in Ruby (`"@{w}".to_f`
+          # is 0.0, and 0/0 is NaN), so the division moves into the emit.
+          if json_data['aspectWidth'] && json_data['aspectHeight']
+            if BoundValue.bound?(json_data['aspectWidth']) || BoundValue.bound?(json_data['aspectHeight'])
+              w = BoundValue.float(json_data['aspectWidth'], fallback: 1)
+              h = BoundValue.float(json_data['aspectHeight'], fallback: 1)
+              modifiers << ".aspectRatio(#{w} / #{h})"
+            else
+              ratio = json_data['aspectWidth'].to_f / json_data['aspectHeight'].to_f
+              modifiers << ".aspectRatio(#{ratio}f)"
+            end
+          end
+          
+          # `Dp.Infinity` is the unresolved value of a BOUND max, so the
+          # import follows the emitted text rather than the declaration.
+          if required_imports && modifiers.any? { |m| m.include?('Dp.Infinity') }
+            required_imports.add(:dp_infinity)
+          end
+
+          modifiers
+        end
+        
+        # `shape:` — the outline of a component whose drawn shape is not the
+        # declared cornerRadius: CircleImage clips to CircleShape, and Button
+        # draws its default rounded shape when no cornerRadius is declared. A
+        # RectangleShape shadow would sit square behind either. Everything
+        # else about the shadow is this one builder.
+        # The declared shadow defaults (attribute_definitions common.shadow).
+        SHADOW_DEFAULT_RADIUS = 5
+        SHADOW_DEFAULT_COLOR = 'Color.Black.copy(alpha = 0.33f)'
+
+        def self.build_shadow(json_data, required_imports = nil, shape: nil)
+          modifiers = []
+
+          if json_data['shadow']
+            if shape
+              # the caller's outline, as given
+            elsif json_data['cornerRadius']
+              shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
+            else
+              shape = "RectangleShape"
+            end
+
+            shadow_args = nil
+            if json_data['shadow'].is_a?(String)
+              # The string form is the UIKit pipe contract
+              # 'color|offsetX|offsetY|opacity|radius' — exactly five
+              # fields; anything else draws nothing (the canonical guard
+              # all render paths share).
+              parts = json_data['shadow'].split('|', -1)
+              if parts.length == 5
+                color = ResourceResolver.process_color(parts[0], required_imports)
+                required_imports&.add(:dp_offset)
+                shadow_args = "radius = #{parts[4].to_f}.dp, color = #{color}, " \
+                              "offset = DpOffset(#{parts[1].to_f}.dp, #{parts[2].to_f}.dp), alpha = #{parts[3].to_f}f"
+              end
+            elsif json_data['shadow'].is_a?(Hash)
+              shadow = json_data['shadow']
+              # A field left out takes its declared default (attribute_definitions
+              # common.shadow; iOS's, which the other platforms were aligned to):
+              # radius 5, offsets 0, opacity 1, and no colour is black at 33%
+              # (SwiftUI's default shadow colour) with the opacity not applied.
+              args = ["radius = #{BoundValue.dp(shadow['radius'] || SHADOW_DEFAULT_RADIUS)}"]
+              if shadow['color']
+                args << "color = #{ResourceResolver.process_color(shadow['color'], required_imports)}"
+              else
+                required_imports&.add(:color)
+                args << "color = #{SHADOW_DEFAULT_COLOR}"
+              end
+              if shadow['offsetX'] || shadow['offsetY']
+                required_imports&.add(:dp_offset)
+                # `.to_f` keeps a written offset's bytes; on a binding it is 0.0.
+                offset_x, offset_y = [shadow['offsetX'], shadow['offsetY']].map do |value|
+                  BoundValue.bound?(value) ? BoundValue.dp(value) : "#{(value || 0).to_f}.dp"
+                end
+                args << "offset = DpOffset(#{offset_x}, #{offset_y})"
+              end
+              if shadow['opacity'] && shadow['color']
+                args << "alpha = #{BoundValue.bound?(shadow['opacity']) ? BoundValue.float(shadow['opacity'], fallback: 1) : "#{shadow['opacity'].to_f}f"}"
+              end
+              shadow_args = args.join(', ')
+            end
+
+            if shadow_args
+              required_imports&.add(:drop_shadow)
+              # The shadow brings the import of the shape it names. The
+              # RoundedCornerShape one used to ride on an import something
+              # else in the chain happened to add (a background's clip, a
+              # `shape =` argument); TextField, TextView and SelectBox add
+              # none, so their shadow did not resolve in the generated file.
+              required_imports&.add(:rectangle_shape) if shape == "RectangleShape"
+              required_imports&.add(:shape) if shape.start_with?('RoundedCornerShape')
+              required_imports&.add(:circle_shape) if shape == 'CircleShape'
+              modifiers << ".dropShadow(shape = #{shape}, shadow = Shadow(#{shadow_args}))"
+            end
+          end
+          
+          modifiers
+        end
+        
+        #: The types whose declared onClick is not a tap on the node — a
+        #: control calls it from its own operation, a text field never — and a
+        #: Button, which draws its own pressed background (ButtonComponent,
+        #: `tapBackground ?: highlightBackground`). The set sjui's
+        #: OPERATION_CLICK_TYPES names, and Button.
+        NO_PRESSED_BACKGROUND_TYPES = %w[button switch toggle checkbox check radio segment slider selectbox
+                                         textfield edittext input textview].freeze
+
+        # tapBackground is the background while pressed, on every node with a
+        # tap and on a Button (jsonui-cli 1.9.0). On a node with a click
+        # (click_call) the background slot draws it: `[colour, condition]` —
+        # the condition the click's own gates and `enabled` make, nil when
+        # there is none — or nil for a node without a click.
+        def self.pressed_background(json_data, required_imports)
+          colour = json_data['tapBackground']
+          return nil if colour.nil? || NO_PRESSED_BACKGROUND_TYPES.include?(json_data['type'].to_s.downcase)
+          return nil if json_data['enabled'] == false
+
+          call, gate = click_call(json_data)
+          return nil unless call
+
+          gates = [gate, enabled_expression(json_data)].compact
+          [ResourceResolver.process_color(colour, required_imports), gates.empty? ? nil : gates.map { |g| conjunct(g) }.join(' && ')]
+        end
+
+        # The background slot: `.background(base)`, or on a node with a pressed
+        # colour, `base` at rest and the pressed colour while a pointer is down
+        # on the node. The press is watched, not taken — nothing is consumed,
+        # so the click and a scroll around the node see every event as before —
+        # and it ends when the pointer lifts or a scroll takes it
+        # (waitForUpOrCancellation).
+        def self.background_stage(base, pressed, required_imports)
+          return ".background(#{base})" unless pressed
+
+          colour, condition = pressed
+          required_imports&.add(:background)
+          required_imports&.add(:pressed_background)
+          held = condition ? "isPressed && #{condition}" : 'isPressed'
+          ".then(run { var isPressed by remember { mutableStateOf(false) }; " \
+            "Modifier.pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false); " \
+            "isPressed = true; waitForUpOrCancellation(); isPressed = false } }" \
+            ".background(if (#{held}) #{colour} else #{base}) })"
+        end
+
+        # disabledBackground (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces):
+        # the colour while `enabled` is false — a literal false always, a bound one
+        # while it is false — over the base (and the highlight), as iOS and the web
+        # draw it. Compose had no View path for it at all. A lambda taking the base
+        # expression, or nil when there is nothing to swap. Button draws its own
+        # (Material's disabledContainerColor); the text inputs are their own.
+        DISABLED_BACKGROUND_SELF = %w[Button TextField TextView SelectBox].freeze
+        def self.disabled_background(json_data, required_imports)
+          colour = json_data['disabledBackground']
+          return nil if colour.nil? || DISABLED_BACKGROUND_SELF.include?(json_data['type'])
+
+          gate = enabled_expression(json_data)
+          return nil if gate.nil?
+
+          disabled = ResourceResolver.process_color(colour, required_imports)
+          gate == 'false' ? ->(_base) { disabled } : ->(base) { "if (#{gate}) #{base} else #{disabled}" }
+        end
+
+        def self.build_background(json_data, required_imports = nil)
+          modifiers = []
+          
+          # highlighted — the View's highlighted appearance: when set (literal
+          # true, or a bool binding) the background swaps to
+          # highlightBackground, matching sjui's apply_highlighted_to_bag.
+          #
+          # tapBackground is not this colour (jsonui-cli 1.9.0): it is the
+          # background while PRESSED, on a node with a click
+          # (pressed_background). Reading `tapBackground || highlightBackground`
+          # here painted the pressed colour whenever `highlighted` held.
+          highlight_bg = json_data['highlightBackground']
+          pressed = pressed_background(json_data, required_imports)
+          highlight_cond = case json_data['highlighted']
+                           when true, 'true' then 'true'
+                           when String
+                             if is_binding?(json_data['highlighted'])
+                               "data.#{extract_binding_property(json_data['highlighted'])}"
+                             end
+                           end
+
+          disabled = disabled_background(json_data, required_imports)
+          if json_data['background']
+            required_imports&.add(:background)
+            
+            # Use ResourceResolver to process background color
+            background_color = ResourceResolver.process_color(json_data['background'], required_imports)
+            if highlight_cond && highlight_bg
+              hl = ResourceResolver.process_color(highlight_bg, required_imports)
+              background_color = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else #{background_color}"
+            end
+            background_color = disabled.call(background_color) if disabled
+            
+            # border before clip to prevent border being clipped
+            modifiers.concat(build_border_and_clip(json_data, required_imports))
+            modifiers << background_stage(background_color, pressed, required_imports)
+          elsif highlight_cond && highlight_bg
+            # No base background: the highlight IS the background when the
+            # flag holds (transparent otherwise, which is what no-background
+            # renders anyway).
+            required_imports&.add(:background)
+            hl = ResourceResolver.process_color(highlight_bg, required_imports)
+            expr = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else Color.Transparent"
+            modifiers << background_stage(expr, pressed, required_imports)
+          elsif disabled
+            # No base background: the disabled colour while disabled, nothing otherwise
+            required_imports&.add(:background)
+            modifiers.concat(build_border_and_clip(json_data, required_imports))
+            modifiers << background_stage(disabled.call('Color.Transparent'), pressed, required_imports)
+          else
+            modifiers.concat(build_border_and_clip(json_data, required_imports))
+            modifiers << background_stage('Color.Transparent', pressed, required_imports) if pressed
+          end
+
+          # `safeAreaInsetPositions` on a PLAIN node. The SSoT declares it on
+          # View as well as SafeAreaView on purpose — sjui runs
+          # `apply_safe_area_insets_to_bag` for every component and rjui emits
+          # `env(safe-area-inset-*)` padding from `safe_area_edges`, while
+          # kjui read the spelling only inside the SafeAreaView builder. The
+          # words mean what they mean there (SafeAreaEdges).
+          positions = json_data['safeAreaInsetPositions']
+          if positions && json_data['type'] != 'SafeAreaView'
+            modifiers.concat(SafeAreaEdges.modifiers(
+              SafeAreaEdges.edges(positions), 'LocalSafeAreaConfig.current', required_imports
+            ))
+          end
+
+          # `effectStyle` is declared on `common`, not just on Blur, and only
+          # the Blur component read it — so a plain View declaring a material
+          # got nothing (plan 49 lane C). The vocabulary is shared with that
+          # component (EffectStyleHelper) so the two cannot answer differently,
+          # which is the shape rjui settled on. Blur builds its own richer
+          # chain from the same tables and is skipped here.
+          if json_data['effectStyle'] && json_data['type'] != 'Blur' && json_data['type'] != 'BlurView'
+            required_imports&.add(:background)
+            required_imports&.add(:blur)
+            modifiers << ".background(#{EffectStyleHelper.scrim(json_data['effectStyle'], json_data['type'])})"
+            modifiers << ".blur(#{EffectStyleHelper.blur_dp(json_data['effectStyle'], json_data['type'])}.dp)"
+          end
+
+          # clipToBounds — declared boolean|binding. A plain truthiness test
+          # froze `"@{flag}"` permanently ON (plan 49 lane C, bound-frozen).
+          clip_state = BoundValue.bool(json_data['clipToBounds'])
+          if (clip = BoundValue.conditional_modifier(clip_state, '.clipToBounds()'))
+            required_imports&.add(:shape)
+            modifiers << clip
+          end
+
+          modifiers
+        end
+
+        # The background stage without its colour: the border (width + colour
+        # pair), then the corner clip — border first so the clip does not cut
+        # it. build_background paints its colour after these; a component that
+        # paints its own background (a native parameter or view) takes these
+        # two alone. The imports are the ones build_background always added
+        # for any of the three attributes.
+        def self.build_border_and_clip(json_data, required_imports = nil)
+          return [] unless json_data['cornerRadius'] || json_data['borderColor'] || json_data['borderWidth']
+
+          required_imports&.add(:border)
+          required_imports&.add(:shape)
+          modifiers = []
+          modifiers << build_border_modifier(json_data, required_imports) if json_data['borderColor'] && json_data['borderWidth']
+          modifiers.concat(build_corner_clip(json_data, required_imports))
+          modifiers
+        end
+
+        # The corner clip alone — `.clip(RoundedCornerShape(cornerRadius))`.
+        def self.build_corner_clip(json_data, required_imports = nil)
+          return [] unless json_data['cornerRadius']
+
+          required_imports&.add(:shape)
+          [".clip(RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])}))"]
+        end
+
+        # The border alone, for a component that paints its own background —
+        # a native parameter (Segment's containerColor) or view (WebView's
+        # setBackgroundColor, Blur's scrim) — and so cannot take
+        # build_background without painting it twice. The same modifier and
+        # the same imports build_background emits for the pair. `shape:` is
+        # the outline of a component whose drawn shape is not the declared
+        # cornerRadius (CircleImage's circle), as for build_shadow.
+        def self.build_border(json_data, required_imports = nil, shape: nil)
+          return [] unless json_data['borderColor'] && json_data['borderWidth']
+
+          required_imports&.add(:border)
+          required_imports&.add(:shape)
+          [build_border_modifier(json_data, required_imports, shape: shape)]
+        end
+
+        def self.build_test_tag(json_data, required_imports = nil)
+          modifiers = []
+
+          if json_data['id']
+            id_value = json_data['id']
+            required_imports&.add(:semantics)
+            required_imports&.add(:test_tag)
+            required_imports&.add(:test_tags_as_resource_id)
+            # Add testTag for UI testing (used by Espresso/UI Automator)
+            modifiers << ".testTag(#{JsonUIShared::StringLiterals.kotlin(id_value)})"
+            # Expose testTag as resource-id for UIAutomator compatibility (Compose 1.2+)
+            modifiers << ".semantics { testTagsAsResourceId = true }"
+            # The element a reorderable Collection picks its rows up by (ReorderHandleIndex; ticket
+            # jui-collection-drag-to-reorder): in a cell layout whose Collection names it as reorderHandle.
+            if reorder_handle_ids.include?(id_value)
+              required_imports&.add(:collection_reorder_handle)
+              modifiers << ".collectionReorderHandle()"
+            end
+          end
+
+          modifiers + build_control_accessibility(json_data, required_imports)
+        end
+
+        # What TalkBack is told about a control beyond what it shows
+        # (shared/core/control_accessibility.rb), on the chain every
+        # component's modifiers take (build_test_tag):
+        #   accessibilityLabel      — `contentDescription`, the key localized
+        #                             like `text`, or the binding. It is
+        #                             evaluated outside the semantics block:
+        #                             stringResource is composable, and the
+        #                             block is not.
+        #   accessibilityLiveRegion — `liveRegion = LiveRegionMode.Polite` /
+        #                             `Assertive`
+        #   accessibilitySelected   — `selected = true` while it is true (a
+        #                             binding gates the modifier); false tells
+        #                             nothing, as on iOS. Where it takes effect
+        #                             is the rule's (a Button, or a View /
+        #                             IconLabel the tap rule makes one button).
+        def self.build_control_accessibility(json_data, required_imports = nil)
+          rule = JsonUIShared::ControlAccessibility
+          modifiers = []
+          if (raw = rule.label(json_data))
+            required_imports&.add(:semantics_content_description)
+            text = ResourceResolver.process_text(raw, required_imports)
+            modifiers << ".then((#{text}).let { label -> Modifier.semantics { contentDescription = label } })"
+          end
+          if (live = rule.live(json_data))
+            required_imports&.add(:semantics_live_region)
+            modifiers << ".semantics { liveRegion = LiveRegionMode.#{live.capitalize} }"
+          end
+          unless (selected = rule.selected(json_data)).nil?
+            required_imports&.add(:semantics_selected)
+            told = 'Modifier.semantics { selected = true }'
+            gate = selected == true ? nil : boolean_expression(selected)
+            modifiers << (gate.nil? ? ".then(#{told})" : ".then(if (#{gate}) #{told} else Modifier)")
+          end
+          modifiers
+        end
+
+        def self.build_visibility(json_data, required_imports = nil)
+          modifiers = []
+          visibility_info = {}
+          
+          # Handle visibility attribute (static or data-bound)
+          if json_data['visibility']
+            if json_data['visibility'].is_a?(String) && json_data['visibility'].start_with?('@{')
+              # Data binding for visibility (string value context —
+              # canonical parse so a `?? 'gone'` default emits a real elvis)
+              inner = json_data['visibility'][2..-2]
+              visibility_info[:visibility_binding] = BindingExpression.value_access(inner)
+              required_imports&.add(:visibility_wrapper)
+            else
+              # Static visibility
+              visibility_info[:visibility] = json_data['visibility']
+              required_imports&.add(:visibility_wrapper)
+            end
+          end
+
+          # Handle hidden attribute (boolean or data binding)
+          if json_data['hidden']
+            if json_data['hidden'].is_a?(String) && json_data['hidden'].start_with?('@{')
+              # Data binding for hidden (boolean value context — `@{!flag}`
+              # emits a real Kotlin negation, `?? true/false` a real elvis)
+              inner = json_data['hidden'][2..-2]
+              visibility_info[:hidden_binding] = BindingExpression.value_access(inner, negatable: true)
+              required_imports&.add(:visibility_wrapper)
+            elsif json_data['hidden'] == true
+              visibility_info[:hidden] = true
+              required_imports&.add(:visibility_wrapper)
+            end
+          end
+          
+          # Handle alpha/opacity attribute separately (not part of visibility wrapper)
+          # Canonical spelling is 'opacity' ('alpha' is its alias; alias
+          # fallback is skipped for L1-normalized layouts).
+          alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
+          if alpha_value
+            required_imports&.add(:alpha)
+            # A nullable bound opacity used to emit `data.x.toFloat()`, which
+            # does not compile on a `Double?`. BoundValue coalesces it.
+            modifiers << ".alpha(#{BoundValue.float(alpha_value, fallback: 1)})"
+          end
+
+          # Return both visibility info and modifiers
+          { modifiers: modifiers, visibility_info: visibility_info }
+        end
+        
+        # `offsetX` / `offsetY` — moves the view without changing the space it
+        # occupies or where its siblings land.
+        #
+        # `absoluteOffset`, not `offset` and not `graphicsLayer`, is E's ruling
+        # (51-E f433580) and neither half is a style choice:
+        #
+        # - `graphicsLayer { translationX/Y }` translates at draw time and
+        #   leaves the touch target behind. `onClick`, `onLongPress` and
+        #   `canTap` are COMMON, so that draws the control in one place and
+        #   makes it tappable in another — one declaration silently breaking
+        #   another, the same reason clipToBounds does not default to clipping.
+        # - plain `Modifier.offset` mirrors under RTL. `offsetX` is spelled on
+        #   the X axis, and this SSoT already separates the absolute axis
+        #   vocabulary (leftMargin/rightMargin) from the RTL-aware one
+        #   (startMargin/endMargin), so the X spelling must not mirror.
+        #
+        # Emitted immediately after size and before alpha — agreed with G so
+        # both android paths use the same slot. Compose composes left-to-outside,
+        # so this is the only position that satisfies both constraints: outside
+        # background/shadow (or the background stays put while the content
+        # slides), and inside margins (or the siblings move after all).
+        def self.build_offset(json_data, required_imports = nil)
+          x = json_data['offsetX']
+          y = json_data['offsetY']
+          return [] if x.nil? && y.nil?
+
+          required_imports&.add(:absolute_offset)
+          [".absoluteOffset(x = #{BoundValue.dp(x || 0)}, y = #{BoundValue.dp(y || 0)})"]
+        end
+
+        # Build alpha/opacity modifier separately (can be used independently of visibility)
+        def self.build_alpha(json_data, required_imports = nil)
+          modifiers = []
+          alpha_value = Core::Normalization.attr_lookup(json_data, 'opacity', 'alpha')
+          if alpha_value
+            required_imports&.add(:alpha)
+            # A nullable bound opacity used to emit `data.x.toFloat()`, which
+            # does not compile on a `Double?`. BoundValue coalesces it.
+            modifiers << ".alpha(#{BoundValue.float(alpha_value, fallback: 1)})"
+          end
+          modifiers
+        end
+
+        # Build .clickable modifier for non-Button components with onClick/onclick.
+        # onLongPress rides the same sink: its detector is emitted BEFORE
+        # .clickable (mirrors dynamic ModifierBuilder.applyClickable) so a
+        # fired long press consumes the gesture and the click never fires.
+        def self.build_clickable(json_data, required_imports = nil)
+          modifiers = []
+          modifiers.concat(build_gestures(json_data, required_imports))
+          modifiers.concat(build_click(json_data, required_imports))
+          # `disabled()` follows `enabled` only: a view that is merely not
+          # tappable is not "disabled" to a screen reader.
+          modifiers.concat(build_disabled_semantics(json_data, enabled_expression(json_data), required_imports))
+          modifiers.concat(build_interaction_blocker(json_data, required_imports))
+          modifiers
+        end
+
+        # The node's own long press, pan and pinch — build_clickable's
+        # gestures, each gated by gesture_gate.
+        def self.build_gestures(json_data, required_imports = nil)
+          modifiers = []
+          modifiers.concat(build_long_pressable(json_data, required_imports))
+          modifiers.concat(build_pannable(json_data, required_imports))
+          modifiers.concat(build_pinchable(json_data, required_imports))
+          modifiers
+        end
+
+        # The declared onClick as a Kotlin call, and its canTap gate:
+        # `[call, gate]` (gate nil when there is none), or nil when there is
+        # no handler or `canTap` is false. The one reading build_click and
+        # operation_click_call share. `userInteractionEnabled` gates it the
+        # same way (tap_gate): on this node, and on every node around it (the
+        # tap rule, shared/core/tap_accessibility.rb). The pointer blocker
+        # stopped a touch there, not TalkBack's double tap, which calls the
+        # click's action and announced it as a button.
+        def self.click_call(json_data)
+          # A handler names a method (shared/core/tap_accessibility.rb
+          # `handler?`): `""`, `"   "`, `"@{}"`, `[]` and `[""]` are no tap.
+          tap = JsonUIShared::TapAccessibility
+          handler = [json_data['onclick'], json_data['onClick']].find { |value| tap.handler?(value) }
+          can_tap = tap_gate(json_data)
+          return nil if handler.nil? || can_tap == 'false'
+
+          view_id = view_id(json_data)
+          call = if tap.handler?(json_data['onClick']) && is_binding?(json_data['onClick'])
+                   get_event_handler_invocation(json_data['onClick'], view_id, nil)
+                 elsif tap.handler?(json_data['onClick'])
+                   get_event_handler_call(json_data['onClick'], is_camel_case: true, view_id: view_id)
+                 else
+                   get_event_handler_call(json_data['onclick'], is_camel_case: false, view_id: view_id)
+                 end
+          [call, can_tap]
+        end
+
+        # The declared onClick of a CONTROL — Switch / Toggle, CheckBox,
+        # Radio, Segment, Slider, SelectBox — called from the control's own
+        # operation, after its own update: a statement for the operation's
+        # lambda, or nil. `canTap` gates the call (a binding: while it holds),
+        # and userInteractionEnabled with it (click_call);
+        # `enabled` is the control's own parameter, so a disabled control
+        # neither operates nor calls. No `.clickable` is added: on the
+        # control's node an outer clickable's OnClick action replaces the
+        # control's own (Compose applies a node's semantics innermost first and
+        # a later action replaces an earlier one), so TalkBack's double tap ran
+        # the handler and did not operate the control, while a touch operated
+        # it and never reached the handler. The tap rule's shape for these is
+        # `none` — a control already, left as it was
+        # (kjui-dynamic-components-that-skip-the-common-modifiers, item A).
+        def self.operation_click_call(json_data)
+          call, gate = click_call(json_data)
+          return nil unless call
+
+          gate = lambda_gate(gate)
+          gate ? "if (#{gate}) { #{call} }" : call
+        end
+
+        # The name a lambda of a layout a stop can reach reads the handed-down
+        # stop by (INTERACTION_CAPTURE): a CompositionLocal is read in the
+        # composable's scope, not in the lambda a control or a Button calls
+        # its onClick from, so the leaf node's code is wrapped in
+        # `LocalInteractionStopped.current.let { jsonuiInteractionStopped -> … }`
+        # (ComposeBuilder#capture_interaction_stop) and the lambda gates on it.
+        INTERACTION_CAPTURE = 'jsonuiInteractionStopped'
+
+        # A gate for a call made inside a lambda — a control's operation, a
+        # Button's onClick: `gate` (tap_gate's), and in a layout a stop can
+        # reach (reads_interaction_local) the stop handed down, captured.
+        def self.lambda_gate(gate)
+          return gate unless reads_interaction_local
+          return 'false' if gate == 'false'
+
+          handed_down = "!#{INTERACTION_CAPTURE}"
+          gate ? "#{conjunct(gate)} && #{handed_down}" : handed_down
+        end
+
+        # Append an argument that opens with its own `,\n` to a call being
+        # built. When the call so far already ends in a comma — the argument
+        # before it closed with one and no modifier chain followed — the
+        # argument's comma is dropped: `onCheckedChange = { },,` does not
+        # compile (a Switch or CheckBox with `enabled` or colours and no
+        # modifier emitted it since before 24f7fad0).
+        def self.join_argument(code, argument)
+          return code if argument.nil? || argument.empty?
+          return code + argument.sub(/\A,/, '') if code.rstrip.end_with?(',') && argument.start_with?(',')
+
+          code + argument
+        end
+
+        # A control's operation lambda — `{ newValue -> … }`, `{ … }` or
+        # `{ }` — with operation_click_call as its last statement, after the
+        # value is written and onValueChange has run. Unchanged when there is
+        # no call, and for an `// ERROR` lambda (its comment runs to the end of
+        # the line). An empty lambda takes the call on `it`, so no unused
+        # parameter is named.
+        # Text for a comment the emit writes: one line, and no `*/` that would
+        # close a block comment early. The layout's own spelling goes in here
+        # (a handler name that is not a binding), so a newline in it would
+        # end a `//` comment and put the rest in code position.
+        def self.comment_text(text)
+          text.to_s.gsub(/[\r\n]+/, ' ').gsub('*/', '* /')
+        end
+
+        # A handler lambda that calls nothing and says why — in a BLOCK
+        # comment. The line comment it was (`{ // ERROR: … }`) ran to the end
+        # of the line and swallowed the lambda's closing brace and the
+        # argument's comma, so the file did not compile at all.
+        def self.error_lambda(message)
+          "{ /* #{comment_text(message)} */ }"
+        end
+
+        # A two-state control's value and its binding: `[checked, variable]`.
+        # Its state attributes are read in their order (Switch: isOn, value,
+        # checked; CheckBox: isOn, checked, value). The control's own state
+        # attribute is the value — bound, or static (the seed of its own
+        # state) — and `bind` is the value only when there is none: SSoT
+        # common.bind, "an alternative spelling to each component's own value
+        # attribute, which takes precedence when both are set". The shown
+        # value and the written one come from the same attribute. It showed a
+        # static isOn (seeded, never written) while the operation wrote `bind`,
+        # so the control never moved; and a CheckBox bound through `value`
+        # showed the binding and wrote nothing.
+        #
+        # `states` are the state attributes' VALUES, in order, read by the
+        # caller with literal keys — the attribute coverage scan counts
+        # literal reads (`json_data['isOn']`), not keys passed by name.
+        def self.control_state(json_data, states)
+          bound = ->(v) { v.is_a?(String) && v =~ /@\{([^}]+)\}/ ? Regexp.last_match(1) : nil }
+          state = states.compact.first
+          if (var = bound.call(state))
+            ["data.#{var}", var]
+          elsif !state.nil?
+            [state.to_s, nil]
+          else
+            ['false', nil]
+          end
+        end
+
+        def self.with_operation_click(lambda_text, json_data)
+          call = operation_click_call(json_data)
+          return lambda_text if call.nil? || lambda_text.include?('ERROR')
+          return "{ #{call} }" if lambda_text.strip == '{ }'
+
+          lambda_text.sub(/\s*\}\z/, "; #{call} }")
+        end
+
+        # The clickable stage of a control whose tap is its own operation:
+        # build_clickable's gestures and blocker, no `.clickable` (see
+        # operation_click_call), and `disabled()` only where the control's own
+        # `enabled` does not land on this node — `enabled_on_node: false` for
+        # a wrapper (the labelled Row, a text field's margin Box), whose tag a
+        # UI test reads.
+        def self.build_control_clickable(json_data, required_imports = nil, enabled_on_node:, blocker: true)
+          modifiers = []
+          modifiers.concat(build_gestures(json_data, required_imports))
+          unless enabled_on_node
+            modifiers.concat(build_disabled_semantics(json_data, enabled_expression(json_data), required_imports))
+          end
+          modifiers.concat(build_interaction_blocker(json_data, required_imports)) if blocker
+          modifiers
+        end
+
+        # The click alone: `.clickable` for onClick / onclick, gated by canTap
+        # and carrying `enabled`. build_clickable wraps it in the node's
+        # gestures, its disabled semantics and its interaction blocker. A
+        # container that emits the blocker early (TabView, Embed,
+        # SafeAreaView) takes this piece and the disabled semantics, so no
+        # gate is emitted twice. Controls take operation_click_call instead.
+        # Per-file: this layout is drawn in a composable of its own where a
+        # `userInteractionEnabled` stop in another layout can reach it
+        # (InteractionStopIndex) — a Collection's cell, an Embed's screen, a
+        # TabView tab's view. Its clicks are attached while no stop is handed
+        # down (LocalInteractionStopped), as under a bound flag. Only the
+        # click reads it: it is a modifier, built in the composable's scope; a
+        # control's operation call and a Button's onClick are lambdas, where a
+        # CompositionLocal cannot be read.
+        @reads_interaction_local = false
+        # Per-file: the ids of this layout's elements a reorderable Collection picks its rows up by
+        # (ReorderHandleIndex). Empty outside a jui build's file loop.
+        @reorder_handle_ids = Set.new
+
+        class << self
+          attr_reader :reads_interaction_local
+
+          def reorder_handle_ids
+            @reorder_handle_ids || Set.new
+          end
+
+          def reorder_handle_ids=(value)
+            @reorder_handle_ids = value || Set.new
+          end
+
+          def reads_interaction_local=(value)
+            @reads_interaction_local = value ? true : false
+          end
+        end
+
+        def self.build_click(json_data, required_imports = nil)
+          modifiers = []
+          call, can_tap = click_call(json_data)
+          if call && reads_interaction_local
+            required_imports&.add(:local_interaction_stopped)
+            handed_down = '!LocalInteractionStopped.current'
+            can_tap = can_tap ? "#{conjunct(can_tap)} && #{handed_down}" : handed_down
+          end
+          handler = call
+          enabled = enabled_expression(json_data)
+          # `canTap` (attribute_definitions.json common.canTap, the Compose tap
+          # gate) decides whether there is a click at all, and `enabled` whether
+          # it is enabled. The two were one `clickable(enabled = enabled &&
+          # canTap)`, and Compose's clickable marks a node `disabled()` while
+          # it is not enabled: a view whose tap was merely gated — a Switch
+          # still switching under it — read as disabled (measured on an API 35
+          # emulator, AccessibilityNodeInfo.isEnabled), where iOS reads it as
+          # enabled. So `false` emits no click (and no Role.Button), and a
+          # binding attaches the click while it resolves true — what the iOS
+          # codegen and both dynamic runtimes do (click_call).
+          if handler
+            required_imports&.add(:clickable)
+            handler_call = call
+            # A tap a screen reader should call a button
+            # (shared/core/tap_accessibility.rb): `role = Role.Button`. Left off
+            # where the tappable is a control already or holds one — the same
+            # decision the iOS codegen makes.
+            args = []
+            args << "enabled = #{enabled}" if enabled
+            if %w[button combine].include?(json_data[JsonUIShared::TapAccessibility::SHAPE_KEY])
+              required_imports&.add(:role)
+              args << 'role = Role.Button'
+            end
+            gate = args.any? ? "(#{args.join(', ')})" : ''
+            clickable = "clickable#{gate} { #{handler_call} }"
+            modifiers << (can_tap ? ".then(if (#{can_tap}) Modifier.#{clickable} else Modifier)" : ".#{clickable}")
+          end
+          modifiers
+        end
+
+        # The click's gate as one Kotlin condition: nil (none), 'false' (shut),
+        # or the bound gates joined — `canTap`, then each bound
+        # userInteractionEnabled of the nodes around it (outermost first) and
+        # its own (TapAccessibility.interaction_gates). `userInteractionEnabled:
+        # false` on it or on a node around it shuts it (TapAccessibility.stopped?).
+        def self.tap_gate(json_data)
+          return 'false' if JsonUIShared::TapAccessibility.stopped?(json_data)
+
+          gates = [boolean_expression(json_data['canTap'])]
+          gates.concat(JsonUIShared::TapAccessibility.interaction_gates(json_data).map { |g| boolean_expression(g) })
+          gates = gates.compact.uniq
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+          return gates.first if gates.size == 1
+
+          gates.map { |g| conjunct(g) }.join(' && ')
+        end
+
+        # Whether a Label's links — its tappable ranges and the links
+        # `linkable` detects — are operable, as a Kotlin Boolean for
+        # PartialAttributesText's `linksEnabled`: nil (always; the argument is
+        # left out), 'false', or the bound userInteractionEnabled values of
+        # the nodes around it and its own, joined. `userInteractionEnabled`
+        # stops a node and everything in it, links included, and a binding
+        # gates them as it gates a tap (the tap rule; the orchestrator's ruling, jsonui-cli
+        # 1.9.0). The pointer blocker stopped a touch on a link, but each link
+        # is a semantics node of its own whose action TalkBack's double tap
+        # still called (measured, API 35 emulator). canTap and enabled are the
+        # node's own tap and state, not its links'; they are not read here.
+        def self.links_enabled_expression(json_data)
+          tap = JsonUIShared::TapAccessibility
+          return 'false' if tap.stopped?(json_data)
+
+          gates = tap.interaction_gates(json_data).map { |g| boolean_expression(g) }.compact.uniq
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+          return gates.first if gates.size == 1
+
+          gates.map { |g| conjunct(g) }.join(' && ')
+        end
+
+        # A condition as one operand of `&&`: as it is when it is one already
+        # (a parenthesised whole, or a member access), else parenthesised.
+        def self.conjunct(expr)
+          return expr if expr.match?(/\A!?[\w.]+\z/)
+
+          depth = 0
+          closes_at_end = expr.start_with?('(') && expr.each_char.with_index.all? do |ch, i|
+            depth += 1 if ch == '('
+            depth -= 1 if ch == ')'
+            depth.positive? || i == expr.length - 1
+          end
+          closes_at_end ? expr : "(#{expr})"
+        end
+
+        # userInteractionEnabled — blocks touches for this node AND its
+        # descendants, which is what UIKit's flag does and what
+        # `.allowsHitTesting(false)` does on iOS. Compose has no such modifier, so
+        # the events are consumed in the Initial pass, before any child sees
+        # them. The same pass build_long_pressable already uses.
+        def self.build_interaction_blocker(json_data, required_imports = nil)
+          expr = boolean_expression(json_data['userInteractionEnabled'])
+          return [] if expr.nil?
+
+          required_imports&.add(:interaction_blocker)
+          consume = <<~KOTLIN.rstrip
+            awaitPointerEventScope {
+                while (true) {
+                    awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                }
+            }
+          KOTLIN
+
+          # A literal `false` is decided here, not at runtime: emitting
+          # `if (!(false))` would trip the Kotlin "condition is always true"
+          # warning, and the kjui build gate tolerates zero warnings.
+          if expr == 'false'
+            return [".pointerInput(Unit) {\n#{indent_block(consume, 1)}\n}"]
+          end
+
+          [".pointerInput(#{expr}) {\n    if (!(#{expr})) {\n#{indent_block(consume, 2)}\n    }\n}"]
+        end
+
+        def self.indent_block(text, levels)
+          pad = '    ' * levels
+          text.split("\n").map { |line| line.empty? ? line : pad + line }.join("\n")
+        end
+
+        # `enabled` — declared boolean|binding on `common`, so it may appear on
+        # any node, and the Compose codegen read it on none of them: a View with
+        # `enabled: "@{x}"` stayed clickable. Returns the Kotlin boolean
+        # expression, or nil when the attribute is absent or literally true
+        # (which is the default and needs no gate).
+        def self.enabled_expression(json_data)
+          boolean_expression(json_data['enabled'])
+        end
+
+        # A boolean|binding attribute as a Kotlin expression. `true` yields nil:
+        # it is the default for every one of these gates, so emitting it would
+        # only add noise.
+        # The bound branch used to be `data.#{$1}` — the inner expression
+        # spliced in verbatim, so `@{on ?? true}` emitted `data.on ?? true`.
+        # `??` is not Kotlin, and no validator rule fires here: only
+        # attributes DECLARED `binding_direction: "two-way"` are checked for a
+        # complex expression, and `enabled` is not one of them. Measured on
+        # Button / Slider / TextField before the fix (plan 49 lane C, the
+        # audit the "the validator rejects it anyway" claim did not survive).
+        def self.boolean_expression(value)
+          # ABSENT is not the same as `false` here: an absent flag means "no
+          # gate at all", while a declared `false` means "gate, permanently
+          # shut". BoundValue#bool folds both into :off, so absence is checked
+          # before asking it.
+          return nil if value.nil?
+
+          state = BoundValue.bool(value)
+          case state
+          when :on then nil     # the default for every gate that calls this
+          when :off then 'false'
+          else state
+          end
+        end
+
+        # A click-gated node is still `enabled` in the a11y tree, and the a11y
+        # tree is the only thing a UI test can observe (`assert: "disabled"`
+        # reads it). The check lives inside the semantics lambda so a binding
+        # needs no conditional Modifier.
+        def self.build_disabled_semantics(json_data, enabled, required_imports)
+          return [] if enabled.nil?
+
+          required_imports&.add(:semantics_disabled)
+          return [".semantics { disabled() }"] if enabled == 'false'
+
+          [".semantics { if (!#{enabled}) disabled() }"]
+        end
+
+        # onLongPress (common attribute, platform swift/kotlin) → long-press
+        # gesture modifier. Mirrors the dynamic fix
+        # (ModifierBuilder.applyLongPressable, KotlinJsonUI 2.9.2):
+        #
+        # `Modifier.pointerInput { detectTapGestures(onLongPress) }` does NOT
+        # work on components with an inner clickable (Button's own .clickable,
+        # or the .clickable emitted after this modifier) — the inner handler
+        # consumes the down event in the Main pass and awaitFirstDown
+        # (requireUnconsumed = true) starves. combinedClickable on Button's
+        # modifier races the same way. Instead the detector watches the
+        # Initial pass, which sees every gesture before any inner handler;
+        # when the press outlives the long-press timeout it fires the handler
+        # and consumes the remaining events so the inner onClick is cancelled.
+        #
+        # `pointerInput(data)` keys the gesture coroutine on the data holder
+        # so a rebuilt handler set restarts it with fresh closures — same
+        # contract as the dynamic pointerInput(handler, data) keys.
+        #
+        # Handler resolution follows camelCase onClick conventions:
+        # @{binding} → get_event_handler_invocation (data-definition aware),
+        # plain name → data.<name>?.invoke().
+        # The gate a node's own long press, pan and pinch obey:
+        # userInteractionEnabled and `enabled`, joined — either false stops
+        # every handler of the node (the tap rule reads the same: a disabled
+        # long press does not operate). nil: no gate; 'false': shut.
+        #
+        # And the userInteractionEnabled of every node around it (the tap
+        # rule's `_tapStopped` / `_tapGates`, which annotate! writes on each
+        # node with a handler): the detectors take their first down with
+        # `requireUnconsumed = false` in the Initial pass, so the blocker of a
+        # node around them — which consumes in that same pass — did not stop
+        # them (read, not measured on a device).
+        def self.gesture_gate(json_data)
+          return 'false' if around_stopped?(json_data)
+
+          gates = around_gates(json_data).map { |g| boolean_expression(g) }
+          gates += [boolean_expression(json_data['userInteractionEnabled']), enabled_expression(json_data)]
+          gates = gates.compact.uniq
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+
+          gates.join(' && ')
+        end
+
+        # A node around this one has `userInteractionEnabled: false`.
+        def self.around_stopped?(json_data)
+          json_data[JsonUIShared::TapAccessibility::STOPPED_KEY] == true
+        end
+
+        # The bound userInteractionEnabled of the nodes around this one.
+        def self.around_gates(json_data)
+          gates = json_data[JsonUIShared::TapAccessibility::GATES_KEY]
+          gates.is_a?(Array) ? gates : []
+        end
+
+        def self.build_long_pressable(json_data, required_imports = nil)
+          handler = json_data['onLongPress']
+          return [] unless handler
+
+          # The detector watches the Initial pass from outside the node's
+          # other modifiers, so neither build_interaction_blocker nor the
+          # clickable's `enabled` stopped it: it fired under
+          # `userInteractionEnabled: false` and under `enabled: false`
+          # (measured, API 35 emulator, conformance-host
+          # InteractionGateProbeTest). gesture_gate: `false` emits no long
+          # press; a binding gates it where it fires.
+          interaction = gesture_gate(json_data)
+          return [] if interaction == 'false'
+
+          required_imports&.add(:long_press_gesture)
+          view_id = view_id(json_data)
+          handler_call = if is_binding?(handler)
+                           get_event_handler_invocation(handler, view_id, nil)
+                         else
+                           get_event_handler_call(handler, is_camel_case: true, view_id: view_id)
+                         end
+
+          gesture = <<~KOTLIN.rstrip
+            .pointerInput(data) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val longPressed = try {
+                        withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                            var event: PointerEvent
+                            do {
+                                event = awaitPointerEvent(PointerEventPass.Initial)
+                            } while (event.changes.any { it.pressed })
+                        }
+                        false
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        true
+                    }
+                    if (longPressed#{interaction ? " && #{interaction}" : ''}) {
+                        #{handler_call}
+                        var event: PointerEvent
+                        do {
+                            event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.forEach { it.consume() }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
+            }
+          KOTLIN
+          [gesture]
+        end
+
+        # Whether the SSoT declares `attr` (a common attribute) not to reach
+        # this node's type — `notApplicableTo`, resolved as the validator
+        # resolves it (EditText / Input are TextField). One reader of the
+        # declaration: the build's warning and this emitter's silence agree.
+        def self.declared_not_applicable?(attr, json_data)
+          @not_applicable_validator ||= Core::AttributeValidator.new(:compose)
+          definition = @not_applicable_validator.definitions.dig('common', attr)
+          return false unless definition.is_a?(Hash)
+
+          !@not_applicable_validator.send(:not_applicable_reason, definition, json_data['type'].to_s).nil?
+        end
+
+        # onPan (common attribute) → drag gesture. The handler fires on every
+        # drag event with the cumulative translation since the gesture began
+        # (an Offset — accumulated from per-event deltas so the payload matches
+        # SwiftUI's DragGesture.Value.translation). Declaring onPan means this
+        # node owns drags: detectDragGestures consumes them, so a surrounding
+        # scroll container will not also scroll from touches on this node —
+        # same trade a native drag handler makes.
+        #
+        # Handler resolution is data-definition aware (get_event_handler_invocation):
+        # () -> Unit stays bare, (Offset) — optionally after a String id —
+        # receives the payload.
+        def self.build_pannable(json_data, required_imports = nil)
+          handler = json_data['onPan']
+          return [] unless handler && is_binding?(handler)
+          # A type the SSoT declares onPan does not reach (TextField, its
+          # synonyms, TextView, Slider: the component's own drag takes the
+          # gesture) gets no pan — the build names it instead, in the words
+          # every face prints (ruling 2026-10-03). A TextView's pan was wired
+          # here and called on Android alone; the faces now agree.
+          return [] if declared_not_applicable?('onPan', json_data)
+
+          # gesture_gate: `false` emits no pan; a binding gates the call.
+          interaction = gesture_gate(json_data)
+          return [] if interaction == 'false'
+
+          required_imports&.add(:pan_gesture)
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'total')
+          handler_call = "if (#{interaction}) #{handler_call}" if interaction
+
+          gesture = <<~KOTLIN.rstrip
+            .pointerInput(data) {
+                var total = Offset.Zero
+                detectDragGestures(
+                    onDragStart = { total = Offset.Zero },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        total += dragAmount
+                        #{handler_call}
+                    }
+                )
+            }
+          KOTLIN
+          [gesture]
+        end
+
+        # onPinch (common attribute) → pinch/zoom gesture. The handler fires
+        # with the cumulative scale factor since the gesture began (Float,
+        # matching MagnifyGesture.Value.magnification on iOS). A raw
+        # awaitEachGesture loop rather than detectTransformGestures because the
+        # scale must reset per gesture and detectTransformGestures has no
+        # gesture-start hook. calculateZoom() is 1f for single-pointer events,
+        # so taps and one-finger drags pass through untouched (onPan and
+        # onClick on the same node keep working).
+        def self.build_pinchable(json_data, required_imports = nil)
+          handler = json_data['onPinch']
+          return [] unless handler && is_binding?(handler)
+
+          # gesture_gate: `false` emits no pinch; a binding gates the call.
+          # (It reads the pointers in the Main pass without asking whether
+          # they were consumed, so build_interaction_blocker did not stop it —
+          # read, not measured: a pinch needs two pointers.)
+          interaction = gesture_gate(json_data)
+          return [] if interaction == 'false'
+
+          required_imports&.add(:pinch_gesture)
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'scale', value_type: 'Float')
+          handler_call = "if (#{interaction}) #{handler_call}" if interaction
+
+          gesture = <<~KOTLIN.rstrip
+            .pointerInput(data) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var scale = 1f
+                    var event: PointerEvent
+                    do {
+                        event = awaitPointerEvent()
+                        val zoom = event.calculateZoom()
+                        if (zoom != 1f) {
+                            scale *= zoom
+                            event.changes.forEach { it.consume() }
+                            #{handler_call}
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+          KOTLIN
+          [gesture]
+        end
+
+        # The seven alignment flags are declared `["boolean", "binding"]` in the
+        # SSoT, and this method used to read them with plain Ruby truthiness —
+        # so `alignTop: "@{flag}"` was a non-empty String, i.e. permanently ON
+        # (plan 49 lane C, 7 of the 18 `bound-frozen`).
+        #
+        # The decision tree is a pure function of those seven booleans, so it
+        # is expressed once, as a priority-ordered list, and evaluated in one
+        # of two modes (BoundValue#priority_modifier):
+        #
+        #   * every flag static  -> folded in Ruby, first match wins. This is
+        #     the same answer the old if/elsif chain gave, character for
+        #     character.
+        #   * any flag bound     -> the SAME list becomes a Kotlin `when`,
+        #     spliced in with `.then(...)`. `Modifier.align` stays resolvable
+        #     because the expression is evaluated at the call site, inside the
+        #     surrounding Row/Column/BoxScope content lambda.
+        def self.build_alignment(json_data, required_imports = nil, parent_type = nil)
+          top = BoundValue.bool(json_data['alignTop'])
+          bottom = BoundValue.bool(json_data['alignBottom'])
+          left = BoundValue.bool(json_data['alignLeft'])
+          right = BoundValue.bool(json_data['alignRight'])
+          center_h = BoundValue.bool(json_data['centerHorizontal'])
+          center_v = BoundValue.bool(json_data['centerVertical'])
+          center_both = BoundValue.bool(json_data['centerInParent'])
+
+          modifiers =
+            case parent_type
+            when 'ScopeFree'
+              build_scope_free_alignment(top, bottom, left, right, center_h, center_v, center_both)
+            when 'Row'
+              # For Row, only vertical alignment is allowed
+              [BoundValue.priority_modifier([
+                [top, '.align(Alignment.Top)'],
+                [bottom, '.align(Alignment.Bottom)'],
+                [center_v, '.align(Alignment.CenterVertically)']
+              ])]
+            when 'Column'
+              # For Column, only horizontal alignment is allowed
+              [BoundValue.priority_modifier([
+                [left, '.align(Alignment.Start)'],
+                [right, '.align(Alignment.End)'],
+                [center_h, '.align(Alignment.CenterHorizontally)']
+              ])]
+            when 'Box'
+              # For Box and other containers, full alignment options
+              [BoundValue.priority_modifier(
+                box_alignment_pairs(top, bottom, left, right, center_h, center_v, center_both)
+              ), *build_center_margin_offset(json_data, required_imports)]
+              # No default TopStart - let parent's contentAlignment handle it
+            else
+              []
+            end.compact
+
+          # A runtime `when` can carry BiasAlignment in ANY of its arms, so the
+          # import follows the emitted text rather than the branch taken.
+          if required_imports && modifiers.any? { |m| m.include?('BiasAlignment') }
+            required_imports.add(:bias_alignment)
+          end
+
+          modifiers
+        end
+
+        # Scope-free emit context (no surrounding RowScope/ColumnScope/BoxScope).
+        # Used by the file-scope responsive helper composables (see
+        # compose_builder#generate_responsive_container) — Modifier.align(...)
+        # is a *Scope-receiver-bound* extension, so it doesn't resolve here.
+        # Translate centering to scope-independent equivalents.
+        #
+        # `centerInParent` short-circuited both axes in the original; folding it
+        # in as the top branch of each axis says the same thing without needing
+        # the outer branch.
+        def self.build_scope_free_alignment(top, bottom, left, right, center_h, center_v, center_both)
+          # Horizontal axis. centerHorizontal beats align-left/right; the
+          # align-both case (left AND right) collapses to center to match
+          # the SwiftUI side and the original Android XML semantics.
+          horizontal = BoundValue.priority_modifier([
+            [center_both, '.wrapContentWidth(Alignment.CenterHorizontally)'],
+            [center_h, '.wrapContentWidth(Alignment.CenterHorizontally)'],
+            [BoundValue.all_of(left, right), '.wrapContentWidth(Alignment.CenterHorizontally)'],
+            [left, '.wrapContentWidth(Alignment.Start)'],
+            [right, '.wrapContentWidth(Alignment.End)']
+          ])
+          # Vertical axis. Same precedence.
+          vertical = BoundValue.priority_modifier([
+            [center_both, '.wrapContentHeight(Alignment.CenterVertically)'],
+            [center_v, '.wrapContentHeight(Alignment.CenterVertically)'],
+            [BoundValue.all_of(top, bottom), '.wrapContentHeight(Alignment.CenterVertically)'],
+            [top, '.wrapContentHeight(Alignment.Top)'],
+            [bottom, '.wrapContentHeight(Alignment.Bottom)']
+          ])
+          [horizontal, vertical]
+        end
+
+        # The BoxScope decision tree, in the original priority order. `hb`/`vb`
+        # are the both-direction constraints that mean "centre on that axis".
+        def self.box_alignment_pairs(top, bottom, left, right, center_h, center_v, center_both)
+          hb = BoundValue.all_of(left, right)
+          vb = BoundValue.all_of(top, bottom)
+
+          [
+            # Both horizontal and vertical constraints - center completely
+            [BoundValue.all_of(hb, vb), '.align(Alignment.Center)'],
+            # Center horizontally, align top / bottom
+            [BoundValue.all_of(hb, top), '.align(BiasAlignment(0f, -1f))'],
+            [BoundValue.all_of(hb, bottom), '.align(BiasAlignment(0f, 1f))'],
+            # Just center horizontally
+            [hb, '.align(BiasAlignment(0f, 0f))'],
+            # Center vertically, align left / right
+            [BoundValue.all_of(vb, left), '.align(Alignment.CenterStart)'],
+            [BoundValue.all_of(vb, right), '.align(Alignment.CenterEnd)'],
+            # Just center vertically
+            [vb, '.align(BiasAlignment(0f, 0f))'],
+            [BoundValue.all_of(top, left), '.align(Alignment.TopStart)'],
+            [BoundValue.all_of(top, right), '.align(Alignment.TopEnd)'],
+            [BoundValue.all_of(bottom, left), '.align(Alignment.BottomStart)'],
+            [BoundValue.all_of(bottom, right), '.align(Alignment.BottomEnd)'],
+            # TopCenter / BottomCenter don't exist in BoxScope, use BiasAlignment
+            [BoundValue.all_of(top, center_h), '.align(BiasAlignment(0f, -1f))'],
+            [BoundValue.all_of(bottom, center_h), '.align(BiasAlignment(0f, 1f))'],
+            [BoundValue.all_of(left, center_v), '.align(Alignment.CenterStart)'],
+            [BoundValue.all_of(right, center_v), '.align(Alignment.CenterEnd)'],
+            [center_both, '.align(Alignment.Center)'],
+            # Handle single alignments for Box
+            [top, '.align(BiasAlignment(-1f, -1f))'],
+            [bottom, '.align(BiasAlignment(-1f, 1f))'],
+            [left, '.align(BiasAlignment(-1f, -1f))'],
+            [right, '.align(BiasAlignment(1f, -1f))'],
+            [center_h, '.align(BiasAlignment(0f, -1f))'],
+            [center_v, '.align(BiasAlignment(-1f, 0f))']
+          ]
+        end
+        
+        # The padding a ConstraintLayout child draws AROUND its declared box
+        # when its margins are applied as padding — a child with no
+        # positioning constraint of its own (ConstraintLayoutComponent strips
+        # the margins of the others and consumes them in linkTo()): per edge,
+        # the dp terms build_margins adds on that edge. Its createRef() box
+        # includes them, so a sibling aligned to it must add the matching
+        # term to reach the box it DRAWS. Until jsonui-cli 1.9.15 it did not:
+        # an anchor with topMargin / leftMargin 120 had its ref at 0..170,
+        # and a sibling aligned to its top, left or centre landed at 0 / 85
+        # while iOS and web put it at 120 / 145 (ticket
+        # kjui-relative-align-view-measures-the-anchor-with-its-margin). The
+        # far edges were right by accident: the margin sits on the near side.
+        def self.margin_padding_terms(json_data)
+          terms = { top: [], bottom: [], start: [], end: [] }
+          return terms unless json_data.is_a?(Hash)
+
+          add = lambda do |edge, value|
+            next if value.nil? || (value.is_a?(Numeric) && value.zero?)
+
+            terms[edge] << BoundValue.dp(value)
+          end
+          margins = json_data['margins']
+          if margins.is_a?(Array) && margins.length == 4
+            add.call(:top, margins[0]); add.call(:end, margins[1])
+            add.call(:bottom, margins[2]); add.call(:start, margins[3])
+          elsif margins.is_a?(Array) && margins.length == 1
+            terms.each_key { |edge| add.call(edge, margins[0]) }
+          elsif !margins.nil? && !margins.is_a?(Array)
+            terms.each_key { |edge| add.call(edge, margins) }
+          end
+          { 'topMargin' => :top, 'bottomMargin' => :bottom, 'leftMargin' => :start, 'rightMargin' => :end,
+            'startMargin' => :start, 'endMargin' => :end }.each do |key, edge|
+            next unless json_data[key]
+            next if json_data[key].is_a?(Numeric) && json_data[key].zero?
+
+            terms[edge] << margin_value(json_data[key])
+          end
+          terms
+        end
+
+        # `, margin = <sum>` for a linkTo, or '' when nothing is added.
+        def self.link_margin(terms)
+          terms = terms.compact.reject(&:empty?)
+          return '' if terms.empty?
+
+          ", margin = #{terms.length == 1 ? terms.first : "(#{terms.join(' + ')})"}"
+        end
+
+        # anchor_paddings: id => margin_padding_terms of the siblings whose
+        # margins are drawn as padding (ConstraintLayoutComponent passes them).
+        #
+        # refs: the names this ConstraintLayout declares with createRef(), or
+        # nil (not checked). A target not among them is not a sibling — a
+        # parent, a sibling's child, another container's element, an id
+        # nothing carries — and linking to it is an unresolved reference
+        # that does not compile; `jui build` names it as an ERROR
+        # ([relative-constraints], ticket jui-relative-constraint-target-
+        # not-a-sibling), and the link is left out so the project still
+        # compiles, as iOS and the web drop the constraint.
+        #
+        # margins_in_links: the child's margin keys were stripped for its
+        # links (ConstraintLayoutComponent, a positioned child) — its own
+        # margin is drawn by the links alone: an align*View margin pushes
+        # inward, as iOS and the web draw it, and the margin of an axis no
+        # link places is kept by linking that axis to the parent (ticket
+        # kjui-align-to-view-in-visibility-wrapper-and-margin-sign; measured
+        # by triage support 2 on four faces). Off (the SafeAreaView path,
+        # where every child draws its margins as padding too), the links are
+        # as they were.
+        def self.build_relative_positioning(json_data, anchor_paddings = {}, refs: nil, margins_in_links: false)
+          # These attributes require ConstraintLayout
+          # They generate constraint references instead of modifiers
+          constraints = []
+
+          # Extract margins for use in constraints (with binding support)
+          top_margin = constraint_margin_value(json_data['topMargin'])
+          bottom_margin = constraint_margin_value(json_data['bottomMargin'])
+          start_margin = constraint_margin_value(json_data['leftMargin'])
+          end_margin = constraint_margin_value(json_data['rightMargin'])
+
+          if json_data['margins'] && json_data['margins'].is_a?(Array) && json_data['margins'].length == 4
+            top_margin = json_data['margins'][0].to_s + ".dp" unless json_data['topMargin']
+            end_margin = json_data['margins'][1].to_s + ".dp" unless json_data['rightMargin']
+            bottom_margin = json_data['margins'][2].to_s + ".dp" unless json_data['bottomMargin']
+            start_margin = json_data['margins'][3].to_s + ".dp" unless json_data['leftMargin']
+          end
+
+          own = ->(m) { has_constraint_margin?(m) ? m : nil }
+          pulled = if margins_in_links
+                     own
+                   else
+                     ->(m) { has_constraint_margin?(m) ? "(-#{m})" : nil }
+                   end
+          pad = ->(anchor, edge) { (anchor_paddings[anchor] || {})[edge] || [] }
+
+          # Relative to other views: the child's own margin is the gap, and
+          # the anchor's margin on the facing edge is INSIDE its ref box, so
+          # it is subtracted — `bottom.linkTo(a.top, margin = m)` puts the
+          # bottom at a.top - m, and the drawn top is a.top + the margin.
+          neg = ->(terms) { terms.map { |t| negate_dp(t) } }
+          known = ->(target) { refs.nil? || refs.include?(target) }
+          if (a = json_data['alignTopOfView']) && known.(a)
+            constraints << "bottom.linkTo(#{a}.top#{link_margin([own.(bottom_margin), *neg.(pad.(a, :top))])})"
+          end
+
+          if (a = json_data['alignBottomOfView']) && known.(a)
+            constraints << "top.linkTo(#{a}.bottom#{link_margin([own.(top_margin), *neg.(pad.(a, :bottom))])})"
+          end
+
+          if (a = json_data['alignLeftOfView']) && known.(a)
+            constraints << "end.linkTo(#{a}.start#{link_margin([own.(end_margin), *neg.(pad.(a, :start))])})"
+          end
+
+          if (a = json_data['alignRightOfView']) && known.(a)
+            constraints << "start.linkTo(#{a}.end#{link_margin([own.(start_margin), *neg.(pad.(a, :end))])})"
+          end
+
+          # Align edges with other views: the anchor's drawn edge (its margin
+          # inward), then the child's own margin pulls it the expected way —
+          # linkTo's margin pushes away, so the own term is negated.
+          if (a = json_data['alignTopView']) && known.(a)
+            constraints << "top.linkTo(#{a}.top#{link_margin([*pad.(a, :top), pulled.(top_margin)])})"
+          end
+
+          if (a = json_data['alignBottomView']) && known.(a)
+            constraints << "bottom.linkTo(#{a}.bottom#{link_margin([*pad.(a, :bottom), pulled.(bottom_margin)])})"
+          end
+
+          if (a = json_data['alignLeftView']) && known.(a)
+            constraints << "start.linkTo(#{a}.start#{link_margin([*pad.(a, :start), pulled.(start_margin)])})"
+          end
+
+          if (a = json_data['alignRightView']) && known.(a)
+            constraints << "end.linkTo(#{a}.end#{link_margin([*pad.(a, :end), pulled.(end_margin)])})"
+          end
+
+          # Center with other views: between the anchor's drawn edges.
+          if (a = json_data['alignCenterVerticalView']) && known.(a)
+            constraints << "top.linkTo(#{a}.top#{link_margin(pad.(a, :top))})"
+            constraints << "bottom.linkTo(#{a}.bottom#{link_margin(pad.(a, :bottom))})"
+          end
+
+          if (a = json_data['alignCenterHorizontalView']) && known.(a)
+            constraints << "start.linkTo(#{a}.start#{link_margin(pad.(a, :start))})"
+            constraints << "end.linkTo(#{a}.end#{link_margin(pad.(a, :end))})"
+          end
+
+          # Parent constraints
+          # For parent alignment, margins should work normally as offsets
+          if json_data['alignTop']
+            margin = has_constraint_margin?(top_margin) ? ", margin = #{top_margin}" : ""
+            constraints << "top.linkTo(parent.top#{margin})"
+          end
+
+          if json_data['alignBottom']
+            margin = has_constraint_margin?(bottom_margin) ? ", margin = #{bottom_margin}" : ""
+            constraints << "bottom.linkTo(parent.bottom#{margin})"
+          end
+
+          if json_data['alignLeft']
+            margin = has_constraint_margin?(start_margin) ? ", margin = #{start_margin}" : ""
+            constraints << "start.linkTo(parent.start#{margin})"
+          end
+
+          if json_data['alignRight']
+            margin = has_constraint_margin?(end_margin) ? ", margin = #{end_margin}" : ""
+            constraints << "end.linkTo(parent.end#{margin})"
+          end
+          
+          # A centre's links carry the child's margins when they are drawn by
+          # the links (margins_in_links: a child that also has a positioning
+          # constraint, its margin keys stripped) — the box it is centred by,
+          # and a wrapContent parent's size, include them as on iOS; the
+          # offset ConstraintLayoutComponent adds moves the content back to
+          # the centre (ModifierBuilder.build_center_margin_offset).
+          center_margin = ->(m) { margins_in_links && has_constraint_margin?(m) ? ", margin = #{m}" : "" }
+          if json_data['centerHorizontal'] || json_data['centerInParent']
+            constraints << "start.linkTo(parent.start#{center_margin.(start_margin)})"
+            constraints << "end.linkTo(parent.end#{center_margin.(end_margin)})"
+          end
+
+          if json_data['centerVertical'] || json_data['centerInParent']
+            constraints << "top.linkTo(parent.top#{center_margin.(top_margin)})"
+            constraints << "bottom.linkTo(parent.bottom#{center_margin.(bottom_margin)})"
+          end
+
+          if margins_in_links
+            horizontal = constraints.any? { |c| c.start_with?('start.', 'end.') }
+            vertical = constraints.any? { |c| c.start_with?('top.', 'bottom.') }
+            constraints << "start.linkTo(parent.start, margin = #{start_margin})" if !horizontal && has_constraint_margin?(start_margin)
+            constraints << "top.linkTo(parent.top, margin = #{top_margin})" if !vertical && has_constraint_margin?(top_margin)
+          end
+
+          constraints
+        end
+
+        # `.offset(...)` that centres a child on the axis it centres itself
+        # on (centerHorizontal / centerVertical / centerInParent), or [].
+        # Its margins stay drawn as padding, so the box it is centred by — and
+        # a wrapContent parent's size — includes them, as on iOS and the
+        # Android Dynamic renderer; the padding puts the content off centre by
+        # half the difference of the two margins on that axis, and this moves
+        # it back. The declaration (attribute_semantics margins.offsetModel)
+        # gives a margin no effect on the position a center places. Drawn as
+        # padding alone it moved the element by half the margin (ticket
+        # kjui-align-to-view-in-visibility-wrapper-and-margin-sign; measured
+        # by triage support 2 on four faces, wrapContent parents included).
+        # Only a child's own center declaration — a parent's gravity is not
+        # it. `offset`, not `absoluteOffset`: the padding is start/end, and
+        # mirrors under RTL with it.
+        def self.build_center_margin_offset(json_data, required_imports = nil)
+          values = center_margin_offsets(json_data)
+          return [] if values.empty?
+
+          required_imports&.add(:offset)
+          [".offset(#{values.map { |axis, value| "#{axis} = #{value}" }.join(', ')})"]
+        end
+
+        # {x:, y:} — the Dp expression of each axis build_center_margin_offset
+        # moves, only the axes it moves. A sibling aligned to the child adds
+        # them to reach the box it draws (ConstraintLayoutComponent).
+        def self.center_margin_offsets(json_data)
+          return {} unless json_data.is_a?(Hash)
+
+          both = BoundValue.bool(json_data['centerInParent'])
+          axes = { x: any_of(BoundValue.bool(json_data['centerHorizontal']), both),
+                   y: any_of(BoundValue.bool(json_data['centerVertical']), both) }
+          terms = margin_padding_terms(json_data)
+          {
+            x: half_difference(terms[:end], terms[:start]),
+            y: half_difference(terms[:bottom], terms[:top])
+          }.each_with_object({}) do |(axis, value), out|
+            state = axes[axis]
+            next if value.nil? || state == :off
+
+            out[axis] = state == :on ? value : "(if (#{state}) #{value} else 0.dp)"
+          end
+        end
+
+        # *terms* (margin_padding_terms) with the centre offset of
+        # *json_data* added: its drawn box moves by it, its ref box does not
+        # (an offset is applied after layout).
+        def self.with_center_margin_offset(terms, json_data)
+          offsets = center_margin_offsets(json_data)
+          return terms if offsets.empty?
+
+          out = terms.transform_values(&:dup)
+          if (x = offsets[:x])
+            out[:start] << x
+            out[:end] << negate_dp(x)
+          end
+          if (y = offsets[:y])
+            out[:top] << y
+            out[:bottom] << negate_dp(y)
+          end
+          out
+        end
+
+        # -value as a Dp expression; a negative literal loses its sign
+        # rather than becoming `--5.dp` (Kotlin's decrement).
+        def self.negate_dp(value)
+          return value.delete_prefix('-') if value.start_with?('-') && value.match?(LITERAL_DP)
+
+          "(-#{value})"
+        end
+
+        def self.any_of(*states)
+          return :on if states.include?(:on)
+
+          dynamic = states.reject { |state| state == :off }
+          return :off if dynamic.empty?
+
+          dynamic.length == 1 ? dynamic.first : "(#{dynamic.join(' || ')})"
+        end
+
+        LITERAL_DP = /\A-?\d+(?:\.\d+)?\.dp\z/.freeze
+
+        # (far - near) / 2 as a Dp expression, or nil when it is zero.
+        def self.half_difference(far, near)
+          return nil if far.empty? && near.empty?
+
+          if (far + near).all? { |t| t.match?(LITERAL_DP) }
+            sum = ->(ts) { ts.sum { |t| t.delete_suffix('.dp').to_f } }
+            half = (sum.(far) - sum.(near)) / 2.0
+            return nil if half.zero?
+
+            return "#{half == half.to_i ? half.to_i : half}.dp"
+          end
+          side = ->(ts) { ts.empty? ? '0.dp' : (ts.length == 1 ? ts.first : "(#{ts.join(' + ')})") }
+          "((#{side.(far)} - #{side.(near)}) / 2)"
+        end
+
+        # is_root: when true, start the modifier chain from the caller's
+        # `modifier` (lowercase) parameter instead of a fresh `Modifier`.
+        # The generated *GeneratedView function signature exposes
+        # `modifier: Modifier = Modifier` to callers (e.g. for
+        # combinedClickable, weight, layout). Chaining from the parameter
+        # puts caller modifiers OUTSIDE the internal chain so they apply
+        # to the full element area (e.g. padding-inclusive). When
+        # `is_root` and the internal chain is empty we still emit a
+        # `modifier = modifier` clause so the caller's modifier is wired
+        # in — otherwise root composables with no internal modifiers
+        # would silently drop the caller's modifier.
+        def self.format(modifiers, depth, is_root: false)
+          return "" if modifiers.empty? && !is_root
+
+          base = is_root ? "modifier = modifier" : "modifier = Modifier"
+
+          if modifiers.empty?
+            return "\n" + indent(base, depth + 1)
+          end
+
+          # Check if first modifier is already "Modifier"
+          if modifiers[0] == "Modifier"
+            code = "\n" + indent(base, depth + 1)
+            # Skip the first "Modifier" and process the rest
+            modifiers[1..-1].each do |mod|
+              # indent(mod, 1) first so continuation lines of multi-line
+              # modifiers (e.g. the onLongPress pointerInput block) keep
+              # their relative indentation; identical output for the
+              # single-line case.
+              code += "\n" + indent(indent(mod, 1), depth + 1)
+            end
+          else
+            code = "\n" + indent(base, depth + 1)
+
+            # The inline shortcut is only valid for single-line modifiers;
+            # a multi-line modifier appended inline would lose the base
+            # indentation on its continuation lines.
+            if modifiers.length == 1 && modifiers[0].start_with?('.') && !modifiers[0].include?("\n")
+              code += modifiers[0]
+            else
+              modifiers.each do |mod|
+                code += "\n" + indent(indent(mod, 1), depth + 1)
+              end
+            end
+          end
+
+          code
+        end
+
+        # Build lifecycle event effects (onAppear/onDisappear)
+        # Returns a hash with :before (code before content) and :after (code after content)
+        def self.build_lifecycle_effects(json_data, depth, required_imports = nil)
+          result = { before: "", after: "" }
+
+          if json_data['onAppear'] && !(property = lifecycle_handler_name(json_data['onAppear'])).empty?
+            required_imports&.add(:launched_effect)
+
+            result[:before] += indent("// onAppear lifecycle event", depth)
+            result[:before] += "\n" + indent("LaunchedEffect(Unit) {", depth)
+            # As its closure is declared: `()` with nothing, `(String)` with the
+            # viewId (it was always `invoke()`).
+            result[:before] += "\n" + indent(get_event_handler_invocation(property, view_id(json_data), nil), depth + 1)
+            result[:before] += "\n" + indent("}", depth)
+            result[:before] += "\n"
+          end
+
+          if json_data['onDisappear'] && !(property = lifecycle_handler_name(json_data['onDisappear'])).empty?
+            required_imports&.add(:disposable_effect)
+
+            result[:before] += indent("// onDisappear lifecycle event", depth)
+            result[:before] += "\n" + indent("DisposableEffect(Unit) {", depth)
+            result[:before] += "\n" + indent("onDispose {", depth + 1)
+            result[:before] += "\n" + indent(get_event_handler_invocation(property, view_id(json_data), nil), depth + 2)
+            result[:before] += "\n" + indent("}", depth + 1)
+            result[:before] += "\n" + indent("}", depth)
+            result[:before] += "\n"
+          end
+
+          result
+        end
+
+        # The data name a lifecycle handler calls: `x`, `@{x}` and `x:` are all
+        # `x` ("" for a value that names none — nothing is called for it).
+        def self.lifecycle_handler_name(handler)
+          return '' unless handler.is_a?(String)
+
+          value = handler.strip
+          (value[/\A@\{(.*)\}\z/m, 1] || value).delete(':').strip
+        end
+
+        # Check if component has lifecycle events
+        def self.has_lifecycle_events?(json_data)
+          json_data['onAppear'] || json_data['onDisappear']
+        end
+
+        # Convert event handler to method call
+        # onClick -> binding format only: @{functionName} -> data.functionName?.invoke()
+        #
+        # With `view_id:` each name is called as its closure is declared
+        # (get_event_handler_invocation: `()` with nothing, `(String)` with
+        # the viewId); it was always `invoke()`, so a handler declared
+        # `(String)` on this path did not compile.
+        def self.get_event_handler_call(handler, is_camel_case: false, view_id: nil)
+          # `onclick` is declared `["string", "array"]`, and the array names
+          # several handlers to call in the order written. This called
+          # `match?` straight on the value, so an array did not produce wrong
+          # output — it raised NoMethodError and took the whole android
+          # generation down with it, for a shape the SSoT allows.
+          #
+          # The semantics are not a new decision: the ios converter already
+          # implements them (`build_selector_click_lines` — "a bare string, or
+          # an array of them to call in order"). Both call sites embed this in
+          # a Kotlin lambda body, so the calls are simply sequenced.
+          #
+          # A blank element names no method and is dropped
+          # (TapAccessibility.handler_values), so `["", "onOpen"]` calls onOpen
+          # only.
+          JsonUIShared::TapAccessibility.handler_values(handler).map do |name|
+            view_id ? get_event_handler_invocation(name, view_id, nil) : single_event_handler_call(name)
+          end.join('; ')
+        end
+
+        def self.single_event_handler_call(handler)
+          # Extract function name from binding format @{functionName}
+          match = handler.match(/^@\{(.+)\}$/)
+          method_name = match ? match[1] : handler
+          "data.#{method_name}?.invoke()"
+        end
+
+        # Generate event handler invocation code based on data section type definition
+        # @param handler [String] The event handler value from JSON (e.g., "@{onToggle}")
+        # @param view_id [String] The view's id attribute value
+        # @param value_expr [String] The Kotlin expression for the value (e.g., "it", "newValue")
+        # @return [String] The Kotlin code to invoke the handler
+        #
+        # Examples:
+        #   - If data section has `() -> Unit`: returns "data.onToggle?.invoke()"
+        #   - If data section has `(Event) -> Unit` or `(String, Boolean) -> Unit`:
+        #     returns "data.onToggle?.invoke(\"viewId\", it)"
+        # The viewId a handler is passed: the node's id, else its drawn type
+        # with the first letter lowercased and its position in the layout —
+        # JsonUIShared::LayoutPath.view_id (switch_0_1, selectBox_0_3; the
+        # Radio item's `radio_<path>` is the same form). It was a kind word
+        # (`switch`, `selectbox`, …) or nothing, so two id-less controls
+        # handed their handlers the same viewId.
+        def self.view_id(json_data)
+          JsonUIShared::LayoutPath.view_id(json_data)
+        end
+
+        # `value_type` is the Kotlin type of `value_expr` when the event's
+        # value is a platform number that differs from iOS's: Compose's Slider
+        # and the pinch's scale are Float where SwiftUI hands the same handler
+        # a Double (or a CGFloat, which Swift passes to a Double parameter).
+        # One declaration serves both faces, so a handler declared `(Double)`
+        # is given `value.toDouble()` here (handler_argument); it was given the
+        # Float and did not compile (ticket
+        # kjui-slider-on-value-change-passes-float-to-double-handler).
+        def self.get_event_handler_invocation(handler, view_id, value_expr, value_type: nil)
+          method_name = extract_binding_property(handler) || handler
+
+          # Look up the handler's type in data_definitions
+          data_def = ResourceResolver.data_definitions[method_name]
+          return "data.#{method_name}?.invoke()" unless data_def && data_def['class']
+
+          class_type = data_def['class'].to_s
+          id_literal = JsonUIShared::StringLiterals.kotlin(view_id)
+
+          # `Event` is the data model's placeholder for the platform's
+          # (viewId, value) pair (DataModelUpdater#finalize_data_property).
+          if class_type.include?('Event')
+            return value_expr.nil? ? "data.#{method_name}?.invoke(#{id_literal})" : "data.#{method_name}?.invoke(#{id_literal}, #{value_expr})"
+          end
+
+          # The call is the declared handler's shape — its parameter count —
+          # the shapes KotlinJsonUI Dynamic's resolveEventHandler accepts:
+          # none -> `()`; one -> the event's value when it has one, else the
+          # view id; two -> (view id, value). Through jsonui-cli 1.9.5 the shape
+          # was guessed from the spelling: a declaration starting `(String` was
+          # read as (viewId, value), so `(String) -> Void` on onTextChange got
+          # two arguments, and `(Any) -> Void` (onPan's payload) was outside
+          # the one-argument list and got none — neither compiled
+          # (kjui-text-change-callback-passes-the-id-to-a-one-parameter-handler,
+          # kjui-pan-callback-is-called-without-its-payload). Every shape that
+          # compiled then is called as it was.
+          params = handler_parameters(class_type)
+          return "data.#{method_name}?.invoke()" if params.nil? || params.empty?
+
+          if params.size == 1
+            value_expr ? "data.#{method_name}?.invoke(#{handler_argument(value_expr, value_type, params[0])})" : "data.#{method_name}?.invoke(#{id_literal})"
+          else
+            value_expr ? "data.#{method_name}?.invoke(#{id_literal}, #{handler_argument(value_expr, value_type, params[1])})" : "data.#{method_name}?.invoke(#{id_literal})"
+          end
+        end
+
+        # The event's value as the declared parameter takes it: a Float value
+        # for a `Double` / `Double?` parameter is converted (`.toDouble()`);
+        # anything else is passed as it is — `Float`, a `CGFloat` (written
+        # Float), `Any` take the Float itself, and a parameter no face's value
+        # fits (`Int`: iOS's Double does not convert either) is left for the
+        # compiler to name.
+        def self.handler_argument(value_expr, value_type, declared)
+          return value_expr unless value_type == 'Float' && declared
+
+          type = declared.sub(/\A[A-Za-z_]\w*\s*:\s*/, '') # a label (`value: Double`)
+          kotlin = KjuiTools::Core::TypeConverter.to_kotlin_type(type.strip, 'compose').to_s.delete_suffix('?')
+          kotlin == 'Double' ? "#{value_expr}.toDouble()" : value_expr
+        end
+
+        # The parameter list of a declared function type — `(String, Int) ->
+        # Void`, `((Bool) -> Void)?` — or nil when the class is not one.
+        def self.handler_parameters(class_type)
+          list = class_type[/\(\s*([^()]*?)\s*\)\s*->/, 1]
+          return nil if list.nil?
+
+          list.split(',').map(&:strip).reject(&:empty?)
+        end
+
+        # Check if handler is binding format (@{functionName})
+        def self.is_binding?(value)
+          value.is_a?(String) && value.match?(/^@\{.+\}$/)
+        end
+
+        # The handler named by an event attribute the SSoT declares with a
+        # "string" type (a Collection's onValueChange / onItemAppear, TabView
+        # onValueChange): '@{name}' or the bare name, both naming the data's
+        # closure; nil for anything else. Until jsonui-cli 1.9.6 these read the
+        # binding form only and dropped a bare name with no report (ticket
+        # bare-event-handler-is-dropped-without-a-warning).
+        def self.string_event_name(value)
+          return nil unless value.is_a?(String)
+          return value.match(/\A@\{([^}]+)\}\z/)&.captures&.first&.strip if value.start_with?('@{')
+
+          value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/) ? value.strip : nil
+        end
+
+        # Extract property name from binding expression
+        # "@{propertyName}" -> "propertyName"
+        def self.extract_binding_property(value)
+          return nil unless value.is_a?(String)
+          if value.match(/^@\{(.+)\}$/)
+            $1
+          else
+            value
+          end
+        end
+
+        # Convert margin value to Kotlin/Compose format for constraint linkTo() with binding support
+        # Returns nil for no margin, or the formatted value (e.g., "8.dp" or "data.margin.dp")
+        def self.constraint_margin_value(value)
+          return nil if value.nil?
+
+          if is_binding?(value)
+            # Same bypass process_dimension had: the hand-rolled emit ignored
+            # `??` and nullability. BoundValue is the canonical Dp emitter.
+            BoundValue.dp(value)
+          elsif value.is_a?(Numeric) && value > 0
+            "#{BoundValue.dp(value)}"
+          elsif value.is_a?(String)
+            # Try to parse as number
+            num = value.to_i
+            num > 0 ? "#{BoundValue.dp(num)}" : nil
+          else
+            nil
+          end
+        end
+
+        # Check if constraint margin value is present
+        def self.has_constraint_margin?(margin_value)
+          return false if margin_value.nil?
+          return true if margin_value.is_a?(String) && margin_value.length > 0
+          false
+        end
+
+        private
+
+        # Build border modifier with support for solid/dashed/dotted styles
+        def self.build_border_modifier(json_data, required_imports = nil, shape: nil)
+          # The width+color PAIR is what requests a border; neither half
+          # summons one on its own, and there is no default border colour.
+          # That is a recorded ruling, not an inference —
+          # `shared/core/attribute_semantics.json#semantics.border` carries it
+          # (2026-08-03 user ruling, superseding the transient gray-default of
+          # d2c8628, unified across toolchains in 3e87b96; re-measured
+          # 2026-08-04 at 0px on all three platforms). `borderStyle` alone
+          # likewise renders nothing: it styles a border the pair requested.
+          # The five `observable` entries are a machine gate — making any
+          # single declaration active turns `gate --cross-effect` red.
+          #
+          # NOTE: `TextField.borderStyle` is a DIFFERENT attribute (UIKit
+          # text-field chrome) and is outside this rule.
+          border_color = ResourceResolver.process_color(json_data['borderColor'], required_imports)
+          # The width used to be interpolated raw and suffixed with `.dp` at
+          # each use site — the canonical example of an emit that stops being
+          # a program once the width is bound. BoundValue returns the whole Dp
+          # expression, so the `.dp` moved inside it.
+          border_width = BoundValue.dp(json_data['borderWidth'])
+          border_style = json_data['borderStyle'] || 'solid'
+          if shape
+            border_shape = shape
+          elsif json_data['cornerRadius']
+            border_shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
+          else
+            # `RectangleShape` is in `androidx.compose.ui.graphics`, NOT the
+            # `androidx.compose.foundation.shape` namespace covered by
+            # `:shape`. Register a separate import key so the generated
+            # file actually resolves the reference.
+            required_imports&.add(:rectangle_shape)
+            border_shape = "RectangleShape"
+          end
+
+          case border_style
+          when 'dashed'
+            required_imports&.add(:dashed_border)
+            ".dashedBorder(#{border_width}, #{border_color}, #{border_shape})"
+          when 'dotted'
+            required_imports&.add(:dashed_border)
+            ".dottedBorder(#{border_width}, #{border_color}, #{border_shape})"
+          else # 'solid' or default
+            ".border(#{border_width}, #{border_color}, #{border_shape})"
+          end
+        end
+
+        # Process dimension value - handles data bindings and numeric values.
+        #
+        # This used to own its own binding branch (`data.#{$1}.dp`), which
+        # passed a `??` default through verbatim (`@{w ?? 10}` →
+        # `data.w ?? 10.dp`) and dereferenced nullable properties. It is a thin
+        # wrapper over BoundValue now — the only remaining job is the
+        # matchParent/wrapContent guard and the "absent means 0.dp" contract
+        # its callers rely on.
+        def self.process_dimension(value)
+          if value.is_a?(String) && (value == 'matchParent' || value == 'wrapContent')
+            return nil
+          end
+
+          BoundValue.dp(value) || '0.dp'
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,3245 @@
+#!/usr/bin/env ruby
+
+require_relative 'base_view_converter'
+require_relative 'responsive_helper'
+require_relative '../../core/responsive_resolver'
+require_relative '../../core/string_literals'
+require_relative '../../core/logger'
+require_relative '../../core/attribute_types'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      class CollectionConverter < BaseViewConverter
+        def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil, data_properties = [])
+          super(component, indent_level, action_manager, binding_registry)
+          @data_properties = data_properties || []
+        end
+
+        # Top-level entry: when a `responsive` block is present, regenerate the
+        # collection per size-class branch with the merged attrs. Collection is
+        # not a generic container (no children closure), so view_converter's
+        # responsive wrapper can't host it — we have to handle it locally.
+        def convert
+          if JsonUIShared::ResponsiveResolver.responsive?(@component)
+            return convert_responsive
+          end
+
+          convert_non_responsive
+        end
+
+        # Resolve the `columns` attribute into its Swift emit form. A literal
+        # int returns `{ expr: "5", literal: 5, is_binding: false }`; a
+        # `@{prop}` binding returns `{ expr: "data.prop", literal: nil,
+        # is_binding: true }`. The caller interpolates `expr` into
+        # `Array(repeating: ..., count: ...)` and uses `is_binding` to
+        # suppress compile-time fast-paths (single-column list, etc.) that
+        # require a known column count.
+        def columns_info
+          # itemWeight has its say first (mirror of the dynamic face's
+          # effectiveGridColumns): a weight is a per-ITEM width, and in a
+          # spacing-0 grid "each item is W×w wide" IS "round(1/w) flexible
+          # columns" — so the weight wins over a conflicting `columns`
+          # declaration, the same way the UIKit layout
+          # (SJUICollectionView.getCollectionViewLayout) never consults
+          # `columns` for item sizing.
+          if (count = item_weight_count)
+            return { expr: count.to_s, literal: count, is_binding: false }
+          end
+          value = @component['columns']
+          if value.is_a?(String) && is_binding?(value)
+            { expr: "data.#{extract_binding_property(value)}", literal: nil, is_binding: true }
+          else
+            literal = (value || 1).to_i
+            { expr: literal.to_s, literal: literal, is_binding: false }
+          end
+        end
+
+        # `itemWeight` as a column count. Declared `number` with no binding
+        # form; 0 < w <= 1, anything else inert (same guard the dynamic face
+        # and the retired content-level emit used).
+        def item_weight_count
+          weight = @component['itemWeight']
+          return nil if weight.nil?
+
+          value = weight.to_f
+          return nil unless value > 0 && value <= 1.0
+
+          (1.0 / value).round
+        end
+
+        # True when the runtime column count is unknown or > 1. Used to gate
+        # the grid emit path; binding-form columns always take the grid path
+        # so a runtime resolution to 5/3 doesn't tear the layout structure.
+        def columns_is_multi?
+          info = columns_info
+          info[:is_binding] || (info[:literal] && info[:literal] > 1)
+        end
+
+        # Swift expression for the column count of one section. A literal
+        # `section['columns']` override emits as an Int literal. Absent or
+        # nil falls back to the parent Collection's `columns` expression
+        # (literal or `data.<prop>` binding).
+        def section_columns_expr(section)
+          if section['columns']
+            section['columns'].to_i.to_s
+          else
+            columns_info[:expr]
+          end
+        end
+
+        # A section's own `columns` when it declares more than one, else nil.
+        # Declared (Collection.sections.items.properties.columns), so it is
+        # honoured where the Collection itself is one column too: the list,
+        # lazy and non-lazy single-column routes drew such a section one cell
+        # per row (measured on a22b5182, 2026-09-26).
+        def section_own_grid_columns(section)
+          columns = section['columns']
+          columns.is_a?(Numeric) && columns.to_i > 1 ? columns.to_i : nil
+        end
+
+        # A grid's spacing, one reading for every grid this converter draws
+        # (attribute_definitions.json Collection: columnSpacing "Spacing
+        # between columns", lineSpacing "Spacing between rows", itemSpacing
+        # "used for both grid spacing and list item spacing"): between cells
+        # columnSpacing, else itemSpacing; between rows lineSpacing, else
+        # itemSpacing. The non-lazy grid used columnSpacing between rows as
+        # well until 1.9.0.
+        def grid_cell_spacing
+          @component['columnSpacing'] || @component['itemSpacing'] || 0
+        end
+
+        def grid_row_spacing
+          line_spacing_value || @component['itemSpacing'] || 0
+        end
+
+        # A horizontal Collection (the orchestrator's ruling, 2026-09-26, the rule SwiftJsonUI
+        # Dynamic dde0628 draws): `columns` is its number of lanes — the SSoT
+        # names LazyHorizontalGrid / LazyHGrid for Collection.columns — and a
+        # section's own `columns` is that section block's lanes. A section has
+        # more than one lane when its own `columns`, else the Collection's, is
+        # above 1; a bound `columns` keeps the grid even at 1 lane, and a
+        # section's own count overrides it. The lane count as a Swift Int
+        # expression, or nil for one lane (the stack as it was). Until
+        # jsonui-cli 1.9.0 every horizontal route drew one lane whatever
+        # `columns` said. Paging is not a lane route.
+        def horizontal_lanes(section = {})
+          own = section.is_a?(Hash) ? section['columns'] : nil
+          return (own.to_i > 1 ? own.to_i.to_s : nil) if own.is_a?(Numeric)
+
+          value = @component['columns']
+          return "data.#{extract_binding_property(value)}" if value.is_a?(String) && is_binding?(value)
+
+          value.to_i > 1 ? value.to_i.to_s : nil
+        end
+
+        # Spacing on every horizontal Collection, one lane or many (the same
+        # ruling): along the scroll axis lineSpacing (its alias
+        # sectionSpacing), else itemSpacing, else 0; between lanes
+        # columnSpacing, else itemSpacing, else 0. The single-lane stack read
+        # itemSpacing, then columnSpacing, then lineSpacing.
+        def horizontal_scroll_spacing
+          line_spacing_value || @component['itemSpacing'] || 0
+        end
+
+        def horizontal_lane_spacing
+          @component['columnSpacing'] || @component['itemSpacing'] || 0
+        end
+
+        # A section block of `lanes` rows: cells fill a column top to bottom,
+        # then the next column — LazyHorizontalGrid's order — and the block
+        # starts a new column. The caller emits the cells and closes it.
+        def open_horizontal_lanes(lanes)
+          return unless lanes
+
+          add_line "LazyHGrid(rows: Array(repeating: GridItem(.flexible(), spacing: #{horizontal_lane_spacing}), count: #{lanes}), " \
+                   "alignment: #{get_hstack_alignment_from_gravity(@component['gravity'])}, spacing: #{horizontal_scroll_spacing}) {"
+        end
+
+        def convert_non_responsive
+          id = @component['id'] || 'collection'
+          apply_scroll_container_attrs
+          info = columns_info
+          # Sentinel for downstream control flow: any value > 1 routes
+          # through the multi-column grid path. Compile-time LCM with
+          # per-section overrides is forfeited for bindings because the
+          # runtime column count is unknown.
+          columns = info[:literal] || 2
+          # Support both 'layout' and 'orientation' attributes for
+          # horizontal/vertical; `horizontalScroll: true` is ScrollView's
+          # boolean spelling of the same direction (used by real carousels).
+          layout = @component['layout'] || @component['orientation'] || 'vertical'
+          layout = 'horizontal' if @component['horizontalScroll'] == true
+          is_horizontal = layout == 'horizontal'
+
+          # `lazy` accepts one of:
+          #   "lazy"  -> ScrollView + LazyVStack/LazyHStack  (default)
+          #   "eager" -> ScrollView + VStack/HStack          (no virtualization, smooth for heavy cells)
+          #   "none"  -> VStack/HStack only                  (parent already scrollable)
+          # `@{prop}` bindings resolve at runtime via CollectionStackMode.
+          is_lazy = collection_lazy_mode != :none && !flow_defers_to_scrolling_ancestor?
+
+          # Check if sections are defined
+          sections = @component['sections'] || []
+
+          # Legacy: cellClasses, headerClasses, footerClasses の処理
+          cell_classes = @component['cellClasses'] || []
+          header_classes = @component['headerClasses'] || []
+          footer_classes = @component['footerClasses'] || []
+
+          # Extract the first cell class name (SwiftUI will use this as the view name)
+          cell_class_name = extract_view_name(cell_classes.first) if cell_classes.any?
+          header_class_name = extract_view_name(header_classes.first) if header_classes.any?
+          footer_class_name = extract_view_name(footer_classes.first) if footer_classes.any?
+
+          # setTargetAsDataSource と setTargetAsDelegate
+          if @component['setTargetAsDataSource']
+            add_line "// setTargetAsDataSource: true"
+          end
+          if @component['setTargetAsDelegate']
+            add_line "// setTargetAsDelegate: true"
+          end
+
+          # Create the main collection view structure
+          # Use LazyVStack for section-based collections, List for legacy single column
+          has_sections = @component['sections'] && !@component['sections'].empty?
+
+          # Case-insensitive: the declared enum admits 'Flow' as well as
+          # 'flow', and dynamic reads the value after the runtime
+          # normalizer downcases it (same defect measured on kjui as
+          # parity d=32 — Collection/layout__flow_2). 'leftAligned' is an
+          # alias spelling of flow (SSoT valueAliases, 2026-08-03
+          # unification) — dynamic folds it via the generated enum, so the
+          # raw-reading codegen must accept it too.
+          is_flow = %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
+
+          if !is_lazy
+            generate_non_lazy(
+              columns: columns,
+              is_horizontal: is_horizontal,
+              has_sections: has_sections,
+              is_flow: is_flow,
+              cell_class_name: cell_class_name,
+              header_class_name: header_class_name,
+              footer_class_name: footer_class_name,
+              id: id
+            )
+
+            # scrollEnabled is a no-op here (no scroll container); skip.
+            apply_modifiers(skip_insets: true)
+            return generated_code
+          end
+
+          # A wrapContent (or undeclared) Collection sizes to its content along
+          # its scroll axis, up to its parent's bound (SwiftJsonUI's
+          # CollectionContentFit around the route's scroll container).
+          list_route = columns == 1 && !is_horizontal && !is_flow && (!has_sections || @component['listStyle'])
+          fit_axis = content_fit_axis(is_horizontal, list_route)
+          fit_across = content_fit_across?(is_horizontal, list_route)
+          if fit_axis || fit_across
+            fit_args = ["axis: .#{is_horizontal ? 'horizontal' : 'vertical'}"]
+            fit_args << 'along: false' unless fit_axis
+            fit_args << 'across: true' if fit_across
+            add_line '// Requires SwiftJsonUI >= 10.29.0 (CollectionContentFit across)' if fit_across
+            add_line "CollectionContentFit(#{fit_args.join(', ')}) {"
+            @indent_level += 1
+          end
+
+          if is_flow
+            # Flow layout - items wrap naturally based on content size. Its
+            # cells carry their scroll ids already (open_cell_foreach,
+            # generate_cell_identity); the reader around the ScrollView is
+            # what makes a scrollTo reach them. Until jsonui-cli 1.9.0 the
+            # flow had none, and a scrollTo drew nothing on this route.
+            generate_scroll_reader_open
+            generate_flow_layout(has_sections)
+            generate_scroll_reader_close
+          elsif columns == 1 && !is_horizontal && has_sections && @component['listStyle']
+            # Sectioned vertical collection WITH list chrome: `listStyle` is
+            # what opts a collection into list-ness (the web face words the
+            # same gate the same way, and the android chrome already applies
+            # on its sectioned lazy path — the three faces agree on the WIDER
+            # gate, 2026-08-08). SwiftUI's List holds Sections natively, so
+            # the F4 section content renders inside a List instead of
+            # CollectionStackView; a chrome-less sectioned collection keeps
+            # the CollectionStackView branch below unchanged.
+            generate_scroll_reader_open
+            hide_separators = [true, 'true'].include?(@component['hideSeparator'])
+            add_line "List {"
+            indent do
+              # listRowSeparator styles ROWS, not the List — a Group forwards
+              # the modifier to every row it contains.
+              add_line "Group {" if hide_separators
+              maybe_indent(hide_separators) do
+                @reorder_style = :list
+                generate_collection_content_sections_vertical
+                @reorder_style = nil
+              end
+              if hide_separators
+                add_line "}"
+                add_modifier_line ".listRowSeparator(.hidden)"
+              end
+            end
+            add_line "}"
+            add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            apply_list_content_insets
+            generate_scroll_reader_close
+          elsif columns == 1 && !is_horizontal && has_sections
+            # Section-based vertical collection — delegate outer container
+            # (ScrollView + LazyVStack/VStack/none) to SwiftJsonUI's
+            # CollectionStackView so `lazy: "eager"` etc. become a literal
+            # parameter instead of a structural code branch.
+            generate_scroll_reader_open
+            generate_collection_stack_view_open(axis: :vertical)
+            indent do
+              generate_collection_content_sections_vertical
+            end
+            add_line "}"
+            generate_scroll_reader_close
+          elsif columns == 1 && !is_horizontal && !has_sections &&
+                cell_class_name.nil? && header_class_name.nil? && footer_class_name.nil?
+            # Nothing renderable: no declared sections and no cell class to
+            # draw the items with. Every other face — web, android (both
+            # pipelines) and ios dynamic — renders only the collection's own
+            # box; this path fell into the legacy List below and drew a white
+            # List holding a placeholder Text per item
+            # (control_Collection__no-sections parity d=42, run 31202080745).
+            # Same declaration-faithful stance as the 2026-08-02 bare-
+            # Collection ruling: undeclared content is not invented.
+            # A declared listStyle keeps a List — the chrome belongs to the
+            # CONTAINER on every face (web's list_style_classes, android's
+            # container-level chrome), and short-circuiting it made the
+            # spelling unread on this face (C0, ci run 31234713735) — but an
+            # EMPTY one: the legacy path's placeholder rows are invented
+            # content (the white ':0 :1 :2' rows on run 31243724782's
+            # ios-codegen renders). The dynamic face draws the same chromed
+            # empty List.
+            if @component['listStyle']
+              add_line "List {"
+              add_line "}"
+              add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            else
+              add_line "// Nothing renderable — nothing rendered (declaration-faithful)"
+              add_line "Color.clear"
+            end
+          elsif columns == 1 && !is_horizontal
+            # Legacy single column vertical without sections - use List. A
+            # scrollTo reaches its cells as on the other lists (the reader, and
+            # the cells' ids — every data section's, generate_fallback_foreach);
+            # until jsonui-cli 1.9.0 this route drew no scroll.
+            generate_scroll_reader_open
+            @reorder_style = :list
+            add_line "List {"
+            indent do
+              # Header
+              if header_class_name
+                add_line "Section {"
+                indent do
+                  generate_collection_content(cell_class_name, id)
+                end
+                add_line "} header: {"
+                indent do
+                  add_line class_list_edge_call(header_class_name)
+                end
+                add_line "}"
+
+                # Footer
+                if footer_class_name
+                  add_modifier_line ".listSectionSeparator(.hidden)"
+                  add_line "Section {"
+                  indent do
+                    add_line class_list_edge_call(footer_class_name)
+                  end
+                  add_line "}"
+                end
+              else
+                hide_rows = [true, 'true'].include?(@component['hideSeparator'])
+                add_line "Group {" if hide_rows
+                maybe_indent(hide_rows) do
+                  generate_collection_content(cell_class_name, id)
+                end
+                if hide_rows
+                  add_line "}"
+                  # hideSeparator finally has a List to act on here — the row
+                  # was C0 (unread) on this face until 2026-08-08.
+                  add_modifier_line ".listRowSeparator(.hidden)"
+                end
+
+                # Footer without header
+                if footer_class_name
+                  add_line ""
+                  add_line class_list_edge_call(footer_class_name)
+                end
+              end
+            end
+            add_line "}"
+            add_modifier_line ".listStyle(#{list_style_to_swiftui})"
+            apply_list_content_insets
+            generate_scroll_reader_close
+          elsif is_horizontal && @component['paging']
+            # Horizontal paging collection - use TabView with page style
+            generate_paging_horizontal
+          elsif is_horizontal
+            # Horizontal scroll collection — delegate outer container
+            # (ScrollView + LazyHStack/HStack/none) to SwiftJsonUI's
+            # CollectionStackView. inset spacers and scroll-disabled handling
+            # live inside the library so the generated cell-content closure
+            # is identical across modes.
+            generate_scroll_reader_open
+            generate_collection_stack_view_open(axis: :horizontal)
+            indent do
+                # Check if we have sections defined
+                if @component['sections'] && !@component['sections'].empty?
+                  property_name = extract_property_name(@component['items'])
+                  @component['sections'].each_with_index do |section, index|
+                    cell_view_name = extract_view_name(section['cell']) if section['cell']
+
+                    if cell_view_name && property_name
+                      # Check if property is optional based on data_properties
+                      is_optional = is_property_optional?(property_name)
+
+                      if is_optional
+                        add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                      else
+                        add_line "if data.#{property_name}.sections.count > #{index} {"
+                      end
+                      indent do
+                        if is_optional
+                          add_line "let section = dataSource.sections[#{index}]"
+                        else
+                          add_line "let section = data.#{property_name}.sections[#{index}]"
+                        end
+                        add_line "if let cellsData = section.cells?.data {"
+                        indent do
+                          lanes = horizontal_lanes(section)
+                          open_horizontal_lanes(lanes)
+                          maybe_indent(lanes) do
+                            vars = open_cell_foreach('cellsData', section_index: index)
+                            indent do
+                              add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                              generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+
+                              apply_cell_frame
+
+                              # Add accessibilityIdentifier for test automation (tapItem action)
+                              apply_cell_item_identifier(vars)
+                            end
+                            add_line "}"
+                          end
+                          add_line "}" if lanes
+                        end
+                        add_line "}"
+                      end
+                      add_line "}"
+                    elsif cell_view_name
+                      # No 'items' data source: emit no cells.
+                      #
+                      # This used to write
+                      # `data.collectionDataSource.getCellData(for: "X")`, and
+                      # NEITHER half of that exists — nothing in the corpus or
+                      # in either consuming iOS face declares
+                      # `collectionDataSource`, and `getCellData` has no
+                      # implementation anywhere in SwiftJsonUI. It was
+                      # uncompilable Swift, unnoticed because every other
+                      # Collection declares `items`; the first fixture to
+                      # reach this branch failed the build. The layout is
+                      # named by a validator warning instead.
+                      emit_no_cells_without_items
+                    end
+                  end
+                else
+                  # Legacy: no sections defined, use cellClasses
+                  cell_class_name = extract_view_name(@component['cellClasses']&.first)
+                  if cell_class_name
+                    property_name = extract_property_name(@component['items'])
+                    if property_name
+                      is_optional = is_property_optional?(property_name)
+                      add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
+                      indent do
+                        lanes = horizontal_lanes
+                        open_horizontal_lanes(lanes)
+                        maybe_indent(lanes) do
+                          vars = open_cell_foreach('cellsData')
+                          indent do
+                            add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
+                            generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                            apply_cell_frame
+                            # Add accessibilityIdentifier for test automation (tapItem action)
+                            apply_cell_item_identifier(vars)
+                          end
+                          add_line "}"
+                        end
+                        add_line "}" if lanes
+                      end
+                      add_line "}"
+                    else
+                      # Declaration-faithful (2026-08-02 ruling): no items
+                      # binding declared → nothing rendered. The old 10-item
+                      # placeholder ForEach was undeclared behavior.
+                      add_line "// No items binding — nothing rendered (declaration-faithful)"
+                    end
+                  else
+                    # Declaration-faithful: no cell class declared → nothing
+                    # rendered (was a 10-item placeholder ForEach).
+                    add_line "// No cellClasses — nothing rendered (declaration-faithful)"
+                  end
+                end
+            end  # End indent for CollectionStackView content
+            add_line "}"  # End CollectionStackView
+            generate_scroll_reader_close
+          else
+            # Multiple columns - use ScrollView with LazyVGrid
+            shows_indicators = @component['showsVerticalScrollIndicator'] != false
+            generate_scroll_reader_open
+            add_line "ScrollView(.vertical, showsIndicators: #{shows_indicators}) {"
+            indent do
+            # The scroll's content is a column at the leading edge, its rows —
+            # a section's header, its grid, its footer, the next section —
+            # spaced as the grid's rows (collectionSpacing: lineSpacing, else
+            # itemSpacing, else 0), as the list routes and the other two
+            # tools space them (the orchestrator's ruling 2026-09-27, round 10). Until
+            # jsonui-cli 1.9.0 they were the ScrollView's implicit stack:
+            # centred, the system's spacing between them. A lone grid (one
+            # section, no header or footer) is the one row the stack held
+            # full width either way, and is emitted as it was.
+            column = grid_rows_column?
+            add_line "VStack(alignment: .leading, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {" if column
+            maybe_indent(column) do
+              # Check if we have sections defined
+              if @component['sections'] && !@component['sections'].empty?
+                # For sections, iterate through sections and render header/cells/footer
+                property_name = extract_property_name(@component['items'])
+                @component['sections'].each_with_index do |section, index|
+                  header_view_name = extract_view_name(section['header']) if section['header']
+                  cell_view_name = extract_view_name(section['cell']) if section['cell']
+                  footer_view_name = extract_view_name(section['footer']) if section['footer']
+
+                  # Grid with cells - use section columns if specified, otherwise use component columns
+                  section_columns = section_columns_expr(section)
+
+                  if property_name
+                    # Section wrapper with let binding
+                    # Check if property is optional based on data_properties
+                    is_optional = is_property_optional?(property_name)
+
+                    add_line "// Section #{index + 1}: #{cell_view_name || 'Unknown'} (#{section_columns} columns)"
+                    if is_optional
+                      add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                    else
+                      add_line "if data.#{property_name}.sections.count > #{index} {"
+                    end
+                    indent do
+                      if is_optional
+                        add_line "let section = dataSource.sections[#{index}]"
+                      else
+                        add_line "let section = data.#{property_name}.sections[#{index}]"
+                      end
+
+                      # Header with data binding
+                      if header_view_name
+                        add_line "// Section #{index + 1} Header: #{header_view_name}"
+                        add_line "if let headerData = section.header?.data {"
+                        indent do
+                          add_line "#{header_view_name}(data: headerData)"
+                          apply_grid_edge_row
+                        end
+                        add_line "}"
+                      end
+
+                      # Grid for cells
+                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
+                      indent do
+                        if cell_view_name
+                          add_line "if let cellsData = section.cells?.data {"
+                          indent do
+                            vars = open_cell_foreach('cellsData', section_index: index)
+                            indent do
+                              add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                              generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+
+                              apply_cell_frame(grid: true)
+
+                              # Add accessibilityIdentifier for test automation (tapItem action)
+                              apply_cell_item_identifier(vars)
+                            end
+                            add_line "}"
+                          end
+                          add_line "}"
+                        end
+                      end
+                      add_line "}"
+                      apply_grid_padding
+
+                      # Footer with data binding
+                      if footer_view_name
+                        add_line "// Section #{index + 1} Footer: #{footer_view_name}"
+                        add_line "if let footerData = section.footer?.data {"
+                        indent do
+                          add_line "#{footer_view_name}(data: footerData)"
+                          apply_grid_edge_row
+                        end
+                        add_line "}"
+                      end
+                    end
+                    add_line "}"
+                  else
+                    # No `items`: nothing to draw the section from — no
+                    # header, cell or footer, as on every other route and
+                    # path (the orchestrator's ruling 2026-09-26, round 6). Until jsonui-cli
+                    # 1.9.0 this drew the section's header and footer with no
+                    # data around an empty grid.
+                    add_line "// Section #{index + 1}: no items, nothing drawn"
+                  end
+                end
+              else
+                # Legacy behavior - header/footer from cellClasses
+                if header_class_name
+                  add_line class_list_edge_call(header_class_name)
+                  apply_grid_edge_row
+                end
+                
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
+                indent do
+                  generate_collection_content(cell_class_name, id)
+                end
+                add_line "}"
+                apply_grid_padding
+
+                if footer_class_name
+                  add_line ""
+                  add_line class_list_edge_call(footer_class_name)
+                  apply_grid_edge_row
+                end
+              end
+            end
+            add_line "}" if column
+            end
+            add_line "}"
+            generate_default_scroll_anchor
+            generate_scroll_reader_close
+          end
+
+          if fit_axis || fit_across
+            @indent_level -= 1
+            add_line "}"
+          end
+
+          # scrollEnabled — emit .scrollDisabled(_:) (not .disabled(_:)) so a
+          # dynamic toggle does not interrupt an in-flight pan / deceleration
+          # and does not change the modifier chain shape.
+          scroll_enabled = @component['scrollEnabled']
+          if scroll_enabled == false
+            add_modifier_line ".scrollDisabled(true)"
+          elsif scroll_enabled.is_a?(String) && is_binding?(scroll_enabled)
+            prop = extract_property_name(scroll_enabled)
+            add_modifier_line ".scrollDisabled(!data.#{prop})"
+          end
+
+          # Apply common modifiers (skip insets since we handle them with spacers for contentInset effect)
+          apply_modifiers(skip_insets: true)
+
+          generated_code
+        end
+
+        # Wrap convert_non_responsive in a size-class if/else, regenerating the
+        # full collection per branch with merged attrs. Mirrors the kjui pattern
+        # (compose_builder dispatches per-branch with `generate_non_responsive_component`).
+        # Output is inline (not a separate function) because Collection's
+        # generated code is self-contained per branch.
+        #
+        # `@modifier_bag` is reset per branch because `apply_modifiers` at the
+        # end of `convert_non_responsive` calls `emit_all` against it. Without
+        # a reset, branch N would re-emit modifiers accumulated by branch N-1.
+        def convert_responsive
+          branches = JsonUIShared::ResponsiveResolver.build_branches(@component)
+          saved_component = @component
+
+          # Wrap the if/else chain in `Group { }` so it parses inside an
+          # `AnyView(...)` argument position. AnyView takes a single View
+          # expression and a bare `if/else` is @ViewBuilder content, not an
+          # expression. Group is a transparent @ViewBuilder container that
+          # legalizes the conditional in either nesting context. Mirrors
+          # embed_converter#convert_responsive.
+          add_line "Group {"
+          @indent_level += 1
+
+          branches.each_with_index do |branch, idx|
+            condition = branch[:size_class] ? Views::ResponsiveHelper.size_class_condition(branch[:size_class]) : nil
+
+            if idx == 0 && condition
+              add_line "if #{condition} {"
+            elsif condition
+              add_line "} else if #{condition} {"
+            elsif idx > 0
+              add_line "} else {"
+            end
+
+            branch_attrs = branch[:attrs].dup
+            branch_attrs.delete('responsive')
+            @component = branch_attrs
+            @modifier_bag = ModifierBag.new
+            @indent_level += 1
+            convert_non_responsive
+            @indent_level -= 1
+          end
+
+          add_line "}" if branches.size > 1
+          @indent_level -= 1
+          add_line "}"
+          @component = saved_component
+          # See embed_converter#convert_responsive for the same fix rationale:
+          # generated_code emits the modifier_bag as a side effect, which would
+          # re-emit the LAST branch's modifiers outside the Group's closing
+          # brace. Reset so the final generated_code call is a no-op.
+          @modifier_bag = ModifierBag.new
+          generated_code
+        end
+
+        # ScrollView vocabulary shared by Collection (measured in real
+        # layouts): content insets, safe-area adjustment, and the keyboard
+        # avoidance opt-out. Applied as modifiers on the whole emitted
+        # container, mirroring ScrollViewConverter's mappings.
+        def apply_scroll_container_attrs
+          inset = @component['containerInset']
+          if inset.is_a?(Numeric) || is_binding?(inset)
+            @modifier_bag.append(:component_specific, ".contentMargins(.all, #{number_slot(inset)}, for: .scrollContent)")
+          elsif inset.is_a?(Array)
+            inset = inset.map { |v| number_slot(v) }
+            edge = case inset.length
+                   when 1 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[0]}, bottom: #{inset[0]}, trailing: #{inset[0]})"
+                   when 2 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[0]}, trailing: #{inset[1]})"
+                   when 4 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[2]}, trailing: #{inset[3]})"
+                   end
+            @modifier_bag.append(:component_specific, ".contentMargins(.all, #{edge}, for: .scrollContent)") if edge
+          end
+
+          case @component['contentInsetAdjustmentBehavior']
+          when 'never'
+            @modifier_bag.append(:component_specific, ".ignoresSafeArea()")
+          when 'scrollableAxes'
+            @modifier_bag.append(:component_specific, ".ignoresSafeArea(edges: .horizontal)")
+          end
+
+          # Default (true) is the system behaviour; only the opt-out emits.
+          if @component['keyboardAvoidance'] == false
+            @modifier_bag.append(:component_specific, ".ignoresSafeArea(.keyboard)")
+          end
+        end
+
+        private
+
+        # The cell's own frame, in ONE place.
+        #
+        # Sixteen call sites render a cell, and they had grown three dialects
+        # of this: six applied cellWidth + cellHeight, three applied cellHeight
+        # and a grid `maxWidth`, and SEVEN applied nothing at all. Which
+        # dialect a layout got depended on which container shape it happened to
+        # select, so `cellWidth` was honoured or silently dropped by accident
+        # of routing — the conformance probe's shape (sections + bound items)
+        # lands on a do-nothing site, which is why it measured the spelling
+        # unread while four call sites plainly read it.
+        #
+        # The declaration settles what they should all do: "Fixed width for
+        # EVERY cell […] applied to the cell view AFTER it is built, so it
+        # overrides whatever width the cell layout asked for".
+        #
+        # `grid:` keeps the one legitimate difference. In a LazyVGrid the
+        # column governs the width, so a cell with no declared cellWidth fills
+        # its column — but a declared one still overrides it, per "overrides
+        # whatever width the cell layout asked for". Emission order inside each
+        # dialect is unchanged: `.frame` wraps, so reordering these would move
+        # pixels.
+        # `alignment: .topLeading` + `.clipped()`: a declared cell size can
+        # UNDER-fit the cell's content, and SwiftUI's default .center frame
+        # let the overflow spill symmetrically — the cell drew shifted half
+        # out of its lane (Collection_cellWidth__static parity d=50, run
+        # 31202080745). Web anchors the cell at its leading edge and hides
+        # the overflow; the frame here reads the same way.
+        # `{collectionId}_item_{index}` on the cell wrapper — the address the
+        # test drivers use (`tapItem`, `waitFor`), and the same spelling the
+        # dynamic renderer emits.
+        #
+        # One helper, not sixteen copies. Every cell path used to carry its
+        # own guarded copy of this line: sixteen sites across nine shape
+        # methods (non-responsive, non-lazy horizontal / grid / flow, paging,
+        # flow layout, sections vertical, sections, legacy), each identical
+        # byte for byte. The dynamic side already learned this — its comment
+        # says the identifier was moved onto the one builder every cell path
+        # calls "so a tenth inherits it rather than having to remember, which
+        # is exactly how the static side lost two arms". The static side had
+        # not been consolidated, so a change here had to be made sixteen
+        # times or be silently partial.
+        #
+        # The n is the cell's ADDRESS (attribute_semantics
+        # idBox.collectionCellRoot): its place among the cells of every drawn
+        # section — the cells of the sections before its own, then its index
+        # in its section — the n of scrollTo's Int and of a pager's page.
+        # Until 2.5.39 every route but the pager restarted it at 0 per
+        # section, so two sections each had an `_item_0` and a test could not
+        # reach the second one (ticket jui-collection-item-identifier-repeats-
+        # per-section). A loop's vars carry it as `:address`
+        # (open_cell_foreach) when it differs from the index.
+        def apply_cell_item_identifier(index_var)
+          return unless @component['id']
+
+          address = index_var.is_a?(Hash) ? (index_var[:address] || index_var[:index_var]) : index_var
+          add_modifier_line ".accessibilityIdentifier(\"#{JsonUIShared::StringLiterals.swift_body(@component['id'])}_item_\\(#{address})\")"
+        end
+
+        # The cells of the data sections before the running `sectionIndex`
+        # (the class-list route, which draws every data section at run time).
+        #
+        # Always bound to a TYPED `let` (cells_before_let), never written into
+        # the identifier's interpolation: an untyped reduce closure inside a
+        # string interpolation inside a ViewBuilder ForEach timed out the type
+        # checker of the macos-15 Xcode ("unable to type-check this expression
+        # in reasonable time") while Xcode 27.2 took it (2.5.39 release-check).
+        def runtime_cells_before(data_source_ref)
+          "#{data_source_ref}.sections.prefix(sectionIndex).reduce(0) { (count: Int, section: CollectionDataSection) -> Int in " \
+            "count + (section.cells?.data.count ?? 0) }"
+        end
+
+        # `let cellsBefore: Int = <expr>` — the cells before a section, typed,
+        # for the identifier to read as a plain Int (runtime_cells_before).
+        def cells_before_let(expr)
+          add_line "let cellsBefore: Int = #{expr}"
+        end
+
+        def apply_cell_frame(grid: false)
+          clipped = false
+          if grid
+            if @component['cellHeight']
+              add_modifier_line ".frame(height: #{@component['cellHeight']}, alignment: .topLeading)"
+              clipped = true
+            end
+            if @component['cellWidth']
+              add_modifier_line ".frame(width: #{@component['cellWidth']}, alignment: .topLeading)"
+              clipped = true
+            else
+              add_modifier_line ".frame(maxWidth: .infinity)"
+            end
+          else
+            if @component['cellWidth']
+              add_modifier_line ".frame(width: #{@component['cellWidth']}, alignment: .topLeading)"
+              clipped = true
+            end
+            if @component['cellHeight']
+              add_modifier_line ".frame(height: #{@component['cellHeight']}, alignment: .topLeading)"
+              clipped = true
+            end
+          end
+          add_modifier_line ".clipped()" if clipped
+        end
+
+        #: Declared `listStyle` -> SwiftUI list chrome. Enumerated by the
+        #: `collectionSeparators` ruling (2026-08-07) from the only
+        #: implementation that reads it, SwiftJsonUI's
+        #: TableConverter.applyListStyle.
+        LIST_STYLES = {
+          'plain' => 'PlainListStyle()',
+          'grouped' => 'GroupedListStyle()',
+          'insetgrouped' => 'InsetGroupedListStyle()',
+          'sidebar' => 'SidebarListStyle()',
+        }.freeze
+
+        # This line hardcoded `PlainListStyle()` and never read the attribute,
+        # which is why a declared `listStyle` was inert on the codegen face.
+        # The ruling is explicit that the hardcoding could not be replaced
+        # before the vocabulary existed — a bare string could be neither
+        # validated nor discriminated. It exists now.
+        #
+        # `plain` is the declared default and the declared fallback for an
+        # unrecognised value, so both land on the same arm.
+        #
+        # ORTHOGONAL to `hideSeparator`: this picks the chrome, that hides the
+        # separators, and neither overrides the other.
+        def list_style_to_swiftui
+          LIST_STYLES[JsonUIShared::EnumSpelling.lowered(@component['listStyle'], 'Collection', 'listStyle')] || LIST_STYLES['plain']
+        end
+
+        # The axis along which a scrolling Collection sizes to its content
+        # (the orchestrator's ruling 2026-09-27, the user's "size to content"): its size on
+        # its scroll axis wrapContent, or undeclared — which sjui emits the
+        # same — and not weighted; not the pager, whose TabView is its pages,
+        # and not a List (`list_route`): a List reports no content height to
+        # size to (measured: CollectionContentFit drew it 0pt tall), so a
+        # wrapContent List still fills its parent. nil otherwise. The SSoT's wrapContent is "size to content, up to the
+        # parent's bound, then scroll", as web and Compose draw it; a SwiftUI
+        # ScrollView takes every point offered, so until jsonui-cli 1.9.0 a
+        # wrapContent Collection filled its parent (120 of a 120pt parent)
+        # and pushed the views after it to the parent's end.
+        def content_fit_axis(is_horizontal, list_route)
+          return nil if (is_horizontal && @component['paging']) || list_route
+
+          size = @component[is_horizontal ? 'width' : 'height']
+          return nil unless size.nil? || size == 'wrapContent'
+          return nil if @component['weight'] || @component[is_horizontal ? 'widthWeight' : 'heightWeight']
+
+          is_horizontal ? 'horizontal' : 'vertical'
+        end
+
+        # A horizontal scrolling Collection of wrapContent (or undeclared)
+        # height is its cells' height, capped by its parent — across its
+        # scroll axis, as content_fit_axis sizes it along (the orchestrator, 2026-09-27:
+        # the SSoT's wrapContent is "size to content"). A LazyHStack takes
+        # the height it is offered, so until jsonui-cli 1.9.0 such a row filled
+        # its parent (120 of a 120pt parent) where the eager row was its
+        # cells' 28. Not the pager; not a height a weighted or `distribution:
+        # fill` vertical parent gave it (they have made it matchParent).
+        def content_fit_across?(is_horizontal, list_route)
+          return false unless is_horizontal
+          return false if @component['paging'] || list_route
+
+          height = @component['height']
+          (height.nil? || height == 'wrapContent') && !@component['heightWeight']
+        end
+
+        # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is
+        # expected to live inside an already-scrollable parent. Sticky headers
+        # and programmatic scrollTo are not supported here; scrollEnabled/
+        # scrollAnchor/defaultScrollAnchor/onPageChanged are ignored.
+        def generate_non_lazy(columns:, is_horizontal:, has_sections:, is_flow:,
+                              cell_class_name:, header_class_name:, footer_class_name:, id:)
+          if is_flow
+            # VStack + FlowLayout (no outer ScrollView)
+            generate_non_lazy_flow(has_sections)
+          elsif is_horizontal
+            generate_non_lazy_horizontal(has_sections, cell_class_name)
+          elsif has_sections && columns == 1
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
+            vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
+            add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
+            indent do
+              generate_collection_content_sections_vertical
+            end
+            add_line "}"
+            add_modifier_line ".collectionReorderContainer(#{reorder_value_expr})" if reorder_declared?
+            apply_insets_only
+          elsif columns == 1 && !has_sections
+            # Legacy single column without sections — plain VStack with ForEach
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
+            vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
+            add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
+            indent do
+              if header_class_name
+                add_line class_list_edge_call(header_class_name)
+              end
+              generate_collection_content(cell_class_name, id)
+              if footer_class_name
+                add_line class_list_edge_call(footer_class_name)
+              end
+            end
+            add_line "}"
+            add_modifier_line ".collectionReorderContainer(#{reorder_value_expr})" if reorder_declared?
+            apply_insets_only
+          else
+            # Multi-column grid — LazyVGrid without ScrollView renders eagerly
+            generate_non_lazy_grid(has_sections, cell_class_name, header_class_name, footer_class_name)
+          end
+        end
+
+        def generate_non_lazy_horizontal(has_sections, cell_class_name)
+          spacing = horizontal_scroll_spacing
+          hstack_alignment = get_hstack_alignment_from_gravity(@component['gravity'])
+          add_line "HStack(alignment: #{hstack_alignment}, spacing: #{spacing}) {"
+          indent do
+            if has_sections
+              property_name = extract_property_name(@component['items'])
+              @component['sections'].each_with_index do |section, index|
+                cell_view_name = extract_view_name(section['cell']) if section['cell']
+                next unless cell_view_name && property_name
+
+                is_optional = is_property_optional?(property_name)
+                if is_optional
+                  add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                else
+                  add_line "if data.#{property_name}.sections.count > #{index} {"
+                end
+                indent do
+                  data_ref = is_optional ? "dataSource" : "data.#{property_name}"
+                  add_line "let section = #{data_ref}.sections[#{index}]"
+                  add_line "if let cellsData = section.cells?.data {"
+                  indent do
+                    lanes = horizontal_lanes(section)
+                    open_horizontal_lanes(lanes)
+                    maybe_indent(lanes) do
+                      vars = open_cell_foreach('cellsData', section_index: index)
+                      indent do
+                        add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                        generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                        apply_cell_frame
+                        apply_cell_item_identifier(vars)
+                      end
+                      add_line "}"
+                    end
+                    add_line "}" if lanes
+                  end
+                  add_line "}"
+                end
+                add_line "}"
+              end
+            elsif cell_class_name
+              property_name = extract_property_name(@component['items'])
+              if property_name
+                is_optional = is_property_optional?(property_name)
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
+                indent do
+                  lanes = horizontal_lanes
+                  open_horizontal_lanes(lanes)
+                  maybe_indent(lanes) do
+                    vars = open_cell_foreach('cellsData')
+                    indent do
+                      add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                      apply_cell_frame
+                      apply_cell_item_identifier(vars)
+                    end
+                    add_line "}"
+                  end
+                  add_line "}" if lanes
+                end
+                add_line "}"
+              end
+            end
+          end
+          add_line "}"
+          apply_insets_only
+        end
+
+        def generate_non_lazy_grid(has_sections, cell_class_name, header_class_name, footer_class_name)
+          # Between cells columnSpacing, between rows lineSpacing (grid_cell_spacing).
+          spacing = grid_cell_spacing
+          grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{columns_info[:expr]})"
+
+          if has_sections
+            property_name = extract_property_name(@component['items'])
+            section_spacing = line_spacing_value || @component['itemSpacing'] || 0
+            vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
+            add_line "VStack(alignment: #{vstack_alignment}, spacing: #{section_spacing}) {"
+            indent do
+              @component['sections'].each_with_index do |section, index|
+                header_view_name = extract_view_name(section['header']) if section['header']
+                cell_view_name = extract_view_name(section['cell']) if section['cell']
+                footer_view_name = extract_view_name(section['footer']) if section['footer']
+                section_columns = section_columns_expr(section)
+                section_grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{section_columns})"
+
+                if property_name
+                  is_optional = is_property_optional?(property_name)
+                  if is_optional
+                    add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                  else
+                    add_line "if data.#{property_name}.sections.count > #{index} {"
+                  end
+                  indent do
+                    data_ref = is_optional ? "dataSource" : "data.#{property_name}"
+                    add_line "let section = #{data_ref}.sections[#{index}]"
+
+                    if header_view_name
+                      add_line "if let headerData = section.header?.data {"
+                      indent do
+                        add_line "#{header_view_name}(data: headerData)"
+                      end
+                      add_line "}"
+                    end
+
+                    add_line "LazyVGrid(columns: #{section_grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
+                    indent do
+                      if cell_view_name
+                        add_line "if let cellsData = section.cells?.data {"
+                        indent do
+                          vars = open_cell_foreach('cellsData', section_index: index)
+                          indent do
+                            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                            generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                            apply_cell_frame(grid: true)
+                            apply_cell_item_identifier(vars)
+                          end
+                          add_line "}"
+                        end
+                        add_line "}"
+                      end
+                    end
+                    add_line "}"
+
+                    if footer_view_name
+                      add_line "if let footerData = section.footer?.data {"
+                      indent do
+                        add_line "#{footer_view_name}(data: footerData)"
+                      end
+                      add_line "}"
+                    end
+                  end
+                  add_line "}"
+                end
+              end
+            end
+            add_line "}"
+            apply_insets_only
+          else
+            # A header / footer sits in one VStack with the grid, as the
+            # single-column route's do and as SwiftJsonUI Dynamic draws it
+            # (91b932b). They were emitted as siblings of the grid, so the
+            # Collection was three views in its parent and its own modifiers
+            # (background, identifier, frame…) attached to the last of them,
+            # the footer (measured on aad4c8c4, 2026-09-26).
+            edges = header_class_name || footer_class_name
+            if edges
+              add_line "VStack(alignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}, spacing: #{grid_row_spacing}) {"
+            end
+            maybe_indent(edges) do
+              add_line class_list_edge_call(header_class_name) if header_class_name
+              add_line "LazyVGrid(columns: #{grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
+              indent do
+                generate_collection_content(cell_class_name, id = @component['id'] || 'collection')
+              end
+              add_line "}"
+              apply_insets_only
+              add_line class_list_edge_call(footer_class_name) if footer_class_name
+            end
+            add_line "}" if edges
+          end
+        end
+
+        # A flow section's declared header or footer (the orchestrator's ruling 2026-09-26,
+        # round 7): its view with the section's header / footer data, a row of
+        # its own, full width, above / below the section's wrap — a sibling of
+        # the wrap in the section VStack, so it is spaced as the lines. Until
+        # jsonui-cli 1.9.0 a flow drew neither. Nothing when none is declared.
+        def add_flow_section_edge(section, kind)
+          name = section[kind] && extract_view_name(section[kind])
+          return unless name
+
+          add_line "if let #{kind}Data = section.#{kind}?.data {"
+          indent do
+            add_line "#{name}(data: #{kind}Data)"
+            add_modifier_line '.frame(maxWidth: .infinity, alignment: .leading)'
+          end
+          add_line '}'
+        end
+
+        # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
+        # between cells on a line columnSpacing, else itemSpacing; between
+        # lines lineSpacing (line_spacing_value), else itemSpacing; between
+        # the section blocks as between lines. 0 when none is declared, a
+        # declared 0 included. Until jsonui-cli 1.9.0 each undeclared gap was
+        # 8, and the section blocks did not fall back to itemSpacing.
+        def collection_flow_spacing
+          line = line_spacing_value || @component['itemSpacing'] || 0
+          {
+            cells: @component['columnSpacing'] || @component['itemSpacing'] || 0,
+            lines: line,
+            sections: line
+          }
+        end
+
+        # lineSpacing as declared: `sectionSpacing` is its alias (SSoT
+        # `aliases`), read when lineSpacing is absent — an unnormalised layout
+        # may spell it either way. With both, the canonical lineSpacing wins
+        # (the orchestrator's ruling 2026-09-26, round 6), as SwiftJsonUI Dynamic's typed
+        # attribute reads it. Until jsonui-cli 1.9.0 the flow's section
+        # blocks took sectionSpacing over lineSpacing, and the vertical and
+        # grid routes did not read the alias at all.
+        def line_spacing_value
+          @component.key?('lineSpacing') ? @component['lineSpacing'] : @component['sectionSpacing']
+        end
+
+        def generate_non_lazy_flow(has_sections)
+          # The spacing rule and its undeclared default (0, flow included):
+          # attribute_semantics.json -> collectionSpacing. Cells on a line
+          # columnSpacing, lines lineSpacing, itemSpacing the fallback for
+          # both. Until jsonui-cli 1.9.0 the undeclared default here was 8.
+          h_spacing = collection_flow_spacing[:cells]
+          v_spacing = collection_flow_spacing[:lines]
+          flow_alignment = get_flow_alignment
+          section_spacing = collection_flow_spacing[:sections]
+
+          add_line "VStack(spacing: #{section_spacing}) {"
+          indent do
+            if has_sections
+              property_name = extract_property_name(@component['items'])
+              if property_name
+                is_optional = is_property_optional?(property_name)
+                @component['sections'].each_with_index do |section, index|
+                  cell_view_name = extract_view_name(section['cell']) if section['cell']
+                  next unless cell_view_name || section['header'] || section['footer']
+
+                  if is_optional
+                    add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                  else
+                    add_line "if data.#{property_name}.sections.count > #{index} {"
+                  end
+                  indent do
+                    data_ref = is_optional ? "dataSource" : "data.#{property_name}"
+                    add_line "let section = #{data_ref}.sections[#{index}]"
+                    add_flow_section_edge(section, 'header')
+                    if cell_view_name
+                      add_line "if let cellsData = section.cells?.data {"
+                      indent do
+                        add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                        indent do
+                          vars = open_cell_foreach('cellsData', section_index: index)
+                          indent do
+                            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                            generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                            apply_cell_frame
+                            apply_cell_item_identifier(vars)
+                          end
+                          add_line "}"
+                        end
+                        add_line "}"
+                      end
+                      add_line "}"
+                    end
+                    add_flow_section_edge(section, 'footer')
+                  end
+                  add_line "}"
+                end
+              end
+            else
+              cell_class_name = extract_view_name(@component['cellClasses']&.first)
+              property_name = extract_property_name(@component['items'])
+              if cell_class_name && property_name
+                is_optional = is_property_optional?(property_name)
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
+                indent do
+                  add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                  indent do
+                    vars = open_cell_foreach('cellsData')
+                    indent do
+                      add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                      apply_cell_frame
+                      apply_cell_item_identifier(vars)
+                    end
+                    add_line "}"
+                  end
+                  add_line "}"
+                end
+                add_line "}"
+              end
+            end
+          end
+          add_line "}"
+          apply_insets_only
+        end
+
+        # Generate horizontal paging collection using TabView
+        def generate_paging_horizontal
+          # Pages sit along the scroll axis: lineSpacing, else itemSpacing,
+          # else 0 (the horizontal rule; it read itemSpacing, then
+          # columnSpacing, until jsonui-cli 1.9.0).
+          spacing = horizontal_scroll_spacing
+          property_name = extract_property_name(@component['items'])
+
+          # currentPage binding
+          current_page_prop = nil
+          if @component['currentPage'] && is_binding?(@component['currentPage'])
+            current_page_prop = extract_binding_property(@component['currentPage'])
+          end
+
+          # Page-change callback. onValueChange is the canonical name;
+          # onValueChanged / onPageChanged are its definitions aliases (L0
+          # fallback only).
+          page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
+          page_changed_handler = nil unless handler_reference?(page_changed_handler)
+
+          # TabView with optional selection binding. A scrollTo and a
+          # page-change callback read the selection (paging_scroll_selection):
+          # the bound currentPage, or a page state of the pager's own when
+          # there is none.
+          page_state = paging_scroll_selection(current_page_prop, page_changed_handler)
+          # height wrapContent: the pager is as tall as the page it shows
+          # (KotlinJsonUI's HorizontalPager ...wrapContentHeight()). A page-style
+          # TabView has no height of its own: in a vertical ScrollView it took
+          # the height the ScrollView had left (309 of 420 on SwiftJsonUI's
+          # ConformanceHost, the cell floating in its middle; on a consumer's
+          # screen with less left, its cards cut) and asked its ideal size it
+          # is 0 — 378pt of cards measured 40.7pt (ticket
+          # 2026-10-23-sjui-paging-collection-wrapcontent-height-collapses-in-scrollview).
+          # Each page is measured at its own height (paging_fit_heights) and
+          # the TabView is framed at the shown page's; it needs the shown page,
+          # so a pager with no page state gets one of its own.
+          fit_heights = paging_fit_heights
+          page_state ||= paging_scroll_selection(nil, nil, force: true) if fit_heights && !current_page_prop
+          if current_page_prop
+            add_line "TabView(selection: $data.#{current_page_prop}) {"
+          elsif page_state
+            add_line "TabView(selection: $#{page_state}) {"
+          else
+            add_line "TabView {"
+          end
+
+          # One page per cell, every drawn section's cells in order (4f
+          # ruling 2026-09-26, round 6: what SwiftJsonUI Dynamic, rjui and
+          # KotlinJsonUI Dynamic draw). A page's tag is its place among ALL
+          # the pages, so a bound currentPage names one page: a section's
+          # tags start where the drawn sections before it end (pageStart).
+          # Until jsonui-cli 1.9.0 each section counted from 0, so under
+          # TabView(selection:) section 2's pages repeated section 1's tags.
+          # The class-list shape (cellClasses, no `sections`) is one section,
+          # as on the other one-section routes: the first data section, or
+          # the declared list; it drew no page until jsonui-cli 1.9.0.
+          indent do
+            if @component['sections'] && !@component['sections'].empty? && property_name
+              drawn = []
+              @component['sections'].each_with_index do |section, index|
+                cell_view_name = extract_view_name(section['cell']) if section['cell']
+                next unless cell_view_name && property_name
+
+                is_optional = is_property_optional?(property_name)
+                if is_optional
+                  add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                else
+                  add_line "if data.#{property_name}.sections.count > #{index} {"
+                end
+                indent do
+                  data_ref = is_optional ? "dataSource" : "data.#{property_name}"
+                  add_line "let section = #{data_ref}.sections[#{index}]"
+                  unless drawn.empty?
+                    add_line "let pageStart: Int = #{cells_of_sections(data_ref, drawn)}"
+                  end
+                  add_line "if let cellsData = section.cells?.data {"
+                  indent do
+                    vars = open_cell_foreach('cellsData', page_start: drawn.empty? ? nil : 'pageStart', section_index: index,
+                                                         pager: true)
+                    indent do
+                      add_paging_cell(cell_view_name, vars, spacing, fit_heights)
+                    end
+                    add_line "}"
+                  end
+                  add_line "}"
+                end
+                add_line "}"
+                drawn << index
+              end
+            elsif (cell_view_name = legacy_paging_cell) && property_name
+              add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+              indent do
+                vars = open_cell_foreach('cellsData', pager: true)
+                indent do
+                  add_paging_cell(cell_view_name, vars, spacing, fit_heights)
+                end
+                add_line "}"
+              end
+              add_line "}"
+            end
+          end
+          add_line "}"
+          add_modifier_line ".tabViewStyle(.page(indexDisplayMode: .never))"
+          selection = current_page_prop ? "data.#{current_page_prop}" : page_state
+          # The shown page's height; before it is measured, the tallest measured
+          # (none yet: no frame, as before).
+          add_modifier_line ".frame(height: #{fit_heights}[#{selection}] ?? #{fit_heights}.values.max())" if fit_heights
+          generate_paging_scroll_to(selection) if has_scroll_to?
+
+          # The page-change callback is called with the page the selection
+          # turns to — the bound currentPage, else the pager's own page state,
+          # as KotlinJsonUI calls it from the pager whether or not a
+          # currentPage is bound and SwiftJsonUI Dynamic from its internal
+          # page. Until jsonui-cli 1.9.6 it was emitted only with a currentPage
+          # binding, so without one the callback was dropped with no warning
+          # (ticket sjui-pager-page-change-callback-requires-currentpage-binding).
+          #
+          # A bound currentPage outside the pages is clamped: the pager shows
+          # the last (or first) page, the clamped page is written back once,
+          # and the handler is told the clamped page only when it differs from
+          # the page shown before — never the out-of-range value; the
+          # write-back's own change (from the out-of-range value) is not a
+          # page change. Until jsonui-cli 1.9.6 a currentPage of 10 on three
+          # pages left page 0 shown, the binding at 10 and the handler told 10
+          # (measured on the iOS simulator; ticket
+          # sjui-dynamic-pager-does-not-write-back-a-clamped-page). kjui's
+          # generated pager writes the clamped page back the same way.
+          lists = current_page_prop ? drawn_cell_lists : nil
+          if page_changed_handler || lists
+            handler_call = page_changed_handler && get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
+            add_modifier_line ".onChange(of: #{selection}) { oldValue, newValue in"
+            indent do
+              if lists
+                add_line "let lastPage = max([#{lists.map(&:last).join(', ')}].reduce(0) { $0 + $1.count } - 1, 0)"
+                add_line 'let clamped = min(max(newValue, 0), lastPage)'
+                add_line 'if clamped != newValue {'
+                indent do
+                  add_line "#{selection} = clamped"
+                  if handler_call
+                    add_line "if (0...lastPage).contains(oldValue) && oldValue != clamped { #{get_event_handler_invocation(page_changed_handler, view_id, 'clamped')} }"
+                  end
+                  add_line 'return'
+                end
+                add_line '}'
+                add_line 'guard (0...lastPage).contains(oldValue) else { return }'
+              end
+              if handler_call
+                add_line "guard oldValue != newValue else { return }"
+                add_line handler_call
+              end
+            end
+            add_line "}"
+          end
+
+          # The common modifiers are applied once, by convert_non_responsive
+          # (`apply_modifiers(skip_insets: true)` after this returns). The
+          # insets pad every page's cell (add_paging_cell), inside the pager's
+          # scroll; until jsonui-cli 1.9.0 they padded the TabView from
+          # outside. This method applied the modifiers too, so the frame and
+          # the padding / margin stages were emitted twice (and stacked
+          # paddings add up) — ticket sjui-pager-emits-its-common-modifiers-twice.
+        end
+
+        # A pager's scrollTo turns to the page the value names (the SSoT's
+        # Collection.scrollTo: an Int is the cell, so the page, counted across
+        # the drawn sections; a String the first page whose key it is). It
+        # needs the TabView's selection: the bound currentPage, else a state
+        # of its own — `<id>ScrollPage`, 0 as the TabView starts — returned
+        # here, nil when a currentPage is bound or neither a scrollTo nor a
+        # bound page-change callback reads it (the callback has read it since
+        # jsonui-cli 1.9.6). Until
+        # jsonui-cli 1.9.0 the pager drew no scrollTo (and, with no currentPage,
+        # no selection at all).
+        def paging_scroll_selection(current_page_prop, page_changed_handler = nil, force: false)
+          return nil if current_page_prop || (!force && !has_scroll_to? && !page_changed_handler)
+
+          name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('collection'))
+          state = "#{name}ScrollPage"
+          @state_variables << "@State private var #{state}: Int = 0"
+          state
+        end
+
+        # The value's change turns `selection` to the page it names: the pages'
+        # cells, every drawn section's in order, looked up as the value says
+        # (scroll_match_expr); none, no turn.
+        def generate_paging_scroll_to(selection)
+          scroll_prop = extract_property_name(@component['scrollTo'])
+          property_name = extract_property_name(@component['items'])
+          return unless scroll_prop && property_name
+
+          recv_var = key_scroll? ? 'cellId' : 'index'
+          lists = drawn_cell_lists(enriched: key_scroll?).map(&:last)
+          request_body = lambda do
+            add_line 'var page = 0'
+            add_line 'var found: Int? = nil'
+            add_line "search: for cells in [#{lists.join(', ')}] {"
+            indent do
+              add_line "for #{key_scroll? ? 'cell' : '_'} in cells {"
+              indent do
+                add_line "if #{scroll_match_expr('cell', recv_var).sub('place ==', 'page ==')} { found = page; break search }"
+                add_line 'page += 1'
+              end
+              add_line '}'
+            end
+            add_line '}'
+            add_line 'guard let found else { return }'
+            turn = "#{selection} = found"
+            scroll_animated = @component['scrollAnimated']
+            if scroll_animated.is_a?(String) && scroll_animated.start_with?('@{') && scroll_animated.end_with?('}')
+              animated_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(scroll_animated[2..-2])
+              add_line "if #{animated_expr} {"
+              indent { add_line "withAnimation { #{turn} }" }
+              add_line '} else {'
+              indent { add_line turn }
+              add_line '}'
+            elsif scroll_animated == false
+              add_line turn
+            else
+              add_line "withAnimation { #{turn} }"
+            end
+          end
+          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
+          indent(&request_body)
+          add_line '}'
+          emit_scroll_entry(scroll_prop, recv_var, &request_body)
+        end
+
+        # One page: the cell, its identity, frame, spacing and address, and
+        # its tag — its place among all the pages, which the loop's index
+        # already is (open_cell_foreach counts a later section's cells from
+        # its pageStart). The address counts as the tag does, as kjui's pager
+        # test tag and rjui's item id do (round 7).
+        def add_paging_cell(cell_view_name, vars, spacing, fit_heights = nil)
+          add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+          generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+          apply_cell_frame
+          if spacing > 0
+            add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
+          end
+          apply_cell_item_identifier(vars)
+          # The Collection's insets (with insetHorizontal / insetVertical)
+          # pad the cell on its page: a page is the pager's size, so this is
+          # the padding around the cells inside the pager's scroll (the SSoT's
+          # Collection.insets). Until jsonui-cli 1.9.0 they padded the
+          # TabView from outside: a pager with insets [0, 0, 0, 30] turned
+          # its pages in a scroll 30pt narrower than the Collection. After the
+          # cell's address, which stays the cell's (as SwiftJsonUI Dynamic's
+          # PagingCollectionWrapperView pads it).
+          if (page_insets = collection_content_insets_swift_expr)
+            add_modifier_line ".padding(#{page_insets})"
+          end
+          if fit_heights
+            # Its own height (not the pager's, which comes from it), written
+            # down by page, then laid at the page's top.
+            add_modifier_line ".fixedSize(horizontal: false, vertical: true)"
+            add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_heights}[#{vars[:index_var]}] = $0 }"
+            add_modifier_line ".frame(maxHeight: .infinity, alignment: .top)"
+          end
+          add_modifier_line ".tag(#{vars[:index_var]})"
+        end
+
+        # height wrapContent on a pager: the name of its page heights' state
+        # (page -> measured height), declared here; nil for any other height.
+        def paging_fit_heights
+          return nil unless @component['height'] == 'wrapContent'
+
+          name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('collection'))
+          state = "#{name}PageHeights"
+          @state_variables << "@State private var #{state}: [Int: CGFloat] = [:]"
+          state
+        end
+
+        # The class-list shape's cell view (cellClasses[0], no `sections`),
+        # or nil.
+        def legacy_paging_cell
+          return nil if @component['sections'].is_a?(Array) && !@component['sections'].empty?
+
+          first = (@component['cellClasses'] || []).first
+          first && extract_view_name(first)
+        end
+
+        # Generate flow layout using FlowLayout (iOS 16+)
+        def generate_flow_layout(has_sections)
+          # The spacing rule and its undeclared default (0, flow included):
+          # attribute_semantics.json -> collectionSpacing. Cells on a line
+          # columnSpacing, lines lineSpacing, itemSpacing the fallback for
+          # both. Until jsonui-cli 1.9.0 the undeclared default here was 8.
+          h_spacing = collection_flow_spacing[:cells]
+          v_spacing = collection_flow_spacing[:lines]
+          flow_alignment = get_flow_alignment
+
+          shows_indicators = @component['showsVerticalScrollIndicator'] != false
+          section_spacing = collection_flow_spacing[:sections]
+          add_line "ScrollView(.vertical, showsIndicators: #{shows_indicators}) {"
+          indent do
+            add_line "VStack(spacing: #{section_spacing}) {"
+            indent do
+            if has_sections
+              property_name = extract_property_name(@component['items'])
+              return unless property_name
+
+              is_optional = is_property_optional?(property_name)
+
+              @component['sections'].each_with_index do |section, index|
+                cell_view_name = extract_view_name(section['cell']) if section['cell']
+                next unless cell_view_name || section['header'] || section['footer']
+
+                if is_optional
+                  add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+                else
+                  add_line "if data.#{property_name}.sections.count > #{index} {"
+                end
+                indent do
+                  if is_optional
+                    add_line "let section = dataSource.sections[#{index}]"
+                  else
+                    add_line "let section = data.#{property_name}.sections[#{index}]"
+                  end
+                  add_flow_section_edge(section, 'header')
+                  if cell_view_name
+                    add_line "if let cellsData = section.cells?.data {"
+                    indent do
+                      add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                      indent do
+                        vars = open_cell_foreach('cellsData', section_index: index)
+                        indent do
+                          add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                          generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                          apply_cell_frame
+                          apply_cell_item_identifier(vars)
+                        end
+                        add_line "}"
+                      end
+                      add_line "}"
+                    end
+                    add_line "}"
+                  end
+                  add_flow_section_edge(section, 'footer')
+                end
+                add_line "}"
+              end
+            else
+              # Legacy: no sections
+              cell_class_name = extract_view_name(@component['cellClasses']&.first)
+              property_name = extract_property_name(@component['items'])
+              if cell_class_name && property_name
+                is_optional = is_property_optional?(property_name)
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
+                indent do
+                  add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                  indent do
+                    vars = open_cell_foreach('cellsData')
+                    indent do
+                      add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                      apply_cell_frame
+                      apply_cell_item_identifier(vars)
+                    end
+                    add_line "}"
+                  end
+                  add_line "}"
+                end
+                add_line "}"
+              end
+            end
+            end
+            add_line "}"
+            apply_insets_only
+          end
+          add_line "}"
+        end
+
+        # Extract horizontal alignment from gravity for FlowLayout (default: .leading)
+        def get_flow_alignment
+          gravity = @component['gravity']
+          return '.leading' unless gravity
+          horizontal = extract_horizontal_from_gravity(gravity)
+          case horizontal
+          when 'center' then '.center'
+          when 'right' then '.trailing'
+          else '.leading'
+          end
+        end
+
+        # Extract horizontal alignment from gravity for LazyVGrid
+        # LazyVGrid uses HorizontalAlignment: .leading, .center, .trailing
+        def get_grid_alignment
+          gravity = @component['gravity']
+          return '.center' unless gravity
+          horizontal = extract_horizontal_from_gravity(gravity)
+          case horizontal
+          when 'left' then '.leading'
+          when 'right' then '.trailing'
+          else '.center'
+          end
+        end
+
+        # Extract horizontal alignment from gravity for VStack
+        # VStack uses horizontal alignment: .leading, .center, .trailing
+        def get_vstack_alignment_from_gravity(gravity)
+          horizontal = extract_horizontal_from_gravity(gravity)
+          case horizontal
+          when 'left' then '.leading'
+          when 'center' then '.center'
+          when 'right' then '.trailing'
+          else '.leading'
+          end
+        end
+
+        # Extract vertical alignment from gravity for HStack
+        # HStack uses vertical alignment: .top, .center, .bottom
+        def get_hstack_alignment_from_gravity(gravity)
+          vertical = extract_vertical_from_gravity(gravity)
+          case vertical
+          when 'top' then '.top'
+          when 'center' then '.center'
+          when 'bottom' then '.bottom'
+          else '.top'
+          end
+        end
+
+        def extract_horizontal_from_gravity(gravity)
+          gravity = gravity || 'left|top'
+          if gravity.is_a?(Array)
+            result = gravity.find { |g| ['left', 'center', 'right', 'centerHorizontal'].include?(g) } || 'left'
+            result == 'centerHorizontal' ? 'center' : result
+          elsif gravity.is_a?(String)
+            if gravity.include?('|')
+              parts = gravity.split('|')
+              result = parts.find { |p| ['left', 'center', 'right', 'centerHorizontal'].include?(p) } || 'left'
+              result == 'centerHorizontal' ? 'center' : result
+            else
+              return 'center' if gravity == 'centerHorizontal'
+              ['left', 'center', 'right'].include?(gravity) ? gravity : 'left'
+            end
+          else
+            'left'
+          end
+        end
+
+        def extract_vertical_from_gravity(gravity)
+          gravity = gravity || 'left|top'
+          if gravity.is_a?(Array)
+            result = gravity.find { |g| ['top', 'center', 'bottom', 'centerVertical'].include?(g) } || 'top'
+            result == 'centerVertical' ? 'center' : result
+          elsif gravity.is_a?(String)
+            if gravity.include?('|')
+              parts = gravity.split('|')
+              result = parts.find { |p| ['top', 'center', 'bottom', 'centerVertical'].include?(p) } || 'top'
+              result == 'centerVertical' ? 'center' : result
+            else
+              return 'center' if gravity == 'centerVertical'
+              ['top', 'center', 'bottom'].include?(gravity) ? gravity : 'top'
+            end
+          else
+            'top'
+          end
+        end
+
+        # The scroll direction a horizontal Collection scrolls in: `layout` or
+        # `orientation` 'horizontal', or `horizontalScroll: true`.
+        def horizontal_scroll?
+          layout = @component['layout'] || @component['orientation'] || 'vertical'
+          layout == 'horizontal' || @component['horizontalScroll'] == true
+        end
+
+        # The UnitPoint scrollAnchor names, along the scroll axis (the SSoT's
+        # Collection.scrollAnchor: top — the target's leading edge at the
+        # viewport's; center — its middle at the middle; bottom, the default —
+        # its trailing edge at the trailing edge). A horizontal Collection's
+        # are `.leading` / `.center` / `.trailing` (the orchestrator's ruling 2026-09-27). Until
+        # jsonui-cli 1.9.0 it was `.top` / `.bottom` there too, whose x is
+        # 0.5: every anchor put the target's middle at the viewport's middle.
+        def scroll_anchor_point
+          anchor = @component['scrollAnchor'] || 'bottom'
+          return anchor unless horizontal_scroll?
+
+          { 'top' => 'leading', 'center' => 'center', 'bottom' => 'trailing' }.fetch(anchor, anchor)
+        end
+
+        # A bound scrollAnchor (`"scrollAnchor": "@{prop}"`, jsonui-cli 1.9.29,
+        # jui-collection-scrollto-per-request-anchor): the property it reads,
+        # else nil (a written anchor, scroll_anchor_point).
+        def scroll_anchor_binding
+          extract_property_name(@component['scrollAnchor'])
+        end
+
+        # The `anchor:` a scrollTo lands by: the written one as a UnitPoint
+        # member, or — bound — the library's reading of the bound value when
+        # the scrollTo value changes (CollectionScrollAnchor.point: top /
+        # center / bottom along the scroll axis, anything else bottom with a
+        # DEBUG warning). The value is read inside `.onChange(of:)`, so a
+        # change of the anchor alone scrolls nothing.
+        def scroll_anchor_arg
+          prop = scroll_anchor_binding
+          return ".#{scroll_anchor_point}" unless prop
+
+          "CollectionScrollAnchor.point(data.#{prop}, horizontal: #{horizontal_scroll?}, " \
+            "collection: #{(@component['id'] || '').to_s.inspect})"
+        end
+
+        # ScrollViewReader helpers for programmatic scrolling
+        def has_scroll_to?
+          @component['scrollTo'] != nil
+        end
+
+        # The scrollTo property's declared class ('Int', 'String', …), or nil.
+        def scroll_to_class
+          prop = extract_property_name(@component['scrollTo'])
+          entry = prop && @data_properties.is_a?(Array) && @data_properties.find { |p| p['name'] == prop }
+          entry ? entry['class'].to_s : nil
+        end
+
+        # A String scrollTo on a Collection with no cellIdProperty: the value is
+        # a cell's cellId (the SSoT's Collection.scrollTo — a String is the
+        # first cell, in section order, whose key, its cellId else its
+        # cellIdProperty value, it is). Until jsonui-cli 1.9.0 its cells kept
+        # their counted Int ids, which a String never equals: it scrolled
+        # nowhere.
+        def cell_id_scroll?
+          has_scroll_to? && @component['cellIdProperty'].nil? && %w[String String?].include?(scroll_to_class)
+        end
+
+        # What the value names is its declared class's (the orchestrator's ruling 2026-09-27,
+        # round 14; the SSoT's Collection.scrollTo): a String is a key — the
+        # cellId, else the cellIdProperty value — anything else (an Int) a
+        # cell's place across the drawn sections. cellIdProperty decides what
+        # a key is, not what the value is. A value whose class is not
+        # declared is a String with cellIdProperty and an Int without, as
+        # before. Until jsonui-cli 1.9.0 cellIdProperty alone decided: an Int
+        # with cellIdProperty did not compile on the class-list List and the
+        # pager (`String? == Int`) and scrolled nowhere on the other routes.
+        def key_scroll?
+          return false unless has_scroll_to?
+
+          cls = scroll_to_class
+          return %w[String String?].include?(cls) if cls && !cls.empty?
+
+          !@component['cellIdProperty'].nil?
+        end
+
+        # The value's match against `cell` (a cell's dictionary) where a route
+        # looks the named cell up at scroll time: its place (`place`) for an
+        # Int, its key for a String — the cellId, else the cellIdProperty value
+        # when the Collection has one.
+        def scroll_match_expr(cell, target)
+          return "place == #{target}" unless key_scroll?
+
+          cip = @component['cellIdProperty']
+          key = cip ? "((#{cell}[\"cellId\"] as? String) ?? (#{cell}[\"#{cip}\"] as? String))" : "(#{cell}[\"cellId\"] as? String)"
+          "#{key} == #{target}"
+        end
+
+        def generate_scroll_reader_open
+          return unless has_scroll_to?
+          add_line "ScrollViewReader { scrollProxy in"
+          @indent_level += 1
+        end
+
+        def generate_default_scroll_anchor
+          default_anchor = @component['defaultScrollAnchor']
+          return unless default_anchor
+
+          anchor = collection_default_scroll_anchor_swift_expr
+          add_modifier_line ".defaultScrollAnchor(#{anchor == 'nil' ? '.top' : anchor})"
+        end
+
+        # The value the Collection appears with scrolls nowhere — unless the
+        # screen saw this Collection (by its id) with another value before
+        # visibility gone removed it: then the same request runs
+        # (SwiftJsonUI CollectionScrollMemory; kjui-collection-scrollto-
+        # ignored-after-visibility-gone, 2026-10-14). The view that holds the
+        # Collection provides the screen's memory (providesCollectionScroll-
+        # Memory on the generated view). A Collection with no id keeps the
+        # first-draw rule.
+        def emit_scroll_entry(scroll_prop, recv_var, &request_body)
+          memory_id = scroll_memory_id
+          return unless memory_id
+
+          @uses_collection_scroll_memory = true
+          add_line ".collectionScrollEntry(#{memory_id.inspect}, value: data.#{scroll_prop}) { #{recv_var} in"
+          indent(&request_body)
+          add_line '}'
+        end
+
+        # The id the screen's scrollTo memory knows this Collection by; nil
+        # when it has none.
+        def scroll_memory_id
+          id = @component['id']
+          id.is_a?(String) && !id.empty? ? id : nil
+        end
+
+        def generate_scroll_reader_close
+          return unless has_scroll_to?
+          scroll_prop = extract_property_name(@component['scrollTo'])
+          return unless scroll_prop
+          anchor = scroll_anchor_arg
+          scroll_animated = @component['scrollAnimated']
+          recv_var = key_scroll? ? 'cellId' : 'index'
+          # `scrollTo` is declared as a PLAIN VALUE, its class what it names
+          # (key_scroll?: a String a key, an Int a place). This used to emit
+          # `data.x.throttle(...)`, which only typechecks if the property is a
+          # Combine publisher, so the attribute forced consumers to declare
+          # `PassthroughSubject<Int, Never>` in their data section. The SSoT
+          # withdrew that (2026-08-05, plan 49-E): naming a Swift transport in
+          # a cross-platform declaration is what made kjui's
+          # `map_to_kotlin_type` pass the Combine type through verbatim and
+          # kill the Kotlin build. How the request travels is each platform's
+          # own business.
+          #
+          # The other two platforms both key an effect on the value —
+          # Compose `LaunchedEffect(data.<prop>)`
+          # (collection_component.rb:364), web a `useEffect` on it — and
+          # `.onChange(of:)` is that same shape in SwiftUI. Derived from them
+          # rather than invented here.
+          #
+          # The throttle goes with the publisher: it existed to damp a rapid
+          # stream of sends, and a value that changes has nothing to damp
+          # (neither of the other two throttles either). What is also gone is
+          # "sending the SAME value again re-scrolls" — that is publisher
+          # behaviour a plain value cannot express, and the declaration is now
+          # a plain value.
+          request_body = lambda do
+            target = recv_var
+            if @scroll_every_data_section
+              emit_every_data_section_lookup(recv_var)
+              target = 'found'
+            elsif @component['cellIdProperty'] && !key_scroll? && emit_keyed_place_lookup(recv_var)
+              target = 'found'
+            end
+            scroll_call = "scrollProxy.scrollTo(#{target}, anchor: #{anchor})"
+            if scroll_animated.is_a?(String) && scroll_animated.start_with?('@{') && scroll_animated.end_with?('}')
+              # Binding: runtime check (canonical expression parsing)
+              animated_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(scroll_animated[2..-2])
+              add_line "if #{animated_expr} {"
+              indent do
+                add_line "withAnimation {"
+                indent do
+                  add_line scroll_call
+                end
+                add_line "}"
+              end
+              add_line "} else {"
+              indent do
+                add_line scroll_call
+              end
+              add_line "}"
+            elsif scroll_animated == false
+              add_line scroll_call
+            else
+              add_line "withAnimation {"
+              indent do
+                add_line scroll_call
+              end
+              add_line "}"
+            end
+          end
+          add_modifier_line ".onChange(of: data.#{scroll_prop}) { _, #{recv_var} in"
+          indent(&request_body)
+          add_line "}"
+          emit_scroll_entry(scroll_prop, recv_var, &request_body)
+          @indent_level -= 1
+          add_line "}"
+        end
+
+        # The class-list shape draws every data section's cells with ids of
+        # their place (generate_fallback_foreach: `IndexPath(item:section:)`),
+        # the sections counted at run time; the value is looked up among them
+        # when it changes — an Int by its place across the sections, a String
+        # by the first cell whose key it is — and the scroll goes to that id
+        # (`found`). Until jsonui-cli 1.9.0 every data section's cells were
+        # `.id(cellIndex)`, so section 2's cell 0 answered 0 too, and a key was
+        # never an id.
+        def emit_every_data_section_lookup(target)
+          prop = extract_property_name(@component['items'])
+          sections = is_property_optional?(prop) ? "(data.#{prop}?.sections ?? [])" : "data.#{prop}.sections"
+          return emit_keyed_every_data_section_lookup(sections, target) if @component['cellIdProperty']
+
+          add_line 'var found: IndexPath? = nil'
+          add_line 'var place = 0' unless key_scroll?
+          add_line "search: for (sectionIndex, section) in #{sections}.enumerated() {"
+          indent do
+            cells = key_scroll? ? enriched_cells('(section.cells?.data ?? [])') : '(section.cells?.data ?? [])'
+            add_line "for (cellIndex, #{key_scroll? ? 'cell' : '_'}) in #{cells}.enumerated() {"
+            indent do
+              add_line "if #{scroll_match_expr('cell', target)} { found = IndexPath(item: cellIndex, section: sectionIndex); break search }"
+              add_line 'place += 1' unless key_scroll?
+            end
+            add_line '}'
+          end
+          add_line '}'
+          add_line 'guard let found else { return }'
+        end
+
+        # The class-list shape with cellIdProperty (the orchestrator's round 16): its cells'
+        # loop ids are keyed_loop_ids, so the value is looked up by that rule
+        # and the scroll goes to the found cell's loop id — a String the first
+        # cell, in section order, whose key it is (the first of its section
+        # with it, so [section, key]); an Int the cell at that place.
+        def emit_keyed_every_data_section_lookup(sections, target)
+          add_line 'var found: AnyHashable? = nil'
+          add_line 'var place = 0' unless key_scroll?
+          add_line "search: for (sectionIndex, section) in #{sections}.enumerated() {"
+          indent do
+            add_line 'var seen = Set<String>()'
+            add_line "for (cellIndex, cell) in #{enriched_cells('(section.cells?.data ?? [])')}.enumerated() {"
+            indent do
+              add_line "let key = #{cell_own_key_expr('cell')}"
+              add_line 'let first = key.map { seen.insert($0).inserted } ?? false'
+              add_line "if #{key_scroll? ? "key == #{target}" : "place == #{target}"} {"
+              indent do
+                add_line 'if let key, first { found = AnyHashable([AnyHashable(sectionIndex), AnyHashable(key)]) } ' \
+                         'else { found = AnyHashable(IndexPath(item: cellIndex, section: sectionIndex)) }'
+                add_line 'break search'
+              end
+              add_line '}'
+              add_line 'place += 1' unless key_scroll?
+            end
+            add_line '}'
+          end
+          add_line '}'
+          add_line 'guard let found else { return }'
+        end
+
+        # An Int on a Collection with cellIdProperty (the orchestrator's round 14): its cells'
+        # loop ids are their keys, else their places (open_cell_foreach), so
+        # the value — a cell's place across the drawn sections — is looked up
+        # when it changes and the scroll goes to that cell's id (`found`),
+        # found by the loop's own rule: the key when no cell before it has
+        # it, else IndexPath(item:section:). The cells as each loop reads
+        # them (drawn_cell_lists; enriched first under autoChangeTrackingId).
+        # false when there is no data source to look in.
+        def emit_keyed_place_lookup(target)
+          lists = drawn_cell_lists(enriched: true)
+          return false unless lists
+
+          add_line 'var found: AnyHashable? = nil'
+          add_line 'var place = 0'
+          add_line 'var seen = Set<String>()'
+          add_line "search: for (sectionIndex, cells) in [#{lists.map { |j, cells| "(#{j}, #{cells})" }.join(', ')}] {"
+          indent do
+            add_line 'for (cellIndex, cell) in cells.enumerated() {'
+            indent do
+              add_line "let key = #{cell_own_key_expr('cell')}"
+              add_line 'let first = key.map { seen.insert($0).inserted } ?? false'
+              add_line "if place == #{target} {"
+              indent do
+                add_line 'if let key, first { found = AnyHashable(key) } else { found = AnyHashable(IndexPath(item: cellIndex, section: sectionIndex)) }'
+                add_line 'break search'
+              end
+              add_line '}'
+              add_line 'place += 1'
+            end
+            add_line '}'
+          end
+          add_line '}'
+          add_line 'guard let found else { return }'
+          true
+        end
+
+        # The drawn cells, each list with the section number its loop draws
+        # it as (open_cell_foreach's `section_index`, 0 for one section):
+        # every declared section that names a cell, the data's own when it
+        # has that many; else the declared list's; else the first data
+        # section's. nil with no data source. `enriched`: each list as its
+        # loop reads its keys (enriched_cells).
+        def drawn_cell_lists(enriched: false)
+          property_name = extract_property_name(@component['items'])
+          return nil unless property_name
+
+          is_optional = is_property_optional?(property_name)
+          lists =
+            if @component['sections'].is_a?(Array) && !@component['sections'].empty?
+              secs = is_optional ? "(data.#{property_name}?.sections ?? [])" : "data.#{property_name}.sections"
+              @component['sections'].each_with_index.select { |section, _| section.is_a?(Hash) && section['cell'] }
+                                    .map { |_, i| [i, "(#{secs}.count > #{i} ? (#{secs}[#{i}].cells?.data ?? []) : [])"] }
+            elsif legacy_items_list_element(property_name)
+              [[0, "(#{legacy_array_cells_expr(property_name, is_optional)} ?? [])"]]
+            else
+              [[0, is_optional ? "(data.#{property_name}?.sections.first?.cells?.data ?? [])" : "(data.#{property_name}.sections.first?.cells?.data ?? [])"]]
+            end
+          enriched ? lists.map { |j, cells| [j, enriched_cells(cells)] } : lists
+        end
+
+        # The data a cell is drawn with: its own, with "cellId" rewritten to
+        # CellIdGenerator.autoId of it — "<its cellId, else its cellIdProperty
+        # value, else its place>_<hash of the rest of its content>". The loop
+        # still knows the cell by its key (open_cell_foreach), so nothing is
+        # re-inserted; the cell's view gets a "cellId" that changes when its
+        # content does. The cell views `sjui g collection` and `sjui build`
+        # scaffold (app-owned once written) are Equatable on that "cellId",
+        # re-read their data on its change and guard setData on it, so a cell
+        # whose key stayed fixed while its data changed kept the old data on
+        # iOS while Android redrew it (ticket ios-cell-ignores-data-change-
+        # when-cellid-is-fixed-android-updates: 0 of 6 cells on the
+        # ConformanceHost probe, 0 of 8 on a consumer's tabs). Rewritten here,
+        # in generated code, it reaches every app's scaffold on its next
+        # build. With autoChangeTrackingId (and cellIdProperty) the data is
+        # already enriched so (enriched_cells), and passes as it is.
+        def cell_data_arg(vars)
+          data = vars[:data_var]
+          return data if @component['autoChangeTrackingId'] == true && @component['cellIdProperty']
+
+          # The data's own "cellId" first, else the cellIdProperty value. With
+          # no cellIdProperty, or "cellId" itself, both are "cellId", and the
+          # choice is not written (until 1.9.12 it was, as `… ? "cellId" :
+          # "cellId"`).
+          key = @component['cellIdProperty'] || 'cellId'
+          primary = key == 'cellId' ? '"cellId"' : "#{data}[\"cellId\"] != nil ? \"cellId\" : \"#{key}\""
+          "{ () -> [String: Any] in var refreshed = #{data}; " \
+            "refreshed[\"cellId\"] = CellIdGenerator.autoId(from: #{data}, " \
+            "primaryKey: #{primary}, fallbackIndex: #{vars[:index_var]}); " \
+            "return refreshed }()"
+        end
+
+        # `cells` as a keyed loop reads its keys: with autoChangeTrackingId
+        # (and cellIdProperty), enriched — each cell's "cellId" the
+        # CellIdGenerator's (open_cell_foreach's source). Every lookup reads
+        # a key so (the orchestrator's round 15): until jsonui-cli 1.9.0 the pager's and the
+        # class-list List's compared the data's own key, the loops the
+        # enriched cellId — one String named a cell on one route and none on
+        # the other.
+        def enriched_cells(cells)
+          return cells unless @component['autoChangeTrackingId'] == true && @component['cellIdProperty']
+
+          "#{cells}.reconfigured(cellIdProperty: \"#{@component['cellIdProperty']}\", autoChangeTrackingId: true)"
+        end
+
+        # Open a ForEach block with appropriate identity strategy.
+        # Returns { data_var:, index_var: } for use in the body.
+        # When cellIdProperty is set: maps to IdentifiedCellItem + ForEach(Identifiable)
+        # When not set: uses enumerated() + id: \.offset
+        #
+        # When autoChangeTrackingId is true (plus cellIdProperty), the data
+        # source is wrapped with `.reconfigured(...)` so CellIdGenerator
+        # enriches each cell with a `"cellId"` = `"<primary>_<hash>"` entry.
+        # Idempotent: safe to combine with Mode A (VM pre-sets attributes).
+        # A Collection that names cells but declares no `items` data source
+        # has nothing to iterate. Emit a comment rather than a cell loop: a
+        # ViewBuilder closure may be empty (it becomes EmptyView), and the
+        # layout is named by the validator warning in
+        # json_to_swiftui_converter#validate_component_recursive.
+        def emit_no_cells_without_items
+          add_line "// no 'items' data source declared — no cells emitted"
+        end
+
+        # `section_index`: the section this loop draws, when it is one of a
+        # Collection's `sections`. Every section after the first gives its
+        # cells ids of their own — "<section>:<offset>" — through
+        # IdentifiedCellItem: sibling ForEaches whose ids
+        # repeat (`\.offset` from 0 in each) are one ForEach to a lazy stack
+        # and a TabView, which dropped a later section's cells at an offset an
+        # earlier section already had. Measured on the ConformanceHost codegen
+        # host (iOS 26.5, the orchestrator's round 8): a list of sections of 2 and 1 cells
+        # drew A0 A1 and not B0; a pager of 2 + 3 stopped at page 1. The index
+        # handed to the cell stays its place in its section (an address counts
+        # per section on every route but the pager), except that
+        # `page_start`, a pager's later section, adds the pages before it: a
+        # page's tag and address are its place among all the pages. With
+        # cellIdProperty the ids are the cells' own keys, as before: distinct
+        # unless two sections share a key (not changed here — every face
+        # Collection of two or more sections has cellIdProperty).
+        def open_cell_foreach(data_source_expr, page_start: nil, section_index: nil, pager: false)
+          vars = open_cell_foreach_loop(data_source_expr, page_start: page_start, section_index: section_index, pager: pager)
+          return vars unless @address_start
+
+          vars.merge(address: "sectionStart + #{vars[:index_var]}")
+        end
+
+        def open_cell_foreach_loop(data_source_expr, page_start: nil, section_index: nil, pager: false)
+          @address_start = nil
+          cell_id_property = @component['cellIdProperty']
+          auto_tracking = @component['autoChangeTrackingId'] == true
+
+          if auto_tracking && cell_id_property
+            source_expr = "#{data_source_expr}.reconfigured(" \
+                          "cellIdProperty: \"#{cell_id_property}\", " \
+                          "autoChangeTrackingId: true)"
+          else
+            source_expr = data_source_expr
+            if auto_tracking && cell_id_property.nil?
+              SjuiTools::Core::Logger.warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: " \
+                   'autoChangeTrackingId is true but cellIdProperty is not set; ignoring.'
+            end
+          end
+
+          later = section_index.to_i.positive?
+          index_expr = page_start ? "#{page_start} + index" : 'index'
+          # A later section's scroll target (scrollTo): a scrolled-to index is
+          # a cell's place among the drawn sections' cells, as a pager's page
+          # is — `.id(sectionStart + index)`; it was `.id(index)`, so every
+          # section answered 0… and scrollTo(n) reached the first section's
+          # cell n (the orchestrator's round 9). A pager's later section already counts from
+          # its pageStart.
+          # A keyed loop: cellIdProperty, or a String scrollTo with none (its
+          # cells' cellIds are the keys).
+          keyed = cell_id_property || cell_id_scroll?
+          section_start = later && !page_start && has_scroll_to? && !keyed && earlier_cells_count(section_index)
+          # A later section's cells' address (apply_cell_item_identifier)
+          # counts the drawn sections' cells before it — the same sum as
+          # sectionStart. A pager's later section already counts from its
+          # pageStart.
+          address_start = later && !page_start && @component['id'] && earlier_cells_count(section_index)
+          add_line "let sectionStart: Int = #{section_start || address_start}" if section_start || address_start
+          @address_start = address_start
+          # A key an earlier drawn section has is that section's to answer: a
+          # scrollTo names the FIRST cell, in section order, whose key it is
+          # (the orchestrator's ruling 2026-09-27; the SSoT's Collection.scrollTo). A later
+          # section's cell takes its key as a scroll target only when no
+          # earlier section has it — two views answering one id left
+          # SwiftUI to choose (the orchestrator's round 10).
+          # A String scrollTo with no cellIdProperty: the same rule on the
+          # cellIds. Not a pager's: its loop is by the page (below), and its
+          # scrollTo turns the selection, so nothing would read the set.
+          earlier_keys = !pager && later && has_scroll_to? &&
+                         (cell_id_property ? earlier_cell_keys(section_index) : cell_id_scroll? && earlier_cell_ids(section_index))
+          add_line "let earlierKeys = #{earlier_keys}" if earlier_keys
+          if keyed
+            add_line "let items = #{source_expr}.enumerated().map { index, data in"
+            indent do
+              # Prefer the pre-enriched "cellId" when autoChangeTrackingId is on;
+              # otherwise fall back to the user's primary key. The item's id is
+              # not the loop's (`ids` / `targets` below are): until jsonui-cli
+              # 1.9.0 a later section's was "<section>:" + the key (the orchestrator's round 9),
+              # a string a key could spell (round 16).
+              add_line "IdentifiedCellItem(id: #{cell_key_expr('data', 'index')}, index: #{index_expr}, data: data)"
+            end
+            add_line "}"
+            vars = { data_var: 'cell.data', index_var: 'cell.index' }
+            if pager
+              # A pager's page is known by its place among all the pages (its
+              # tag), not by its key: with autoChangeTrackingId the key is the
+              # enriched cellId, which changes with the cell's content, and a
+              # page whose id changed during a swipe — even off screen — was
+              # removed and re-inserted, leaving the paging TabView between two
+              # pages (ticket sjui-paging-collection-uses-change-tracking-
+              # cellid-as-page-identity-and-stops-mid-swipe; 16 of 41 swipes on
+              # a consumer's book screen). KotlinJsonUI's HorizontalPager is
+              # positional too. The cellId still reaches the cell, which
+              # redraws on it. A pager's scrollTo turns the selection, not an
+              # id (generate_paging_scroll_to).
+              add_line 'ForEach(items, id: \\.index) { cell in'
+              return vars
+            end
+            unless has_scroll_to?
+              # No scrollTo: a cell's loop id is its key in its section,
+              # [section, key] (keyed_loop_ids), when no earlier cell of the
+              # loop has the key; else its place, IndexPath(item:section:). No
+              # two cells share an id — in a loop, or across the sections'
+              # sibling loops, since a key cannot spell another section's id.
+              # Until jsonui-cli 1.9.0 it was the IdentifiedCellItem id: the
+              # key, else "\(index)", and "<section>:" + that after the first
+              # section — a key "2:x" in section 0 was section 2's "x", round
+              # 9's dropped cell (round 16); and two cells with one key were
+              # one id (ForEach(items), round 15).
+              keyed_loop_ids('ids', 'items', 'cell', 'cell.data', 'cell.index', section_index.to_i)
+              add_line 'ForEach(zip(ids, items).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in'
+              indent { add_line 'let cell = item.cell' }
+              return vars
+            end
+
+            # With scrollTo, a cell's loop id is its scroll target: its key
+            # when no cell before it, in section order, has that key — no
+            # earlier drawn section (`earlierKeys`) and no earlier cell of its
+            # own section (the SSoT's Collection.scrollTo names the FIRST cell
+            # whose key it is) — else its place, an IndexPath, which no value
+            # a scrollTo sends (a String, an Int) equals: a cell with no key
+            # has no key, and a later cell with a key already taken is no
+            # scroll target. So no two cells share an id, and a String reaches
+            # the first cell with it by construction. Until jsonui-cli 1.9.0
+            # the loop id of a cell with no key was "\(index)"
+            # ("<section>:\(index)" after the first section), so the String
+            # "3" reached the fourth cell of a section with no keys (round
+            # 13); and two cells of one section with one key had one id, the
+            # view it named SwiftUI's choice (round 14). The place counts the
+            # section too: the ids of the sections' sibling loops stay apart,
+            # as the "<section>:" prefix kept them (round 9).
+            add_line 'let targets: [AnyHashable] = {'
+            indent do
+              add_line "var seen = #{earlier_keys ? 'earlierKeys' : 'Set<String>()'}"
+              add_line 'return items.map { cell in'
+              indent do
+                add_line "if let key = #{cell_own_key_expr('cell.data')}, seen.insert(key).inserted { return AnyHashable(key) }"
+                add_line "return AnyHashable(IndexPath(item: cell.index, section: #{section_index.to_i}))"
+              end
+              add_line '}'
+            end
+            add_line '}()'
+            add_line 'ForEach(zip(targets, items).map { pair in (target: pair.0, cell: pair.1) }, id: \\.target) { item in'
+            indent { add_line 'let cell = item.cell' }
+            vars
+          elsif later
+            add_line "ForEach(#{source_expr}.enumerated().map { IdentifiedCellItem(id: \"#{section_index}:\\($0.offset)\", " \
+                     "index: #{page_start ? "#{page_start} + " : ''}$0.offset, data: $0.element) }) { cell in"
+            vars = { data_var: 'cell.data', index_var: 'cell.index' }
+            section_start ? vars.merge(scroll_id: 'sectionStart + cell.index') : vars
+          else
+            add_line "ForEach(Array(#{source_expr}.enumerated()), id: \\.offset) { cellIndex, cellData in"
+            { data_var: 'cellData', index_var: 'cellIndex' }
+          end
+        end
+
+        # `let <name>: [AnyHashable]`, a keyed loop's ids with no direct scroll
+        # to a key (the orchestrator's round 16): each cell's key in its section, as the
+        # structured `[section, key]` — not a string a key could spell — when
+        # no earlier cell of the loop has the key; else its place,
+        # IndexPath(item:section:). `section` is a literal or, on the
+        # class-list, the running `sectionIndex`.
+        def keyed_loop_ids(name, list, cell, data_var, index_var, section)
+          add_line "let #{name}: [AnyHashable] = {"
+          indent do
+            add_line 'var seen = Set<String>()'
+            add_line "return #{list}.map { #{cell} in"
+            indent do
+              add_line "if let key = #{cell_own_key_expr(data_var)}, seen.insert(key).inserted { " \
+                       "return AnyHashable([AnyHashable(#{section}), AnyHashable(key)]) }"
+              add_line "return AnyHashable(IndexPath(item: #{index_var}, section: #{section}))"
+            end
+            add_line '}'
+          end
+          add_line '}()'
+        end
+
+        # A class-list header or footer (headerClasses / footerClasses): drawn
+        # once, with no data of its own — called as every cell and section
+        # header is, `View(data:)` (the initializer `sjui g collection` writes
+        # is `init(data: Any)`), with an empty dictionary. It was `View()`, which
+        # does not compile against a view whose only initializer takes data
+        # (the orchestrator's round 9).
+        def class_list_edge_call(view_name)
+          "#{view_name}(data: [String: Any]())"
+        end
+
+        # A cell's loop id as `data` holds it: the pre-enriched "cellId", else
+        # the cellIdProperty value, else its index — the loop's identity only:
+        # with scrollTo, a cell with no key answers no key (open_cell_foreach).
+        def cell_key_expr(data_var, index_var)
+          cip = @component['cellIdProperty']
+          by_property = cip ? " ?? (#{data_var}[\"#{cip}\"] as? String)" : ''
+          "(#{data_var}[\"cellId\"] as? String)#{by_property} ?? \"\\(#{index_var})\""
+        end
+
+        # A cell's key, a `String?`: the pre-enriched "cellId", else the
+        # cellIdProperty value; nil for a cell with neither.
+        def cell_own_key_expr(data_var)
+          cip = @component['cellIdProperty']
+          return "(#{data_var}[\"cellId\"] as? String)" unless cip
+
+          "((#{data_var}[\"cellId\"] as? String) ?? (#{data_var}[\"#{cip}\"] as? String))"
+        end
+
+        # The drawn sections before `section_index` (a declared cell), their
+        # cells counted: `(dataSource.sections[0].cells?.data.count ?? 0) + …`,
+        # or nil when none is before it. The data reference is the one every
+        # sectioned route binds (`dataSource` for an optional property).
+        def earlier_cells_count(section_index)
+          prop = extract_property_name(@component['items'])
+          return nil unless prop
+
+          data_ref = is_property_optional?(prop) ? 'dataSource' : "data.#{prop}"
+          drawn = (@component['sections'] || []).first(section_index).each_with_index
+                                                .select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
+          drawn.empty? ? nil : cells_of_sections(data_ref, drawn)
+        end
+
+        # The cells of the sections `indices` (literal), as ONE typed reduce:
+        # `[0, 2].reduce(0) { (count: Int, index: Int) -> Int in count +
+        # (<data>.sections[index].cells?.data.count ?? 0) }`. One `??` however
+        # many sections there are — a `(… ?? 0) + (… ?? 0) + …` chain grows the
+        # type checker's work with every section, and an untyped closure in an
+        # interpolation timed it out on the macos-15 Xcode (2.5.39
+        # release-check). Bound to a typed `let` by every caller.
+        def cells_of_sections(data_ref, indices)
+          "[#{indices.join(', ')}].reduce(0) { (count: Int, index: Int) -> Int in " \
+            "count + (#{data_ref}.sections[index].cells?.data.count ?? 0) }"
+        end
+
+        # The keys of the drawn sections before `section_index`, as a Swift
+        # `Set<String>` expression — each cell's key as its own section's
+        # loop reads it (cell_own_key_expr; enriched first under
+        # autoChangeTrackingId), a cell with no key adding none — or nil when
+        # none is before it. The data reference is earlier_cells_count's.
+        # Until jsonui-cli 1.9.0 a cell with no key added "\(index)".
+        def earlier_cell_keys(section_index)
+          prop = extract_property_name(@component['items'])
+          return nil unless prop
+
+          earlier = (@component['sections'] || []).first(section_index).each_with_index
+                                                  .select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
+          return nil if earlier.empty?
+
+          data_ref = is_property_optional?(prop) ? 'dataSource' : "data.#{prop}"
+          cells = '($0.cells?.data ?? [])'
+          if @component['autoChangeTrackingId'] == true
+            cells = "#{cells}.reconfigured(cellIdProperty: \"#{@component['cellIdProperty']}\", autoChangeTrackingId: true)"
+          end
+          "Set([#{earlier.join(', ')}].map { #{data_ref}.sections[$0] }.flatMap { #{cells}.compactMap { #{cell_own_key_expr('$0')} } })"
+        end
+
+        # The cellIds of the drawn sections before `section_index`, as a Swift
+        # `Set<String>` expression, or nil when none is before it —
+        # earlier_cell_keys for a String scrollTo with no cellIdProperty (a
+        # cell with no cellId has no key).
+        def earlier_cell_ids(section_index)
+          prop = extract_property_name(@component['items'])
+          return nil unless prop
+
+          earlier = (@component['sections'] || []).first(section_index).each_with_index
+                                                  .select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
+          return nil if earlier.empty?
+
+          data_ref = is_property_optional?(prop) ? 'dataSource' : "data.#{prop}"
+          "Set([#{earlier.join(', ')}].map { #{data_ref}.sections[$0] }.flatMap { ($0.cells?.data ?? []).compactMap { $0[\"cellId\"] as? String } })"
+        end
+
+        # `scroll_id`: the cell's scroll target when it is not `index_var`
+        # (open_cell_foreach's `:scroll_id`). `every_section`: generate_fallback_foreach's cells, looked up at
+        # scroll time (emit_every_data_section_lookup) — their id is their place.
+        def generate_cell_identity(index_var = 'cellIndex', scroll_id: nil, every_section: false)
+          if has_scroll_to? && every_section
+            # With cellIdProperty the loop's id is the target (keyed_loop_ids).
+            add_modifier_line ".id(IndexPath(item: #{index_var}, section: sectionIndex))" unless @component['cellIdProperty']
+            @scroll_every_data_section = true
+          elsif has_scroll_to? && @component['cellIdProperty'].nil? && !cell_id_scroll?
+            # Integer-based ID for scroll target only
+            add_modifier_line ".id(#{scroll_id || index_var})"
+          end
+          # A keyed loop's id is its scroll target (open_cell_foreach): no
+          # `.id`. A String with no cellIdProperty took its cellId as `.id`
+          # until jsonui-cli 1.9.0 (round 15), inside loops whose ids were
+          # the offsets — "<section>:<offset>" Strings after the first
+          # section, which a String reached — and two cells of a section with
+          # one cellId had one `.id`.
+
+          # onItemAppear: fire callback with index when cell appears
+          on_item_appear = @component['onItemAppear']
+          if handler_reference?(on_item_appear)
+            prop = handler_property(on_item_appear)
+            add_modifier_line ".onAppear { data.#{prop}?(#{index_var}) }"
+          end
+        end
+
+        # Check if a property is optional based on data_properties
+        # A property is optional if it has no defaultValue or defaultValue is nil
+        def is_property_optional?(property_name)
+          return true if @data_properties.nil? || @data_properties.empty?
+
+          prop = @data_properties.find { |p| p['name'] == property_name }
+          return true unless prop
+
+          # If defaultValue is nil or not specified, it's optional
+          prop['defaultValue'].nil? || prop['defaultValue'] == 'nil'
+        end
+
+        # The Swift view a cell / header / footer reference draws. A class
+        # method too: the build asks it which cell views the generated code
+        # will name (CellViewScaffold), by this one rule.
+        def extract_view_name(class_info)
+          self.class.cell_view_name(class_info)
+        end
+
+        def self.cell_view_name(class_info)
+          return nil unless class_info
+
+          if class_info.is_a?(Hash)
+            # Format: { "className": "InformationListCollectionViewCell" }
+            class_name = class_info['className']
+          elsif class_info.is_a?(String)
+            # Format: "InformationListCollectionViewCell" or "item_card"
+            class_name = class_info
+          else
+            return nil
+          end
+          # A node written inline, with no className, names no layout: it is
+          # not drawn, and the validator says so (inline_layout?). It raised
+          # here, and the build stopped.
+          return nil unless class_name.is_a?(String) && !class_name.empty?
+
+          # Strip directory path if present (e.g., "Chat/candidate_card" -> "candidate_card")
+          class_name = File.basename(class_name) if class_name.include?('/')
+
+          # First, convert snake_case to PascalCase if needed
+          # e.g., "item_card" -> "ItemCard"
+          if class_name.include?('_')
+            class_name = pascal_case(class_name)
+          end
+
+          # Convert UIKit cell class name to SwiftUI view name
+          # If it ends with CollectionViewCell, replace with View
+          # If it ends with Cell, replace with CellView
+          # Otherwise add View
+          view_name = if class_name.end_with?('CollectionViewCell')
+                        class_name.sub(/CollectionViewCell$/, 'View')
+                      elsif class_name.end_with?('cell')
+                        # Handle lowercase 'cell' - convert to CellView with proper casing
+                        class_name.sub(/cell$/, 'Cell') + 'View'
+                      elsif class_name.end_with?('Cell')
+                        # Handle uppercase 'Cell' - just add View
+                        class_name + 'View'
+                      elsif !class_name.end_with?('View')
+                        class_name + 'View'
+                      else
+                        class_name
+                      end
+
+          view_name
+        end
+
+        def self.pascal_case(str)
+          snake = str.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                     .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                     .downcase
+          snake.split(/[_\-]/).map(&:capitalize).join
+        end
+
+        # Convert snake_case, kebab-case, camelCase, or PascalCase to PascalCase
+        # e.g., "item_card" -> "ItemCard", "HomeHeader" -> "HomeHeader"
+        def to_pascal_case(str)
+          # First convert camelCase/PascalCase to snake_case, then to PascalCase
+          snake = str.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                     .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                     .downcase
+          snake.split(/[_\-]/).map(&:capitalize).join
+        end
+
+        # Generate vertical section-based collection content using LazyVStack
+        # Conditionally indent a block — the Group wrappers above read better
+        # than duplicated branches.
+        def maybe_indent(condition, &block)
+          if condition
+            indent(&block)
+          else
+            block.call
+          end
+        end
+
+        def generate_collection_content_sections_vertical
+          property_name = extract_property_name(@component['items'])
+          return unless property_name
+
+          is_optional = is_property_optional?(property_name)
+
+          @component['sections'].each_with_index do |section, index|
+            cell_view_name = extract_view_name(section['cell']) if section['cell']
+            header_view_name = extract_view_name(section['header']) if section['header']
+            footer_view_name = extract_view_name(section['footer']) if section['footer']
+
+            # Wrap in optional check
+            if is_optional
+              add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
+            else
+              add_line "if data.#{property_name}.sections.count > #{index} {"
+            end
+            indent do
+              if is_optional
+                add_line "let section = dataSource.sections[#{index}]"
+              else
+                add_line "let section = data.#{property_name}.sections[#{index}]"
+              end
+
+              # Header
+              if header_view_name
+                add_line "if let headerData = section.header?.data {"
+                indent do
+                  add_line "#{header_view_name}(data: headerData)"
+                end
+                add_line "}"
+              end
+
+              # Cells — in a grid of the section's own columns when it
+              # declares more than one.
+              if cell_view_name
+                own_columns = section_own_grid_columns(section)
+                if own_columns
+                  add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{grid_cell_spacing}), count: #{own_columns}), alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
+                end
+                maybe_indent(own_columns) do
+                  add_line "if let cellsData = section.cells?.data {"
+                  if reorder_declared? && !own_columns
+                    indent do
+                      before = @component['id'] && index.to_i.positive? && earlier_cells_count(index)
+                      cells_before_let(before) if before
+                      emit_reorder_rows('cellsData', index, cell_view_name, @reorder_style || :stack,
+                                        cells_before: before ? 'cellsBefore' : nil)
+                    end
+                    add_line "}"
+                    next
+                  end
+                  indent do
+                    vars = open_cell_foreach('cellsData', section_index: index)
+                    indent do
+                      add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+                      generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+                      apply_cell_frame(grid: !own_columns.nil?)
+                      # Add accessibilityIdentifier for test automation (tapItem action)
+                      apply_cell_item_identifier(vars)
+                    end
+                    add_line "}"
+                  end
+                  add_line "}"
+                end
+                add_line "}" if own_columns
+              end
+
+              # Footer
+              if footer_view_name
+                add_line "if let footerData = section.footer?.data {"
+                indent do
+                  add_line "#{footer_view_name}(data: footerData)"
+                end
+                add_line "}"
+              end
+            end
+            add_line "}"
+          end
+        end
+
+        def generate_collection_content_sections(property_name)
+          # If sections are defined in JSON, use those
+          # No `sections` branch: this function is only called from
+          # `generate_collection_content`, and all five of ITS callers sit in
+          # branches that require `sections` to be absent — so the
+          # sections-shaped body that used to live here could not run. Two
+          # cell-address emit sites went with it (they were 2 of the 16, and
+          # the only 2 that no declaration reached).
+          # Fallback to dynamic sections from data (when sections not defined in JSON)
+          is_optional_fallback = is_property_optional?(property_name)
+          data_source_ref = if is_optional_fallback
+                              "dataSource"
+                            else
+                              "data.#{property_name}"
+                            end
+
+          if is_optional_fallback
+            add_line "if let dataSource = data.#{property_name} {"
+            indent do
+              generate_fallback_foreach(data_source_ref)
+            end
+            add_line "}"
+          else
+            generate_fallback_foreach(data_source_ref)
+          end
+        end
+        
+        # The single `cellClasses` entry to render every item with, or nil.
+        #
+        # SSoT (`/Collection/cellClasses`): with `items` and no `sections`, one
+        # declared cell layout renders every item. Several need `sections[].cell`
+        # to say which goes where, and that case is refused by the validator
+        # rather than silently rendering the first.
+        def single_declared_cell_view
+          declared = @component['cellClasses'] || []
+          return nil unless declared.length == 1
+
+          extract_view_name(declared.first)
+        end
+
+        def generate_fallback_foreach(data_source_ref)
+          # A declared cell class IS the view name, known at compile time.
+          # Without one there is nothing to instantiate: `section.cells?.viewName`
+          # is a runtime string, so this face could only print it.
+          cell_view = single_declared_cell_view
+          add_line "ForEach(Array(#{data_source_ref}.sections.enumerated()), id: \\.offset) { sectionIndex, section in"
+          indent do
+            guard = if cell_view
+                      'if let cellsData = section.cells?.data {'
+                    else
+                      'if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {'
+                    end
+            add_line guard
+            if reorder_declared? && cell_view && !columns_is_multi?
+              # The data's sections, each one a reorderable section of its own (its index at run time).
+              indent do
+                cells_before_let(runtime_cells_before(data_source_ref)) if @component['id']
+                emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false,
+                                  cells_before: @component['id'] ? 'cellsBefore' : nil)
+              end
+              add_line "}"
+              next # the rest of this block is the plain loop; the ForEach closes after it, as for the plain loop
+            end
+            indent do
+              cells_before_let(runtime_cells_before(data_source_ref)) if cell_view && @component['id']
+              if cell_view && @component['cellIdProperty']
+                # cellIdProperty is the cells' identity here too (the orchestrator's round 16):
+                # keyed_loop_ids over the section's cells as its lookup reads
+                # them (enriched_cells). Until jsonui-cli 1.9.0 this loop's ids
+                # were the offsets, whatever cellIdProperty said.
+                add_line "let cells = #{enriched_cells('cellsData')}.enumerated().map { (cellIndex: $0.offset, cellData: $0.element) }"
+                keyed_loop_ids('ids', 'cells', 'cell', 'cell.cellData', 'cell.cellIndex', 'sectionIndex')
+                add_line 'ForEach(zip(ids, cells).map { pair in (id: pair.0, cell: pair.1) }, id: \\.id) { item in'
+                indent do
+                  add_line 'let cellIndex = item.cell.cellIndex'
+                  add_line 'let cellData = item.cell.cellData'
+                end
+              else
+                add_line "ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in"
+              end
+              indent do
+                if cell_view
+                  # What Android and Web already do for this shape:
+                  # kjui emits `<cellClass>View(data = itemData)`, rjui
+                  # `<CellView data={item} />`. iOS printed a placeholder,
+                  # so the same layout rendered cells on two faces and
+                  # debug text on the third.
+                  add_line "#{cell_view}(data: #{cell_data_arg(data_var: 'cellData', index_var: 'cellIndex')})"
+                  generate_cell_identity('cellIndex', every_section: true)
+                  apply_cell_frame(grid: columns_is_multi?)
+                  apply_cell_item_identifier('cellsBefore + cellIndex')
+                else
+                  add_line "// No cellClasses declared — the cell view name is only"
+                  add_line "// known at runtime, so nothing can be instantiated here."
+                  add_line "Text(\"\\(viewName): \\(cellIndex)\")"
+
+                  apply_cell_frame(grid: columns_is_multi?)
+                end
+              end
+              add_line "}"
+            end
+            add_line "}"
+          end
+          add_line "}"
+        end
+
+        # Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
+        # 2026-09-26). A class-list Collection (no `sections`) whose items
+        # property the layout DECLARES a list — `Array`, `[T]`
+        # (AttributeTypes.list_element) — is one section: every element with
+        # cellClasses[0], on the routes a one-section data source draws. Any
+        # other declaration, or none, is the canonical CollectionDataSource.
+        # Until jsonui-cli 1.9.0 every class-list route read `.sections`, which
+        # an array does not have (swiftc: "value of type '[Any]' has no member
+        # 'sections'").
+        def legacy_items_list_element(property_name)
+          return nil unless property_name && @data_properties.is_a?(Array)
+
+          prop = @data_properties.find { |p| p.is_a?(Hash) && p['name'] == property_name }
+          JsonUIShared::AttributeTypes.list_element(prop && prop['class'])
+        end
+
+        # The cells of a class-list Collection as a `[[String: Any]]?` —
+        # what the cell view's model reads (`init(data: Any)`, setData reads a
+        # dictionary). A list of the cell's own Data (`[<Cell>Data]`) becomes
+        # its dictionaries; an untyped list (`Array` = [Any]) is read element
+        # by element as dictionaries. A list of any other type is named: its
+        # elements are no dictionary, so its cells draw with no data.
+        def legacy_array_cells_expr(property_name, is_optional)
+          element = legacy_items_list_element(property_name)
+          cell_view = extract_view_name((@component['cellClasses'] || []).first)
+          own_data = cell_view && cell_view.sub(/View\z/, 'Data')
+          if element.any? || element.name != own_data
+            unless element.any?
+              SjuiTools::Core::Logger.warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
+                                           "#{element.name}; a cell reads its own #{own_data || 'Data'} or a dictionary, so its cells draw with no data."
+            end
+            conversion = 'compactMap({ $0 as? [String: Any] })'
+          else
+            conversion = 'map({ $0.toDictionary() })'
+          end
+          is_optional ? "data.#{property_name}?.#{conversion}" : "Optional(data.#{property_name}.#{conversion})"
+        end
+
+        # The `if let` binding of `cellsData` for a one-section route
+        # (horizontal, flow): the first data section's cells, or the declared
+        # list's.
+        def legacy_first_cells_binding(property_name, is_optional)
+          return "cellsData = #{legacy_array_cells_expr(property_name, is_optional)}" if legacy_items_list_element(property_name)
+
+          if is_optional
+            "dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data"
+          else
+            "cellsData = data.#{property_name}.sections.first?.cells?.data"
+          end
+        end
+
+        # `items` is declared ["array", "binding"]; the data source is the
+        # binding. An array names no data and is set aside, as kjui and rjui
+        # set it aside — until 1.9.0 it reached `start_with?` and raised
+        # NoMethodError (ticket kjui-codegen-table-crashes-on-an-items-array).
+        def extract_property_name(items_property)
+          return nil unless items_property.is_a?(String)
+          
+          if items_property.start_with?('@{') && items_property.end_with?('}')
+            # Data-source reference: parsed path only ('??'/'!' are not
+            # meaningful for collection data sources)
+            SwiftUI::Binding::BindingExpression.parse(items_property[2...-1]).path
+          else
+            nil
+          end
+        end
+        
+        def generate_collection_content(cell_class_name, id)
+          # Check if items property is specified (e.g., "@{items}")
+          property_name = extract_property_name(@component['items'])
+          
+          if property_name && legacy_items_list_element(property_name)
+            # A declared list: one section (legacy_items_list_element).
+            generate_legacy_array_cells(property_name)
+          elsif property_name
+            # Use section-based rendering
+            generate_collection_content_sections(property_name)
+          else
+            # Legacy behavior for backward compatibility
+            generate_collection_content_legacy(cell_class_name, id)
+          end
+        end
+        
+        # Every cell of a declared list, with the single declared cellClass —
+        # the every-section routes' (List, grid, lazy:none) one section.
+        def generate_legacy_array_cells(property_name)
+          cell_view = single_declared_cell_view
+          unless cell_view
+            add_line "// No single cellClass — nothing rendered (several need sections[].cell)"
+            return
+          end
+
+          add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+          if reorder_declared? && !columns_is_multi?
+            indent { emit_reorder_rows('cellsData', 0, cell_view, @reorder_style || :stack, equatable: false) }
+            add_line "}"
+            return
+          end
+          indent do
+            vars = open_cell_foreach('cellsData')
+            indent do
+              add_line "#{cell_view}(data: #{cell_data_arg(vars)})"
+              generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
+              apply_cell_frame(grid: columns_is_multi?)
+              apply_cell_item_identifier(vars)
+            end
+            add_line "}"
+          end
+          add_line "}"
+        end
+
+        def generate_collection_content_legacy(cell_class_name, id)
+          if cell_class_name
+            # Extract the original class name from the cell classes
+            cell_class_info = @component['cellClasses']&.first
+            original_class_name = if cell_class_info.is_a?(Hash)
+                                    cell_class_info['className']
+                                  elsif cell_class_info.is_a?(String)
+                                    cell_class_info
+                                  else
+                                    cell_class_name.sub('View', '')
+                                  end
+            
+            # Same dead fallback as the sections branch: `collectionDataSource`
+            # is declared nowhere and `getCellData` is implemented nowhere, so
+            # this emitted Swift that cannot compile. `original_class_name` is
+            # kept because the warning and future emit both need it.
+            _ = original_class_name
+            add_line "// Legacy non-section based collection"
+            emit_no_cells_without_items
+          else
+            # Declaration-faithful (2026-08-02 ruling): no cell class
+            # declared → nothing rendered (was a 10-item placeholder).
+            add_line "// No cellClasses — nothing rendered (declaration-faithful)"
+          end
+        end
+        
+        # Generate .padding() from declared insets — declaration-faithful:
+        # nothing declared, nothing emitted. The old else-branch injected the
+        # SwiftUI system default (.padding(.horizontal) ≈16pt) that Compose
+        # never had, so an insets-free Collection rendered 16pt wider gutters
+        # on iOS only.
+        # insets format: [top, left, bottom, right]
+        def apply_grid_padding
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          if insets
+            top, left, bottom, right = insets
+            add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
+          end
+          apply_inset_vertical
+        end
+
+        # The grid route's scroll holds more than one row: two or more
+        # sections, a section's header or footer, or the class-list shape's
+        # header or footer (grid_rows_column's caller).
+        def grid_rows_column?
+          sections = @component['sections']
+          if sections.is_a?(Array) && !sections.empty?
+            sections.size > 1 || sections.any? { |s| s.is_a?(Hash) && (s['header'] || s['footer']) }
+          else
+            !!(extract_view_name(@component['headerClasses']&.first) || extract_view_name(@component['footerClasses']&.first))
+          end
+        end
+
+        # A grid's header or footer is a full-width row, the view at its
+        # start (the orchestrator's ruling 2026-09-27, round 10) — kjui's full-span item and
+        # the web's row of its own draw it so — inset as the grid is.
+        def apply_grid_edge_row
+          add_modifier_line ".frame(maxWidth: .infinity, alignment: .leading)"
+          apply_header_footer_padding
+        end
+
+        # Section headers/footers sit outside the LazyVGrid; follow the
+        # declared insets' horizontal edges so they line up with the grid
+        # body. Nothing declared → nothing emitted. They used to get an
+        # unconditional .padding(.horizontal) — even when insets WERE
+        # declared, which misaligned them from the grid.
+        def apply_header_footer_padding
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          return unless insets
+
+          _top, left, _bottom, right = insets
+          add_modifier_line ".padding(EdgeInsets(top: 0, leading: #{left}, bottom: 0, trailing: #{right}))"
+        end
+
+        # Resolve the `lazy` attribute into one of three symbols matching
+        # SwiftJsonUI's CollectionStackMode enum. Returns :lazy / :eager / :none.
+        # Bindings always resolve to :lazy at build time; the runtime expression
+        # in `collection_mode_swift_expr` handles the dynamic case.
+        # A Collection is not a container by TYPE. Every lazy shape emits a
+        # ScrollView (or List / TabView / CollectionStackView), which IS an
+        # accessibility element and takes the identifier itself. `lazy:
+        # "none"` emits a bare VStack / HStack / FlowLayout — no scroll
+        # container, by the intent stated at generate_non_lazy — and a bare
+        # `.accessibilityIdentifier` on a non-element is pushed DOWN onto
+        # every child element, renaming each cell to the collection's id.
+        #
+        # Measured on a consumer face: a flow Collection's cells were all
+        # called `suggested_collection`, so `tapItem` could not address any
+        # index, and `assert visible <collection>` passed against a renamed
+        # chip. Same mechanism that put `embed` in
+        # ACCESSIBILITY_CONTAINER_TYPES in 10.4.2.
+        #
+        # The anchor comes with it: a Collection declares no `child` nodes,
+        # so guaranteed_accessible_child_count is 0 and the merge hazard is
+        # already true. With one cell, `.contain` alone still merged — the
+        # consumer measured that too.
+        #
+        # NOTE for whoever changes the emitted containers: this predicate
+        # tracks which shapes are elements. If a shape stops being one (say
+        # the ScrollView is removed from the flow arm to match the other
+        # codegens), it has to be added here, or its cells lose their
+        # addresses silently. SwiftJsonUI's Dynamic renderer wraps flow in a
+        # ScrollView today and needs nothing; the same applies there.
+        def accessibility_container?
+          super || collection_lazy_mode == :none || flow_defers_to_scrolling_ancestor?
+        end
+
+        # A flow Collection with `lazy` in effect scrolls inside its own bounds
+        # (2026-09-03 ruling) — and "its own bounds" is literal. A wrapContent
+        # flow has none: under a scrolling ancestor the ScrollView this arm
+        # used to emit unconditionally grew to the outer viewport's height
+        # inside the outer ScrollView (the corpus's flowOverflow__wrap picture
+        # on iOS), while Android wraps and lets the parent scroll. So when
+        # the tree shows a scrolling ancestor (marked once from the root by
+        # JsonToSwiftUIConverter#mark_scrolling_ancestors), a wrapping flow
+        # takes the non-lazy container — VStack + FlowLayout, anchor + .contain
+        # so its cells keep their addresses — and the ancestor scrolls. No
+        # ancestor in the tree (a full-screen chip destination, a converter
+        # built on a bare component, a layout used as a Collection cell whose
+        # parent is another file) keeps the ScrollView: the static emit can
+        # only defer to what it can see. A numeric or matchParent height is
+        # unchanged: those have bounds to scroll inside.
+        def flow_defers_to_scrolling_ancestor?
+          return false unless @component[SCROLLING_ANCESTOR_KEY]
+          return false if collection_lazy_mode == :none
+
+          layout = @component['layout'] || @component['orientation'] || 'vertical'
+          return false unless %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
+
+          height = @component['height']
+          height.nil? || height == 'wrapContent'
+        end
+
+        def collection_lazy_mode
+          value = @component['lazy']
+          case value
+          when 'eager' then :eager
+          when 'none' then :none
+          when 'lazy', nil then :lazy
+          else :lazy
+          end
+        end
+
+        # Swift-source expression evaluating to a CollectionStackMode value.
+        # Literal modes return `.lazy` / `.eager` / `.none`; bindings emit a
+        # runtime-resolved `CollectionStackMode(json: data.<prop>)` so toggles
+        # propagate without rebuilding the modifier chain.
+        def collection_mode_swift_expr
+          value = @component['lazy']
+          if value.is_a?(String) && is_binding?(value)
+            prop = extract_binding_property(value)
+            "CollectionStackMode(json: data.#{prop})"
+          else
+            ".#{collection_lazy_mode}"
+          end
+        end
+
+        # Convert array-form insets to a Swift EdgeInsets literal. Returns nil
+        # when no insets attribute is present so the generator can omit the
+        # parameter (uses CollectionStackView's default `nil`).
+        #
+        # Reads `contentInsets` as well as `insets`. Both are declared and the
+        # UIKit runtime honours both — SJUICollectionView parses `contentInsets`
+        # (string "t|l|b|r" or array) into the section inset — while this only
+        # looked at `insets`, so the SwiftUI path dropped it. `insets` wins when
+        # both are present, matching UIKit's order.
+        # insetVertical / insetHorizontal fold into the same content-padding
+        # channel (the dynamic renderer's applyCollectionContentInsets does
+        # the same). The horizontal axis keeps insetHorizontal on its
+        # insetLeading/insetTrailing params instead, so the caller excludes
+        # it there to avoid double-application.
+        def collection_content_insets_swift_expr(include_horizontal: true)
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          inset_v = @component['insetVertical']
+          inset_h = include_horizontal ? @component['insetHorizontal'] : nil
+          return nil unless insets || inset_v || inset_h
+          top, left, bottom, right = insets || [0, 0, 0, 0]
+          if inset_v
+            top += inset_v.to_i
+            bottom += inset_v.to_i
+          end
+          if inset_h
+            left += inset_h.to_i
+            right += inset_h.to_i
+          end
+          "EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
+        end
+
+        # The declared insets as `[top, leading, bottom, trailing]` — the order
+        # every caller here destructures — or nil when the value pads nothing.
+        #
+        # The SSoT (Collection.insets, jsonui-cli 1.9.0) reads it as `paddings`
+        # reads them: 1, 2 or 4 values, an array or a string separated by `|`;
+        # one, every side; two, [vertical, horizontal]; four, [top, right,
+        # bottom, left] (right the end, left the start); any other value pads
+        # nothing. SwiftJsonUI Dynamic and both Compose paths read it so. Until
+        # jsonui-cli 1.9.0 this read four as [top, left, bottom, right], so
+        # `insets: [0, 30, 0, 0]` put the cells 30pt in from the start here and
+        # at the start on Dynamic, and it read a value it could not parse as 0
+        # rather than as nothing.
+        def collection_insets_array(value)
+          parts = case value
+                  when Array then value
+                  when String then value.split('|', -1)
+                  else return nil
+                  end
+          nums = parts.map { |v| inset_number(v) }
+          return nil if nums.empty? || nums.any?(&:nil?)
+
+          case nums.length
+          when 4 then [nums[0], nums[3], nums[2], nums[1]]
+          when 2 then [nums[0], nums[1], nums[0], nums[1]]
+          when 1 then [nums[0]] * 4
+          end
+        end
+
+        # One inset value: a number, or a string that is one; else nil.
+        def inset_number(value)
+          number = case value
+                   when Numeric then value
+                   when String then Float(value.strip, exception: false)
+                   end
+          return nil if number.nil? || !number.finite?
+
+          number == number.to_i ? number.to_i : number
+        end
+
+        # itemWeight is folded into the COLUMN COUNT (columns_info /
+        # item_weight_count), not emitted as a modifier. The previous emit
+        # here — `.containerRelativeFrame(.horizontal, count:, span: 1)` on
+        # the collection CONTENT via apply_insets_only — declared the
+        # per-item intent in its own comment and then squeezed the whole
+        # content to 1/count width instead: run 5 measured ZERO cell pixels
+        # against 43k on neighbouring Collection fixtures. The dynamic face
+        # (effectiveGridColumns) carries the canonical reading.
+
+        # insetVertical — vertical-only content inset.
+        #
+        # UIKit folds it into the section inset; here it is vertical padding on
+        # the scroll content, which is what the attribute says and what the
+        # Dynamic runtime does.
+        def apply_inset_vertical
+          value = @component['insetVertical']
+          return if value.nil?
+
+          add_modifier_line ".padding(.vertical, #{value})"
+        end
+
+        # Open a CollectionStackView(...) call. The caller is responsible for
+        # emitting the trailing closing `}` after the cell-content block.
+        # ---- Reorder (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13) ----
+        # A vertical single-column Collection with sections, `reorderable` (true or a binding) and an `onReorder`
+        # handler draws SwiftJsonUI's CollectionReorder: CollectionReorderRows in place of each section's ForEach
+        # (style .list in a List, .stack elsewhere), the container on the stack (CollectionStackView's `reorder:`, or
+        # .collectionReorderContainer on the lazy-none VStack; a List needs none). The handle is marked in the cell's
+        # own file (ReorderHandleIndex). The OS version's fork is the library's (no #available here). Without the
+        # declaration the emitted code is the route as it was. The class-list shape (no sections), grids and
+        # horizontal Collections do not reorder (v1).
+        def reorder_declared?
+          r = @component['reorderable']
+          return false if r.nil? || r == false || r == 'false'
+          handler_reference?(@component['onReorder'])
+        end
+
+        def reorder_value_expr
+          r = @component['reorderable']
+          enabled = if r == true || r == 'true'
+                      'true'
+                    elsif r.is_a?(String) && (prop = r[/\A@\{([^}]+)\}\z/, 1])
+                      "data.#{prop} == true"
+                    else
+                      'false'
+                    end
+          uses_handle = @component['reorderHandle'].is_a?(String) && !@component['reorderHandle'].empty?
+          # Locked rows keep the library's own drag on iOS 27 too (orchestrator's ruling 2026-11-13): the
+          # standard reorderable moves a locked row while the finger drags.
+          locked = @component['reorderLockedProperty'].is_a?(String) && !@component['reorderLockedProperty'].empty?
+          name = handler_property(@component['onReorder'])
+          # Fixed rows (reorderFixedProperty) keep the library's drag too; the argument only when declared, so a
+          # Collection without it is emitted as it was.
+          fixed = reorder_fixed_property ? 'hasFixedRows: true, ' : ''
+          # onReorderStart (section, index) / onReorderEnd (section), only when declared (rule.callbacks; ticket
+          # jui-collection-reorder-start-callback-missing): a Collection without them is emitted as it was.
+          callbacks = +''
+          if handler_reference?(@component['onReorderStart'])
+            callbacks << "onReorderStart: { section, index in data.#{handler_property(@component['onReorderStart'])}?(section, index) }, "
+          end
+          if handler_reference?(@component['onReorderEnd'])
+            callbacks << "onReorderEnd: { section in data.#{handler_property(@component['onReorderEnd'])}?(section) }, "
+          end
+          "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, hasLockedRows: #{locked}, #{fixed}" \
+            "#{callbacks}onReorder: { section, from, to in data.#{name}?(section, from, to) })"
+        end
+
+        # reorderFixedProperty's key, or nil (ticket jui-collection-reorder-fixed-row-vs-barrier-row).
+        def reorder_fixed_property
+          prop = @component['reorderFixedProperty']
+          prop.is_a?(String) && !prop.empty? ? prop : nil
+        end
+
+        # A section's rows through CollectionReorderRows; `style` is :list or :stack.
+        # `cells_before`: the cells of the sections before this one, a Swift
+        # expression (nil for the first) — the rows' address counts them.
+        def emit_reorder_rows(cells_expr, section_index, cell_view_name, style, equatable: true, cells_before: nil)
+          locked_prop = @component['reorderLockedProperty']
+          locked = if locked_prop.is_a?(String) && !locked_prop.empty?
+                     "Set(#{cells_expr}.indices.filter { (#{cells_expr}[$0][\"#{locked_prop}\"] as? Bool) == true })"
+                   else
+                     '[]'
+                   end
+          fixed = if (fixed_prop = reorder_fixed_property)
+                    ", fixed: Set(#{cells_expr}.indices.filter { (#{cells_expr}[$0][\"#{fixed_prop}\"] as? Bool) == true })"
+                  else
+                    ''
+                  end
+          ids = "#{cells_expr}.enumerated().map { index, data in #{cell_key_expr('data', 'index')} }"
+          add_line "CollectionReorderRows(section: #{section_index}, ids: #{ids}, locked: #{locked}#{fixed}, reorder: #{reorder_value_expr}, style: .#{style}) { index in"
+          indent do
+            vars = { data_var: "#{cells_expr}[index]", index_var: 'index' }
+            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)})#{equatable ? '.equatable()' : ''}"
+            apply_cell_frame(grid: false)
+            apply_cell_item_identifier(cells_before ? "#{cells_before} + index" : 'index')
+          end
+          add_line "}"
+        end
+
+        def generate_collection_stack_view_open(axis:)
+          params = collection_stack_view_params(axis: axis)
+          add_line "CollectionStackView("
+          indent do
+            params.each_with_index do |line, idx|
+              add_line(idx == params.length - 1 ? line : "#{line},")
+            end
+          end
+          add_line ") {"
+        end
+
+        # Build the ordered parameter list (without trailing commas) for a
+        # CollectionStackView call. Tests can validate this list directly.
+        def collection_stack_view_params(axis:)
+          if axis == :vertical
+            shows_indicators = @component['showsVerticalScrollIndicator'] != false
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
+            alignment_param = "horizontalAlignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}"
+          else
+            shows_indicators = @component['showsHorizontalScrollIndicator'] != false
+            # `lineSpacing` historically named the inter-line gap; with a
+            # horizontal single-column CollectionStackView, the inter-cell gap
+            # IS the inter-line gap (one cell per line), so authoring
+            # `lineSpacing` for a horizontal Collection should still set the
+            # spacing. kjui's CollectionStack matches this fallback order AND
+            # the all-absent default of 0 (the composable's `spacing: Dp = 0.dp`).
+            line_spacing = horizontal_scroll_spacing
+            alignment_param = "verticalAlignment: #{get_hstack_alignment_from_gravity(@component['gravity'])}"
+          end
+
+          # scrollDisabled: derived from scrollEnabled (binding or literal).
+          scroll_enabled = @component['scrollEnabled']
+          scroll_disabled_expr =
+            if scroll_enabled.is_a?(String) && is_binding?(scroll_enabled)
+              "!data.#{extract_binding_property(scroll_enabled)}"
+            elsif scroll_enabled == false
+              "true"
+            else
+              "false"
+            end
+
+          params = [
+            "mode: #{collection_mode_swift_expr}",
+            "axis: .#{axis}",
+            alignment_param,
+            "spacing: #{line_spacing}",
+            "showsIndicators: #{shows_indicators}",
+            "scrollDisabled: #{scroll_disabled_expr}"
+          ]
+
+          # defaultScrollAnchor on both axes (the orchestrator's ruling 2026-09-27): until
+          # jsonui-cli 1.9.0 a horizontal Collection's was not passed, and it
+          # started at its leading edge whatever the anchor said.
+          anchor_expr = collection_default_scroll_anchor_swift_expr
+          params << "defaultScrollAnchor: #{anchor_expr}" unless anchor_expr == 'nil'
+          # insetHorizontal rides on the row's leading / trailing spacers; the
+          # declared insets are its content padding (contentInsets below), as
+          # on the vertical axis. Until jsonui-cli 1.9.0 a four-value insets
+          # array also set these spacers — from [1] and [3] read as leading
+          # and trailing — so its horizontal sides were applied twice.
+          unless axis == :vertical
+            inset_horizontal = inset_number(@component['insetHorizontal']) || 0
+            params << "insetLeading: #{inset_horizontal}" if inset_horizontal > 0
+            params << "insetTrailing: #{inset_horizontal}" if inset_horizontal > 0
+          end
+
+          if (insets_expr = collection_content_insets_swift_expr(include_horizontal: axis == :vertical))
+            params << "contentInsets: #{insets_expr}"
+          end
+
+          # A horizontal eager row fills a declared height, as the lazy row
+          # does (CollectionStackView fillsCrossAxis, SwiftJsonUI 10.29.0):
+          # until jsonui-cli 1.9.0 it was its cells' height — 28pt in a 40pt
+          # frame where the lazy row was 40. Only where the mode can be eager:
+          # a lazy row fills already and a `none` row is sized by its frame.
+          mode_expr = collection_mode_swift_expr
+          if axis != :vertical && fills_cross_axis? && !%w[.lazy .none].include?(mode_expr)
+            params << 'fillsCrossAxis: true'
+          end
+          # A reorderable Collection: the stack is its container (SwiftJsonUI CollectionReorder).
+          params << "reorder: #{reorder_value_expr}" if axis == :vertical && reorder_declared?
+
+          params
+        end
+
+        # The Collection's height is declared — a number or matchParent (a
+        # weighted or `distribution: fill` vertical parent has already made it
+        # matchParent). wrapContent, absent, or bound: false. The Dynamic half
+        # is CollectionConverter.fillsHeight.
+        def fills_cross_axis?
+          height = @component['height']
+          height.is_a?(Numeric) || height == 'matchParent'
+        end
+
+        # defaultScrollAnchor expressed as a UnitPoint? Swift expression. Returns
+        # 'nil' when no anchor is configured. Along the scroll axis, as
+        # scrollAnchor (scroll_anchor_point): on a horizontal Collection top /
+        # center / bottom are `.leading` / `.center` / `.trailing` (the orchestrator's ruling
+        # 2026-09-27) — `.top` / `.bottom` have x 0.5.
+        def collection_default_scroll_anchor_swift_expr
+          raw = @component['defaultScrollAnchor']
+          return 'nil' unless raw
+
+          start, finish = horizontal_scroll? ? %w[.leading .trailing] : %w[.top .bottom]
+          if raw.is_a?(String) && is_binding?(raw)
+            prop = extract_binding_property(raw)
+            "data.#{prop} == \"bottom\" ? #{finish} : data.#{prop} == \"center\" ? .center : #{start}"
+          else
+            case raw
+            when 'bottom' then finish
+            when 'center' then '.center'
+            when 'top' then start
+            else 'nil'
+            end
+          end
+        end
+
+        # A List's content insets: the Collection's insets with insetHorizontal
+        # / insetVertical, as safe-area padding on the List - the rows are laid
+        # out that far in from each edge, inside the List's scroll, which stays
+        # the Collection's size, and on top of the safe area and the List's
+        # own row insets (the SSoT's Collection.insets: added, no precedence).
+        # SwiftJsonUI Dynamic's buildListLayout / buildSectionedListLayout
+        # apply the same. Until jsonui-cli 1.9.0 neither List route read the
+        # insets.
+        def apply_list_content_insets
+          insets_expr = collection_content_insets_swift_expr
+          add_modifier_line ".safeAreaPadding(#{insets_expr})" if insets_expr
+        end
+
+        # Apply insets only when explicitly specified (no default padding)
+        # Used for LazyVStack paths that originally had no padding
+        # Every collection path funnels through here for its content padding,
+        # so `contentInsets` / `itemWeight` / `insetVertical` are applied here
+        # too rather than at each of the eight call sites.
+        def apply_insets_only
+          insets = collection_insets_array(@component['insets']) ||
+                   collection_insets_array(@component['contentInsets'])
+          if insets
+            top, left, bottom, right = insets
+            add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
+          end
+          apply_inset_vertical
+        end
+
+        def to_camel_case(str)
+          return str if str.nil? || str.empty?
+
+          # Handle snake_case to camelCase
+          parts = str.split('_')
+          parts[0] + parts[1..-1].map(&:capitalize).join
+        end
+      end
+    end
+  end
+end

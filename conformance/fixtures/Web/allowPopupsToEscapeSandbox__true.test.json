@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/allowPopupsToEscapeSandbox__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.allowPopupsToEscapeSandbox (true)",
+    "description": "Conformance fixture for 'allowPopupsToEscapeSandbox' on Web (section: Web, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "allowPopupsToEscapeSandbox__true",
+      "description": "Conformance fixture for 'allowPopupsToEscapeSandbox' on Web (section: Web, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_allowPopupsToEscapeSandbox__true"
+        }
+      ]
+    }
+  ]
+}

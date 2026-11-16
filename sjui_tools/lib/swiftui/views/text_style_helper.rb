@@ -1,0 +1,209 @@
+# frozen_string_literal: true
+
+require_relative 'value_expression_helper'
+require_relative 'attribute_vocabulary'
+require_relative '../../core/enum_spelling'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      # The three text vocabularies the SSoT declares as enums — text
+      # alignment, keyboard/input type and autofill content type — and their
+      # SwiftUI spellings.
+      #
+      # One table each, because a vocabulary that exists twice drifts (plan
+      # 40). Two of them already did: `text_alignment_to_swiftui` was a
+      # private copy in both the Label and the TextField converter, and
+      # TextView — which reads the same declared `textAlign` — had neither and
+      # emitted nothing at all.
+      #
+      # Each table has a bound sibling that resolves the SAME table at run
+      # time (see `ValueExpressionHelper#bound_enum`), so a declaration keeps
+      # its meaning when it is written as `@{...}`.
+      module TextStyleHelper
+        include ValueExpressionHelper
+
+        #: JSON spelling -> SwiftUI `TextAlignment`. `Left`/`Center`/`Right`
+        #: are the declared enum; the leading/trailing spellings are accepted
+        #: because they were before this table had one home.
+        TEXT_ALIGNMENTS = {
+          'left' => '.leading',
+          'leading' => '.leading',
+          'right' => '.trailing',
+          'trailing' => '.trailing',
+          'center' => '.center'
+        }.freeze
+
+        #: JSON `input` -> `UIKeyboardType`.
+        #
+        # `alphabet` (and the historical `allphabet` typo the SSoT still
+        # declares) and `phone` and the lower-case `url` were missing, so
+        # three of the nine declared values landed on `.default` next to the
+        # value that MEANS default — the converter looked like it read the
+        # attribute and did not. `password` is deliberately `.default`: the
+        # secure entry is a SecureField, not a keyboard.
+        KEYBOARD_TYPES = {
+          'default' => '.default',
+          'alphabet' => '.asciiCapable',
+          'allphabet' => '.asciiCapable',
+          'email' => '.emailAddress',
+          'number' => '.numberPad',
+          'decimal' => '.decimalPad',
+          # `signedDecimal` is a decimal keyboard that can also type a sign.
+          # `.decimalPad` has no minus key, so it is NOT the same keyboard as
+          # `decimal` — `.numbersAndPunctuation` is the narrowest UIKit type
+          # that offers one. Member name taken from the SDK header
+          # (UITextInputTraits.h, UIKeyboardTypeNumbersAndPunctuation), not
+          # from the plan or the declaration: the Android lane lost an hour
+          # to `KeyboardType.SignedDecimal`, which does not exist.
+          #
+          # Without this row the value fell through `KEYBOARD_TYPES[...] ||
+          # '.default'` to a plain `.default` — not even `decimal`'s pad.
+          'signeddecimal' => '.numbersAndPunctuation',
+          'phone' => '.phonePad',
+          'url' => '.URL',
+          'password' => '.default',
+          'twitter' => '.twitter',
+          'websearch' => '.webSearch',
+          'namephonepad' => '.namePhonePad'
+        }.freeze
+
+        #: JSON `contentType` -> `UITextContentType`. Kept in step with rjui's
+        #: `map_content_type` (autocomplete) and kjui's keyboard handling.
+        CONTENT_TYPES = {
+          'username' => '.username',
+          # Passkeys come to a .username field through the app's
+          # performAutoFillAssistedRequests; the field asks for nothing else.
+          'usernamewebauthn' => '.username',
+          'password' => '.password',
+          'newpassword' => '.newPassword',
+          'onetimecode' => '.oneTimeCode',
+          'email' => '.emailAddress',
+          'emailaddress' => '.emailAddress',
+          'name' => '.name',
+          'givenname' => '.givenName',
+          'familyname' => '.familyName',
+          'tel' => '.telephoneNumber',
+          'telephonenumber' => '.telephoneNumber',
+          'streetaddress' => '.streetAddressLine1',
+          'postalcode' => '.postalCode',
+          'country' => '.countryName',
+          'creditcardnumber' => '.creditCardNumber',
+          'url' => '.URL'
+        }.freeze
+
+        # *attribute*: a path for a textAlign declared inside an object
+        # (%w[highlightAttributes textAlign] — Left / Right / Center only).
+        def text_alignment_to_swiftui(alignment, attribute = 'textAlign')
+          TEXT_ALIGNMENTS[JsonUIShared::EnumSpelling.lowered(alignment, @component && @component['type'], attribute)] || '.leading'
+        end
+
+        def bound_text_alignment(value)
+          bound_enum(value, declared_vocabulary('textAlign', TEXT_ALIGNMENTS), exact: true,
+                     default: '.leading', type: 'TextAlignment')
+        end
+
+        def input_to_keyboard_type(input)
+          KEYBOARD_TYPES[JsonUIShared::EnumSpelling.lowered(input, @component && @component['type'], 'input')] || '.default'
+        end
+
+        def bound_keyboard_type(value)
+          bound_enum(value, declared_vocabulary('input', KEYBOARD_TYPES), exact: true,
+                     default: '.default', type: 'UIKeyboardType')
+        end
+
+        # Unknown values warn instead of silently degrading to `.none`
+        # (sjui-textfield-contenttype-newpassword-not-mapped).
+        def map_content_type(type)
+          # An alias (`phone`) by its canonical spelling: a Style reaches here
+          # as written, without `jui build`'s normalizer.
+          canonical = JsonUIShared::EnumSpelling.canonical(type, 'TextField', 'contentType')
+          mapped = CONTENT_TYPES[JsonUIShared::EnumSpelling.lowered(canonical, 'TextField', 'contentType')]
+          return mapped if mapped
+
+          puts "Warning: unknown contentType '#{type}' — emitting .textContentType(.none); add a mapping if this is a canonical value"
+          '.none'
+        end
+
+        # `.textContentType` takes a `UITextContentType?`, so the bound form
+        # leaves the lookup Optional: an unrecognised value at run time turns
+        # the autofill hint off, which is what `.none` means statically.
+        def bound_content_type(value)
+          bound_enum(value, declared_vocabulary('contentType', CONTENT_TYPES), exact: true,
+                     default: nil, type: 'UITextContentType')
+        end
+
+        # Whether a declared `underline` / `strikethrough` face asks for a
+        # line to be drawn.
+        #
+        # Both are declared `boolean|object|array`, and the object face
+        # carries `lineStyle`, whose enum spells "no line" as `None`. Every
+        # read site tested the face for truthiness, so `{"lineStyle": "None"}`
+        # — an object, therefore truthy — asked for a line, which is the one
+        # thing that value cannot mean.
+        #
+        # The object face's CONTENTS (lineStyle, colour, lineOffset) are still
+        # unemitted on ios: `PartialAttributedText` takes `underline: Bool`,
+        # so there is nothing to hand them to yet. That is the
+        # C2/presence-only row in codegen_effect.json, and it lands when the
+        # library grows the styled parameters.
+        def line_decoration?(face)
+          return false if face.nil? || face == false
+          # `lineStyle` by its declared spelling (Label.underline / .strikethrough
+          # .lineStyle — the same four, Single / Double / Thick / None), case and
+          # all (1.9.0): an undeclared one is the default, a single line.
+          return JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]) != 'none' if face.is_a?(Hash)
+
+          true
+        end
+
+        #: Declared `lineStyle` -> `TextDecoration.LineStyle`. `None` never
+        #: reaches here: `line_decoration?` already suppresses that face.
+        DECORATION_LINE_STYLES = {
+          'single' => '.single',
+          'double' => '.double',
+          'thick' => '.thick',
+        }.freeze
+
+        # The OBJECT face of `underline` / `strikethrough`, as a
+        # `TextDecoration(...)` literal — or nil for the boolean face, which
+        # keeps the plain line it always drew.
+        #
+        # Both faces used to emit the same bare `underline: true`, so a styled
+        # declaration and a plain `true` produced byte-identical text: the
+        # `presence-only` row in codegen_effect.json. The library grew the
+        # receiving parameters in SwiftJsonUI 0fc5231 and this fills them.
+        #
+        # `lineOffset` is underline-only — the declaration does not give
+        # `strikethrough` one, so the caller says which face it is asking for.
+        def text_decoration_expression(face, line_offset: true)
+          return nil unless face.is_a?(Hash)
+          return nil unless line_decoration?(face)
+
+          args = ["lineStyle: #{DECORATION_LINE_STYLES[JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]).to_s] || '.single'}"]
+          args << "color: #{get_swiftui_color(face['color'])}" if face['color']
+          args << "lineOffset: #{number_slot(face['lineOffset'])}" if line_offset && face['lineOffset']
+
+          "TextDecoration(#{args.join(', ')})"
+        end
+
+        # The tool's token -> SwiftUI table, widened to every spelling the
+        # SSoT declares for this component's attribute. A run-time table has
+        # to know the ALIAS spellings, which the build-time normalizer would
+        # otherwise have rewritten before the converter ever saw them — a
+        # binding never passes through it.
+        def vocabulary(attribute, mapping)
+          AttributeVocabulary.widen(@component && @component['type'] || 'View', attribute, mapping)
+        end
+
+        # The same table keyed by each spelling the SSoT declares, as written —
+        # what a run-time lookup of a bound value matches (bound_enum exact:).
+        def declared_vocabulary(attribute, mapping)
+          widened = vocabulary(attribute, mapping)
+          JsonUIShared::EnumSpelling.declared(@component && @component['type'] || 'View', attribute)
+                                    .map { |spelling| (literal = widened[spelling.downcase]) && [spelling, literal] }.compact.to_h
+        end
+      end
+    end
+  end
+end

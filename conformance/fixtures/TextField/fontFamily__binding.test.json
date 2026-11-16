@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/fontFamily__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.fontFamily (binding)",
+    "description": "Conformance fixture for 'fontFamily' on TextField (section: TextField, class: visual). Value under test: \"@{boundFontFamily}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontFamily__binding",
+      "description": "Conformance fixture for 'fontFamily' on TextField (section: TextField, class: visual). Value under test: \"@{boundFontFamily}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_fontFamily__binding"
+        }
+      ]
+    }
+  ]
+}

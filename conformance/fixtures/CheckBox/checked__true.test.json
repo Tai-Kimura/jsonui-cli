@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/checked__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.checked (true)",
+    "description": "Conformance fixture for 'checked' on CheckBox (section: CheckBox, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "checked__true",
+      "description": "Conformance fixture for 'checked' on CheckBox (section: CheckBox, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_checked__true"
+        }
+      ]
+    }
+  ]
+}

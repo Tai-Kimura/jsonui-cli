@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/checked__alias_isOn.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.checked (alias_isOn)",
+    "description": "Conformance fixture for 'checked' on Radio (section: Radio, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "checked__alias_isOn",
+      "description": "Conformance fixture for 'checked' on Radio (section: Radio, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_checked__alias_isOn"
+        }
+      ]
+    }
+  ]
+}

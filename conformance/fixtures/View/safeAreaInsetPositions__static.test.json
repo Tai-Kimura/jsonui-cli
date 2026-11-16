@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/safeAreaInsetPositions__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.safeAreaInsetPositions (static)",
+    "description": "Conformance fixture for 'safeAreaInsetPositions' on View (section: View, class: visual). Value under test: [\"top\", \"bottom\"].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "safeAreaInsetPositions__static",
+      "description": "Conformance fixture for 'safeAreaInsetPositions' on View (section: View, class: visual). Value under test: [\"top\", \"bottom\"].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_safeAreaInsetPositions__static"
+        }
+      ]
+    }
+  ]
+}

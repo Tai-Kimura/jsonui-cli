@@ -1,0 +1,1289 @@
+"""Screenshot baseline hashing + same-platform visual regression detection.
+
+Plan 12 §3: the visual fixtures' screenshots were capture-only in v1; v2
+turns them into a *same-platform* regression signal. PNGs are never
+committed — only a perceptual-hash manifest per render environment and
+platform:
+
+```
+conformance/baselines/<env>/<platform>.hashes.json   # @generated, committed
+conformance/artifacts/<platform>/*.png               # local / CI artifact only
+```
+
+The *environment* key exists because a baseline is a fact about one
+renderer: the 2026-08-01 full CI run proved a locally-baked baseline and a
+fresh CI render disagree wholesale (ios 534/534, android 506/506 compared
+screenshots over the dhash-64 threshold) while the CI render was internally
+healthy (0 fail / 0 error, ratchets exactly on their ceilings). Comparing
+across render environments measures the environment, not the change under
+test. ``local`` is the developer-machine set; CI lanes pass their own key
+(``ci``) and compare only against baselines baked from CI artifacts.
+
+Algorithm: **dHash (difference hash), 64x64 grid = 4096 bits**.
+
+- grayscale -> resize to 65x64 (LANCZOS) -> compare horizontal neighbours;
+  each bit encodes "left pixel brighter than right".
+- the grid is deliberately fine: conformance screenshots are full-page
+  captures where the component under test often covers only ~1% of the
+  frame. A coarse 16x16 dHash averaged such a component into a single cell
+  and *missed a deliberately injected rendering change entirely* (measured
+  distance 0); at 64x64 the same change measured 34 bits while repeat-run
+  noise stayed at <= 2 bits.
+- distance = Hamming distance between the 4096-bit hashes. The comparison
+  threshold is calibrated against measured repeat-run variance of the web
+  host (see ``conformance/baselines/README.md``) — not guessed.
+- every bit compares a pixel with its RIGHT neighbour, so an element that
+  moves inside its own column changes few bits: a 50 pt box moved 132 pt
+  down measured 6 against a threshold of 8 while 26400 px had changed
+  (ticket conformance-moved-dhash-misses-a-small-pale-box-moving). The same
+  hash of the TRANSPOSED picture (``vdhash_file``, stored as ``vhashes``)
+  compares each pixel with the one BELOW it and measured 27 on that move; a
+  sideways move of the same box measured 29 / 16. A picture is moved when
+  either distance is over the threshold. ``vhashes`` is a field beside
+  ``hashes`` rather than a new ``ALGORITHM``, so a baseline baked before it
+  still compares on the horizontal hash and reports its entries as
+  vertically UNCOVERED, never as unmoved.
+
+Dependency: Pillow (image decode + resample), an *optional* extra — see
+``jui_tools/setup.py`` ``extras_require["conformance"]``. Everything doing
+baseline work degrades with a clear error when Pillow is missing; the rest
+of the conformance harness never imports it.
+
+Cross-platform comparison is explicitly NOT done (fonts/renderers differ by
+construction); a baseline only ever compares against the same platform.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from ..core.generated_marker import json_marker
+from .visual_stability import unstable_screenshots
+from . import shared_core
+from .os_dependence import os_dependent_screenshots_for
+
+GENERATOR_NAME = "jui conformance baseline update"
+
+#: Default render-environment key. Baselines live under
+#: ``baselines/<env>/`` and only ever compare within one environment;
+#: everything defaults to the developer-machine set.
+DEFAULT_ENV = "local"
+
+#: dHash grid size: NxN bits per row comparison -> N*N bit hash.
+HASH_SIZE = 64
+
+#: Algorithm identifier stored in baseline manifests; bump when the hashing
+#: parameters change (stale-algorithm baselines are reported, not compared).
+ALGORITHM = f"dhash-{HASH_SIZE}"
+
+#: Where a manifest records WHAT computed its hashes, beside ``algorithm``
+#: (which records only how they are shaped). Value: :func:`hasher_identity`.
+#:
+#: 🔻 WHY THE SHAPE WAS NOT ENOUGH. Every bit of a dHash compares two pixels
+#: of a 65x64 picture Pillow resampled (LANCZOS) — so the hash is a function
+#: of the screenshot AND of Pillow's resampler. Pillow 13.0.0 resamples
+#: differently: conformance-mobile run 39012627109 read 99 byte-identical iOS
+#: screenshots as regressions, while the same artifacts under Pillow 12.3.0
+#: read 0 (ticket jui-conformance-dhash-depends-on-pillow-major). A distance
+#: across two hashers measures the library, not the screenshot, and it can
+#: err either way — it is only luck that this one came out red.
+#:
+#: 🔑 GRANULARITY IS THE MAJOR, AND THAT IS MEASURED, NOT ASSUMED. Measured
+#: 2026-10-17 on that run's ci artifacts (ios 946 / android 898 / web 894):
+#: Pillow 10.4.0, 11.3.0, 12.0.0, 12.1.0, 12.1.1, 12.2.0 and 12.3.0 give
+#: bit-identical dHash AND vdHash on all 2738 pictures; 13.0.0 moves the
+#: horizontal hash of 843 of 946 iOS pictures (max 46 bits; android and web
+#: 0). No minor in that window moved one bit, so a full-version pin would
+#: stop the gate on every patch release for a difference the evidence does
+#: not show. A future minor that DOES move bits is not covered — that is the
+#: price of the choice, stated rather than hidden.
+HASHER_FIELD = "hashed_with"
+
+#: Maximum Hamming distance treated as "same rendering".
+#:
+#: Calibrated 2026-07-02 against repeat-run variance of the web host
+#: (Playwright/chromium headless, 466 visual screenshots, independent full
+#: suite runs): 458 screenshots at distance 0, 2 at distance 1, 6 at
+#: distance 2 (Slider / number-input anti-aliasing flicker) — measured max
+#: noise 2. Threshold 8 = 4x the measured max, while a deliberately
+#: injected rendering change (gradient direction flip inside a 100x100
+#: component on the 1024x768 page) measured distance 34.
+#: Rationale + raw numbers: conformance/baselines/README.md.
+DEFAULT_THRESHOLD = 8
+
+
+class BaselineMoved(RuntimeError):
+    """Raised INSTEAD OF writing, when entries moved or dropped and the caller refused that.
+
+    Carries the classification so the caller can print every MOVED and DROPPED
+    line — the reading the flag exists to force — without the file having changed.
+    """
+
+    def __init__(
+        self,
+        out_path: "Path",
+        moved: "tuple[tuple[str, int], ...]",
+        dropped: "tuple[str, ...]" = (),
+    ):
+        self.out_path = out_path
+        self.moved = moved
+        self.dropped = dropped
+        super().__init__(
+            f"{len(moved)} entr(y/ies) moved, {len(dropped)} dropped; "
+            f"{out_path} was NOT written"
+        )
+
+
+class BaselineError(RuntimeError):
+    """Raised when baseline work cannot proceed (missing Pillow / inputs)."""
+
+
+def _load_pillow():
+    try:
+        from PIL import Image  # noqa: PLC0415
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise BaselineError(
+            "Pillow is required for screenshot baselines — "
+            "install with: pip install 'jui-tools[conformance]' (or pip install Pillow)"
+        ) from exc
+    return Image
+
+
+def _pillow_version() -> str:
+    _load_pillow()
+    import PIL  # noqa: PLC0415
+
+    return str(PIL.__version__)
+
+
+def hasher_identity() -> str:
+    """``pillow-<major>`` of the Pillow this process hashes with.
+
+    Raises :class:`BaselineError` when Pillow is missing — there is then no
+    hasher to name, and no hash could be computed anyway.
+    """
+    return f"pillow-{_pillow_version().split('.', 1)[0]}"
+
+
+def hasher_mismatch(manifest: dict, label: str, platform: str, env: str) -> str | None:
+    """Why *manifest* cannot be compared with hashes computed HERE, or None.
+
+    A STOP, never a pass and never a verdict: the caller compares nothing and
+    reports this string. A manifest with no recorded hasher stops too — its
+    absence cannot be told apart from "made by another library", and every
+    manifest this repo commits records one.
+
+    The re-bake line below is kept on ONE source line for the same reason as
+    the env recipe in :func:`compare_platform`: line-oriented scanners
+    (tests/test_every_bake_recipe_forces_the_review.py) must see it whole.
+    """
+    current = hasher_identity()
+    recorded = manifest.get(HASHER_FIELD)
+    if recorded == current:
+        return None
+    rehash = f"`jui conformance baseline update --platform {platform} --env {env} --rehash --fail-on-moved`"
+    if not recorded:
+        head = (
+            f"cannot measure: {label} does not record which library computed its hashes "
+            f"(`{HASHER_FIELD}`), and this run hashes with {current} (Pillow {_pillow_version()})"
+        )
+    else:
+        head = (
+            f"cannot measure: {label} was hashed with {recorded}, and this run hashes with "
+            f"{current} (Pillow {_pillow_version()})"
+        )
+    return (
+        head
+        + " — dHash resamples through Pillow, and a different major draws a different "
+        "grid from the same bytes, so a distance across the two measures the library, "
+        "not the screenshot. Nothing was compared. Either judge with the recorded major "
+        "(`pip install 'jui-tools[conformance]'` — the extra in jui_tools/setup.py "
+        "caps Pillow at it), or move to the new one by re-baking EVERY baseline with it "
+        "in the same commit that raises that cap, after the old major's gate has judged "
+        f"the same artifacts clean: {rehash}"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Hashing
+# --------------------------------------------------------------------------- #
+
+
+#: Rows of the frame that belong to system chrome rather than to the fixture,
+#: keyed by ``(platform, env)`` as ``(top, bottom)`` pixel counts.
+#:
+#: The CI android emulator runs the pixel_tablet profile, whose launcher draws
+#: an opaque status bar across the top and an opaque taskbar across the bottom,
+#: over an app that is inset away from both (``systemBarsPadding``). Neither
+#: band can carry fixture pixels there — but both move on their own: the
+#: taskbar's predicted-apps row reorders between boots and promotes the host app
+#: into itself, and the status-bar clock ticks when SystemUI drops the demo-mode
+#: broadcast. Measured on run 30874627862, that noise put 478/478 fixtures over
+#: the threshold with a mean distance of 16.45; excluding the two bands brings
+#: the same comparison to 0/478 at mean 0.36.
+#:
+#: ANDROID local runs are NOT cropped and must not be: that AVD has no
+#: taskbar, so the same rows hold real content there (the TabView tab bar,
+#: alignBottom, fill clamps). This is exactly the asymmetry the env key exists
+#: to carry — baselines never cross environments, so the crop never has to
+#: either. Measured 2026-09-04, one android fixture: inverting every row of
+#: both bands moves the hash by 9 against a threshold of 8, so the exposure
+#: is real in principle — but across every local android run pair taken this
+#: cycle (two library revisions, two full 804-shot runs on conf_ci) the bands
+#: were byte-identical, and the 48/120 rows carry 6 and 13 distinct values
+#: across the corpus. Nothing has ridden; cropping would trade those away for
+#: no measured gain. Revisit if the local AVD is ever replaced.
+#: Bounds come from the measured bands (status bar 11–36, taskbar 1495–1583)
+#: with margin, and stop short of the tab bar at 1300–1450.
+#:
+#: The CI ios simulator draws its status bar glyphs (clock, cellular, wifi,
+#: battery) at rows 78–116 of the 1206x2622 frame, and their COLOR is not a
+#: function of the fixture: UIKit infers light/dark status-bar content from
+#: the luminance behind the bar, and on a fixture that lands near the decision
+#: boundary the inference races the render and flips run to run. Measured on
+#: runs 32657361988/33333136630 (same image, same code, same library pins):
+#: the codegen host drew effectStyle__regular's clock black on one run and
+#: white on the next — dhash 23 vs 0 with every non-glyph pixel identical —
+#: while the dynamic host held white on both. The battery glyph also renders
+#: the host's charging state, a second flake the fixture cannot control.
+#:
+#: Unlike android, the ios app is edge-to-edge, so this band DOES carry
+#: fixture pixels (safe-area backgrounds reach the top edge). Cropping trades
+#: them away deliberately: a codegen deviation confined to rows 0–159 with no
+#: trace below is invisible after the crop. That loss is accepted because the
+#: OS glyphs inside the band are unfixably nondeterministic, and measured on
+#: run 33333136630 it costs nothing today: the crop flips not one control-diff
+#: verdict (494 active / 111 inert, unchanged) — backgrounds that reach the
+#: top edge continue below it. Neither the Dynamic Island nor the home
+#: indicator is rendered in these captures (measured, same runs), so the
+#: bottom stays 0. Nothing in the host keeps the indicator away, so the gate
+#: holds it: ``home_indicator`` (tests/test_conformance_home_indicator.py)
+#: fails an iOS run whose screenshots carry the pill's pixels, and names them.
+#:
+#: ios LOCAL takes the same crop, for the same glyphs. The band is not stable
+#: across simulator INSTANCES either: two "iPhone 16 Pro / iOS 18.6" devices
+#: differing only in UDID rendered the same corpus with 849 of 852 hashes
+#: moved (distance median 18, max 255) while the content was identical —
+#: cropped to (160, 0) the same pairs fall to 0–4, and the differing pixels
+#: sit at rows 78–117 with a few at 2595 (measured 2026-09-04, D6A1DD42 vs
+#: C13F2A69, both frozen to 9:41). Uncropped, a local baseline is a fact
+#: about one simulator instance rather than about the renderer: the same
+#: library re-rendered on a sibling device reads as a whole-corpus
+#: regression, which is how two bakes were spent this cycle. The trade is the
+#: one the ci entry already makes and it is not free here either: 139 of 852
+#: fixtures draw something inside those rows (SafeAreaView_direction is the
+#: sharpest case — the top edge IS its subject), so a deviation confined to
+#: rows 0–159 is invisible on this lane too. Prefer the assertable arms for
+#: those; a picture cannot carry both this band and a stable baseline.
+PLATFORM_ENV_CHROME_CROP: dict[tuple[str, str], tuple[int, int]] = {
+    ("android", "ci"): (48, 120),
+    ("ios", "ci"): (160, 0),
+    ("ios", "local"): (160, 0),
+}
+
+
+#: Spellings a host gives a screenshot it takes to EXPLAIN A FAILURE, not to
+#: record a fixture. SwiftJsonUI ConformanceHost writes them into the same
+#: artifacts/ios directory as the captures: ConformanceUITests'
+#: postTapDiagnosis (`<fixture>__post_tap_failure.png`) and the
+#: CellDataRefresh probe (`<name>__post_tap_failure_v<N>.png`).
+#:
+#: 🔻 run 38958247680: the Dynamic host missed a tap in an interactive
+#: fixture and kept the screenshot of it. The codegen host does not host
+#: interactive fixtures, so parity read the diagnostic as "rendered by only
+#: one pipeline — a host that skipped work" and the gate printed a second
+#: error for the one fixture that had already errored. A bake of the same run
+#: would have filed the diagnostic as a new baseline entry.
+DIAGNOSTIC_SCREENSHOT_MARKERS = ("__post_tap_failure",)
+
+
+def is_diagnostic_screenshot(name: str) -> bool:
+    """Whether *name* (a file name or stem) is a failure diagnostic, not a capture."""
+    return any(marker in name for marker in DIAGNOSTIC_SCREENSHOT_MARKERS)
+
+
+def capture_pngs(directory: Path) -> list[Path]:
+    """The fixture captures under *directory*, sorted — every ``*.png`` but
+    the failure diagnostics (DIAGNOSTIC_SCREENSHOT_MARKERS)."""
+    return sorted(
+        png for png in Path(directory).glob("*.png") if not is_diagnostic_screenshot(png.name)
+    )
+
+
+def chrome_crop(platform: str | None, env: str | None) -> tuple[int, int]:
+    """``(top, bottom)`` rows to exclude from the hash for this lane."""
+    if platform is None or env is None:
+        return (0, 0)
+    return PLATFORM_ENV_CHROME_CROP.get((platform, env), (0, 0))
+
+
+def dhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
+    """4096-bit dHash of one image file (a 64x64 grid of "brighter than the
+    RIGHT neighbour" bits), as a 1024-char lowercase hex string.
+
+    ``crop`` excludes ``(top, bottom)`` rows before hashing — see
+    :data:`PLATFORM_ENV_CHROME_CROP`. A hash taken with a crop is only ever
+    comparable to another taken with the same crop, which the ``(platform,
+    env)`` keying guarantees.
+    """
+    return _dhash_of(path, crop, transpose=False)
+
+
+def vdhash_file(path: Path, crop: tuple[int, int] = (0, 0)) -> str:
+    """The same hash of the TRANSPOSED picture: each bit compares a pixel with
+    the one BELOW it, so it sees the vertical moves :func:`dhash_file` is
+    blind to. Same crop, same size, same string form."""
+    return _dhash_of(path, crop, transpose=True)
+
+
+def _dhash_of(path: Path, crop: tuple[int, int], transpose: bool) -> str:
+    return _measures(path, crop)["vdhash" if transpose else "dhash"]
+
+
+def _measures(path: Path, crop: tuple[int, int]) -> dict:
+    """dHash, vdHash and ink of one file under one crop, from ONE decode, kept
+    for the file's content (image_memo): parity asks dHash and ink of each
+    screenshot, the baseline dHash and vdHash, and each used to decode it
+    again."""
+    from . import image_memo  # noqa: PLC0415
+
+    digest, data = image_memo.content_key(path)
+
+    def compute() -> dict:
+        Image = _load_pillow()
+        with image_memo.open_bytes(Image, data) as opened:
+            img = opened
+            top, bottom = crop
+            if top or bottom:
+                width, height = img.size
+                if height > top + bottom:
+                    img = img.crop((0, top, width, height - bottom))
+            gray = img.convert("L")
+            out = {
+                "dhash": _dhash_bits(img, Image, transpose=False),
+                "vdhash": _dhash_bits(img, Image, transpose=True),
+                "ink": _ink_of(gray),
+            }
+        return out
+
+    return image_memo.memo("measures", (digest, tuple(crop)), compute)
+
+
+def _dhash_bits(img, Image, transpose: bool) -> str:
+    if transpose:
+        img = img.transpose(Image.Transpose.TRANSPOSE)
+    gray = img.convert("L").resize(
+        (HASH_SIZE + 1, HASH_SIZE), Image.Resampling.LANCZOS
+    )
+    # tobytes() on mode-L images is the raw 8-bit pixel row-major buffer
+    # (stable across Pillow versions, unlike the deprecated getdata()).
+    pixels = gray.tobytes()
+
+    bits = 0
+    for row in range(HASH_SIZE):
+        offset = row * (HASH_SIZE + 1)
+        for col in range(HASH_SIZE):
+            bits = (bits << 1) | (1 if pixels[offset + col] > pixels[offset + col + 1] else 0)
+    return f"{bits:0{HASH_SIZE * HASH_SIZE // 4}x}"
+
+
+def _ink_of(gray) -> int:
+    histogram = gray.histogram()
+    return sum(histogram) - max(histogram)
+
+
+def hamming(hex_a: str, hex_b: str) -> int:
+    """Hamming distance between two same-length hex hash strings."""
+    if len(hex_a) != len(hex_b):
+        raise ValueError(f"hash length mismatch: {len(hex_a)} != {len(hex_b)}")
+    return (int(hex_a, 16) ^ int(hex_b, 16)).bit_count()
+
+
+def popcount(hex_hash: str) -> int:
+    """Set bits in a hex hash.
+
+    ``popcount(h) == hamming(h, 0)``, and an all-zero dHash is what a
+    perfectly uniform image produces — so this is the distance from *this*
+    picture to a blank page, derivable without opening a single file.
+    """
+    return int(hex_hash, 16).bit_count()
+
+
+def blanking_premise_holds(hashes: dict[str, str]) -> bool:
+    """Does a blank picture hash to all zeros ON THIS LANE?
+
+    🔴 `blind_to_blanking` BELOW RESTS ENTIRELY ON THIS, AND IT IS NOT UNIVERSAL.
+    The derivation works because `hamming(h, 0) == popcount(h)`, i.e. because a
+    blank page hashes to all zeros — which holds only when the capture contains
+    nothing but the fixture. A lane that keeps chrome in the frame (a status bar
+    the crop does not remove) has that chrome in EVERY hash, so a fixture that
+    empties out lands on the chrome-only hash, not on zero.
+
+    Measured 2026-09-15 across the six committed baselines at threshold 8:
+
+        ci/android    (48,120)   816 entries   blind 106   min popcount  0
+        ci/ios        (160,0)    867           blind 115   min popcount  0
+        ci/web        (0,0)      818           blind 221   min popcount  0
+        local/ios     (160,0)    867           blind 114   min popcount  0
+        local/web     (0,0)      818           blind 229   min popcount  0
+        local/android  NO CROP   816           blind   0   min popcount 14   <- here
+
+    Same fixtures, same library; android splits 106 / 0 on the crop alone. All
+    816 local/android hashes sit at popcount >= 14, so nothing on that lane can
+    approach zero — and the derivation answered **0 blind entries**, which reads
+    as "fully covered" when it means "this question cannot be asked here".
+
+    🔻 THE TEST IS AN EXISTENCE PROOF, NOT A GUESS ABOUT THE CROP. An entry whose
+    committed hash IS all zeros is a picture that hashes blank on this lane, so
+    its presence proves a blank page reaches zero here. Deciding from the crop
+    would be wrong in both directions: ci/web takes no crop and still reaches
+    zero, so "uncropped" does not imply "cannot".
+
+    The closure this does NOT take: compute the lane's chrome-only hash and
+    measure distance from THAT instead of from zero. Nothing produces such an
+    image today, so the hole is left open and REPORTED rather than papered over
+    with a zero — see `VisualComparison.blank_check_unavailable`.
+    """
+    return any(popcount(h) == 0 for h in hashes.values())
+
+
+def already_blank(hashes: dict[str, str]) -> list[str]:
+    """Entries whose committed hash is ITSELF the blank hash.
+
+    A different category from "could go blank without being noticed": these
+    already are blank as far as the hash can tell, so no threshold and no
+    distance can say anything about them. The ink record is the only thing that
+    distinguishes "deliberately empty" from "empty because it broke", which is
+    why the ink comparison treats a recorded zero as its own case.
+    """
+    return sorted(n for n, h in hashes.items() if popcount(h) == 0)
+
+
+def blind_to_blanking(hashes: dict[str, str], threshold: int) -> list[str]:
+    """Names whose committed hash cannot tell their picture from a blank page.
+
+    🔻 THE HOLE THIS NAMES. The visual gate passes anything within *threshold*
+    of the committed hash. A picture that goes completely blank hashes to all
+    zeros, so its distance from the baseline is exactly ``popcount(baseline)``
+    — and every entry whose popcount is at or below the threshold therefore
+    stays green no matter how empty it gets.
+
+    Measured 2026-09-15 at threshold 8: **115 of 867 ci/ios entries**, 106 of
+    816 on android, 221 of 818 on web. Of the iOS 115, **96 draw something**
+    (ink > 0) — those are the ones with real coverage to lose; the other 19
+    are already blank on purpose and nothing can distinguish them.
+
+    The population is DERIVED from the committed hashes rather than listed,
+    so it follows the corpus and the threshold without being maintained.
+    """
+    return sorted(n for n, h in hashes.items() if popcount(h) <= threshold)
+
+
+#: A picture has "gone blank" when its ink falls below this fraction of the
+#: ink the baseline recorded. DECLARED as a ratio, not calibrated to a
+#: measurement: a per-fixture floor taken from today's render would turn every
+#: legitimate content change red and create pressure to lower it, which is how
+#: a ratchet stops meaning anything. A ratio is scale-free — it asks "did this
+#: collapse by an order of magnitude", which is the question, and it degrades
+#: gracefully: a fixture with 12 ink pixels needs to reach 1 to pass, i.e. the
+#: rule becomes "went to zero", which is still exactly the defect.
+INK_COLLAPSE_RATIO = 8
+
+
+def ink_file(path: Path, crop: tuple[int, int] = (0, 0)) -> int:
+    """Pixels that are not the picture's single most common grey level.
+
+    A blank page — of any colour — has one level and therefore **zero ink**.
+    Anything drawn on top of a uniform background has ink above zero. That is
+    the whole claim; this is not a similarity measure and is never compared
+    across fixtures, only against the same fixture's recorded value.
+
+    ⚠️ It reads the *modal* level rather than "not white", so a dark-mode or
+    tinted capture is measured the same way, and it takes the SAME ``crop`` as
+    :func:`dhash_file` so the two describe the same rectangle. Computed from
+    the 256-bucket histogram, which Pillow builds in C: the whole blind
+    population of one face is ~1.4 s (measured, 115 images of 1206x2622).
+
+    🔻 KNOWN LIMIT, STATED RATHER THAN HIDDEN: luminance collapses colour, so
+    two different hues at the same grey level read as one. A picture that
+    changes colour without changing brightness has no ink change — that case
+    belongs to dHash and the control diff, not here.
+    """
+    return _measures(path, crop)["ink"]
+
+
+# --------------------------------------------------------------------------- #
+# Baseline manifest I/O
+# --------------------------------------------------------------------------- #
+
+
+def baseline_path(conformance_dir: Path, platform: str, env: str = DEFAULT_ENV) -> Path:
+    return Path(conformance_dir) / "baselines" / env / f"{platform}.hashes.json"
+
+
+def load_baseline(
+    conformance_dir: Path, platform: str, env: str = DEFAULT_ENV
+) -> dict | None:
+    """Parsed baseline manifest, or None when none has been recorded."""
+    path = baseline_path(conformance_dir, platform, env)
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@dataclass
+class BaselineUpdateSummary:
+    out_path: Path
+    platform: str
+    hashed: int = 0
+    env: str = DEFAULT_ENV
+    #: Classification against the baseline that was already committed. Always
+    #: computed, because "what else would this write have changed" is the
+    #: question a bake cannot answer after the fact.
+    new: tuple[str, ...] = ()
+    same: tuple[str, ...] = ()
+    moved: tuple[tuple[str, int], ...] = ()   # (name, hamming distance)
+    #: Differences accepted WITHOUT failing the exact check, because the
+    #: fixture's own layout says its picture is not stable (animated /
+    #: async). Reported so the tolerance is visible every run rather than
+    #: being an unstated exemption: the count and the names are printed, and
+    #: any of these at or above the threshold is in `moved` instead.
+    tolerated: tuple[tuple[str, int, str], ...] = ()
+    #: How many screenshots are exempt from the EXACT check at all, whether
+    #: or not any of them moved this run. Printed unconditionally: an
+    #: exemption that only appears when it fires is invisible on the runs
+    #: where it matters least and unreviewable on the rest.
+    unstable_total: int = 0
+    dropped: tuple[str, ...] = ()
+    only_new: bool = False
+    #: The hasher this bake recorded (:func:`hasher_identity`).
+    hashed_with: str = ""
+    #: Set by a ``rehash`` bake: the hasher the committed file recorded
+    #: ("" when it recorded none). Its entries are listed in ``rehashed``
+    #: instead of same/moved, because a distance across two hashers is not a
+    #: measurement — the review of those pictures is the OLD major's gate run
+    #: on the same artifacts, not this classification.
+    rehashed_from: str | None = None
+    rehashed: tuple[str, ...] = ()
+    #: Per-OS buckets of OTHER OSes a rehash removed: their pictures are not
+    #: in this run's artifacts, so they cannot be re-hashed, and keeping them
+    #: under the new identity would be the mixed file the field exists to rule
+    #: out. Named so the loss of coverage is visible.
+    dropped_os_buckets: tuple[str, ...] = ()
+    #: Set by a ``take`` bake: the entries it wrote from this run.
+    taken: tuple[str, ...] = ()
+    #: Set by a ``drop`` bake: the entries it removed.
+    removed: tuple[str, ...] = ()
+    #: The run asked for nothing the committed file does not already say, so
+    #: the file was not written.
+    unchanged: bool = False
+
+    @property
+    def written(self) -> int:
+        return self.hashed
+
+
+def update_baseline(
+    conformance_dir: Path,
+    platform: str,
+    artifacts_dir: Path | None = None,
+    env: str = DEFAULT_ENV,
+    threshold: int | None = None,
+    rendered_by: dict[str, str] | None = None,
+    os_key: str | None = None,
+    only_new: bool = False,
+    refuse_if_moved: bool = False,
+    rehash: bool = False,
+    take: tuple[str, ...] | list[str] | None = None,
+    drop: tuple[str, ...] | list[str] | None = None,
+) -> BaselineUpdateSummary:
+    """Hash every PNG under the platform's artifacts dir into the manifest.
+
+    Deterministic: keys are sorted artifact filenames, no timestamps.
+    *threshold* overrides the stored comparison threshold for this manifest —
+    per-(env, platform) recalibration is the anticipated path when a
+    renderer's measured repeat-run noise differs from the shared default
+    (baselines/README.md records each calibration; measure before changing).
+
+    *only_new* inserts entries the baseline does not have and touches nothing
+    else. Without it this rewrites the manifest wholesale, which is the right
+    thing for a recalibration and the wrong thing for "the four new fixtures
+    never got baselines" — the wholesale write absorbs every drifted picture
+    into the baseline at the same time, and a regression that gets absorbed
+    stops being a regression. That default cost two lanes a hand-written merge
+    script and a `git diff --numstat` check on 2026-09-04; the check was what
+    made those bakes safe, not the command.
+
+    Either way the summary carries the full classification (new / same / moved
+    / dropped) so the caller can see what a wholesale write *would* have
+    changed, before deciding it wanted one.
+
+    The manifest records the hasher (:data:`HASHER_FIELD`). A committed file
+    made by another one — or recording none — is refused: classifying against
+    it would compare across hashers, and an only-new bake would file hashes
+    from two libraries under one name. *rehash* is the one way across: a
+    wholesale bake whose committed entries are listed as ``rehashed`` rather
+    than classified. It is refused when the hasher did NOT change, because
+    there it would only be a way around *refuse_if_moved*.
+
+    *refuse_if_moved* refuses on a moved entry and on a dropped one: a partial
+    artifact directory reports `moved 0` and would otherwise remove what it did
+    not draw. With neither, every committed entry stays as it is and only new
+    entries are written; with no new entry the file is not written. Unstable
+    wobble and a re-measured ink are not a change anyone reviewed, and with no
+    *rendered_by* a wholesale write would also blank the provenance, so a bake
+    that reports `moved 0` used to leave a diff the reader could not attribute.
+
+    *take* names the entries to write from this run (hash, vertical hash, ink)
+    and *drop* the entries to remove; everything else stays as committed. With
+    *refuse_if_moved*, an entry that moved or dropped and was not named still
+    refuses.
+    """
+    conformance_dir = Path(conformance_dir)
+    # The os-dependent carve-out below reads the SSoT beside conformance/. On a
+    # copy without it the carve-out finds nothing and the availability-gated
+    # pictures land in the OS-agnostic table, silently (shared_core).
+    missing = shared_core.missing_for(conformance_dir, [shared_core.DEFINITIONS], asked="a bake")
+    if missing:
+        raise BaselineError(missing[0])
+    if artifacts_dir is None:
+        artifacts_dir = conformance_dir / "artifacts" / platform
+    artifacts_dir = Path(artifacts_dir)
+    if not artifacts_dir.is_dir():
+        raise BaselineError(
+            f"artifacts directory not found: {artifacts_dir} — run the {platform} suite first"
+        )
+
+    pngs = capture_pngs(artifacts_dir)
+    if not pngs:
+        raise BaselineError(f"no screenshots under {artifacts_dir} — nothing to baseline")
+
+    crop = chrome_crop(platform, env)
+    measured = {png.name: dhash_file(png, crop) for png in pngs}
+    # Measured for EVERY picture, not only the ones the ink check will read.
+    # Which entries are blind to blanking is a function of the hash and the
+    # threshold, so it moves when either does — recording ink only for
+    # today's blind set would leave the next threshold change with no data
+    # and no way to tell "never measured" from "measured as zero".
+    measured_ink = {png.name: ink_file(png, crop) for png in pngs}
+    measured_v = {png.name: vdhash_file(png, crop) for png in pngs}
+
+    # Classify against what is already committed, whichever mode we are in.
+    previous = load_baseline(conformance_dir, platform, env) or {}
+    current_hasher = hasher_identity()
+    previous_hasher = previous.get(HASHER_FIELD) or ""
+    previous_has_entries = bool(previous.get("hashes") or any(
+        (previous.get("hashes_by_os") or {}).values()
+    ))
+    hasher_changed = previous_has_entries and previous_hasher != current_hasher
+    label = f"baselines/{env}/{platform}.hashes.json"
+    if rehash and only_new:
+        raise BaselineError(
+            "--rehash and --only-new do not combine: only-new keeps the committed "
+            "hashes, and a rehash exists because they were made by another library"
+        )
+    take_names = tuple(sorted(set(take or ())))
+    drop_names = tuple(sorted(set(drop or ())))
+    named_bake = bool(take_names or drop_names)
+    if named_bake and (only_new or rehash):
+        raise BaselineError(
+            "--take and --drop do not combine with --only-new or --rehash: each of "
+            "them already decides which entries are written"
+        )
+    both_names = sorted(set(take_names) & set(drop_names))
+    if both_names:
+        raise BaselineError(
+            f"--take and --drop name the same entries: {', '.join(both_names)} — "
+            f"{label} was NOT written"
+        )
+    if rehash and not hasher_changed:
+        raise BaselineError(
+            f"--rehash: {label} already records {current_hasher}, the hasher this run "
+            "uses — there is nothing to rehash, and passing it anyway would skip the "
+            "moved review. Drop the flag."
+        )
+    if hasher_changed and not rehash:
+        raise BaselineError(
+            (hasher_mismatch(previous, label, platform, env) or "")
+            + f" — {label} was NOT written"
+        )
+    # 🔻 WHAT THIS RUN IS COMPARED AGAINST: the OS-agnostic entries plus THIS
+    # OS's bucket. An entry filed under a different OS is deliberately not
+    # prior — separating those is the whole point of the key, and folding them
+    # in here would reintroduce the cross-runtime comparison one level down.
+    previous_by_os: dict = {k: dict(v) for k, v in (previous.get("hashes_by_os") or {}).items()}
+    prior: dict[str, str] = dict(previous.get("hashes") or {})
+    if os_key:
+        prior.update(previous_by_os.get(os_key) or {})
+    # The committed vertical hashes, keyed like `prior`. A baseline baked
+    # before they existed has none, and its entries are then classified on the
+    # horizontal hash alone, as they always were.
+    prior_v: dict[str, str] = dict(previous.get("vhashes") or {})
+    if os_key:
+        prior_v.update((previous.get("vhashes_by_os") or {}).get(os_key) or {})
+
+    def _distance(n: str) -> int:
+        """The larger of the two distances from the committed entry."""
+        d = hamming(prior[n], measured[n])
+        if n in prior_v:
+            d = max(d, hamming(prior_v[n], measured_v[n]))
+        return d
+
+    def _changed(n: str) -> bool:
+        return prior[n] != measured[n] or (n in prior_v and prior_v[n] != measured_v[n])
+
+    new_names = sorted(n for n in measured if n not in prior)
+    same_names = sorted(n for n in measured if n in prior and not _changed(n))
+    # A fixture whose picture is not a function of the code — a spinning
+    # Indicator, an image still arriving — differs run to run on a correct
+    # machine (measured: four runs, four pictures, one host). Holding those
+    # to an EXACT match makes `--fail-on-moved` fire every time, and a gate
+    # that always fires is one the operator learns to switch off. They are
+    # judged at the same threshold the visual gate uses instead: still
+    # caught when they move for real, not caught for existing.
+    #
+    # Everything else stays exact. A fixture outside this set that wobbles
+    # fails by name, so the narrow set costs a named refusal, not silence.
+    unstable = unstable_screenshots(conformance_dir)
+    limit = DEFAULT_THRESHOLD if threshold is None else int(threshold)
+    moved_pairs = tuple(
+        (n, _distance(n))
+        for n in sorted(measured)
+        if n in prior
+        and _changed(n)
+        and (n not in unstable or _distance(n) >= limit)
+    )
+    tolerated_pairs = tuple(
+        (n, _distance(n), unstable[n])
+        for n in sorted(measured)
+        if n in prior
+        and _changed(n)
+        and n in unstable
+        and _distance(n) < limit
+    )
+    dropped_names = sorted(n for n in prior if n not in measured)
+    rehashed_names: list[str] = []
+    if rehash:
+        # A distance from a hash another library computed is not a
+        # measurement, so nothing here is "same" or "moved"; the entries are
+        # named as rehashed and the file is rewritten wholesale.
+        rehashed_names = sorted(n for n in measured if n in prior)
+        same_names, moved_pairs, tolerated_pairs = [], (), ()
+
+    missing_names = [n for n in take_names if n not in measured]
+    if missing_names:
+        raise BaselineError(
+            f"--take: not in this run's artifacts: {', '.join(missing_names)} — {label} was NOT written"
+        )
+    unchanged_names = [n for n in take_names if n in prior and not _changed(n)]
+    if unchanged_names:
+        raise BaselineError(
+            f"--take: these already match {label}, so there is nothing to take: "
+            f"{', '.join(unchanged_names)} — {label} was NOT written"
+        )
+    unknown_drops = [n for n in drop_names if n not in prior]
+    if unknown_drops:
+        raise BaselineError(
+            f"--drop: not in {label}: {', '.join(unknown_drops)} — {label} was NOT written"
+        )
+    drawn_drops = [n for n in drop_names if n in measured]
+    if drawn_drops:
+        raise BaselineError(
+            f"--drop: this run still drew these: {', '.join(drawn_drops)} — {label} was NOT written"
+        )
+
+    refused_moved = tuple(pair for pair in moved_pairs if pair[0] not in take_names)
+    refused_dropped = tuple(n for n in dropped_names if n not in drop_names)
+    # Passed the review with nothing moved or dropped: the committed entries stand.
+    clean_bake = (
+        refuse_if_moved
+        and not refused_moved
+        and not refused_dropped
+        and not rehash
+        and not named_bake
+        and not only_new
+        and previous_has_entries
+    )
+    keep_committed = only_new or named_bake or clean_bake
+    # The entries this run writes when the committed ones are kept.
+    fresh = set(take_names) if named_bake else set(new_names)
+    # Hash identical to this render, so a missing ink or vertical hash can be
+    # filled from it without pairing two different renders.
+    fillable = set(same_names) if clean_bake else set()
+
+    if keep_committed:
+        # Existing entries keep their committed hash.
+        hashes = dict(prior)
+        hashes.update({n: measured[n] for n in fresh})
+        for n in drop_names:
+            hashes.pop(n, None)
+        hashes = {k: hashes[k] for k in sorted(hashes)}
+    else:
+        hashes = measured
+
+    # Carve the availability-gated pictures into a per-OS bucket. Only these
+    # move: the corpus at large is NOT a function of the running OS (measured
+    # on the 2026-09-14 re-bake — the 61 entries that moved were every one a
+    # system-DRAWN control, which is the SDK the host links against, a
+    # different axis). Keying the whole file by OS would assert the stronger
+    # thing and make every re-bake answer a question it did not ask.
+    by_os = {k: dict(v) for k, v in previous_by_os.items()}
+    if drop_names and os_key in by_os:
+        by_os[os_key] = {k: v for k, v in by_os[os_key].items() if k not in drop_names}
+    dropped_os_buckets: tuple[str, ...] = ()
+    if rehash:
+        dropped_os_buckets = tuple(sorted(k for k in by_os if k != os_key))
+        by_os = {}
+    os_dependent = os_dependent_screenshots_for(conformance_dir)
+    carved = {n: hashes.pop(n) for n in sorted(hashes) if n in os_dependent}
+    if carved:
+        if not os_key:
+            raise BaselineError(
+                "these pictures resolve through an availability check, so they cannot be "
+                "filed without the OS that drew them: "
+                + ", ".join(sorted(carved))
+                + " — pass the run's `runner` (os_key) so they land under "
+                "hashes_by_os.<os>. Baking them OS-agnostically is the comparison this "
+                "key exists to prevent, and dropping them silently would remove them "
+                "from visual coverage."
+            )
+        bucket = dict(by_os.get(os_key) or {})
+        bucket.update(carved)
+        by_os[os_key] = {k: bucket[k] for k in sorted(bucket)}
+
+    # Ink follows whatever `hashes` / `by_os` ended up holding, so the two
+    # can never describe different key sets. In only-new mode an entry that
+    # kept its committed hash keeps its committed ink with it: re-measuring it
+    # would pair a fresh ink with a stale hash, which is the one combination
+    # that makes the collapse check compare two different renders.
+    prior_ink: dict[str, int] = dict(previous.get("ink") or {})
+    if os_key:
+        prior_ink.update((previous.get("ink_by_os") or {}).get(os_key) or {})
+    # 🔴 WHETHER THE COMMITTED BASELINE HAS INK AT ALL, as its own fact. The
+    # first version keyed the guard below on `n in prior_ink`, which silently
+    # stops guarding when the map is EMPTY — and empty is exactly the state of
+    # every baseline that has not been re-baked since ink existed. In that
+    # state an only-new bake kept each committed hash (an older render) and
+    # attached TODAY's ink to it: the one pairing the comment forbids, applied
+    # to the whole corpus, on the very operation that introduces ink. A fixture
+    # that had gone blank in between would have had its blank ink baked in, and
+    # the collapse check would be permanently blind to it.
+    baseline_records_ink = previous.get("ink") is not None
+
+    def _ink_for(names) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for n in sorted(names):
+            if keep_committed and n not in fresh:
+                # This entry kept its COMMITTED hash, so it may only keep its
+                # COMMITTED ink. If there is none, it stays ABSENT and is
+                # reported as uncovered — never re-measured against a hash
+                # from a different render.
+                if baseline_records_ink and n in prior_ink:
+                    out[n] = int(prior_ink[n])
+                elif n in fillable and n in measured_ink:
+                    out[n] = measured_ink[n]
+            elif n in measured_ink:
+                out[n] = measured_ink[n]
+            # else: no measurement and nothing committed — left ABSENT, which
+            # the comparison reports as uncovered rather than as zero ink.
+        return out
+
+    def _bucket(names_by_os: dict, committed_by_os: dict, measure) -> dict:
+        """Another OS's bucket is not this run's to read: `prior_ink` and `prior_v`
+        hold THIS OS's values, so a kept bucket keeps its own committed map."""
+        return {
+            k: dict(committed_by_os.get(k) or {})
+            if keep_committed and k != os_key
+            else measure(v)
+            for k, v in names_by_os.items()
+        }
+
+    ink_by_os = _bucket(by_os, previous.get("ink_by_os") or {}, _ink_for)
+
+    # Vertical hashes follow the same key sets by the same rule as ink, for
+    # the same reason: in only-new mode an entry that kept its committed
+    # horizontal hash may only keep its COMMITTED vertical one, and where
+    # there is none it stays ABSENT (reported as uncovered) rather than
+    # pairing today's vertical hash with an older render's horizontal one.
+    baseline_records_v = previous.get("vhashes") is not None
+
+    def _v_for(names) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for n in sorted(names):
+            if keep_committed and n not in fresh:
+                if baseline_records_v and n in prior_v:
+                    out[n] = prior_v[n]
+                elif n in fillable and n in measured_v:
+                    out[n] = measured_v[n]
+            elif n in measured_v:
+                out[n] = measured_v[n]
+        return out
+
+    vhashes_by_os = _bucket(by_os, previous.get("vhashes_by_os") or {}, _v_for)
+
+    out_path = baseline_path(conformance_dir, platform, env)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "_generated": json_marker(
+            source=f"conformance/artifacts/{platform}", generator=GENERATOR_NAME
+        ),
+        "platform": platform,
+        "environment": env,
+        "algorithm": ALGORITHM,
+        # What computed the hashes below — see HASHER_FIELD. Compared before
+        # anything else is, by every reader of these hashes.
+        HASHER_FIELD: current_hasher,
+        "threshold": (
+            int(threshold)
+            if threshold is not None
+            else int(previous.get("threshold", DEFAULT_THRESHOLD))
+            if keep_committed
+            else DEFAULT_THRESHOLD
+        ),
+        # Which library drew these pixels. The manifest already recorded how
+        # the measurement was taken (platform, env, algorithm, threshold) and
+        # nothing about what was measured: conformance-mobile checks the
+        # libraries out at `master` / `main`, so two bakes at the same
+        # jsonui-cli commit can legitimately hold different pictures, and the
+        # baseline could not say why. Thirteen regressions in one run were
+        # neither fixture nor codegen; two lanes reached "the library moved"
+        # by elimination because the device could not point at it.
+        #
+        # Metadata only — deliberately outside `hashes` so it never
+        # participates in a comparison. Folding it in would make a library
+        # bump read as "the picture changed", which is the confusion this
+        # exists to end.
+        # An additive bake did not re-draw the pictures that were already
+        # here, so it must not restate who drew them. Passing nothing in
+        # only-new mode keeps the committed provenance rather than blanking it.
+        "rendered_by": (
+            dict(sorted(rendered_by.items()))
+            if rendered_by
+            else dict(sorted((previous.get("rendered_by") or {}).items()))
+            if keep_committed
+            else {}
+        ),
+        "hashes": hashes,
+        # Availability-gated pictures, keyed by the MAJOR OS that drew them.
+        # Empty for every platform whose runner does not name an OS (android
+        # reports a uiautomator version, web a playwright one).
+        "hashes_by_os": {k: by_os[k] for k in sorted(by_os)},
+        # Non-background pixel counts, in the same key sets as `hashes`. Read
+        # only for the entries `blind_to_blanking` derives — where the hash
+        # cannot tell the picture from a blank page — and never compared
+        # across fixtures. See `ink_file` and `INK_COLLAPSE_RATIO`.
+        "ink": _ink_for(hashes),
+        "ink_by_os": {k: ink_by_os[k] for k in sorted(ink_by_os)},
+        # The transposed hash (`vdhash_file`), in the same key sets as
+        # `hashes`. Compared beside it at the same threshold.
+        "vhashes": _v_for(hashes),
+        "vhashes_by_os": {k: vhashes_by_os[k] for k in sorted(vhashes_by_os)},
+    }
+    # 🔻 THE REFUSAL HAS TO HAPPEN BEFORE THE WRITE, AND IT DID NOT.
+    # `--fail-on-moved` used to be checked by the CLI on the summary this
+    # function returns — i.e. AFTER the line below had already replaced the
+    # file. The exit code was honest and the baseline was gone: measured
+    # 2026-09-15, baking two android entries with the flag on landed 797
+    # insertions / 800 deletions and then exited 1, so the flag performed the
+    # very thing it exists to prevent. Worse, the run printed "a wholesale bake
+    # rewrote the moved entries above" one line ABOVE the error, so the two
+    # statements that contradicted each other were in the same output.
+    #
+    # ⚠️ The measurement that vouched for the flag was the symptom: a second
+    # run against the already-baked set reported `moved 0`, and that was read
+    # as "it fires on the thing and not on everything". It is evidence the
+    # FIRST run wrote. A flag that refused would report the same N twice.
+    if refuse_if_moved and (refused_moved or refused_dropped):
+        raise BaselineMoved(out_path, refused_moved, refused_dropped)
+    unchanged = clean_bake and payload == previous
+    if not unchanged:
+        out_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
+            encoding="utf-8",
+        )
+    return BaselineUpdateSummary(
+        out_path=out_path,
+        platform=platform,
+        hashed=len(hashes),
+        env=env,
+        new=tuple(new_names),
+        same=tuple(same_names),
+        moved=moved_pairs,
+        dropped=tuple(dropped_names),
+        only_new=only_new,
+        tolerated=tolerated_pairs,
+        unstable_total=len(unstable),
+        hashed_with=current_hasher,
+        rehashed_from=previous_hasher if rehash else None,
+        rehashed=tuple(rehashed_names),
+        dropped_os_buckets=dropped_os_buckets,
+        taken=take_names,
+        removed=drop_names,
+        unchanged=unchanged,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Comparison (consumed by the report)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class VisualComparison:
+    """Outcome of comparing one platform's artifacts against its baseline."""
+
+    platform: str
+    baseline_exists: bool = False
+    algorithm_mismatch: str | None = None  # baseline algorithm when incompatible
+    threshold: int = DEFAULT_THRESHOLD
+    compared: int = 0
+    regressions: list[tuple[str, int]] = field(default_factory=list)  # (name, distance)
+    no_baseline: list[str] = field(default_factory=list)  # screenshot without baseline hash
+    missing_artifact: list[str] = field(default_factory=list)  # baseline hash without PNG
+    error: str | None = None  # e.g. Pillow missing
+
+    #: Entries whose committed hash is within the threshold of a blank page,
+    #: so the Hamming comparison above cannot see them empty out. DERIVED
+    #: every run from the committed hashes — see `blind_to_blanking`.
+    blind: list[str] = field(default_factory=list)
+    #: How many of `blind` the ink check actually judged. Printed whether or
+    #: not it is zero: a check that only appears when it fires is invisible
+    #: on exactly the runs that are supposed to prove it is alive.
+    ink_checked: int = 0
+    #: (name, baseline ink, measured ink, what happened). `collapsed` is the
+    #: ticketed defect; `appeared` is the same blindness the other way round
+    #: — a fixture recorded as empty that has started drawing — and costs
+    #: nothing extra to catch.
+    ink_regressions: list[tuple[str, int, int, str]] = field(default_factory=list)
+    #: Blind entries with no committed ink. A baseline baked before this
+    #: existed has none, so these are NOT passes: they are reported as
+    #: uncovered and counted separately until the face is re-baked.
+    ink_uncovered: list[str] = field(default_factory=list)
+    #: name -> ink measured on an entry that has no committed value to judge
+    #: against. Not a verdict — a number, so a before/after pair across a fix
+    #: has something to subtract while the baseline is still uncovered.
+    ink_measured_while_uncovered: dict[str, int] = field(default_factory=dict)
+    #: Blind entries whose picture is not a function of the code (a spinning
+    #: Indicator, an image still arriving). Their ink legitimately varies run
+    #: to run, so they are exempt from the collapse check — and named, so the
+    #: exemption is visible rather than assumed.
+    ink_tolerated: list[str] = field(default_factory=list)
+    #: Set when this lane cannot be asked the blanking question at all — no
+    #: committed hash on it is all zeros, so nothing proves a blank page
+    #: reaches zero here and `blind` would be an empty set for the wrong
+    #: reason. Carries the number of entries left UNJUDGED, never zero, plus
+    #: the smallest popcount measured (the evidence).
+    blank_check_unavailable: int = 0
+    blank_check_min_popcount: int | None = None
+    #: How many compared entries the vertical hash judged, and which ones it
+    #: could not because their baseline carries no vertical hash (baked before
+    #: `vhashes` existed). The second is NOT "did not move vertically": a
+    #: vertical move inside the horizontal threshold passes those unseen.
+    vertical_checked: int = 0
+    vertical_uncovered: list[str] = field(default_factory=list)
+    #: name -> "vertical" for a regression only the vertical hash found, so
+    #: the report can say which distance put it over.
+    regression_axis: dict[str, str] = field(default_factory=dict)
+    #: Entries whose committed hash is already the blank hash. Reported apart
+    #: from `blind` because no distance measurement can say anything about
+    #: them — only the ink record can.
+    already_blank: list[str] = field(default_factory=list)
+
+
+def _judge_ink(
+    comparison: VisualComparison,
+    name: str,
+    png: Path,
+    crop: tuple[int, int],
+    committed: dict,
+    unstable: dict,
+) -> None:
+    """Rule on one blind entry. Every one lands in exactly one bucket."""
+    if name in unstable:
+        # Its picture is not a function of the code, so its ink is not either
+        # — an Indicator mid-animation can legitimately be near-empty. Named,
+        # not silently dropped.
+        comparison.ink_tolerated.append(name)
+        return
+    recorded = committed.get(name)
+    if recorded is None:
+        # ABSENCE IS AMBIGUOUS HERE — a baseline baked before ink existed
+        # looks exactly like one whose entry was deleted — so it is reported,
+        # never read as zero. Reading it as zero would make every pre-ink
+        # baseline claim full coverage it does not have.
+        #
+        # 🔻 BUT IT IS STILL MEASURED. The first version returned here without
+        # calling `ink_file`, so an uncovered run left no NUMBER anywhere — and
+        # a before/after pair across a fix (does the picture stop being blank?)
+        # had nothing to subtract, because both sides said only "uncovered".
+        # Judging needs a committed value; REPORTING does not. The cost is the
+        # measured 1.4 s for 115 images.
+        comparison.ink_uncovered.append(name)
+        comparison.ink_measured_while_uncovered[name] = ink_file(png, crop)
+        return
+    recorded = int(recorded)
+    measured = ink_file(png, crop)
+    comparison.ink_checked += 1
+    if recorded > 0 and measured * INK_COLLAPSE_RATIO < recorded:
+        comparison.ink_regressions.append((name, recorded, measured, "collapsed"))
+    elif recorded == 0 and measured > 0:
+        comparison.ink_regressions.append((name, recorded, measured, "appeared"))
+
+
+def compare_platform(
+    conformance_dir: Path,
+    platform: str,
+    screenshot_names: list[str],
+    artifacts_dir: Path | None = None,
+    env: str = DEFAULT_ENV,
+    os_key: str | None = None,
+) -> VisualComparison:
+    """Compare the current artifacts of *screenshot_names* to the baseline.
+
+    ``screenshot_names`` are PNG filenames (the report derives them from the
+    ``screenshot`` fields in the platform's results). Every name ends up in
+    exactly one bucket — a missing baseline is reported, never a silent pass.
+    """
+    conformance_dir = Path(conformance_dir)
+    if artifacts_dir is None:
+        artifacts_dir = conformance_dir / "artifacts" / platform
+    artifacts_dir = Path(artifacts_dir)
+
+    comparison = VisualComparison(platform=platform)
+
+    baseline = load_baseline(conformance_dir, platform, env)
+    if baseline is None:
+        comparison.no_baseline = list(screenshot_names)
+        return comparison
+    comparison.baseline_exists = True
+    comparison.threshold = int(baseline.get("threshold", DEFAULT_THRESHOLD))
+
+    # A manifest that records which environment baked it must match the
+    # environment this comparison is for — comparing across renderers is
+    # exactly the wholesale-mismatch failure the env key exists to prevent.
+    # (Manifests from before the env key have no field; their location under
+    # baselines/<env>/ is the claim.)
+    # 🔑 THE RE-BAKE LINE BELOW CARRIES `--fail-on-moved`, AND IT IS THE ONE
+    # RECIPE NO DOCUMENT CAN COVER. This string is handed to the operator by
+    # the tool, at the moment a comparison stopped because the baseline no
+    # longer matches — i.e. immediately before a bake, to the reader who is
+    # following the tool rather than the README. Without the flag the bake it
+    # names rewrites every changed picture and exits 0.
+    #
+    # ⚠️ KEPT ON ONE SOURCE LINE even though it is long: split across two
+    # f-strings the recipe stops being greppable, and every scanner for it
+    # — this repo's gate, a person's grep, another lane's audit — is line
+    # oriented. The gate caught exactly that when this fix was first written
+    # across two lines.
+    stored_env = baseline.get("environment")
+    if stored_env is not None and stored_env != env:
+        comparison.error = (
+            f"baseline {baseline_path(conformance_dir, platform, env).name} records "
+            f"environment '{stored_env}' but this comparison is for '{env}' — "
+            f"re-bake with `jui conformance baseline update --platform {platform} --env {env} --fail-on-moved`"
+        )
+        return comparison
+
+    if baseline.get("algorithm") != ALGORITHM:
+        comparison.algorithm_mismatch = str(baseline.get("algorithm"))
+        return comparison
+
+    # Same shape is not same measurement: the hashes are also a function of
+    # the library that resampled the picture (HASHER_FIELD). Across two
+    # hashers every distance below would measure the library, so stop here
+    # and say so — an error, which the gate fails on as "not compared".
+    try:
+        stop = hasher_mismatch(
+            baseline, f"baselines/{env}/{platform}.hashes.json", platform, env
+        )
+    except BaselineError as exc:
+        comparison.error = str(exc)
+        return comparison
+    if stop:
+        comparison.error = stop
+        return comparison
+
+    hashes: dict = dict(baseline.get("hashes", {}))
+    # An availability-gated picture is only ever compared against one drawn on
+    # the same major OS. With no os_key — or with a baseline that holds no
+    # bucket for this one — those names simply have no expected value, so they
+    # land in `no_baseline` and are REPORTED as uncovered. That is the correct
+    # answer: we have no baseline for this OS. Falling back to another OS's
+    # bucket would be the cross-runtime comparison the key exists to prevent,
+    # and falling back to silence would drop them out of coverage unseen.
+    if os_key:
+        hashes.update(baseline.get("hashes_by_os", {}).get(os_key) or {})
+    crop = chrome_crop(platform, env)
+    vhashes: dict = dict(baseline.get("vhashes") or {})
+    if os_key:
+        vhashes.update((baseline.get("vhashes_by_os") or {}).get(os_key) or {})
+
+    # 🔻 THE SECOND PREDICATE, AND WHY IT IS NOT A SECOND THRESHOLD.
+    # Lowering the Hamming threshold would not close this: the entries below
+    # are within it of a BLANK PAGE, so no threshold that lets a normal render
+    # pass can also catch them emptying out. They need a different question
+    # asked of them, on a population derived from the same hashes the gate
+    # already trusts.
+    ink_committed: dict = dict(baseline.get("ink") or {})
+    if os_key:
+        ink_committed.update((baseline.get("ink_by_os") or {}).get(os_key) or {})
+    if hashes and not blanking_premise_holds(hashes):
+        # 🔴 NOT "nothing is blind". The derivation cannot run here, and an
+        # empty `blind` would be indistinguishable from full coverage — the
+        # exact silence this whole check exists to remove. Say the number of
+        # entries left unjudged and the evidence that says so.
+        blind: set[str] = set()
+        comparison.blank_check_unavailable = len(hashes)
+        comparison.blank_check_min_popcount = min(popcount(h) for h in hashes.values())
+    else:
+        blind = set(blind_to_blanking(hashes, comparison.threshold))
+    comparison.blind = sorted(blind)
+    comparison.already_blank = already_blank(hashes)
+    unstable = unstable_screenshots(conformance_dir)
+
+    seen = set()
+    for name in screenshot_names:
+        seen.add(name)
+        expected = hashes.get(name)
+        if expected is None:
+            comparison.no_baseline.append(name)
+            continue
+        png = artifacts_dir / name
+        if not png.is_file():
+            comparison.missing_artifact.append(name)
+            continue
+        try:
+            distance = hamming(dhash_file(png, crop), expected)
+            if name in blind:
+                _judge_ink(comparison, name, png, crop, ink_committed, unstable)
+        except BaselineError as exc:
+            comparison.error = str(exc)
+            return comparison
+        comparison.compared += 1
+        if distance > comparison.threshold:
+            comparison.regressions.append((name, distance))
+            continue
+        # Within the horizontal threshold: ask the vertical hash, which sees
+        # a move inside a column. No committed vertical hash is UNCOVERED, a
+        # named state, never a pass.
+        expected_v = vhashes.get(name)
+        if expected_v is None:
+            comparison.vertical_uncovered.append(name)
+            continue
+        try:
+            vdistance = hamming(vdhash_file(png, crop), expected_v)
+        except BaselineError as exc:
+            comparison.error = str(exc)
+            return comparison
+        comparison.vertical_checked += 1
+        if vdistance > comparison.threshold:
+            comparison.regressions.append((name, vdistance))
+            comparison.regression_axis[name] = "vertical"
+
+    # Baseline entries whose fixture no longer produced a screenshot.
+    for name in hashes:
+        if name not in seen:
+            comparison.missing_artifact.append(name)
+
+    return comparison

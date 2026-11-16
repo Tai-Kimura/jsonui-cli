@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+  HandlerRole:
+    Type: AWS::IAM::Role
+  Handler:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt HandlerRole.Arn
+      VpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet
+      Environment:
+        Variables:
+          QUEUE: !Ref Jobs
+          BUCKET: !Sub "${Uploads}"
+  Jobs:
+    Type: AWS::SQS::Queue
+  Uploads:
+    Type: AWS::S3::Bucket
+  Gadget:
+    Type: AWS::Gizmo::Gadget

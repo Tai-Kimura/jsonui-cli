@@ -1,0 +1,367 @@
+# frozen_string_literal: true
+
+require_relative 'base_converter'
+require_relative '../../core/attribute_validator_core'
+
+module RjuiTools
+  module React
+    module Converters
+      class SegmentConverter < BaseConverter
+        # A Segment reads no cornerRadius (the requester's ruling 2026-11-16, ticket
+        # rjui-selectbox-default-corner-overrides-declared): its track and its selected fill are
+        # capsules on every platform, as iOS draws them. The declaration is taken out of the node
+        # before anything reads it, a size class's own included, so no corner class or inline
+        # borderRadius is written for it.
+        def initialize(json, config)
+          super(without_corner(json), config)
+        end
+
+        def convert(indent = 2)
+          class_name = build_class_name
+          style_attr = build_style_attr
+          id_attr = build_id_attr
+          testid_attr = build_testid_attr
+          tag_attr = build_tag_attr
+          # Dropped entries are removed BEFORE the index is taken, so the
+          # React `key` and the `{id}_tab_{n}` ids stay consecutive — the
+          # runtimes compact too (mapNotNull / compactMap).
+          items = declared_segment_items(attributes['items'] || [])
+
+          selected_binding = build_selected_binding
+          on_change = build_on_change
+          disabled_attr = build_disabled_attr
+          # A static index (or none) seeds the segment's own state (wrap_seeded):
+          # the buttons read `seeded` and a tap writes it.
+          raw_selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
+          seeded = !(raw_selected && has_binding?(raw_selected))
+
+          items_jsx = items.each_with_index.map do |item, index|
+            button_class = build_button_class(index, seeded: seeded)
+            # A bound `enabled` disables the tabs behind its binding, as `false`
+            # does: it only dimmed the segment, and a tap still switched it.
+            button_disabled = if attributes['enabled'] == false
+                                ' disabled'
+                              elsif has_binding?(attributes['enabled'])
+                                " disabled={!#{extract_binding_property(attributes['enabled'])}}"
+                              else
+                                ''
+                              end
+            # Data closure props are always optional (type_converter makes all
+            # function types `| undefined`), so the call must be optional-chained.
+            # The tab change is the operation a declared onClick follows
+            # (operation_click_call), after the segment's own update.
+            click_call = operation_click_call
+            on_click_attr = if seeded
+                              " onClick={() => { setSeeded(#{index});#{on_change ? " #{on_change}?.(#{index});" : ''}#{click_call ? " #{click_call}" : ''} }}"
+                            else
+                              operation_attr('onClick', '()', on_change && "#{on_change}?.(#{index})")
+                            end
+            # Item labels go through the same string resolution as Label.text
+            # (string key -> binding -> literal), matching sjui's per-item
+            # get_text_with_string_manager. The TEXT is taken first: an entry
+            # in the canonical `{label, value}` form is a Hash, and a Hash
+            # reached convert_text_binding, which passes non-Strings through
+            # untouched — so Ruby's Hash#inspect went into the JSX as
+            # `{"label"=>"opt_a", "value"=>"a"}` and the file did not parse.
+            "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{segment_pressed_attr(index, seeded: seeded)}#{on_click_attr}#{button_disabled}><span className=\"block min-w-0 truncate\">#{convert_text_binding(item)}</span></button>"
+          end.join("\n")
+
+          # `disabled` is not a valid attribute on <div>; reflect the state via
+          # aria-disabled (each inner <button> carries the real disabled attr).
+          # The segment's name is the group's (` role="group" aria-label=…`),
+          # each button keeping its own text.
+          group_label = build_aria_label_attr
+          group_attrs = group_label.empty? ? '' : %( role="group"#{group_label})
+          jsx = <<~JSX.chomp
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}#{group_attrs}>
+            #{items_jsx}
+            #{indent_str(indent)}</div>
+          JSX
+          jsx = wrap_seeded(jsx, indent, (raw_selected || 0).to_i) if seeded
+
+          wrap_with_visibility(jsx, indent)
+        end
+
+        protected
+
+        # Per-button DOM id following the TabView `{id}_tab_{index}` naming
+        # contract that the web test driver's selectTab action resolves.
+        # Literal ids only — a bound id has no static value to interpolate.
+        def segment_item_id_attr(index)
+          build_suffixed_id_attr("_tab_#{index}")
+        end
+
+        def build_class_name
+          classes = [super]
+          # After super, which starts @dynamic_styles afresh.
+          register_bound_segment_colours
+
+          # The declared width wins (super maps it). `w-full` used to be added
+          # unconditionally and, later in the stylesheet, beat the declared
+          # width: Slider / Progress / Segment with width 200 drew at the
+          # root's full 1024 (ticket
+          # rjui-slider-progress-segment-ignore-the-declared-width-and-fill-the-row).
+          # Filling is only the fallback for a layout that declares no width.
+          # No width written takes the content's width, as wrapContent does — what iOS and Android
+          # draw for a Segment with no width (2.5.47: SwiftJsonUI 10.45.0, KotlinJsonUI 2.63.1). It
+          # filled the row (w-full).
+          classes << 'w-fit' if attributes['width'].nil?
+          # Equal segments, each as wide as the widest label when the Segment takes its content's
+          # width (wrapContent), as UISegmentedControl and KotlinJsonUI's Segment divide it; a set
+          # width is divided equally and a label that does not fit is cut. A flex row of flex-1
+          # min-w-0 buttons sized a wrapContent Segment by its SHORTEST label and cut the others
+          # (2.5.45; minmax(0, 1fr) keeps the cut in a set width).
+          classes << 'grid grid-flow-col auto-cols-[minmax(0,1fr)]'
+          # The track is a capsule, as on iOS and Android (the requester's ruling 2026-11-16; it was
+          # rounded-lg, 8px).
+          classes << 'rounded-full'
+
+          # Background color: a declared `background` is drawn by the base
+          # converter; without one the control's grey
+          classes << 'bg-gray-100' unless attributes['background']
+
+          classes << 'p-1'
+
+          # Disabled state
+          if attributes['enabled'] == false
+            classes << 'opacity-50'
+          elsif has_binding?(attributes['enabled'])
+            binding_expr = extract_binding_property(attributes['enabled'])
+            classes << "${!#{binding_expr} ? 'opacity-50' : ''}"
+          end
+
+          finalize_classes(classes)
+        end
+
+        # `Segment.items` is DECLARED as static label strings: the SSoT entry
+        # carries no `items` sub-schema, where TabView.tabs and
+        # Collection.sections declare `{"type": "object"}` explicitly when
+        # they mean an object. Both dynamic runtimes agree — Android's
+        # DynamicSegmentComponent keeps `isJsonPrimitive` and maps the rest to
+        # null, iOS's `asStrings` keeps String/NSNumber and compacts the rest
+        # away — so an object entry renders as nothing at runtime.
+        #
+        # Only the generator disagreed, and it did so by handing the Hash to
+        # a text helper that passes non-Strings through: Ruby's Hash#inspect
+        # went into the JSX as `{"label"=>"opt_a", "value"=>"a"}` and the
+        # generated file stopped parsing, from a build that exited 0.
+        #
+        # So: keep what the declaration describes and drop the rest, as the
+        # runtimes do. Taking `label` instead would give meaning to an input
+        # the SSoT does not declare — that decision belongs to the
+        # declaration, not to this converter.
+        #
+        # The drop is not silent: the shared validator names the entry, with
+        # the layout path, on every path that reaches this converter (build /
+        # watch / hotload all run BuildCommand, which validates). This
+        # converter deliberately prints nothing of its own — two warnings for
+        # one drop is noise, and only the validator has the path.
+        #
+        # The judgment is the shared one — `non_scalar_item_indices` is what
+        # the validator uses to warn, so what is dropped here and what is
+        # named there cannot drift apart. It is a no-op for every attribute
+        # other than Segment.items, and for a non-Array value (`items` also
+        # takes a binding string, which has no elements to drop).
+        def declared_segment_items(items)
+          # A bound `items` no longer arrives here: `Segment.items` is
+          # `type: array` with no binding, so LayoutValidator refuses the
+          # layout at `:error` before any converter runs. This used to
+          # return [] and emit a Segment with no items while the build
+          # exited 0 — the same "green with a hole" the refusal replaced.
+          #
+          # The `is_a?(Array)` guard stays: it is not the binding case. A
+          # non-array, non-binding value (an object, a number) is still
+          # only caught here.
+          return items unless items.is_a?(Array)
+
+          drop = JsonUIShared::AttributeValidatorCore.non_scalar_item_indices(
+            'Segment', 'items', items
+          )
+          return items if drop.empty?
+
+          kept = []
+          items.each_with_index do |item, index|
+            next if drop.include?(index)
+
+            kept << item
+          end
+          kept
+        end
+
+        # Which segment is selected, told to a screen reader the way the buttons
+        # draw it (ticket rjui-segment-tabview-switch-state-not-exposed): the
+        # same expression the class reads, so the two cannot disagree. iOS's
+        # Picker and Android's Tab(selected=) already say it.
+        def segment_pressed_attr(index, seeded:)
+          selected_index = attributes['selectedIndex'] || attributes['selectedTabIndex'] || 0
+          if seeded
+            " aria-pressed={seeded === #{index}}"
+          elsif has_binding?(selected_index)
+            " aria-pressed={#{extract_binding_property(selected_index)} === #{index}}"
+          else
+            %( aria-pressed="#{selected_index.to_i == index}")
+          end
+        end
+
+        def build_button_class(index, seeded: false)
+          selected_index = attributes['selectedIndex'] || attributes['selectedTabIndex'] || 0
+
+          # Build font size class
+          font_size_class = if attributes['fontSize']
+            TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts)
+          elsif font_scale_declared?
+            # The segment's own default (13) is the size the declaration applies to.
+            TailwindMapper.map_font_size(13, **font_scale_opts)
+          else
+            # 13, fixed, as iOS draws a segment's label and KotlinJsonUI since 2.63.0 (13dp, not
+            # following the text scale; the orchestrator's decision 2026-11-16): at text-sm, 14, a
+            # 200-wide three-item Segment cut "Gamma", which iOS and Android draw whole.
+            TailwindMapper.map_font_size(13, scaling: false)
+          end
+
+          # Build padding class
+          # height may be a keyword ("wrapContent" / "matchParent") — only a
+          # numeric height can be translated into vertical padding.
+          # A declared height: the label is centred in the segment the track gives it. A quarter of
+          # the height above and below it was padding the segment had no room for — a 32-high
+          # Segment drew a 24-high fill and its label 8 below that, cut at the foot
+          # (Segment/items__ja_fit_156). No height: the padding as before.
+          padding_class = if attributes['height'].is_a?(Numeric)
+            'flex items-center justify-center'
+          else
+            'py-2'
+          end
+
+          # Label colors. fontColor is the UNSELECTED label and selectedFontColor
+          # the selected one, falling back to fontColor (contract:
+          # semantics.segmentLabelColors). fontColor used to be the selected
+          # label's fallback while the unselected one was hardcoded, so a dark
+          # tint left the label unreadable with no way to declare otherwise.
+          font_color = attributes['fontColor']
+          unselected_text = font_color ? segment_colour_class(font_color, 'text', '--jui-segment-font') : 'text-gray-500 hover:text-gray-700'
+          selected_font = attributes['selectedFontColor'] || font_color
+          selected_text = selected_font ? segment_colour_class(selected_font, 'text', '--jui-segment-selected-font') : 'text-gray-900'
+
+          # tintColor is the selected-segment background accent
+          # (UISegmentedControl heritage — sjui/kjui already render it).
+          tint = attributes['tintColor']
+          selected_bg = tint ? segment_colour_class(tint, 'bg', '--jui-segment-tint') : 'bg-white'
+
+          # Each label on one line, cut with an ellipsis where it does not fit, as iOS and Android
+          # draw a segment's (the requester's ruling 2026-11-15, option (a)): a 156-wide Segment
+          # wrapped a four-character Japanese label onto two lines. The label's own span truncates (convert), so only its
+          # width is cut — on the button, overflow-hidden cut the label's foot where a declared height
+          # is shorter than the padding and the line. min-w-0 lets the flex item shrink.
+          # The side padding is the 6 a segment keeps on Android, and about what iOS keeps (the
+          # orchestrator's decision 2026-11-16; it was px-4, 16, and cut a four-character Japanese label to two and an ellipsis).
+          base_classes = "min-w-0 px-1.5 #{padding_class} #{font_size_class} font-medium rounded-full transition-colors cursor-pointer"
+          disabled_class = attributes['enabled'] == false ? ' cursor-not-allowed' : ''
+
+          if seeded
+            "#{base_classes}#{disabled_class} ${seeded === #{index} ? '#{selected_bg} #{selected_text} shadow' : '#{unselected_text}'}"
+          elsif has_binding?(selected_index)
+            prop = extract_binding_property(selected_index)
+            "#{base_classes}#{disabled_class} ${#{prop} === #{index} ? '#{selected_bg} #{selected_text} shadow' : '#{unselected_text}'}"
+          else
+            # Static selectedIndex — resolve the selected state at generation
+            # time (the old code emitted a bare `selectedIndex` identifier,
+            # which is undefined at runtime and crashed the component).
+            selected_classes = if selected_index.to_i == index
+                                 "#{selected_bg} #{selected_text} shadow"
+                               else
+                                 unselected_text
+                               end
+            "#{base_classes}#{disabled_class} #{selected_classes}"
+          end
+        end
+
+        # A segment's colour as its class. A bound one reads the custom property
+        # the container sets (register_bound_segment_colours); in the class
+        # itself it was `bg-@{v}` / `text-@{v}`, which is no class.
+        def segment_colour_class(value, prefix, property)
+          return "#{prefix}-[var(#{property})]" if has_binding?(value)
+
+          TailwindMapper.map_color(value, prefix)
+        end
+
+        # The bound segment colours, as custom properties on the container the
+        # buttons inherit. Called before the container's style is written.
+        def register_bound_segment_colours
+          font = attributes['fontColor']
+          selected = attributes['selectedFontColor'] || font
+          {
+            '--jui-segment-font' => font, '--jui-segment-selected-font' => selected,
+            '--jui-segment-tint' => attributes['tintColor']
+          }.each do |property, value|
+            @dynamic_styles[property] = color_style_expr(value) if has_binding?(value)
+          end
+        end
+
+        def build_selected_binding
+          selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
+
+          if selected && has_binding?(selected)
+            extract_binding_property(selected)
+          else
+            selected || 0
+          end
+        end
+
+        # onChange handler expression, or nil when neither onValueChange nor a
+        # selectedIndex binding provides one (static segment).
+        def build_on_change
+          handler = attributes['onValueChange']
+
+          if handler && has_binding?(handler)
+            extract_binding_property(handler)
+          elsif has_binding?(attributes['valueChange'])
+            # `valueChange` is declared "string": '@{h}' names the same
+            # closure a bare name does. It was written out as `data.@{h}`,
+            # which is not TypeScript (rjui-segment-valuechange-binding-
+            # writes-the-braces).
+            extract_binding_property(attributes['valueChange'])
+          elsif attributes['valueChange'].is_a?(String) && !attributes['valueChange'].empty?
+            # `valueChange` is the legacy SELECTOR spelling (a bare method
+            # name, like `onclick`) that only the UIKit runtime read.
+            add_viewmodel_data_prefix(to_camel_case(attributes['valueChange']))
+          else
+            # Generate setter from the raw binding name (without viewModel.data. prefix)
+            selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
+            return nil unless selected && has_binding?(selected)
+
+            raw_binding = extract_raw_binding_property(selected)
+            setter_name = "set#{raw_binding[0].upcase}#{raw_binding[1..]}"
+            add_viewmodel_data_prefix(setter_name)
+          end
+        end
+
+        def build_disabled_attr
+          enabled = attributes['enabled']
+          return '' if enabled.nil?
+
+          if has_binding?(enabled)
+            " data-disabled={!#{extract_binding_property(enabled)}}"
+          elsif enabled == false
+            ' data-disabled="true"'
+          else
+            ''
+          end
+        end
+
+        private
+
+        def without_corner(node)
+          return node unless node.is_a?(Hash)
+
+          stripped = node.reject { |key, _| key == 'cornerRadius' }
+          if stripped['responsive'].is_a?(Hash)
+            stripped['responsive'] = stripped['responsive'].transform_values do |overrides|
+              overrides.is_a?(Hash) ? overrides.reject { |key, _| key == 'cornerRadius' } : overrides
+            end
+          end
+          stripped
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,7 @@
+{
+  "type": "Text",
+  "text": "Hello World",
+  "fontSize": 14,
+  "fontColor": "#333333",
+  "textAlign": "center"
+}

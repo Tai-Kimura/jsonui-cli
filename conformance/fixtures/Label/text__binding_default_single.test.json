@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/text__binding_default_single.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.text (binding_default_single)",
+    "description": "Interactive conformance fixture for 'text' on Label (section: Label, case: binding_default_single). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__binding_default_single",
+      "description": "Interactive conformance fixture for 'text' on Label (section: Label, case: binding_default_single). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Guest"
+        }
+      ]
+    }
+  ]
+}

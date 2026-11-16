@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/accessibilityLiveRegion__off.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.accessibilityLiveRegion (off)",
+    "description": "Conformance fixture for 'accessibilityLiveRegion' on View (section: View, class: visual). Value under test: \"off\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "android",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "accessibilityLiveRegion__off",
+      "description": "Conformance fixture for 'accessibilityLiveRegion' on View (section: View, class: visual). Value under test: \"off\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_accessibilityLiveRegion__off"
+        }
+      ]
+    }
+  ]
+}

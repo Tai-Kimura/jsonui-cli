@@ -1,0 +1,598 @@
+"""The cost simulator's calculation (infra/cost, infra/rules; plan docs/plans/2026-10-20-jui-viz-backend-load-and-cost-
+simulator.md, L-B): the charges, the price book, the scaling, the formulas, the engine and its lines, the bundled table
+and the rules. The rules are tested on the official pages' own examples (each test names its page), priced from the
+bundled table where it holds the page's prices, else from the example's own prices.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from jsonui_doc_cli.infra import load as L
+from jsonui_doc_cli.infra import model as M
+from jsonui_doc_cli.infra import prices as P
+from jsonui_doc_cli.infra import room as R
+from jsonui_doc_cli.infra import rules as RULES
+from jsonui_doc_cli.infra.cost import aws_offers as A
+from jsonui_doc_cli.infra.cost import currency as CUR
+from jsonui_doc_cli.infra.cost import engine as E
+from jsonui_doc_cli.infra.cost import formulas as F
+from jsonui_doc_cli.infra.cost import parts
+from jsonui_doc_cli.infra.cost import pricebook as PB
+from jsonui_doc_cli.infra.cost import scale
+
+FIX = Path(__file__).resolve().parent / "fixtures" / "infra"
+ALL = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+BUNDLED = PB.Book(bundled=PB.bundled_rows())
+
+
+def _model(nodes: list[dict], groups: list[dict] | None = None, edges: list[dict] | None = None) -> dict:
+    doc = {"version": 0, "groups": groups or [], "nodes": nodes, "edges": edges or []}
+    model, problems = M.merge([("m.json", json.dumps(doc).encode())])
+    assert M.errors(problems) == []
+    return model
+
+
+def _run(nodes, loads, book=BUNDLED, month="2026-11", groups=None, edges=None, edge_loads=None, **extra):
+    """(result, month totals) of one scenario over a model of ``nodes``."""
+    model = _model(nodes, groups, edges)
+    doc = {"version": 0, "id": "t", "month": month, "loads": loads, **({"edges": edge_loads} if edge_loads else {}), **extra}
+    scenario, problems = L.normalize("t.json", doc, model)
+    assert [p for p in problems if p["severity"] == "error"] == []
+    result = E.simulate(scenario, model, book)
+    return result, E.month_totals(result)
+
+
+def _meter_usd(result, node, meter) -> float:
+    run = next(r for r in result.nodes if r.node == node)
+    return sum(v for v in run.meters[meter]["usd"] if v is not None)
+
+
+def _per_hour(total: float, hours: int = 720) -> float:
+    return total / hours
+
+
+def _user(rows: list[dict]) -> PB.Book:
+    return PB.Book(user=[dict(r, file="u.json", index=i, per_units=r.get("per_units", 1)) for i, r in enumerate(rows)])
+
+
+# ---------------------------------------------------------------- parts: the charges
+
+def test_a_charge_flat_free_and_stepped_on_the_months_total():
+    flat = {"price_usd": 0.2, "per_units": 1_000_000}
+    assert parts.charge(0, 3_000_000, flat)[0] == pytest.approx(0.6)
+    free = dict(flat, free={"amount": 1_000_000, "period": "month"})
+    assert parts.charge(0, 500_000, free) == (0.0, {"free": 500_000})
+    usd, detail = parts.charge(500_000, 1_000_000, free)              # crosses the free amount
+    assert usd == pytest.approx(0.1) and detail["free"] == 500_000
+    tiers = {"tiers": [{"from": 0, "to": 10, "price_usd": 1.0}, {"from": 10, "price_usd": 0.5}], "per_units": 1}
+    assert parts.charge(5, 10, tiers) == (pytest.approx(5 * 1.0 + 5 * 0.5), {"free": 0, "tiers": [0, 1]})
+    assert parts.charge(20, 4, tiers)[0] == pytest.approx(2.0)
+    both = dict(tiers, free={"amount": 10, "period": "month"})        # the free amount first, then the steps
+    assert parts.charge(0, 25, both)[0] == pytest.approx(10 * 1.0 + 5 * 0.5)
+
+
+# ---------------------------------------------------------------- the price book
+
+ROW = {"provider": "aws", "service": "s3", "sku": "get", "region": "ap-northeast-1", "unit": "request",
+       "price_usd": 1.0, "effective": "2026-10-01", "source": "manual"}
+
+
+def test_the_book_takes_the_first_layer_the_region_then_global_and_the_latest_effective():
+    book = PB.Book(user=[dict(ROW, price_usd=3.0, file="u", index=0)], cache=[dict(ROW, price_usd=2.0, file="c", index=0)],
+                   bundled=[dict(ROW, file="b", index=0)])
+    assert book.find("aws", "s3", "get", "request", "ap-northeast-1", "2026-11-01")["layer"] == "user"
+    book = PB.Book(cache=[dict(ROW, price_usd=2.0)], bundled=[dict(ROW)])
+    assert book.find("aws", "s3", "get", "request", "ap-northeast-1", "2026-11-01")["row"]["price_usd"] == 2.0
+    book = PB.Book(bundled=[dict(ROW, region="global", price_usd=9.0), dict(ROW, price_usd=1.0),
+                            dict(ROW, price_usd=1.5, effective="2026-11-15")])
+    assert book.find("aws", "s3", "get", "request", "ap-northeast-1", "2026-11-01")["row"]["price_usd"] == 1.0
+    assert book.find("aws", "s3", "get", "request", "ap-northeast-1", "2026-12-01")["row"]["price_usd"] == 1.5
+    assert book.find("aws", "s3", "get", "request", "us-east-1", "2026-11-01")["row"]["price_usd"] == 9.0
+    assert book.find("aws", "s3", "get", "request", "ap-northeast-1", "2026-09-01") is None   # not yet effective
+    assert book.find("aws", "s3.standard", "get", "request", "ap-northeast-1", "2026-11-01")   # the service's head
+    assert book.find("gcp", "s3", "get", "request", "ap-northeast-1", "2026-11-01") is None
+
+
+def test_the_cache_is_read_from_viz_home(tmp_path):
+    folder = PB.cache_dir({"JUI_VIZ_HOME": str(tmp_path)})
+    assert folder == tmp_path / "cloud-prices"
+    (folder / "aws").mkdir(parents=True)
+    (folder / "aws" / "s3.json").write_text(json.dumps({"version": 0, "prices": [ROW]}))
+    (folder / "bad.json").write_text("{")
+    from jsonui_doc_cli.infra.cost import fetch as FE
+    mine = {"writer": FE.WRITER}
+    (folder / "index.json").write_text(json.dumps({"version": 1, "files": {"aws/s3.json": mine, "bad.json": mine}}))
+    rows, why = PB.cache_rows(folder)
+    assert [r["sku"] for r in rows] == ["get"] and why == ["bad.json: not used (json)"]
+
+
+# ---------------------------------------------------------------- scale
+
+def test_autoscale_clamps_marks_max_lags_and_steps():
+    assert scale.wanted(100, 50, 0.5) == 4 and scale.wanted(0, 50, 1) == 0
+    counts, at_max = scale.autoscale([100, 400, 100], 50, 1.0, [1, 1, 1], [4, 4, 4])
+    assert counts == [2, 4, 2] and at_max == [False, True, False]
+    counts, _ = scale.autoscale([50, 400, 400, 50, 50], 50, 1.0, [1] * 5, [10] * 5, out_delay_min=60, in_delay_min=120)
+    assert counts == [1, 1, 8, 8, 8]        # up one hour late, down two hours late (the fifth hour still holds)
+    counts, _ = scale.autoscale([50, 500], 50, 1.0, [1, 1], [10, 10], step=3)
+    assert counts == [1, 4]
+    counts, _ = scale.autoscale([50, 500], 50, 1.0, [1, 0], [10, 0])
+    assert counts == [1, 0]                 # max 0: stopped at once
+    counts, _ = scale.autoscale([100, 100], [50, 100], 1.0, [1, 1], [10, 10])
+    assert counts == [2, 1]                 # one instance takes more on a bigger step
+
+
+def test_a_delay_rounds_half_an_hour_up():
+    assert [scale.lag_hours(m) for m in (None, 0, 29, 30, 89, 90, 149, 150, 210)] == [0, 0, 0, 1, 1, 2, 2, 3, 4]
+
+
+LADDER = [{"sku": "s", "amount": 100}, {"sku": "m", "amount": 200}, {"sku": "l", "amount": 400}]
+
+
+def test_vertical_picks_the_smallest_step_that_carries_it_by_order():
+    args = dict(min_skus=["s"] * 3, max_skus=["l"] * 3, counts_lo=[1] * 3, counts_hi=[2] * 3, change_delay_min=0)
+    assert scale.vertical([150, 350, 900], LADDER, 1.0, order="schedule_vertical", **args) == ["s", "m", "l"]
+    assert scale.vertical([150, 350, 900], LADDER, 1.0, order="vertical_first", **args) == ["m", "l", "l"]
+    assert scale.vertical([150], LADDER, 1.0, ["m"], ["m"], "schedule_vertical", [1], [1], 0) == ["m"]   # the range
+    assert scale.vertical([50, 900, 50], LADDER, 1.0, ["s"] * 3, ["l"] * 3, "vertical_first", [1] * 3, [1] * 3, 60) == ["s", "s", "l"]
+    assert scale.vertical([1], [{"sku": "a", "vcpu": 1}, {"sku": "b", "vcpu": 2}], 1.0, ["a"], ["b"], "vertical_first",
+                          [1], [1], 0) == ["a"]                      # no amounts: the range's smallest
+    assert scale.vertical([100], LADDER, 1.0, ["s"], ["l"], "vertical_first", [1], [1], 0, per_hours=1 / 3600) == ["s"]
+
+
+def test_capacity_and_served():
+    assert scale.capacity(3, 50) == 150 and scale.capacity(3, None) is None
+    assert scale.served(200, 150) == (150, 50) and scale.served(100, 150) == (100, 0) and scale.served(9, None) == (9, 0)
+
+
+# ---------------------------------------------------------------- formulas and rules
+
+def test_every_meter_is_in_a_price_unit_and_every_rule_has_its_page():
+    units = set(P.units())
+    q = {k: 1.0 for k in L.quantities()}
+    hour = F.Hour(node={"ha": "multi-az"}, q=q, by_zone={"japan": 1.0}, running=2.0, sku="t")
+    for rule in RULES.REGISTRY:
+        if rule.cost is None:
+            assert rule.category in ("client", "ci", "external.saas", "security.iam", "security.policy", "monitoring.alarm")
+            continue
+        for m in rule.cost(hour):
+            assert m.unit in units, (rule.id, m)
+        if rule.provider:   # the pages read 10-20; the NAT gateway's, public IPv4's, alarms' and stage B's 10-21
+            new = rule.id in ("aws/nat", "aws/ipv4", "aws/cloudwatch-alarm", "aws/aurora", "aws/docdb", "aws/msk",
+                              "aws/kms", "aws/ssm", "cloudflare/kv", "cloudflare/access", "cloudflare/lb",
+                              "aws/ecr", "firebase/rtdb", "aws/stepfunctions", "aws/apprunner", "aws/lightsail",
+                              "aws/lightsail-database", "aws/gwlb", "aws/classic-lb", "aws/eventbridge") \
+                or rule.provider in ("azure", "gcp")   # every Azure and GCP rule: read 10-21
+            assert rule.source.startswith("https://") and rule.checked == ("2026-10-21" if new else "2026-10-20"), rule.id
+
+
+def test_the_most_specific_provider_rule_is_found():
+    assert RULES.lookup({"category": "compute.function", "providerResolved": "aws", "service": "lambda"}).id == "aws/lambda"
+    assert RULES.lookup({"category": "load_balancer", "providerResolved": "aws", "service": "elb.nlb"}).id == "aws/nlb"
+    assert RULES.lookup({"category": "compute.function", "providerResolved": "gcp", "service": "functions"}).id == "gcp/functions"
+    assert RULES.lookup({"category": "compute.function", "providerResolved": "digitalocean", "service": "functions"}).id == "generic/compute.function"
+
+
+# ---------------------------------------------------------------- the official examples
+
+def test_lambda_example_1():
+    """https://aws.amazon.com/lambda/pricing/ example 1 (us-east-1, x86): 3 million requests a month, 120 ms, 1536 MB
+    -> compute 540,000 GB-s - 400,000 free = $2.33, requests 2 million billable = $0.40, total $2.73."""
+    node = {"id": "fn", "category": "compute.function", "provider": "aws", "service": "lambda", "region": "us-east-1"}
+    load = {"node": "fn", "quantities": {"requests": _per_hour(3_000_000), "duration_ms": 120, "memory_mb": 1536}}
+    result, totals = _run([node], [load])
+    assert round(_meter_usd(result, "fn", "compute"), 2) == 2.33
+    assert round(_meter_usd(result, "fn", "requests"), 2) == 0.40
+    assert round(totals["usd"], 2) == 2.73
+
+
+def test_workers_example_1():
+    """https://developers.cloudflare.com/workers/platform/pricing/ example 1: 15 million requests, 7 ms CPU each ->
+    $5.00 + requests $1.50 + CPU $1.50 = $8.00."""
+    node = {"id": "w", "category": "compute.function", "provider": "cloudflare", "service": "workers"}
+    result, totals = _run([node], [{"node": "w", "quantities": {"requests": _per_hour(15_000_000), "cpu_ms": 7}}])
+    assert [round(_meter_usd(result, "w", m), 2) for m in ("plan", "requests", "cpu")] == [5.0, 1.5, 1.5]
+    assert round(totals["usd"], 2) == 8.00
+
+
+def test_alb_example():
+    """https://aws.amazon.com/elasticloadbalancing/pricing/ (ALB, us-east-1): 1 new connection a second lasting 2
+    minutes (120 open), 1.08 GB an hour, 250 rule evaluations a second -> 1.08 LCU, $0.03114 an hour, $22.42 a month."""
+    node = {"id": "lb", "category": "load_balancer", "provider": "aws", "service": "elb.alb", "region": "us-east-1"}
+    q = {"new_connections": {"amount": 1, "per": "second"}, "active_connections": 120, "processed_gb": 1.08,
+         "rule_evaluations": {"amount": 250, "per": "second"}}
+    result, totals = _run([node], [{"node": "lb", "quantities": q}])
+    run = next(r for r in result.nodes if r.node == "lb")
+    assert run.meters["lcu"]["amount"][0] == pytest.approx(1.08)
+    assert run.meters["hour"]["usd"][0] + run.meters["lcu"]["usd"][0] == pytest.approx(0.03114)
+    assert round(totals["usd"], 2) == 22.42
+
+
+def test_dynamodb_on_demand_example():
+    """https://aws.amazon.com/dynamodb/pricing/on-demand/ simple example (us-east-1): 3.55 million writes and reads,
+    27 GB on average (25 free) -> writes $2.22, reads $0.44, storage $0.50, total $3.16."""
+    node = {"id": "t", "category": "database.kv", "provider": "aws", "service": "dynamodb", "region": "us-east-1"}
+    q = {"write_units": _per_hour(3_550_000), "read_units": _per_hour(3_550_000), "storage_gb": 27}
+    result, totals = _run([node], [{"node": "t", "quantities": q}])
+    assert [round(_meter_usd(result, "t", m), 2) for m in ("write_units", "read_units", "storage")] == [2.22, 0.44, 0.50]
+    assert round(totals["usd"], 2) == 3.16
+
+
+def test_r2_example():
+    """https://developers.cloudflare.com/r2/pricing/ first example: 1,000 GB for a month, 1,000 writes, 1 million
+    reads -> storage 990 billable GB-months $14.85; operations inside the free tier; total $14.85."""
+    node = {"id": "b", "category": "storage.object", "provider": "cloudflare", "service": "r2"}
+    q = {"storage_gb": 1000, "put_requests": _per_hour(1000), "get_requests": _per_hour(1_000_000), "egress_gb": 5}
+    result, totals = _run([node], [{"node": "b", "quantities": q}])
+    assert round(totals["usd"], 2) == 14.85 and totals["noPrice"] == []      # R2 has no egress charge at all
+
+
+def test_queues_example_1():
+    """https://developers.cloudflare.com/queues/platform/pricing/ example 1: 1 million messages a day written, read
+    and deleted for 30 days -> 90 million operations - 1 million free = 89 million, $35.60."""
+    node = {"id": "q", "category": "queue", "provider": "cloudflare", "service": "queues"}
+    result, totals = _run([node], [{"node": "q", "quantities": {"messages": {"amount": 1_000_000, "per": "day"}}}])
+    assert round(totals["usd"], 2) == 35.60
+
+
+def test_fargate_example_vcpu_and_memory():
+    """https://aws.amazon.com/fargate/pricing/ example (us-east-1, Linux/x86): 5 tasks, 1 vCPU and 2 GB each, 600
+    seconds a day for 30 days, at $0.000011244 a vCPU-second and $0.000001235 a GB-second -> vCPU $1.01, memory $0.22
+    (ephemeral storage is not modelled)."""
+    book = _user([{"provider": "aws", "service": "ecs", "sku": "vcpu", "region": "us-east-1", "unit": "vCPU-hour",
+                   "price_usd": 0.000011244 * 3600, "effective": "2026-10-01", "source": "manual"},
+                  {"provider": "aws", "service": "ecs", "sku": "memory", "region": "us-east-1", "unit": "GB-hour",
+                   "price_usd": 0.000001235 * 3600, "effective": "2026-10-01", "source": "manual"}])
+    node = {"id": "api", "category": "compute.container", "provider": "aws", "service": "ecs.fargate",
+            "region": "us-east-1", "count": 5}
+    hour = F.Hour(node=node, q={"vcpu": 1, "memory_gb": 2}, running=5 * 600 / 3600, hours_in_month=720)
+    usd = {m.name: 0.0 for m in RULES.lookup(node).cost(hour)}
+    totals: dict = {}
+    for _day in range(30):
+        for m in RULES.lookup(node).cost(hour):
+            usd[m.name] += E.price_meter(book, totals, m, node, "us-east-1", "2026-11-01")[0]
+    assert (round(usd["vcpu"], 2), round(usd["memory"], 2)) == (1.01, 0.22)
+
+
+# ---------------------------------------------------------------- the engine
+
+def test_the_examples_run_and_say_what_is_not_priced():
+    model = R.read(FIX / "aws-three-tier")
+    sc = {s["id"]: s for s in L.read(FIX / "aws-three-tier")["scenarios"]}
+    ordinary = E.month_totals(E.simulate(sc["ordinary"], model, BUNDLED))
+    assert ordinary["noRule"] == ["api-role"]   # api-5xx: an alarm, priced since 2026-10-21
+    assert ordinary["loadUndefined"] == ["stripe"]   # a SaaS billed by use (2.3.16): its load is not written
+    assert ordinary["noPrice"] == [{"node": "mailer", "meter": "emails", "sku": "emails", "unit": "email"},   # sendgrid
+                                   # an alarm in no region's group: its region's price is not found, said not guessed
+                                   {"node": "api-5xx", "meter": "alarm", "sku": "alarm", "unit": "month"}]
+    assert ordinary["usd"] > 0 and abs(sum(d["usd"] for d in ordinary["days"]) - ordinary["usd"]) < 1e-6
+    sale = E.month_totals(E.simulate(sc["sale"], model, BUNDLED))
+    assert sale["loadUndefined"] == ["stripe", "mailer", "assets"] and "api-prod" in sale["overflowHours"]
+
+
+def test_overflow_is_judged_by_capacity_and_left_out_of_the_charge_unless_the_rule_says():
+    node = {"id": "api", "category": "compute.container", "provider": "aws", "service": "ecs", "region": "us-east-1"}
+    load = {"node": "api", "quantities": {"requests": {"amount": 300, "per": "second"}},
+            "autoscale": {"min": 1, "max": 2, "per_instance": {"quantity": "requests", "amount": 100, "per": "second"}}}
+    result, totals = _run([node], [load])
+    run = next(r for r in result.nodes if r.node == "api")
+    assert run.running[0] == 2 and run.at_max[0] is True
+    assert (run.demand[0], run.capacity[0], run.served[0], run.overflow[0]) == pytest.approx((1_080_000, 720_000, 720_000, 360_000))
+    assert run.quantities["requests"]["perHour"][0] == pytest.approx(720_000)      # served, not demanded
+    line = next(x for x in E.day_lines(result, "2026-11-02") if x["node"] == "api" and x["hour"] == 0)
+    assert line["overflow"] == pytest.approx(360_000) and line["range"] == [1, 2] and line["atMax"] is True
+    assert totals["overflowHours"] == {"api": 720}
+
+
+def test_a_node_without_capacity_is_not_judged():
+    node = {"id": "fn", "category": "compute.function", "provider": "aws", "service": "lambda", "region": "us-east-1"}
+    result, totals = _run([node], [{"node": "fn", "quantities": {"requests": 1000}}])
+    run = next(r for r in result.nodes if r.node == "fn")
+    assert run.demand is None and totals["overflowHours"] == {}
+
+
+def test_a_shared_free_amount_is_used_once_across_nodes():
+    """Lambda's free requests are the account's: two functions of 600,000 requests each bill 200,000, not 0."""
+    nodes = [{"id": f"f{i}", "category": "compute.function", "provider": "aws", "service": "lambda", "region": "us-east-1"}
+             for i in (1, 2)]
+    loads = [{"node": f"f{i}", "quantities": {"requests": _per_hour(600_000)}} for i in (1, 2)]
+    _result, totals = _run(nodes, loads)
+    assert totals["usd"] == pytest.approx(200_000 * 0.2 / 1_000_000)
+
+
+def test_a_shared_free_amount_goes_to_the_first_node_in_the_models_order():
+    """The month's totals run node by node in the model's order: of two functions of 1 million requests each, the
+    first takes the free million (it pays 0.0) and the second pays for all of its own (0.2)."""
+    nodes = [{"id": n, "category": "compute.function", "provider": "aws", "service": "lambda", "region": "us-east-1"}
+             for n in ("a", "b")]
+    loads = [{"node": n, "quantities": {"requests": _per_hour(1_000_000)}} for n in ("a", "b")]
+    result, _totals = _run(nodes, loads)
+    assert round(_meter_usd(result, "a", "requests"), 6) == 0.0
+    assert round(_meter_usd(result, "b", "requests"), 6) == 0.2
+
+
+def test_lines_carry_the_rate_as_written_and_the_price_trace():
+    node = {"id": "cdn", "category": "edge.cdn", "provider": "aws", "service": "cloudfront"}
+    load = {"node": "cdn", "quantities": {"requests": {"amount": 100, "per": "second"},
+                                          "cdn_egress_gb": {"by_zone": {"japan": 3, "asia": 1}}}}
+    result, _t = _run([node], [load])
+    lines = [x for x in E.day_lines(result, "2026-11-02") if x["hour"] == 12]
+    req = next(x for x in lines if x["meter"] == "requests-japan")
+    assert req["rate"] == {"value": pytest.approx(75.0), "per": "second", "unit": "request", "label": "リクエスト"}
+    assert req["price"]["layer"] == "bundled" and req["price"]["source"].startswith("https://pricing.us-east-1.amazonaws.com/")
+    egress = next(x for x in lines if x["meter"] == "egress-asia")
+    assert egress["rate"]["value"] == pytest.approx(1.0) and egress["usd"] > 0
+
+
+def test_a_stopped_hour_runs_nothing_and_a_fixed_type_is_priced_by_its_sku():
+    node = {"id": "db", "category": "database.relational", "provider": "aws", "service": "rds.mysql",
+            "region": "ap-northeast-1"}
+    load = {"node": "db", "sku": "db.r6g.large", "schedule": "night", "quantities": {"storage_gb": 100}}
+    sch = {"night": {"default": 1, "rules": [{"days": ALL, "from": "00:00", "to": "06:00", "count": 0}]}}
+    result, _t = _run([node], [load], schedules=sch)
+    run = next(r for r in result.nodes if r.node == "db")
+    inst = run.meters["instance"]
+    assert inst["sku"] == "db.r6g.large" and inst["amount"][3] == 0 and inst["amount"][10] == 1
+    assert sum(inst["usd"]) == pytest.approx(30 * 18 * 0.255)                        # 18 hours a day running
+    assert sum(run.meters["storage"]["usd"]) == pytest.approx(100 * 0.138)           # storage stays when stopped
+
+
+def test_edges_are_priced_as_data_transfer():
+    nodes = [{"id": "a", "category": "compute.vm", "provider": "aws", "service": "ec2", "region": "ap-northeast-1"},
+             {"id": "b", "category": "compute.vm", "provider": "aws", "service": "ec2", "region": "us-east-1"}]
+    result, _t = _run(nodes, [], edges=[{"from": "a", "to": "b"}],
+                      edge_loads=[{"from": "a", "to": "b", "quantities": {"transfer_gb": _per_hour(100)}}])
+    run = next(r for r in result.nodes if r.node == "a>b")
+    assert run.meters["transfer-inter-region"]["sku"] == "transfer-inter-region"
+    assert sum(run.meters["transfer-inter-region"]["usd"]) == pytest.approx(100 * 0.09)
+
+
+def test_a_rule_that_fails_is_a_warning_naming_the_node_and_hour():
+    saved = list(RULES.REGISTRY)
+    try:
+        def broken(h):
+            raise KeyError("x")
+        RULES.register(RULES.Rule(id="aws/lambda", category="compute.function", provider="aws", service="lambda",
+                                  reads=("requests",), cost=broken))
+        node = {"id": "fn", "category": "compute.function", "provider": "aws", "service": "lambda", "region": "us-east-1"}
+        _result, totals = _run([node], [{"node": "fn", "quantities": {"requests": 1}}])
+        w = totals["warnings"][0]
+        assert w["fn"] == "meters_of" and w["node"] == "fn" and w["hour"] == "2026-11-01T00"
+    finally:
+        RULES.REGISTRY[:] = saved
+
+
+# ---------------------------------------------------------------- the bundled table and the offer files
+
+def test_the_bundled_table_is_valid_and_traced():
+    raw = PB.BUNDLED_PATH.read_bytes()
+    doc, problems = P.read_file("bundled-prices.json", raw)
+    rows, warnings = P.rows("bundled-prices.json", doc)
+    assert problems == [] and warnings == [] and len(rows) == len(doc["prices"]) > 100
+    assert all(r["source"].startswith("https://") for r in rows)
+    assert {r["region"] for r in rows if r["provider"] == "aws"} == {"ap-northeast-1", "us-east-1", "global"}
+    assert {(r["service"], r["sku"]) for r in rows if r["provider"] == "firebase"} == {("rtdb", "storage"), ("rtdb", "download")}
+    assert {r["service"] for r in rows if r["provider"] == "cloudflare"} == {"workers", "r2", "d1", "queues", "kv",
+                                                                             "access", "lb"}
+
+
+def test_rows_from_an_offer_file():
+    offer = {"publicationDate": "2026-10-16T18:23:59Z", "products": {
+        "A": {"productFamily": "Serverless", "attributes": {"usagetype": "APN1-Request"}},
+        "B": {"productFamily": "Serverless", "attributes": {"usagetype": "APN1-Request-ARM"}},
+        "C": {"productFamily": "Storage", "attributes": {"usagetype": "APN1-TimedStorage-ByteHrs"}},
+        "D": {"attributes": {"usagetype": "APN1-InstanceUsage:db.r6g.xl", "instanceType": "db.r6g.xlarge"}}},
+        "terms": {"OnDemand": {
+            "A": {"t": {"priceDimensions": {"d": {"unit": "Requests", "pricePerUnit": {"USD": "0.0000002000"}, "beginRange": "0", "endRange": "Inf"}}}},
+            "B": {"t": {"priceDimensions": {"d": {"unit": "Requests", "pricePerUnit": {"USD": "0.0000001000"}, "beginRange": "0", "endRange": "Inf"}}}},
+            "C": {"t": {"priceDimensions": {
+                "x": {"unit": "GB-Mo", "pricePerUnit": {"USD": "0.024"}, "beginRange": "51200", "endRange": "Inf"},
+                "y": {"unit": "GB-Mo", "pricePerUnit": {"USD": "0.025"}, "beginRange": "0", "endRange": "51200"}}}},
+            "D": {"t": {"priceDimensions": {"d": {"unit": "Hrs", "pricePerUnit": {"USD": "0.51"}, "beginRange": "0", "endRange": "Inf"}}}}}}}
+    spec = [A.S("AWSLambda", "lambda", "requests", "request", "Request", 1_000_000, family="Serverless",
+                free={"amount": 1_000_000, "period": "month"}),
+            A.S("AmazonS3", "s3", "storage", "GB-month", "TimedStorage-ByteHrs", family="Storage"),
+            A.S("AmazonRDS", "rds.mysql", "db.r6g.xlarge", "instance-hour", "InstanceUsage:*", attrs={"instanceType": "db.r6g.xlarge"}),
+            A.S("AmazonS3", "s3", "get", "request", "Requests-Tier2", 1000)]
+    rows, missing = A.rows_from_offer(offer, spec, "ap-northeast-1", "https://x.example/index.json")
+    assert rows[0] == {"provider": "aws", "service": "lambda", "sku": "requests", "region": "ap-northeast-1",
+                       "unit": "request", "effective": "2026-10-16", "source": "https://x.example/index.json",
+                       "per_units": 1_000_000, "price_usd": 0.2, "free": {"amount": 1_000_000, "period": "month"}}
+    assert rows[1]["tiers"] == [{"from": 0.0, "to": 51200.0, "price_usd": 0.025}, {"from": 51200.0, "price_usd": 0.024}]
+    assert rows[2]["price_usd"] == 0.51
+    assert missing == ["s3 get (Requests-Tier2)"]
+
+
+# ---------------------------------------------------------------- the currency's place
+
+def test_the_currency_is_usd_and_a_converter_is_only_read(tmp_path):
+    assert CUR.config(tmp_path) == (None, [])
+    (tmp_path / "jui.config.json").write_text(json.dumps({"infra": {"currency": {"plugin": "fx.jpy:convert"}}}))
+    cfg, warnings = CUR.config(tmp_path)
+    assert cfg == {"plugin": "fx.jpy:convert"} and "converts nothing" in warnings[0]
+    (tmp_path / "jui.config.json").write_text(json.dumps({"infra": {"currency": {"plugin": "rm -rf /"}}}))
+    assert CUR.config(tmp_path)[0] is None
+    assert CUR.convert(1.5, cfg) == {"usd": 1.5}
+
+
+# ---------------------------------------------------------------- free amounts per scenario (ticket 2026-10-21-infra-
+# bundled-prices-missing-common-aws-rows: a scenario is one environment, so environments sharing an account each take
+# its free amount; the result says so)
+
+def _free_warnings(result) -> list[dict]:
+    return [w for w in E.month_totals(result)["warnings"] if w.get("code") == "cost.free_per_scenario"]
+
+
+def _env_run(envs: list[str], book=BUNDLED):
+    """A Lambda function (free requests and GB-seconds) in a model of ``envs``, priced for the first."""
+    doc = {"version": 0, "environments": [{"id": e} for e in envs], "groups": [], "edges": [],
+           "nodes": [{"id": "fn", "category": "compute.function", "provider": "aws", "service": "lambda",
+                      "region": "us-east-1"}]}
+    model, problems = M.merge([("m.json", json.dumps(doc).encode())])
+    assert M.errors(problems) == []
+    load = {"version": 0, "id": "t", "month": "2026-11", "environment": envs[0],
+            "loads": [{"node": "fn", "quantities": {"requests": _per_hour(3_000_000), "duration_ms": 120, "memory_mb": 1536}}]}
+    scenario, problems = L.normalize("t.json", load, model)
+    assert [p for p in problems if p["severity"] == "error"] == []
+    return E.simulate(scenario, model, book)
+
+
+def test_a_model_of_several_environments_is_told_free_amounts_are_per_scenario():
+    got = _free_warnings(_env_run(["production", "staging"]))
+    assert len(got) == 1 and got[0]["fn"] == "simulate" and "once per scenario" in got[0]["message"]
+    assert got[0]["rows"] == ["aws lambda compute (us-east-1)", "aws lambda requests (us-east-1)"]
+
+
+def test_one_environment_or_no_free_amount_is_not_told():
+    assert _free_warnings(_env_run(["production"])) == []
+    plain = [{k: v for k, v in r.items() if k != "free"} for r in PB.bundled_rows()
+             if not (r.get("tiers") and r["tiers"][0]["price_usd"] == 0)]
+    assert _free_warnings(_env_run(["production", "staging"], PB.Book(bundled=plain))) == []
+
+
+def test_two_scenarios_of_one_account_take_the_free_amount_twice():
+    """What the warning says, measured: 113 custom metrics priced in two scenarios are $30.90 each (10 free taken in
+    each); in one they are $30.90 and $33.90."""
+    node = {"id": "logs", "category": "monitoring", "provider": "aws", "providerResolved": "aws", "service": "cloudwatch"}
+
+    def month(totals):
+        usd = 0.0
+        for _ in range(730):
+            for m in RULES.lookup(node).cost(F.Hour(node=node, q={"metrics": 113.0}, hours_in_month=730)):
+                usd += E.price_meter(BUNDLED, totals, m, node, "ap-northeast-1", "2027-06-01")[0]
+        return round(usd, 2)
+    assert (month({}), month({})) == (30.9, 30.9)
+    shared: dict = {}
+    assert (month(shared), month(shared)) == (30.9, 33.9)
+
+
+def test_a_free_first_step_counts_as_a_free_amount():
+    """EventBridge Scheduler's 14 million free invocations are the offer's first step at $0, not a free amount."""
+    rows = [{"provider": "aws", "service": "lambda", "sku": "requests", "region": "us-east-1", "unit": "request",
+             "per_units": 1_000_000, "tiers": [{"from": 0, "to": 1_000_000, "price_usd": 0}, {"from": 1_000_000, "price_usd": 0.2}],
+             "effective": "2026-01-01"},
+            {"provider": "aws", "service": "lambda", "sku": "compute", "region": "us-east-1", "unit": "GB-second",
+             "price_usd": 0.0000166667, "effective": "2026-01-01"}]
+    got = _free_warnings(_env_run(["production", "staging"], _user(rows)))
+    assert len(got) == 1 and got[0]["rows"] == ["aws lambda requests (us-east-1)"]
+
+
+# ---------------------------------------------------------------- the account's free amounts: pools, simulate_account
+
+def _account_model(nodes: list[dict], envs=("production", "staging")) -> dict:
+    doc = {"version": 0, "environments": [{"id": e} for e in envs], "groups": [], "edges": [], "nodes": nodes}
+    model, problems = M.merge([("m.json", json.dumps(doc).encode())])
+    assert M.errors(problems) == []
+    return model
+
+
+def _scenario(model: dict, env: str, loads: list[dict], month: str = "2026-11") -> dict:
+    sc, problems = L.normalize(f"{env}.json", {"version": 0, "id": env, "month": month, "environment": env,
+                                               "loads": loads}, model)
+    assert [p for p in problems if p["severity"] == "error"] == []
+    return sc
+
+
+def _vm(id_: str, region: str) -> dict:
+    return {"id": id_, "category": "compute.vm", "provider": "aws", "service": "ec2", "region": region}
+
+
+def test_an_unknown_free_pool_is_an_error():
+    row = {"provider": "aws", "service": "data-transfer", "sku": "egress", "region": "us-east-1", "unit": "GB",
+           "price_usd": 0.09, "effective": "2026-01-01", "source": "https://example.com/prices",
+           "free": {"amount": 100, "period": "month", "pool": "aws:mystery"}}
+    doc, problems = P.read_file("p.json", json.dumps({"version": 0, "prices": [row]}).encode())
+    assert doc is None and [(p["code"], p["path"]) for p in problems if p["severity"] == "error"] == [
+        ("schema", "/prices/0/free/pool")]
+    ok = dict(row, free=dict(row["free"], pool="aws:data-transfer-out"))
+    assert P.read_file("p.json", json.dumps({"version": 0, "prices": [ok]}).encode())[0] is not None
+
+
+def test_the_100_free_gb_out_are_taken_once_across_regions():
+    """AWS's 100 GB a month out to the internet are the account's, all regions together (the EC2 pricing page, read
+    2026-10-21): 75 GB from Tokyo and 75 GB from Virginia are 75 free, then 25 free and 50 at $0.09."""
+    model = _account_model([_vm("tokyo", "ap-northeast-1"), _vm("virginia", "us-east-1")], ("production",))
+    per_hour = 75 / 720
+    sc = _scenario(model, "production", [{"node": "tokyo", "quantities": {"egress_gb": per_hour}},
+                                         {"node": "virginia", "quantities": {"egress_gb": per_hour}}])
+    result = E.simulate(sc, model, BUNDLED)
+    assert round(_meter_usd(result, "tokyo", "egress"), 6) == 0.0
+    assert round(_meter_usd(result, "virginia", "egress"), 2) == 4.50
+
+
+def test_without_its_pool_a_free_amount_is_the_rows_own():
+    """The same 150 GB on rows whose 100 GB is each row's (no pool): each region takes 100 free, nothing is billed."""
+    plain = [dict(r, free={"amount": 100, "period": "month"}) if r["service"] == "data-transfer" and r["sku"] == "egress"
+             else r for r in PB.bundled_rows()]
+    model = _account_model([_vm("tokyo", "ap-northeast-1"), _vm("virginia", "us-east-1")], ("production",))
+    sc = _scenario(model, "production", [{"node": n, "quantities": {"egress_gb": 75 / 720}} for n in ("tokyo", "virginia")])
+    result = E.simulate(sc, model, PB.Book(bundled=plain))
+    assert round(_meter_usd(result, "virginia", "egress"), 6) == 0.0
+
+
+def test_the_account_takes_its_free_amounts_once_across_environments():
+    """Production and staging in one account (113 custom metrics each): priced as two scenarios, $30.90 each (the
+    warning says so); as the account, $30.90 then $33.90, and no warning."""
+    logs = {"id": "logs", "category": "monitoring", "provider": "aws", "service": "cloudwatch", "region": "ap-northeast-1"}
+    model = _account_model([logs])
+    scs = [_scenario(model, e, [{"node": "logs", "quantities": {"metrics": 113.0}}]) for e in ("production", "staging")]
+    alone = [E.simulate(s, model, BUNDLED) for s in scs]
+    assert [round(E.month_totals(r)["usd"], 2) for r in alone] == [30.9, 30.9]
+    assert all(_free_warnings(r) for r in alone)
+    account = E.simulate_account(scs, model, BUNDLED)
+    assert [round(E.month_totals(r)["usd"], 2) for r in account] == [30.9, 33.9]
+    assert not any(_free_warnings(r) for r in account)
+    assert round(E.account_totals(account)["usd"], 2) == 64.8
+
+
+def test_a_scenario_of_another_month_is_priced_on_its_own_and_says_so():
+    logs = {"id": "logs", "category": "monitoring", "provider": "aws", "service": "cloudwatch", "region": "ap-northeast-1"}
+    model = _account_model([logs])
+    scs = [_scenario(model, "production", [{"node": "logs", "quantities": {"metrics": 113.0}}]),
+           _scenario(model, "staging", [{"node": "logs", "quantities": {"metrics": 113.0}}], month="2026-12")]
+    account = E.simulate_account(scs, model, BUNDLED)
+    assert [round(E.month_totals(r)["usd"], 2) for r in account] == [30.9, 30.9]
+    assert [w["code"] for w in account[1].warnings if w.get("code") == "cost.account_other_month"] == ["cost.account_other_month"]
+
+
+# ---------------------------------------------------------------- what a rule assumed, said (ticket 2026-10-21-infra-
+# bundled-prices-missing-common-aws-rows, the rest of stage B): a cap or a 0 the reader would otherwise take as measured
+
+def _notices(result, code: str) -> list[dict]:
+    return [w for w in E.month_totals(result)["warnings"] if w.get("code") == code]
+
+
+def test_app_runner_says_an_hour_with_requests_is_counted_active_through_the_hour():
+    node = {"id": "web", "category": "compute.paas", "provider": "aws", "service": "apprunner", "region": "us-east-1"}
+    busy, _ = _run([node], [{"node": "web", "quantities": {"requests": _per_hour(100_000), "vcpu": 1, "memory_gb": 2}}])
+    got = _notices(busy, "cost.apprunner_active_upper_bound")
+    assert len(got) == 1 and got[0]["node"] == "web" and "the most it can be" in got[0]["message"]
+    idle, _ = _run([node], [{"node": "web", "quantities": {"vcpu": 1, "memory_gb": 2}}])
+    assert _notices(idle, "cost.apprunner_active_upper_bound") == []   # provisioned only: nothing assumed
+    # requests only in hours nothing runs (the environment stopped all day): no active hour was counted
+    off = {"off": {"default": 0, "rules": []}}
+    stopped, _ = _run([node], [{"node": "web", "schedule": "off",
+                                "quantities": {"requests": _per_hour(100_000), "vcpu": 1, "memory_gb": 2}}], schedules=off)
+    assert max(next(r for r in stopped.nodes if r.node == "web").running) == 0
+    assert _notices(stopped, "cost.apprunner_active_upper_bound") == []
+
+
+def test_a_standard_workflow_with_requests_and_no_transitions_is_named_as_priced_0():
+    node = {"id": "flow", "category": "compute.function", "provider": "aws", "service": "stepfunctions",
+            "region": "us-east-1"}
+    bare, totals = _run([node], [{"node": "flow", "quantities": {"requests": _per_hour(10_000)}}])
+    got = _notices(bare, "cost.stepfunctions_no_transitions")
+    assert len(got) == 1 and got[0]["node"] == "flow" and "state_transitions" in got[0]["message"]
+    assert sum(v for r in bare.nodes for m in r.meters.values() for v in m["usd"] if v is not None) == 0.0
+    with_t, _ = _run([node], [{"node": "flow", "quantities": {"requests": _per_hour(10_000),
+                                                              "state_transitions": _per_hour(50_000)}}])
+    assert _notices(with_t, "cost.stepfunctions_no_transitions") == []
+    # Express, as the rule reads it: spec workflow_type or type (the priced and the said agree)
+    for key in ("workflow_type", "type"):
+        express, _ = _run([dict(node, spec=[{"key": key, "value": "express"}])],
+                          [{"node": "flow", "quantities": {"requests": _per_hour(10_000)}}])
+        assert _notices(express, "cost.stepfunctions_no_transitions") == [], key
+        assert sum(v for r in express.nodes for m in r.meters.values() for v in m["usd"] if v is not None) > 0, key

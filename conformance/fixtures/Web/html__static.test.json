@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/html__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.html (static)",
+    "description": "Conformance fixture for 'html' on Web (section: Web, class: visual). Value under test: \"<p>Conformance Sample</p>\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "html__static",
+      "description": "Conformance fixture for 'html' on Web (section: Web, class: visual). Value under test: \"<p>Conformance Sample</p>\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_html__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/allowsInlineMediaPlayback__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.allowsInlineMediaPlayback (false)",
+    "description": "Conformance fixture for 'allowsInlineMediaPlayback' on Web (section: Web, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "allowsInlineMediaPlayback__false",
+      "description": "Conformance fixture for 'allowsInlineMediaPlayback' on Web (section: Web, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_allowsInlineMediaPlayback__false"
+        }
+      ]
+    }
+  ]
+}

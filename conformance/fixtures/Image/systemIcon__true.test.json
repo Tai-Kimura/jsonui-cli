@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Image/systemIcon__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Image.systemIcon (true)",
+    "description": "Conformance fixture for 'systemIcon' on Image (section: Image, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Image"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "systemIcon__true",
+      "description": "Conformance fixture for 'systemIcon' on Image (section: Image, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Image_systemIcon__true"
+        }
+      ]
+    }
+  ]
+}

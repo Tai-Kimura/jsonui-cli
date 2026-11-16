@@ -1,0 +1,425 @@
+"""A declaration the installed driver does not read is caught at validate time.
+
+The schema is the authoring side and the driver is the runtime, and they ship
+as separate releases. Between jsonui-cli 1.7.32 (accepts `screenReady`) and
+driver 1.8.4 (reads it) a project can write a declaration that validates green
+and is then ignored.
+
+Ignored is not neutral. `screenReady: 'none'` exists to say "do not wait for
+this screen"; ignored, the default gate runs and the file waits fifteen
+seconds for exactly the marker it declared it would not wait for, then fails
+naming the screen. Nothing in that output points at the declaration. It is the
+failure shape the value-checking in `screen.py` prevents within a release,
+reappearing across releases.
+
+The reporting lane had not hit it: they knew, from a message, that 1.8.4 was
+required, and held the declaration back. That is a notification standing in
+for a check, and it only works while someone remembers to send it.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from jsonui_test_cli.schema import KEY_DRIVER_REQUIREMENTS  # noqa: E402
+from jsonui_test_cli.validation.runtime_support import (  # noqa: E402
+    check_declarations,
+    collect_declared_keys,
+    installed_driver_version,
+    parse_version,
+    platform_roots_from_config,
+)
+
+REQ = {"screenReady": {"web": "1.8.4"}}
+
+
+def with_driver(root: Path, version: str | None, at: Path | None = None) -> Path:
+    if version is not None:
+        pkg = (at or root) / "node_modules" / "jsonui-test-runner-web"
+        pkg.mkdir(parents=True, exist_ok=True)
+        (pkg / "package.json").write_text(
+            json.dumps({"name": "jsonui-test-runner-web", "version": version}),
+            encoding="utf-8")
+    return root
+
+
+def write_test(root: Path, name: str = "a.test.json", **extra) -> Path:
+    path = root / name
+    path.write_text(json.dumps({
+        "type": "screen",
+        "source": {"layout": "layouts/admin_items.json"},
+        "metadata": {"name": "x"},
+        "cases": [{"name": "c", "steps": []}],
+        **extra,
+    }), encoding="utf-8")
+    return path
+
+
+class TestVersionComparison:
+    @pytest.mark.parametrize("older,newer", [
+        ("1.8.3", "1.8.4"), ("1.8.9", "1.9.0"), ("1.9.0", "2.0.0"),
+    ])
+    def test_ordering(self, older, newer):
+        assert parse_version(older) < parse_version(newer)
+
+    def test_a_prerelease_counts_as_its_release(self):
+        # Deliberate, and stated rather than left to be discovered: drivers
+        # ship as plain X.Y.Z, so ordering `1.8.4-beta.1` before `1.8.4`
+        # would only ever matter to someone testing an unreleased build,
+        # for whom reding the run would be wrong.
+        assert parse_version("1.8.4-beta.1") == parse_version("1.8.4")
+
+    def test_equal_is_not_older(self):
+        # The boundary that decides whether the exact required version reds.
+        assert not parse_version("1.8.4") < parse_version("1.8.4")
+
+
+class TestTheCheckFiresOnlyWhenItShould:
+    def test_an_older_driver_is_an_error(self, tmp_path):
+        with_driver(tmp_path, "1.8.3")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        errors, notes = check_declarations(declared, REQ, tmp_path)
+        assert len(errors) == 1 and notes == []
+        # Names the version found, the version needed, and the silence.
+        assert "1.8.3" in errors[0] and "1.8.4" in errors[0]
+        assert "without saying so" in errors[0]
+
+    def test_the_required_version_passes(self, tmp_path):
+        with_driver(tmp_path, "1.8.4")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        assert check_declarations(declared, REQ, tmp_path) == ([], [])
+
+    def test_a_newer_driver_passes(self, tmp_path):
+        with_driver(tmp_path, "1.9.0")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        assert check_declarations(declared, REQ, tmp_path) == ([], [])
+
+    def test_no_declaration_means_no_finding_even_on_an_old_driver(self, tmp_path):
+        # The check is about declarations, not about driver currency. Reding
+        # every project on an old driver would be a different feature, and a
+        # wrong one.
+        with_driver(tmp_path, "1.8.2")
+        assert check_declarations({}, REQ, tmp_path) == ([], [])
+
+
+class TestWhatCannotBeMeasuredIsSaid:
+    def test_an_unreadable_driver_warns_rather_than_guessing(self, tmp_path):
+        # No node_modules at all: tests may be run from elsewhere. Assuming
+        # "absent means old" would red those projects; assuming "absent means
+        # fine" would be the silence this check exists to remove.
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        errors, notes = check_declarations(declared, REQ, tmp_path)
+        assert errors == [] and len(notes) == 1
+        assert "could not be read" in notes[0]
+        assert "not checked" in notes[0]
+
+    def test_a_hoisted_node_modules_is_found(self, tmp_path):
+        # A monorepo installs above the package that declares the dependency.
+        # Missing it would turn every such project into the warning above,
+        # which is how a check stops being read.
+        workspace = tmp_path / "packages" / "admin"
+        workspace.mkdir(parents=True)
+        with_driver(workspace, "1.8.3", at=tmp_path)
+        declared = {"screenReady": [write_test(workspace, screenReady="none")]}
+        errors, _ = check_declarations(declared, REQ, workspace)
+        assert len(errors) == 1
+
+    def test_a_malformed_manifest_is_unreadable_not_old(self, tmp_path):
+        pkg = tmp_path / "node_modules" / "jsonui-test-runner-web"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text("{ not json", encoding="utf-8")
+        assert installed_driver_version("web", tmp_path) is None
+
+
+class TestKeyCollection:
+    def test_only_declared_keys_are_reported(self, tmp_path):
+        a = write_test(tmp_path, "a.test.json", screenReady="none")
+        write_test(tmp_path, "b.test.json")
+        found = collect_declared_keys([a, tmp_path / "b.test.json"],
+                                      {"screenReady"})
+        assert found == {"screenReady": [a]}
+
+    def test_unreadable_files_do_not_crash_the_check(self, tmp_path):
+        bad = tmp_path / "bad.test.json"
+        bad.write_text("{ not json", encoding="utf-8")
+        # Malformed files are the file validator's finding, reported there
+        # with a position. Raising here would replace it with a stack trace.
+        assert collect_declared_keys([bad], {"screenReady"}) == {}
+
+
+class TestCaseKeysAreDeclarations:
+    """A case-level key needs the same driver as the file-level one."""
+
+    def test_a_case_initial_state_is_collected(self, tmp_path):
+        a = write_test(tmp_path, "a.test.json", caseIsolation="reopen",
+                       cases=[{"name": "c", "steps": [],
+                               "initialState": {"viewModel": {"email": "x"}}}])
+        assert collect_declared_keys([a], {"initialState"}) == {"initialState": [a]}
+
+    def test_a_file_is_listed_once_per_key(self, tmp_path):
+        state = {"viewModel": {"email": "x"}}
+        a = write_test(tmp_path, "a.test.json", initialState=state, caseIsolation="reopen",
+                       cases=[{"name": "c", "steps": [], "initialState": state},
+                              {"name": "d", "steps": [], "initialState": state}])
+        assert collect_declared_keys([a], {"initialState"}) == {"initialState": [a]}
+
+    def test_an_old_driver_is_an_error_for_a_case_only_declaration(self, tmp_path):
+        with_driver(tmp_path, "1.14.2")
+        a = write_test(tmp_path, "a.test.json", caseIsolation="reopen",
+                       cases=[{"name": "c", "steps": [],
+                               "initialState": {"viewModel": {"email": "x"}}}])
+        errors, _ = check_declarations(
+            collect_declared_keys([a], set(KEY_DRIVER_REQUIREMENTS)),
+            {"initialState": KEY_DRIVER_REQUIREMENTS["initialState"]}, tmp_path)
+        assert len(errors) == 1 and "'initialState' requires the web driver 1.15.0" in errors[0]
+
+    @pytest.mark.parametrize("empty", [{}, {"viewModel": {}}])
+    def test_an_empty_initial_state_is_not_a_declaration(self, tmp_path, empty):
+        # Spec §10.2: the same as none — nothing is delivered, so an older
+        # driver has nothing to ignore.
+        a = write_test(tmp_path, "a.test.json", initialState=empty,
+                       cases=[{"name": "c", "steps": [], "initialState": empty}])
+        assert collect_declared_keys([a], {"initialState"}) == {}
+
+    def test_an_empty_flow_view_models_is_not_a_declaration(self, tmp_path):
+        a = tmp_path / "f.test.json"
+        a.write_text(json.dumps({"type": "flow", "metadata": {"name": "f"}, "steps": [],
+                                 "initialState": {"viewModels": {}}}), encoding="utf-8")
+        assert collect_declared_keys([a], {"initialState"}) == {}
+
+
+class TestTheRequirementComesFromTheSchema:
+    def test_screen_ready_is_declared_with_its_requirement(self):
+        # Guards the class, not the instance: the requirement is data beside
+        # the key in the canonical schema, so adding a key means stating its
+        # runtime requirement. test_schema_drift pins both directions.
+        assert KEY_DRIVER_REQUIREMENTS["screenReady"] == {"web": "1.8.4"}
+
+
+class TestNoProjectRootIsAThirdKindOfUnknowable:
+    """`_project_root` returns None when there is no config and no `.git`.
+
+    Two "unknowable" cases are handled inside `installed_driver_version`; this
+    one is decided before the call and crashed with a TypeError instead
+    (docsite, 1.7.33). Two handled cases made the third look handled.
+    """
+
+    def test_a_missing_project_root_notes_rather_than_crashing(self, tmp_path):
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        errors, notes = check_declarations(declared, REQ, None)
+        assert errors == [] and len(notes) == 1
+        assert "not checked" in notes[0]
+
+    def test_it_does_not_reuse_the_unreadable_driver_wording(self, tmp_path):
+        # The distinction is the whole point of the fix. "The installed
+        # version could not be read" sends the reader to install a driver;
+        # here nothing was searched, and what they need is --config or a
+        # different working directory. Same wording would misdirect them.
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        _, rootless = check_declarations(declared, REQ, None)
+        _, unreadable = check_declarations(declared, REQ, tmp_path)
+        assert len(rootless) == 1 and len(unreadable) == 1
+        assert rootless[0] != unreadable[0]
+        assert "no project root" in rootless[0]
+        assert "could not be read" in unreadable[0]
+
+    def test_no_declaration_means_no_note_without_a_root_either(self, tmp_path):
+        # Same opt-in rule as everywhere else: a project that declares nothing
+        # hears nothing, wherever it is run from.
+        assert check_declarations({}, REQ, None) == ([], [])
+
+
+class TestThePlatformRootIsSearched:
+    """`jui init` puts the web app, and its node_modules, under
+    `platforms.web.root`. A search from the project root alone never reached
+    it: every standard layout read "could not be read" (2026-10-16)."""
+
+    WEB_UNDER = {"platforms": {"web": {"root": "web"}}}
+
+    def test_an_older_driver_under_the_web_root_is_an_error(self, tmp_path):
+        with_driver(tmp_path, "1.8.3", at=tmp_path / "web")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        roots = platform_roots_from_config(self.WEB_UNDER, tmp_path)
+        errors, notes = check_declarations(declared, REQ, tmp_path, roots)
+        assert len(errors) == 1 and notes == []
+        assert "1.8.3" in errors[0]
+        # Control: the same tree searched from the project root alone is the
+        # old "could not be read" — the defect this fixes.
+        errors, notes = check_declarations(declared, REQ, tmp_path)
+        assert errors == [] and "could not be read" in notes[0]
+
+    def test_a_new_enough_driver_under_the_web_root_passes(self, tmp_path):
+        with_driver(tmp_path, "1.9.0", at=tmp_path / "web")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        roots = platform_roots_from_config(self.WEB_UNDER, tmp_path)
+        assert check_declarations(declared, REQ, tmp_path, roots) == ([], [])
+
+    def test_a_config_without_platforms_searches_as_before(self, tmp_path):
+        with_driver(tmp_path, "1.8.3")
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        roots = platform_roots_from_config({"project_name": "x"}, tmp_path)
+        assert roots == {}
+        assert check_declarations(declared, REQ, tmp_path, roots) == check_declarations(declared, REQ, tmp_path)
+        assert len(check_declarations(declared, REQ, tmp_path, roots)[0]) == 1
+
+    def test_with_a_driver_in_both_places_the_web_root_wins(self, tmp_path):
+        # Old at the project root, new under web/: the web app resolves its
+        # own, so the new one is what runs.
+        with_driver(tmp_path, "1.8.3")
+        with_driver(tmp_path, "1.9.0", at=tmp_path / "web")
+        roots = platform_roots_from_config(self.WEB_UNDER, tmp_path)
+        assert installed_driver_version("web", tmp_path, roots["web"]) == "1.9.0"
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        assert check_declarations(declared, REQ, tmp_path, roots) == ([], [])
+        # And the other way round, so "wins" is not "the newer one wins".
+        with_driver(tmp_path, "1.9.0")
+        with_driver(tmp_path, "1.8.3", at=tmp_path / "web")
+        assert installed_driver_version("web", tmp_path, roots["web"]) == "1.8.3"
+
+
+class TestPlatformRootsFromConfig:
+    def test_roots_resolve_against_the_project_root(self, tmp_path):
+        config = {"platforms": {"web": {"root": "web"}, "ios": {"root": "app-ios"}, "android": {}}}
+        assert platform_roots_from_config(config, tmp_path) == {
+            "web": tmp_path / "web", "ios": tmp_path / "app-ios"}
+
+    def test_a_list_of_platforms_or_no_project_root_gives_none(self, tmp_path):
+        assert platform_roots_from_config({"platforms": ["web"]}, tmp_path) == {}
+        assert platform_roots_from_config({"platforms": {"web": {"root": "web"}}}, None) == {}
+
+
+# ------------------------------------------------------------- iOS / Android pins
+#
+# The mobile drivers' version is the project's pin: Package.resolved for iOS,
+# the version catalog (or a coordinate in a build file) for Android. Same
+# roots as web: platforms.<name>.root first, then the project root.
+
+
+def ios_pin(root: Path, version=None, branch=None, revision="6ecbba03fbc31e515869e6893ed1963a556ca5cc"):
+    state = {"revision": revision}
+    if version:
+        state["version"] = version
+    if branch:
+        state["branch"] = branch
+    path = root / "App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"version": 3, "pins": [
+        {"identity": "swiftjsonui", "kind": "remoteSourceControl",
+         "location": "https://github.com/Tai-Kimura/SwiftJsonUI", "state": {"version": "10.30.0"}},
+        {"identity": "jsonui-test-runner-ios", "kind": "remoteSourceControl",
+         "location": "https://github.com/Tai-Kimura/jsonui-test-runner-ios", "state": state}]}),
+        encoding="utf-8")
+    return root
+
+
+def android_catalog(root: Path, version: str):
+    # The shape the measured consumer apps use: version.ref.
+    path = root / "gradle/libs.versions.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '[versions]\njsonui-test-runner-android = "%s"\n\n[libraries]\n'
+        'jsonui-test-runner-android = { group = "io.github.tai-kimura", name = '
+        '"jsonui-test-runner-android", version.ref = "jsonui-test-runner-android" }\n' % version,
+        encoding="utf-8")
+    return root
+
+
+def android_direct(root: Path, version: str):
+    path = root / "app/build.gradle.kts"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('dependencies {\n    androidTestImplementation('
+                    f'"io.github.tai-kimura:jsonui-test-runner-android:{version}")\n}}\n',
+                    encoding="utf-8")
+    return root
+
+
+MOBILE = {
+    "ios": (ios_pin, {"initialState": {"ios": "1.15.0"}}, "1.14.0", "1.15.0"),
+    "android": (android_catalog, {"initialState": {"android": "1.17.0"}}, "1.16.0", "1.17.0"),
+}
+
+
+def _pin(platform, root, version):
+    writer = MOBILE[platform][0]
+    return writer(root, version=version) if platform == "ios" else writer(root, version)
+
+
+@pytest.mark.parametrize("platform", ["ios", "android"])
+class TestTheMobilePinIsRead:
+    def _declared(self, root):
+        return {"initialState": [write_test(root, initialState={"viewModel": {"email": "x"}})]}
+
+    def test_an_older_pin_is_an_error(self, tmp_path, platform):
+        _, req, old, _ = MOBILE[platform]
+        _pin(platform, tmp_path / "app", old)
+        roots = platform_roots_from_config({"platforms": {platform: {"root": "app"}}}, tmp_path)
+        errors, notes = check_declarations(self._declared(tmp_path), req, tmp_path, roots)
+        assert notes == [] and len(errors) == 1
+        assert f"requires the {platform} driver" in errors[0] and f"but {old} is installed" in errors[0]
+
+    def test_a_new_enough_pin_passes(self, tmp_path, platform):
+        _, req, _, new = MOBILE[platform]
+        _pin(platform, tmp_path / "app", new)
+        roots = platform_roots_from_config({"platforms": {platform: {"root": "app"}}}, tmp_path)
+        assert check_declarations(self._declared(tmp_path), req, tmp_path, roots) == ([], [])
+
+    def test_no_pin_is_todays_note(self, tmp_path, platform):
+        _, req, _, _ = MOBILE[platform]
+        errors, notes = check_declarations(self._declared(tmp_path), req, tmp_path)
+        assert errors == [] and len(notes) == 1
+        assert notes[0] == (
+            f"'initialState' requires the {platform} driver {req['initialState'][platform]} or "
+            "newer; the installed version could not be read, so this is not checked. An older "
+            "driver ignores the declaration silently (1 file(s) declare it).")
+
+    def test_with_a_pin_in_both_roots_the_platform_root_wins(self, tmp_path, platform):
+        _, req, old, new = MOBILE[platform]
+        _pin(platform, tmp_path, old)
+        _pin(platform, tmp_path / "app", new)
+        roots = platform_roots_from_config({"platforms": {platform: {"root": "app"}}}, tmp_path)
+        assert installed_driver_version(platform, tmp_path, roots[platform]) == new
+        assert check_declarations(self._declared(tmp_path), req, tmp_path, roots) == ([], [])
+        # And the other way round, so "wins" is not "the newer one wins".
+        _pin(platform, tmp_path, new)
+        _pin(platform, tmp_path / "app", old)
+        assert installed_driver_version(platform, tmp_path, roots[platform]) == old
+
+
+def test_an_ios_branch_pin_is_said_to_have_no_version(tmp_path):
+    # Both consumers measured with a committed Package.resolved pin this way.
+    ios_pin(tmp_path, branch="main")
+    declared = {"initialState": [write_test(tmp_path, initialState={"viewModel": {"email": "x"}})]}
+    errors, notes = check_declarations(declared, {"initialState": {"ios": "1.15.0"}}, tmp_path)
+    assert errors == [] and len(notes) == 1
+    assert "pins jsonui-test-runner-ios to branch 'main', not a version" in notes[0]
+    ios_pin(tmp_path)  # a revision alone
+    _, notes = check_declarations(declared, {"initialState": {"ios": "1.15.0"}}, tmp_path)
+    assert "to revision 6ecbba03fbc3, not a version" in notes[0]
+
+
+def test_an_android_coordinate_in_a_build_file_is_read(tmp_path):
+    android_direct(tmp_path, "1.16.0")
+    assert installed_driver_version("android", tmp_path) == "1.16.0"
+    android_direct(tmp_path, "$runnerVersion")
+    assert installed_driver_version("android", tmp_path) is None
+
+
+def test_a_files_platform_bounds_which_floors_are_checked(tmp_path):
+    # platform: web — the iOS / Android floors are not this file's business,
+    # so no note for them (the ticket's symptom); web is still checked.
+    with_driver(tmp_path, "1.15.0")
+    web_only = write_test(tmp_path, "w.test.json", platform="web",
+                          initialState={"viewModel": {"email": "x"}})
+    req = {"initialState": KEY_DRIVER_REQUIREMENTS["initialState"]}
+    assert check_declarations({"initialState": [web_only]}, req, tmp_path) == ([], [])
+    with_driver(tmp_path, "1.14.2")
+    errors, notes = check_declarations({"initialState": [web_only]}, req, tmp_path)
+    assert notes == [] and len(errors) == 1 and "web driver 1.15.0" in errors[0]
+    everywhere = write_test(tmp_path, "a.test.json", initialState={"viewModel": {"email": "x"}})
+    _, notes = check_declarations({"initialState": [everywhere]}, req, tmp_path)
+    assert sorted(n.split(" driver")[0] for n in notes) == [
+        "'initialState' requires the android", "'initialState' requires the ios"]

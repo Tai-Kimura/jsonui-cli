@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/leftPadding__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.leftPadding (binding)",
+    "description": "Conformance fixture for 'leftPadding' on View (section: common, class: visual). Value under test: \"@{boundLeftPadding}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "leftPadding__binding",
+      "description": "Conformance fixture for 'leftPadding' on View (section: common, class: visual). Value under test: \"@{boundLeftPadding}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_leftPadding__binding"
+        }
+      ]
+    }
+  ]
+}

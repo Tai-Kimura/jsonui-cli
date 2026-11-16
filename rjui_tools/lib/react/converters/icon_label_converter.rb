@@ -1,0 +1,180 @@
+# frozen_string_literal: true
+
+require_relative 'base_converter'
+
+module RjuiTools
+  module React
+    module Converters
+      class IconLabelConverter < BaseConverter
+        def convert(indent = 2)
+          class_name = build_class_name
+          style_attr = build_style_attr
+          id_attr = build_id_attr
+          testid_attr = build_testid_attr
+          tag_attr = build_tag_attr
+          onclick_attr = build_onclick_attr
+
+          text = convert_text_binding(attributes['text'] || '')
+          icon_position = JsonUIShared::EnumSpelling.lowered(attributes['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
+          icon_src = get_icon_src
+          icon_style = build_icon_style
+
+          # Determine flex direction based on icon position
+          flex_direction = case icon_position
+                          when 'top' then 'flex-col'
+                          when 'bottom' then 'flex-col-reverse'
+                          when 'right' then 'flex-row-reverse'
+                          else 'flex-row' # left is default
+                          end
+
+          # get_icon_src returns the selected-state ternary already braced,
+          # or the attribute as written — a binding in it (`@{img}`) was
+          # emitted with its braces taken out, `src={@img}`.
+          icon_element = if icon_src.start_with?('{') && attributes['selected'] && has_binding?(attributes['selected'])
+            "<img className=\"#{icon_style}\" src=#{icon_src} alt=\"\" />"
+          elsif has_binding?(icon_src)
+            "<img className=\"#{icon_style}\" src={#{attribute_expression(icon_src)}} alt=\"\" />"
+          else
+            "<img className=\"#{icon_style}\"#{jsx_attr_text('src', icon_src)} alt=\"\" />"
+          end
+
+          text_style = build_text_style
+          text_element = "<span className=\"#{build_text_class_name}\"#{text_style}>#{text}</span>"
+
+          # No icon declared, no icon drawn and no space kept for one (user
+          # ruling 2026-10-05, attribute_semantics iconLabelIconSize). An
+          # `<img src="">` drew the browser's empty-image box, 96 high.
+          inner = icon_declared? ? [icon_element, text_element] : [text_element]
+          jsx = <<~JSX.chomp
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr("#{class_name} flex #{flex_direction} items-center")}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
+            #{inner.map { |el| "#{indent_str(indent + 2)}#{el}" }.join("\n")}
+            #{indent_str(indent)}</div>
+          JSX
+
+          wrap_with_visibility(jsx, indent)
+        end
+
+        protected
+
+        def build_class_name
+          classes = [super]
+
+          # Cursor pointer for clickable items
+          classes << 'cursor-pointer' if tap_handler?(attributes['onClick'], attributes['onclick'])
+
+          finalize_classes(classes)
+        end
+
+        def build_text_class_name
+          classes = []
+
+          # Font size
+          classes << TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts) if attributes['fontSize']
+
+          # Font weight
+          classes << TailwindMapper.map_font_weight(attributes['fontWeight']) if attributes['fontWeight']
+
+          # Font color
+          if attributes['selected'] == true && attributes['selectedFontColor']
+            # Statically selected: the selected colour IS the colour.
+            classes << TailwindMapper.map_color(attributes['selectedFontColor'], 'text')
+          elsif attributes['fontColor'] && !has_binding?(attributes['fontColor'])
+            classes << TailwindMapper.map_color(attributes['fontColor'], 'text')
+          end
+
+          # Text decoration
+          classes << 'underline' if attributes['underline']
+          classes << 'line-through' if attributes['strikethrough']
+
+          finalize_classes(classes)
+        end
+
+        def build_text_style
+          style_parts = []
+
+          # selectedFontColor with a bound selected state: the colour follows
+          # the selection at runtime — same swap the icon does in get_icon_src.
+          if attributes['selectedFontColor'] && attributes['selected'] &&
+             has_binding?(attributes['selected'])
+            selected_expr = extract_binding_property(attributes['selected'])
+            base_color = attributes['fontColor'] && !has_binding?(attributes['fontColor']) ? attributes['fontColor'] : nil
+            fallback = base_color ? "'#{base_color}'" : 'undefined'
+            style_parts << "color: #{selected_expr} ? '#{attributes['selectedFontColor']}' : #{fallback}"
+          elsif attributes['fontColor'] && has_binding?(attributes['fontColor'])
+            binding_expr = convert_binding(attributes['fontColor']).gsub(/^\{|\}$/, '')
+            style_parts << "color: #{binding_expr}"
+          end
+
+          # textShadow — same canonical object contract as Label.
+          shadow = attributes['textShadow']
+          shadow_style = text_shadow_style(shadow)
+          style_parts << "textShadow: #{shadow_style}" if shadow_style
+
+          return '' if style_parts.empty?
+
+          " style={{ #{style_parts.join(', ')} }}"
+        end
+
+        def icon_declared?
+          %w[icon_on iconOn icon_off iconOff icon].any? do |key|
+            value = attributes[key]
+            value.is_a?(String) && !value.empty?
+          end
+        end
+
+        def get_icon_src
+          # Support selected state with icon_on/icon_off
+          if attributes['selected'] && has_binding?(attributes['selected'])
+            binding_expr = extract_binding_property(attributes['selected'])
+            icon_on = attributes['icon_on'] || ''
+            icon_off = attributes['icon_off'] || ''
+            "{#{binding_expr} ? #{JsonUIShared::StringLiterals.ts_single(icon_on)} : #{JsonUIShared::StringLiterals.ts_single(icon_off)}}"
+          elsif attributes['selected'] == true || attributes['selected'] == 'true'
+            # A literal selected state (or its alias isOn) draws icon_on, as
+            # the text takes selectedFontColor: it fell to the branch below
+            # and drew icon_off, the icon alone left unselected (ticket
+            # rjui-iconlabel-static-selected-draws-icon-off).
+            attributes['icon_on'] || attributes['icon_off'] || ''
+          else
+            attributes['icon_off'] || attributes['icon_on'] || ''
+          end
+        end
+
+        def build_icon_style
+          classes = []
+
+          # Icon size
+          icon_size = attributes['iconSize']
+          if icon_size.is_a?(Array) && icon_size.length >= 2
+            width = icon_size[0]
+            height = icon_size[1]
+            classes << "w-[#{width}px]" if width
+            classes << "h-[#{height}px]" if height
+          elsif icon_size.is_a?(Numeric)
+            classes << "w-[#{icon_size}px]"
+            classes << "h-[#{icon_size}px]"
+          end
+
+          # Icon margin
+          icon_position = JsonUIShared::EnumSpelling.lowered(attributes['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
+          # 5 is the cross-platform canonical default (IconLabelView.swift and
+          # both mobile dynamic converters) — 4 was an rjui-only deviation.
+          margin = attributes['iconMargin'] || 5
+          margin_class = case icon_position
+                        when 'top' then "mb-#{TailwindMapper.spacing_value(margin)}"
+                        when 'bottom' then "mt-#{TailwindMapper.spacing_value(margin)}"
+                        when 'right' then "ml-#{TailwindMapper.spacing_value(margin)}"
+                        else "mr-#{TailwindMapper.spacing_value(margin)}" # left is default
+                        end
+          classes << margin_class
+
+          # Icon tint color (for SVG)
+          tint_color = attributes['tintColor']
+          # Note: CSS filter or mix-blend-mode would be needed for actual color tinting
+
+          finalize_classes(classes)
+        end
+      end
+    end
+  end
+end

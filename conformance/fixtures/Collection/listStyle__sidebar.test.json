@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/listStyle__sidebar.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.listStyle (sidebar)",
+    "description": "Conformance fixture for 'listStyle' on Collection (section: Collection, class: visual). Value under test: \"sidebar\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "listStyle__sidebar",
+      "description": "Conformance fixture for 'listStyle' on Collection (section: Collection, class: visual). Value under test: \"sidebar\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_listStyle__sidebar"
+        }
+      ]
+    }
+  ]
+}

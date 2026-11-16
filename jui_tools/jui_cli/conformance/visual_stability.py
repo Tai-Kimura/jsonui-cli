@@ -1,0 +1,157 @@
+"""Which fixtures do not draw the same picture twice.
+
+WHY THIS EXISTS. `baseline update --fail-on-moved` treats any difference as
+"moved", which is what makes it a gate: a bake must not absorb a picture that
+changed without someone attributing the change. But a handful of fixtures
+render something that is *not a function of the code* — a spinning activity
+indicator, an image that arrives over time — and they differ run to run on a
+correct machine. An exact check that fires every time teaches the operator to
+pass `--no-fail-on-moved`, and then the gate protects nothing at all.
+
+WHAT IS MEASURED (2026-09-05, iPhone 16 Pro C13F2A69, one host, one corpus,
+four runs). Hamming against the committed baseline:
+
+    Indicator/color__alias_tint                  1, 0, 3, 3
+    __control/NetworkImage__no-defaultImage…     1, 0, 0, 2
+
+Four runs, four pictures; the raw PNG bytes differ every time. The
+NetworkImage control matched the baseline EXACTLY on one run and differed on
+the next, so a single observation could not tell "flaky" from "the library
+moved it by one bit" — both predict that reading.
+
+This is not the first observation of the class. `baselines/README.md`'s iOS
+calibration (2026-07-03), status bar frozen, 490 screenshots: distance 0 on
+486, distance 1 on 3 — "Indicator activity-spinner frames". Indicator wobbles
+as a CLASS, and that was measured two months before tonight.
+
+SCOPE, AND WHAT IS NOT MEASURED. Two shapes qualify, derived from what a
+fixture's layout DECLARES rather than from its name:
+
+  * animated — the layout contains an Indicator
+  * async    — the layout contains a NetworkImage with no `defaultImage`,
+               so the frame depends on when the load lands
+
+Everything else is treated as stable. That is a narrow set built from two
+measured fixtures plus three calibration screenshots, and OTHER CLASSES ARE
+UNMEASURED. `SelectBox_selectedValue` sits at distance 6 in the 07-03
+calibration — one observation, not reproduced tonight — and is deliberately
+NOT in the set; it is named in `baselines/README.md` so the next person sees
+it without it silently weakening the check.
+
+The cost of being narrow is bounded on purpose: a fixture outside this set
+that wobbles still fails the exact check, BY NAME. The next unstable class
+arrives as a named refusal rather than as a repeat of tonight's
+investigation.
+
+🔻 `Web` WAS CONSIDERED AND DELIBERATELY NOT ADDED (2026-09-15). Its pictures
+DO move between runs: in conformance run 34878202456 `Web_html__static`
+rendered BLANK while its control rendered "Sample", and in a local run on a
+different machine and OS both rendered; an earlier `ci/` bake caught the same
+race on the control side, where `control_Web.png` hashed to all zeroes. Three
+observations, comparable to the calibration behind `Indicator`.
+
+⚠️ THE DECIDING QUESTION IS NOT HOW OFTEN IT WOBBLES BUT WHETHER THE WOBBLE IS
+IRREDUCIBLE. `Indicator` draws a different frame every capture and
+`NetworkImage` without `defaultImage` depends on when the network answers —
+neither can be waited out from here. `Web` is different in kind: the host
+captures as soon as the fixture MARKER exists (ConformanceUITests.swift,
+`markerElement.waitForExistence`), and a `WKWebView` is in the hierarchy — so
+the marker is there — before `loadHTMLString` has painted. There is no
+Web-specific wait in the host at all.
+
+⇒ Exempting `Web` would make a BLANK RENDER pass silently, and a blank render
+is the defect signal, not noise. The fix belongs in the host (wait for the web
+content the way the marker is waited for), not in this set. Recorded here so
+the next person who sees a Web screenshot move does not read it as jitter and
+add the row — and so that adding it later is a decision to overturn this one
+rather than a gap to fill.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+#: Why a fixture is exempt from the exact check. The reason travels with the
+#: name so a report says which kind of instability was tolerated.
+ANIMATED = "animated (Indicator draws a different frame each capture)"
+ASYNC = "async (NetworkImage without defaultImage — the frame depends on load timing)"
+
+
+# Moved here from gate.py so there is ONE spelling. The two had already
+# drifted: gate strips exactly a leading "__", the copy written for this
+# module used lstrip("_"), which also eats a single leading underscore.
+# Neither corpus has such an id today, so nothing was wrong yet — which
+# is what a second spelling looks like right up until it matters.
+def screenshot_name(fixture_id: str) -> str:
+    """Fixture id -> the file the runners actually write.
+
+    Control fixtures are the exception, and it is not cosmetic: their ids
+    carry the `__control` component that keeps them sorted out of the way,
+    but all three runners drop the leading underscores and write
+    `control_<host>.png`. There are 166 of them across the three committed
+    ci baselines and not one `__control_*.png`, so deriving the name
+    verbatim meant NO control screenshot could ever be matched — every
+    screenshot-keyed ledger row naming a control read as dangling, forever,
+    which is the opposite of what this check is for. `control_TabView.png`
+    was the row that surfaced it: a PERMANENT accepted deviation (the
+    TabView glyph source, 2026-08-03 user ruling) reported as stale, where
+    "cleaning it up" would have silently un-accepted the ruling.
+    """
+    if fixture_id.startswith("__"):
+        fixture_id = fixture_id[2:]
+    return fixture_id.replace("/", "_") + ".png"
+
+
+def _declares(node, predicate) -> bool:
+    if isinstance(node, dict):
+        if predicate(node):
+            return True
+        return any(_declares(v, predicate) for v in node.values())
+    if isinstance(node, list):
+        return any(_declares(i, predicate) for i in node)
+    return False
+
+
+def _is_indicator(node: dict) -> bool:
+    return str(node.get("type", "")).casefold() == "indicator"
+
+
+def _is_async_network_image(node: dict) -> bool:
+    if str(node.get("type", "")).casefold() != "networkimage":
+        return False
+    # A declared defaultImage gives the view something to draw immediately,
+    # so the capture does not depend on when the network answers.
+    return not node.get("defaultImage")
+
+
+def unstable_screenshots(conformance_dir: Path) -> dict[str, str]:
+    """`{screenshot name: reason}` for fixtures whose picture is not stable.
+
+    Derived from each fixture's layout — the declaration is the source, not
+    the fixture id, so a rename cannot quietly drop a fixture out of the set
+    and a new fixture of the same shape joins it without anyone maintaining
+    a list.
+    """
+    manifest_path = Path(conformance_dir) / "manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    fixtures = manifest.get("fixtures", manifest if isinstance(manifest, list) else [])
+
+    out: dict[str, str] = {}
+    for fixture in fixtures:
+        layout_rel = fixture.get("layout")
+        if not layout_rel:
+            continue
+        layout_path = Path(conformance_dir) / layout_rel
+        if not layout_path.is_file():
+            continue
+        try:
+            layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if _declares(layout, _is_indicator):
+            out[screenshot_name(fixture["id"])] = ANIMATED
+        elif _declares(layout, _is_async_network_image):
+            out[screenshot_name(fixture["id"])] = ASYNC
+    return out

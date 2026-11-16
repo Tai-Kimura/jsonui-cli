@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/paddingStart__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.paddingStart (binding)",
+    "description": "Conformance fixture for 'paddingStart' on View (section: common, class: visual). Value under test: \"@{boundPaddingStart}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "paddingStart__binding",
+      "description": "Conformance fixture for 'paddingStart' on View (section: common, class: visual). Value under test: \"@{boundPaddingStart}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_paddingStart__binding"
+        }
+      ]
+    }
+  ]
+}

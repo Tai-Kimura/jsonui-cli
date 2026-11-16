@@ -1,0 +1,418 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/static_seed'
+require_relative '../helpers/bound_value'
+require_relative '../helpers/font_spec_helper'
+require_relative '../helpers/resource_resolver'
+require_relative '../helpers/inherited_tint'
+require_relative '../../core/normalization'
+
+module KjuiTools
+  module Compose
+    module Components
+      # CheckBox Component Generator
+      # CheckBox is the primary component name. Check is supported as an alias for backward compatibility.
+      # Both "CheckBox" and "Check" JSON types map to this component.
+      class CheckboxComponent
+        # The state attributes' values, in their order (ModifierBuilder.control_state).
+        def self.state_values(json_data)
+          [json_data['isOn'], json_data['checked'], json_data['value']]
+        end
+
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # `value` is declared as a state alias of isOn/checked and was read
+          # by nobody on Compose (plan 49 lane C, handed over from D). It sits
+          # last so the more specific spellings keep winning.
+          # A bound state wins, then a bound `bind`, then a static value
+          # (ModifierBuilder.control_state).
+          checked, = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
+
+          # A static value (or none) is the seed of the checkbox's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless checked.start_with?('data.')
+            return Helpers::StaticSeed.wrap(checked, depth, required_imports) do |d, state|
+              generate_control(json_data, d, required_imports, parent_type, state, state)
+            end
+          end
+          generate_control(json_data, depth, required_imports, parent_type, checked, nil)
+        end
+
+        # The checkbox itself, reading `checked`; `seeded` names the state a
+        # static value seeded (nil when the value is bound), which every change
+        # writes.
+        def self.generate_control(json_data, depth, required_imports, parent_type, checked, seeded)
+          has_label = json_data['label'] || json_data['text']
+          # 'src' is the common spelling of the unchecked icon (33).
+          has_custom_icon = json_data['src'] || json_data['icon'] ||
+                            Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
+
+          # If custom icons are specified, use IconToggleButton instead of Checkbox
+          if has_custom_icon
+            return generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded)
+          end
+
+          if has_label
+            # Checkbox with label
+            code = indent("Row(", depth)
+            code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 1)
+
+            # Build modifiers for Row
+            modifiers = []
+            # userInteractionEnabled stops this node and
+            # what is in it (ModifierBuilder.build_interaction_blocker); this
+            # component builds no clickable, which is where it came from.
+            modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+            # testTag after margins and offset, before alpha: the tagged box (resource-id
+            # bounds, TalkBack focus) is the drawn box. Ticket
+            # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+            modifiers.concat(decoration_stages(json_data, required_imports, labelled: true))
+            modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+
+            code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+            code += "\n" + indent(") {", depth)
+
+            # Checkbox
+            code += "\n" + indent("Checkbox(", depth + 1)
+            code += "\n" + indent("checked = #{checked},", depth + 2)
+
+            # onCheckedChange handler
+            _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
+
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)}", depth + 2)
+
+            # iconSize on the labeled default checkbox sizes the box itself —
+            # the dynamic labeled path does the same (it was only emitted on
+            # the unlabeled branch; 32 parity re-measure).
+            if json_data['iconSize']
+              code += ",\n" + indent("modifier = Modifier.size(#{icon_size_dp(json_data['iconSize'])})", depth + 2)
+            end
+
+            # The colour and `enabled` arguments used to exist ONLY on the
+            # unlabeled branch, and the fixture base carries `text`, so they
+            # were unreachable for every measurement (plan 49 lane C: 4 of the
+            # CheckBox entries; 32 closed `iconSize` the same way and left
+            # these four behind — see the comment above).
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_colors_arg(json_data, required_imports, depth + 1))
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_enabled_arg(json_data, depth + 1))
+
+            code += "\n" + indent(")", depth + 1)
+
+            # Spacer with configurable spacing
+            spacing = json_data['spacing'] || 8
+            code += "\n" + indent("Spacer(modifier = Modifier.width(#{Helpers::BoundValue.dp(spacing)}))", depth + 1)
+
+            # Label text with font attributes
+            label_text = json_data['label'] || json_data['text']
+            # A bound label used to be interpolated into the string literal, so
+            # the characters `@{...}` reached the screen.
+            label_expr = Helpers::BoundValue.text(label_text)
+            text_params = ["text = #{label_expr}"]
+
+            # The label goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+            # jui-font-provider-not-reached-without-font-attributes-android-web): a slot the provider leaves null
+            # draws as before (the Text's style). `fontWeight` (declared 51-E) outranks the legacy `font` weight
+            # spelling.
+            weight_spelling = json_data['fontWeight'] || json_data['font']
+            spec = Helpers::FontSpecHelper.plain_spec(
+              weight_spelling && Helpers::FontSpecHelper.weight_expression(weight_spelling), json_data['fontSize'], required_imports
+            )
+            var = 'checkBoxFont'  # its own Row's lambda: one per scope, so a fixed name
+            code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth + 1, required_imports)
+            text_params.concat(Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data))
+
+            if json_data['fontColor']
+              font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+              text_params << "color = #{font_color}"
+            end
+
+
+            if text_params.size == 1
+              code += "\n" + indent("Text(#{label_expr})", depth + 1)
+            else
+              code += "\n" + indent("Text(", depth + 1)
+              code += "\n" + text_params.map { |param| indent(param, depth + 2) }.join(",\n")
+              code += "\n" + indent(")", depth + 1)
+            end
+
+            code += "\n" + indent("}", depth)
+          else
+            # Checkbox without label
+            code = indent("Checkbox(", depth)
+            code += "\n" + indent("checked = #{checked},", depth + 1)
+
+            # onCheckedChange handler
+            _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
+
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)},", depth + 1)
+
+            # Build modifiers
+            modifiers = []
+            # userInteractionEnabled stops this node and
+            # what is in it (ModifierBuilder.build_interaction_blocker); this
+            # component builds no clickable, which is where it came from.
+            modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+            # testTag after margins and offset, before alpha: the tagged box (resource-id
+            # bounds, TalkBack focus) is the drawn box. Ticket
+            # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+            modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+            modifiers.concat(decoration_stages(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          # Add weight modifier if in Row or Column
+          if parent_type == 'Row' || parent_type == 'Column'
+            modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          end
+
+          # iconSize with no custom icon: there is no separate glyph to size, so
+          # it sizes the Checkbox itself.
+          modifiers << ".size(#{icon_size_dp(json_data['iconSize'])})" if json_data['iconSize']
+
+            code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_colors_arg(json_data, required_imports, depth))
+            code = Helpers::ModifierBuilder.join_argument(code, checkbox_enabled_arg(json_data, depth))
+
+            code += "\n" + indent(")", depth)
+          end
+
+          code
+        end
+
+        # `colors = CheckboxDefaults.colors(...)`. Extracted so the LABELLED
+        # branch can emit it too — it never did, and the conformance fixture
+        # base carries `text`, so `checkedColor` / `uncheckedColor` /
+        # `iconColor` measured as unread on android (plan 49 lane C).
+        def self.checkbox_colors_arg(json_data, required_imports, depth)
+          checked_color_value = json_data['checkColor'] || json_data['checkedColor'] || json_data['tintColor'] || json_data['onTintColor']
+
+          required_imports&.add(:checkbox_colors)
+          colors_params = []
+
+          # The box's accent: the CheckBox's own, else the tint a container
+          # handed down (InheritedTint) — so the colors are always emitted.
+          checked_color = if checked_color_value
+                            Helpers::ResourceResolver.process_color(checked_color_value, required_imports)
+                          else
+                            Helpers::InheritedTint.accent(required_imports)
+                          end
+          colors_params << "checkedColor = #{checked_color}"
+
+          if json_data['uncheckedColor']
+            unchecked_color = Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
+            colors_params << "uncheckedColor = #{unchecked_color}"
+          end
+
+          # For a Material Checkbox the "icon" is the tick, so iconColor maps
+          # to checkmarkColor rather than to the box.
+          if json_data['iconColor']
+            icon_color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
+            colors_params << "checkmarkColor = #{icon_color}"
+          end
+
+          return '' if colors_params.empty?
+
+          code = ",\n" + indent("colors = CheckboxDefaults.colors(", depth + 1)
+          code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
+          code + "\n" + indent(")", depth + 1)
+        end
+
+        # `iconSize` is `["number", "binding"]`. The static path keeps its
+        # `.to_i` truncation so existing output is unchanged; a binding takes
+        # the canonical Dp emitter instead of truncating to 0.
+        def self.icon_size_dp(value)
+          return Helpers::BoundValue.dp(value) if Helpers::BoundValue.bound?(value)
+
+          "#{value.to_i}.dp"
+        end
+
+        # `enabled = ...`. Same story as the colours: unlabelled branch only.
+        def self.checkbox_enabled_arg(json_data, depth)
+          return '' unless json_data.key?('enabled')
+
+          state = Helpers::BoundValue.bool(json_data['enabled'])
+          expr = case state
+                 when :on then 'true'
+                 when :off then 'false'
+                 else state
+                 end
+          ",\n" + indent("enabled = #{expr}", depth + 1)
+        end
+
+        private
+
+        # Generate checkbox with custom icon/selectedIcon
+        def self.generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded = nil)
+          required_imports&.add(:icon_toggle_button)
+          required_imports&.add(:icon)
+
+          # Each state falls back to the OTHER supplied asset, not to a Material
+          # icon name: this branch only runs when the layout named at least one
+          # drawable, and `R.drawable.check_box` does not exist in the app.
+          # `onSrc` is the declared alias of selectedIcon (raw L0 layouts only;
+          # the normalizer rewrites it for L1).
+          selected_icon_decl = Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
+          icon = json_data['icon'] || json_data['src'] || selected_icon_decl
+          selected_icon = selected_icon_decl || json_data['icon'] || json_data['src']
+
+          # Resolve icon names to drawable resources
+          required_imports&.add(:painter_resource)
+          required_imports&.add(:r_class)
+          icon_res = "#{Helpers::ResourceResolver.drawable_id(icon)}"
+          selected_icon_res = "#{Helpers::ResourceResolver.drawable_id(selected_icon)}"
+
+          code = indent("IconToggleButton(", depth)
+          code += "\n" + indent("checked = #{checked},", depth + 1)
+
+          # onCheckedChange handler
+          _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
+
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)},", depth + 1)
+
+          # Build modifiers — declared width/height must reach the control
+          # (the dynamic renderer's buildModifier applies size in the same
+          # slot); dropping them left the button at its 48dp default, which
+          # shifted the glyph and let the button's shape clip it.
+          modifiers = []
+          # userInteractionEnabled stops this node and
+          # what is in it (ModifierBuilder.build_interaction_blocker); this
+          # component builds no clickable, which is where it came from.
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(decoration_stages(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
+          # `enabled` is the control's own parameter here too: a disabled
+          # IconToggleButton neither toggles nor calls the declared onClick
+          # (it was never passed, so a disabled icon checkbox still toggled).
+          code = Helpers::ModifierBuilder.join_argument(code, checkbox_enabled_arg(json_data, depth))
+
+          code += "\n" + indent(") {", depth)
+
+          # Icon content - switch based on checked state
+          code += "\n" + indent("Icon(", depth + 1)
+          # A bound icon is looked up by its name at run time (ResourceResolver.drawable_painter).
+          if Helpers::BindingExpression.whole_binding?(icon) || Helpers::BindingExpression.whole_binding?(selected_icon)
+            on = Helpers::ResourceResolver.drawable_painter(selected_icon, required_imports)
+            off = Helpers::ResourceResolver.drawable_painter(icon, required_imports)
+            code += "\n" + indent("painter = if (#{checked}) #{on} else #{off},", depth + 2)
+          else
+            code += "\n" + indent("painter = painterResource(id = if (#{checked}) #{selected_icon_res} else #{icon_res}),", depth + 2)
+          end
+          code += "\n" + indent("contentDescription = null", depth + 2)
+
+          # Icon size. IconToggleButton keeps its own 48dp touch target, so this
+          # sizes the glyph inside it rather than the control.
+          if json_data['iconSize']
+            code += ",\n" + indent("modifier = Modifier.size(#{json_data['iconSize'].to_i}.dp)", depth + 2)
+          end
+
+          # Icon tint. `iconColor` is the declared attribute for this; fontColor
+          # stays as the fallback it has always been. When neither is
+          # declared, Color.Unspecified keeps the asset's OWN colors — the
+          # dynamic component always passes `tint ?: Color.Unspecified`,
+          # while omitting the argument here left Icon()'s default
+          # LocalContentColor tint painting custom icons black (parity
+          # family kjui-codegen-selection-icon-placement).
+          tint_value = json_data['iconColor'] || json_data['fontColor']
+          if tint_value
+            icon_color = Helpers::ResourceResolver.process_color(tint_value, required_imports)
+            code += ",\n" + indent("tint = #{icon_color}", depth + 2)
+          else
+            code += ",\n" + indent("tint = Color.Unspecified", depth + 2)
+          end
+
+          code += "\n" + indent(")", depth + 1)
+          code += "\n" + indent("}", depth)
+
+          code
+        end
+
+        # The CheckBox's own operation: write the bound value, run
+        # onValueChange, then the declared onClick
+        # (ModifierBuilder.with_operation_click) — the one lambda all three
+        # branches emit. The first four forms are the ones they always emitted.
+        # The checkbox's own operation, in order: its own update — the bound
+        # write, or the seeded state's (Helpers::StaticSeed, `seeded`) — then
+        # onValueChange, then the declared onClick (with_operation_click).
+        def self.checked_change_lambda(json_data, binding_variable, seeded: nil)
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
+          on_change = json_data['onValueChange']
+          lambda = if on_change && !Helpers::ModifierBuilder.is_binding?(on_change)
+                     Helpers::ModifierBuilder.error_lambda("ERROR: #{on_change} - camelCase events require binding format @{functionName}")
+                   else
+                     # The handler takes the new value by the lambda's own name for it:
+                     # `newValue` where the lambda names its parameter, `it` where it
+                     # does not. It was `it` in both, so a bound CheckBox with a
+                     # handler passed `it` inside `{ newValue -> … }` — unresolved.
+                     handler_for = lambda do |arg|
+                       Helpers::ModifierBuilder.get_event_handler_invocation(on_change, view_id, arg) if on_change
+                     end
+                     update = "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))" if binding_variable
+                     if update && on_change then "{ newValue -> #{update}; #{handler_for.call('newValue')} }"
+                     elsif update then "{ newValue -> #{update} }"
+                     else
+                       body = [("#{seeded} = it" if seeded), handler_for.call('it')].compact
+                       body.empty? ? '{ }' : "{ #{body.join('; ')} }"
+                     end
+                   end
+          Helpers::ModifierBuilder.with_operation_click(lambda, json_data)
+        end
+
+        # shadow → background: the View slots between alpha and padding, on
+        # every branch. Size (on the two branches without it), shadow and
+        # background (with its cornerRadius and border) are declared on
+        # `common` and were dropped
+        # (kjui-dynamic-components-that-skip-the-common-modifiers). There is
+        # no click here: the declared onClick is called from onCheckedChange
+        # (checked_change_lambda). The labelled Row carries the tag and the
+        # Checkbox inside it the `enabled`, so the Row takes `disabled()` for a
+        # UI test to read; the bare Checkbox and the IconToggleButton carry
+        # their own `enabled` on the tagged node.
+        def self.decoration_stages(json_data, required_imports, labelled: false)
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
+          if labelled
+            modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+              json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+            ))
+          end
+          modifiers
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

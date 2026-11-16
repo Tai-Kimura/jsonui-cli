@@ -1,0 +1,197 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/content_scale_helper'
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/resource_resolver'
+require_relative '../helpers/image_accessibility_helper'
+require_relative '../../core/enum_spelling'
+
+module KjuiTools
+  module Compose
+    module Components
+      class ImageComponent
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # Image source priority: srcName > src > defaultImage >
+          # errorImage > loadingImage > 'placeholder'. A STATIC Image has no
+          # in-flight state, so `loadingImage` can only mean fallback imagery
+          # here (the sjui converter makes the same call) — and for the same
+          # reason `errorImage` belongs in the chain too. It was the only link
+          # missing on this platform; sjui has it (image_converter.rb:42).
+          # Plan 49 lane C, handed over from D.
+          raw_src = json_data['srcName'] || json_data['src'] || json_data['defaultImage'] ||
+                    json_data['errorImage'] || json_data['loadingImage'] || 'placeholder'
+
+          # Add required imports
+          required_imports&.add(:image)
+
+          code = indent("Image(", depth)
+
+          code += painter_argument(json_data, raw_src, depth, required_imports)
+          
+          # What TalkBack reads: the alt, or nothing for a decorative image
+          # (ImageAccessibilityHelper). Tests find the image by its testTag,
+          # below, so the id no longer doubles as spoken text — it stays only
+          # on an image that operates a control and has no alt, which the
+          # build names.
+          content_desc = Helpers::ImageAccessibilityHelper.content_description(json_data, json_data['id'] || '', required_imports)
+          code += "\n" + indent("contentDescription = #{content_desc},", depth + 1)
+          
+          # Build modifiers
+          modifiers = []
+
+          # Add testTag and contentDescription for UI testing
+
+          # Margins (outer spacing) - must be applied BEFORE size in Compose
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+
+          # Size handling
+          w = json_data['width']
+          h = json_data['height']
+          if w && h
+            if w == 'matchParent' && h == 'matchParent'
+              modifiers << ".fillMaxSize()"
+            elsif w == 'matchParent'
+              modifiers << ".fillMaxWidth()"
+              modifiers << ".height(#{Helpers::BoundValue.dp(h)})" unless h == 'wrapContent'
+            elsif h == 'matchParent'
+              modifiers << ".width(#{Helpers::BoundValue.dp(w)})" unless w == 'wrapContent'
+              modifiers << ".fillMaxHeight()"
+            elsif w.is_a?(Numeric) && h.is_a?(Numeric)
+              modifiers << ".size(#{Helpers::BoundValue.dp(w)}, #{Helpers::BoundValue.dp(h)})"
+            else
+              modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+            end
+          else
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          end
+
+          # Padding (inner spacing) - applied after size
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → background (border + clip + background): the View slots.
+          # Both were declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers).
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          code += Helpers::ModifierBuilder.format(modifiers, depth)
+          
+          # Content mode (case-insensitive). Vocabulary AND default live in
+          # ContentScaleHelper so Image and NetworkImage cannot drift apart
+          # again, and so a `@{...}` mode resolves at runtime instead of
+          # freezing (plan 49 lane C: Image.contentMode). This caller used to
+          # emit NOTHING for a mode outside the table; the declared default is
+          # `fit` (attribute_semantics.json#image), which is also Compose's own
+          # default for Image — so naming it changes no picture.
+          if json_data['contentMode']
+            required_imports&.add(:content_scale)
+            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], section: json_data['type']))
+              code += ",\n" + indent("contentScale = #{scale}", depth + 1)
+            end
+            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'], section: json_data['type']))
+              required_imports&.add(:alignment)
+              code += ",\n" + indent("alignment = #{alignment}", depth + 1)
+            end
+          end
+          
+          # renderingMode — `template` means "take the tint, ignore the asset's own
+          # colours", which is a ColorFilter here and `.renderingMode(.template)`
+          # on iOS. `original` says the opposite, so it suppresses a tint that
+          # would otherwise apply. Emitted after contentScale, which is where the
+          # Image( ... ) argument list ends.
+          if (filter = rendering_color_filter(json_data, required_imports))
+            code += ",\n" + indent("colorFilter = #{filter}", depth + 1)
+          end
+
+          code += "\n" + indent(")", depth)
+          code
+        end
+
+        def self.rendering_color_filter(json_data, required_imports)
+          mode = JsonUIShared::EnumSpelling.lowered(json_data['renderingMode'], 'Image', 'renderingMode').to_s
+          tint = json_data['tintColor']
+
+          case mode
+          when 'template'
+            required_imports&.add(:color_filter)
+            color = if tint
+                      Helpers::ResourceResolver.process_color(tint, required_imports)
+                    else
+                      # Compose's stand-in for "the current foreground colour",
+                      # which is what a template image takes on iOS.
+                      required_imports&.add(:local_content_color)
+                      'LocalContentColor.current'
+                    end
+            "ColorFilter.tint(#{color})"
+          when 'original'
+            nil
+          else
+            # No renderingMode: a tint still applies if one was asked for.
+            return nil unless tint
+
+            required_imports&.add(:color_filter)
+            "ColorFilter.tint(#{Helpers::ResourceResolver.process_color(tint, required_imports)})"
+          end
+        end
+        
+        private
+
+        # The `painter = …,` argument for a drawable source, its leading
+        # newline included. A binding (`@{avatar}`, the name held in data) is
+        # looked up at run time — defaultImage, else loadingImage, else
+        # `placeholder` when the name is no drawable — and a literal is
+        # R.drawable. CircleImage's local image takes the same (a binding was
+        # frozen into a drawable name there: `R.drawable.img___avatar_`).
+        def self.painter_argument(json_data, raw_src, depth, required_imports)
+          required_imports&.add(:painter_resource)
+          required_imports&.add(:r_class)
+          unless Helpers::ModifierBuilder.is_binding?(raw_src)
+            return "\n" + indent("painter = painterResource(id = #{Helpers::ResourceResolver.drawable_id(raw_src)}),", depth + 1)
+          end
+
+          # @{termsCheckboxIcon} -> data.termsCheckboxIcon (String = drawable resource name)
+          # Use runtime resource lookup to convert String -> Painter via painterResource
+          property_name = Helpers::ModifierBuilder.extract_binding_property(raw_src)
+          camel_case_name = to_camel_case(property_name)
+          required_imports&.add(:local_context)
+          fallback_raw = json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder'
+          fallback = if Helpers::BindingExpression.whole_binding?(fallback_raw)
+                       Helpers::ResourceResolver.drawable_painter(fallback_raw, required_imports)
+                     else
+                       "painterResource(id = #{Helpers::ResourceResolver.drawable_id(fallback_raw)})"
+                     end
+          "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1) +
+            "\n" + indent("val resId = ctx.resources.getIdentifier(#{Helpers::ResourceResolver.bound_drawable_name("data.#{camel_case_name}")}, \"drawable\", ctx.packageName)", depth + 2) +
+            "\n" + indent("if (resId != 0) painterResource(id = resId) else #{fallback}", depth + 2) +
+            "\n" + indent("},", depth + 1)
+        end
+
+        def self.to_camel_case(snake_case_string)
+          return snake_case_string unless snake_case_string.include?('_')
+          parts = snake_case_string.split('_')
+          parts[0] + parts[1..-1].map(&:capitalize).join
+        end
+
+        def self.quote(text)
+          "\"#{text.gsub('"', '\\"')}\""
+        end
+
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line|
+            line.empty? ? line : spaces + line
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

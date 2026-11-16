@@ -1,0 +1,9 @@
+{
+ "infra": {
+  "dir": "infra/model",
+  "icons": {
+   "service:gcp/run": "infra/icons/run.svg",
+   "category:cache": "infra/icons/cache.svg"
+  }
+ }
+}

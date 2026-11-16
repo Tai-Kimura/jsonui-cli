@@ -1,0 +1,270 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/content_inset_helper'
+require_relative '../helpers/modifier_builder'
+require_relative 'container_component'
+
+module KjuiTools
+  module Compose
+    module Components
+      class ScrollViewComponent
+        # `keyboardAvoidancePadding` in dp; the SSoT default (20) when the
+        # layout does not declare it, so the clearance is the same on both
+        # platforms whether or not the attribute is written. nil for a
+        # non-numeric value (the validator reports the type).
+        def self.keyboard_padding_dp(json_data)
+          return 20 unless json_data.key?('keyboardAvoidancePadding')
+          v = json_data['keyboardAvoidancePadding']
+          return nil unless v.is_a?(Numeric)
+          v == v.to_i ? v.to_i : v
+        end
+
+        # The scroll axis — the one predicate every path that draws a
+        # ScrollView reads (this component, and ComposeBuilder's
+        # ConstraintLayout child, kjui-scroll-with-constraints-always-vertical).
+        def self.horizontal?(json_data)
+          (json_data['horizontalScroll'] ? true : false) || json_data['orientation'] == 'horizontal'
+        end
+
+        # The run block that measures the safe-area overlap goes round the
+        # ScrollView when its contentInsetAdjustmentBehavior asks for it
+        # (ContentInsetHelper.wrap).
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
+          code = generate_scrollable(json_data, depth, required_imports, parent_type, is_root: is_root)
+          Helpers::ContentInsetHelper.wrap(code, json_data['contentInsetAdjustmentBehavior'], depth,
+                                           horizontal: horizontal?(json_data))
+        end
+
+        def self.generate_scrollable(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
+          # スクロール方向の判定 — horizontalScroll true or orientation
+          # horizontal scrolls sideways, anything else vertically, as sjui
+          # and rjui read it. Neither key outranks the other (a pair that
+          # disagrees is refused by jui build, ERROR [scrollview]), and the
+          # children never decide: a horizontal child is laid out in a
+          # vertical scroll (attribute_definitions.json ScrollView, user
+          # ruling 2026-10-14, jui-scrollview-horizontalscroll-false-disagrees,
+          # jui-scrollview-axis-from-child-web-disagrees).
+          is_horizontal = horizontal?(json_data)
+
+          # keyboardAvoidance属性の確認（デフォルトはtrue）
+          keyboard_avoidance = json_data['keyboardAvoidance'] != false
+
+          # paging: every child becomes its own lazy item and the fling snaps
+          # to item bounds — the child IS the page, which is what UIKit's
+          # isPagingEnabled gives a full-size-children ScrollView. Without
+          # paging the children share one item (plain scroll).
+          paging = json_data['paging'] == true
+          # defaultScrollAnchor — where the scroll STARTS. The non-paging emit
+          # puts every child in ONE lazy item, so item indices cannot anchor;
+          # scrollBy is item-agnostic: a huge delta clamps at the end (bottom),
+          # and backing up half the consumed extent is the centre. One-shot on
+          # first composition, same contract as Collection's anchor.
+          anchor = json_data['defaultScrollAnchor'].to_s
+          anchor = nil unless %w[center bottom].include?(anchor)
+          # keyboardAvoidance (default true) is the library's
+          # `Modifier.keyboardAvoidance(listState, clearanceDp)` — the
+          # viewport half (imePadding + the `keyboardAvoidancePadding` band)
+          # AND the follow (scroll the focused field up once the IME is up),
+          # implemented once in KotlinJsonUI and shared with the dynamic
+          # ScrollView. Until 1.8.109 this emit spelled the viewport half
+          # itself (`.imePadding().padding(bottom = if (WindowInsets.ime…`)
+          # and left the follow to Compose's built-in tracking, which a
+          # user's device did not do (2026-09-22): the band appeared, the
+          # field stayed under the keyboard. The follow scrolls through the
+          # list state, so the state is emitted whenever avoidance is on.
+          # A non-numeric padding falls back to the SSoT default: the
+          # validator reports the type, and avoidance itself must not
+          # silently disappear with the band (it did not before either —
+          # imePadding stayed, only the band was dropped).
+          keyboard_padding = keyboard_avoidance ? (keyboard_padding_dp(json_data) || 20) : nil
+          state_var = nil
+          code = ''
+          # A ScrollView with no id names its list state with nothing of its
+          # own, so two of them in one composable declared one name twice and
+          # the file did not compile ("Conflicting declarations: local val
+          # scrollPagingState" — KotlinJsonUI's sample-app scroll_test, three
+          # id-less ScrollViews, regenerated with jsonui-cli 1.9.6; since
+          # 1.8.109 every ScrollView with keyboardAvoidance, the default,
+          # declares one). The id-less one keeps its state in a `run { }` of
+          # its own, as StaticSeed does for a seeded control, so the name can
+          # never meet another's and the section extractor lifts the two as one
+          # statement. With an id the emit is what it was.
+          outer_depth = depth
+          scoped = (paging || anchor || keyboard_padding) && json_data['id'].to_s.empty?
+          depth += 1 if scoped
+          if paging || anchor || keyboard_padding
+            required_imports&.add(:snap_fling) if paging
+            required_imports&.add(:lazy_list_state) unless paging
+            state_var = "scrollPagingState#{json_data['id'].to_s.gsub(/[^A-Za-z0-9]/, '')}"
+            code += indent("val #{state_var} = rememberLazyListState()", depth) + "\n"
+          end
+          if anchor
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:scroll_by)
+            code += indent("LaunchedEffect(Unit) {", depth) + "\n"
+            # 16777216f (2^24), not 1e9f: scrollBy reports `delta − leftover`
+            # in float32, and near 1e9 floats are 64 apart, so a 1200 px extent
+            # came back as 1216 and the centre started 8 px (4 dp) short
+            # (ticket kjui-scrollview-center-anchor-is-off-by-4). Below 2^24
+            # every integer is exact. Same delta as KotlinJsonUI Dynamic.
+            code += indent("val consumed = #{state_var}.scrollBy(16777216f)", depth + 1) + "\n"
+            code += indent("#{state_var}.scrollBy(-consumed / 2f)", depth + 1) + "\n" if anchor == 'center'
+            code += indent("}", depth) + "\n"
+          end
+
+          if is_horizontal
+            required_imports&.add(:lazy_row)
+            code += indent("LazyRow(", depth)
+          else
+            required_imports&.add(:lazy_column)
+            code += indent("LazyColumn(", depth)
+          end
+          if paging
+            code += "\n" + indent("state = #{state_var},", depth + 1)
+            code += "\n" + indent("flingBehavior = rememberSnapFlingBehavior(lazyListState = #{state_var}),", depth + 1)
+          elsif state_var
+            code += "\n" + indent("state = #{state_var},", depth + 1)
+          end
+
+          # The content, at the ScrollView's own content gravity across the
+          # scroll (common.gravity is "Content gravity/alignment";
+          # gravityDefaults top|start). It was not read, so a ScrollView
+          # declaring centerHorizontal drew a narrow child at the start, where
+          # web centred it (2026-10-05). Read as a Column's gravity is
+          # (ContainerComponent.gravity_parts_of). A child's gravity is the
+          # child's content's and does not place the child. KotlinJsonUI
+          # Dynamic: DynamicScrollViewComponent, the same alignment.
+          if !is_horizontal && (cross = cross_alignment(json_data['gravity']))
+            required_imports&.add(:alignment)
+            code += "\n" + indent("horizontalAlignment = #{cross},", depth + 1)
+          end
+
+          # `contentInsetAdjustmentBehavior` — see ContentInsetHelper. UIKit
+          # adjusts by default and the attribute stops it; Compose never
+          # adjusts, so the values that need code are the opposite ones.
+          if (safe_inset = Helpers::ContentInsetHelper.safe_area_padding(
+                json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal))
+            Helpers::ContentInsetHelper.imports_for(json_data['contentInsetAdjustmentBehavior'])
+                                       .each { |k| required_imports&.add(k) }
+            code += "\n" + indent("contentPadding = #{safe_inset},", depth + 1)
+          end
+
+          # Build modifiers
+          modifiers = []
+
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+
+          # Keyboard avoidance at the end of the modifier chain, on the
+          # LazyColumn itself (inside the content it would only add
+          # scrollable space). The clearance (SSoT: number, default 20) is
+          # passed explicitly even when it is the default, so the emit says
+          # what it does and the library's default cannot drift under it.
+          if keyboard_padding
+            required_imports&.add(:keyboard_avoidance)
+            modifiers << ".keyboardAvoidance(#{state_var}, #{keyboard_padding})"
+          end
+
+          if modifiers.any? || is_root
+            code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
+          end
+
+          # scrollEnabled - controls whether the user can scroll
+          if json_data.key?('scrollEnabled')
+            scroll_enabled = json_data['scrollEnabled']
+            if scroll_enabled.is_a?(String) && scroll_enabled.match(/@\{([^}]+)\}/)
+              # Data binding
+              prop = $1
+              code += ",\n" + indent("userScrollEnabled = data.#{prop}", depth + 1)
+            else
+              code += ",\n" + indent("userScrollEnabled = #{scroll_enabled}", depth + 1)
+            end
+          end
+
+          code += "\n" + indent(") {", depth)
+          code += "\n" + indent("item {", depth + 1) unless paging
+          # A LazyRow measures its items with the viewport's height as the
+          # cross-axis max, so a child declaring more (content 600 in a
+          # 200-high ScrollView) was cut to 200 and centred. Unbounded and
+          # top-anchored, it keeps its declared height from y 0, as web does
+          # (ticket kjui-horizontal-scrollview-clamps-content-height-to-the-
+          # viewport). Same wrapper as KotlinJsonUI Dynamic.
+          unbounded_row = is_horizontal
+          if unbounded_row
+            required_imports&.add(:alignment)
+            code += "\n" + indent(UNBOUNDED_ROW_OPEN, depth + 2) unless paging
+          end
+          
+          # Process children
+          children = json_data['child'] || []
+          children = [children] unless children.is_a?(Array)
+          
+          # Return structure for parent to process children.
+          #
+          # `layout_type: 'ScopeFree'` is important — children render inside
+          # the `item { ... }` lambda whose receiver is `LazyItemScope`, not
+          # ColumnScope/RowScope. Without this override, handle_container_result
+          # falls back to the outer parent_type (e.g. 'Column' when ScrollView
+          # is the child of a vertical SafeAreaView), and a child responsive
+          # View that emits `Modifier.align(Alignment.CenterHorizontally)` then
+          # tries to resolve `.align` against an implicit ColumnScope receiver
+          # that isn't actually present. SwiftUI-free centering modifiers
+          # (`wrapContentWidth/Height(Alignment.*)`) work in any scope, so the
+          # ScopeFree branch of build_alignment routes through those instead.
+          closing = paging ? "\n" + indent("}", depth) : "\n" + indent("}", depth + 1) + "\n" + indent("}", depth)
+          closing = "\n" + indent("}", depth + 2) + closing if unbounded_row && !paging
+          if scoped
+            code = indent("run {", outer_depth) + "\n" + code
+            closing += "\n" + indent("}", outer_depth)
+          end
+          result = {
+            code: code,
+            children: children,
+            closing: closing,
+            layout_type: 'ScopeFree',
+            json_data: json_data
+          }
+          result[:child_depth_offset] = (scoped ? 1 : 0) + (unbounded_row && !paging ? 1 : 0)
+          result.delete(:child_depth_offset) if result[:child_depth_offset].zero?
+          if paging
+            result[:child_wrapper] = unbounded_row ? { open: "item { #{UNBOUNDED_ROW_OPEN}", close: '} }' } : { open: 'item {', close: '}' }
+          end
+          result
+        end
+        
+        # `Alignment.*` for a vertical scroll's cross axis, or nil for start.
+        def self.cross_alignment(gravity)
+          parts = ContainerComponent.gravity_parts_of(gravity)
+          return 'Alignment.End' if parts.include?('right')
+          return 'Alignment.CenterHorizontally' if (parts & %w[centerHorizontal center]).any?
+
+          nil
+        end
+
+        UNBOUNDED_ROW_OPEN = 'Row(modifier = Modifier.wrapContentHeight(align = Alignment.Top, unbounded = true)) {'.freeze
+
+        private
+        
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line| 
+            line.empty? ? line : spaces + line 
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

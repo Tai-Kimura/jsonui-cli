@@ -1,0 +1,101 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'tmpdir'
+require_relative 'spec_helper'
+require 'core/attribute_validator'
+
+# Every conformance fixture layout, companions included (cells, embedded
+# screens, variant screens), declares the attributes the SSoT marks
+# `required`, checked by the same validator a consumer's `jui build` runs.
+#
+# The corpus is generated and never built by `jui build`, so the warning a
+# consumer would see never fired for it. Until jsonui-cli 1.9.18 the generators
+# emitted 168 such omissions in 89 of 1199 layouts. That meant a fixture could
+# ask a renderer what it does with input the declarations forbid, and record
+# the answer as a platform difference: web drew a widthless Label 1024 wide
+# where Android drew 38 (ticket conformance-generators-emit-layouts-missing-
+# required-attributes).
+RSpec.describe 'conformance fixtures declare their required attributes' do
+  CONFORMANCE_FIXTURES = File.expand_path('../../conformance/fixtures', __dir__)
+
+  # Fixtures that leave a required attribute out ON PURPOSE, each with the question it asks. Matched
+  # by file and attribute name, so any other missing attribute in them is still red, and an entry
+  # whose file stops missing it is red too (a stale exemption).
+  DELIBERATELY_MISSING = {
+    # 2.5.47: what each face draws for a Segment with no width written (wrapContent on all three;
+    # attribute_semantics segmentWidth). width is required, so the layout is one an app should not
+    # write, and the fixture exists to pin what is drawn when it does.
+    'Segment/items__no_width.layout.json' => 'width',
+    '__control/Segment__width--omit.layout.json' => 'width'
+  }.freeze
+
+  def missing_required(root)
+    validator = RjuiTools::Core::AttributeValidator.new(:all)
+    found = []
+    walk = lambda do |node, parent_orientation, file|
+      case node
+      when Hash
+        if node['type']
+          validator.validate(node, nil, parent_orientation, file_name: file).each do |w|
+            msg = w.is_a?(Hash) ? (w[:message] || w['message']).to_s : w.to_s
+            found << "#{file}: #{node['type']}##{node['id']}: #{msg}" if msg.include?('Required attribute')
+          end
+        end
+        Array(node['child'] || node['children']).each { |c| walk.call(c, node['orientation'], file) }
+      when Array
+        node.each { |c| walk.call(c, parent_orientation, file) }
+      end
+    end
+    files = Dir[File.join(root, '**', '*.layout.json')].sort
+    files.each { |f| walk.call(JSON.parse(File.read(f)), nil, f.delete_prefix("#{root}/")) }
+    [files.size, found]
+  end
+
+  it 'finds the corpus (not a silent pass on a missing directory)' do
+    expect(Dir.exist?(CONFORMANCE_FIXTURES)).to be(true), "no conformance fixtures at #{CONFORMANCE_FIXTURES}"
+    expect(Dir[File.join(CONFORMANCE_FIXTURES, '**', '*.layout.json')].size).to be > 1000
+  end
+
+  it 'has no layout missing a required attribute' do
+    count, found = missing_required(CONFORMANCE_FIXTURES)
+    expect(count).to be > 1000
+    exempt, rest = found.partition do |line|
+      DELIBERATELY_MISSING.any? { |file, attr| line.start_with?("#{file}:") && line.include?("'#{attr}'") }
+    end
+    expect(rest).to eq([]), "#{rest.size} required attribute(s) missing:\n#{rest.first(40).join("\n")}"
+    stale = DELIBERATELY_MISSING.keys.reject { |file| exempt.any? { |line| line.start_with?("#{file}:") } }
+    expect(stale).to eq([]), "exemptions whose fixture no longer misses the attribute: #{stale.join(', ')}"
+  end
+
+  # A SelectBox with no height takes its content's height on every face (ruling 2026-11-13), and the 2.5.36
+  # fixtures write none: its height is not required (common.height notRequiredFor). Every other component's
+  # still is (ticket rjui-selectbox-height-still-required-by-the-validator).
+  it 'does not require a SelectBox height, and still requires a Label height (control)' do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, 'x.layout.json'), JSON.generate(
+        { 'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent',
+          'orientation' => 'vertical', 'child' => [
+            { 'type' => 'SelectBox', 'id' => 'pick', 'width' => 200, 'items' => %w[a b] },
+            { 'type' => 'Label', 'id' => 'after', 'width' => 100, 'text' => 'After' }
+          ] }
+      ))
+      _, found = missing_required(dir)
+      expect(found.grep(/SelectBox/)).to eq([])
+      expect(found.grep(/Label#after/).join).to include("Required attribute 'height'")
+    end
+  end
+
+  # The validator sees a missing width on a node shaped like the old `after`
+  # Label: the probe is alive.
+  it 'reports a missing width on a widthless Label (control)' do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, 'x.layout.json'), JSON.generate(
+        { 'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent',
+          'orientation' => 'vertical', 'child' => [{ 'type' => 'Label', 'id' => 'after', 'text' => 'After' }] }
+      ))
+      _, found = missing_required(dir)
+      expect(found.join).to include("Required attribute 'width'")
+    end
+  end
+end

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/offsetY_on_Label__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.offsetY (static)",
+    "description": "Conformance fixture for 'offsetY' on Label (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "offsetY_on_Label__static",
+      "description": "Conformance fixture for 'offsetY' on Label (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_offsetY_on_Label__static"
+        }
+      ]
+    }
+  ]
+}

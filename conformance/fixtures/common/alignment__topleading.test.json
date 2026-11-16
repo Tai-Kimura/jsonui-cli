@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/alignment__topleading.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.alignment (topleading)",
+    "description": "Conformance fixture for 'alignment' on View (section: common, class: visual). Value under test: \"topLeading\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "alignment__topleading",
+      "description": "Conformance fixture for 'alignment' on View (section: common, class: visual). Value under test: \"topLeading\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_alignment__topleading"
+        }
+      ]
+    }
+  ]
+}

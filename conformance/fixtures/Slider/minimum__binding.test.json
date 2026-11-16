@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/minimum__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.minimum (binding)",
+    "description": "Conformance fixture for 'minimum' on Slider (section: Slider, class: visual). Value under test: \"@{boundMinimum}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minimum__binding",
+      "description": "Conformance fixture for 'minimum' on Slider (section: Slider, class: visual). Value under test: \"@{boundMinimum}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_minimum__binding"
+        }
+      ]
+    }
+  ]
+}

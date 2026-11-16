@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/flowOverflow__none_item11.layout.json"
+  },
+  "metadata": {
+    "name": "conformance flowOverflow__none_item11",
+    "description": "A lazy \"none\" flow Collection holding 12 cells in a 150x100 box lays every row out past the box, and the unclipped overflow is tappable (clipToBounds defaults to false): cell 11 is addressable and can be tapped.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flowOverflow__none_item11",
+      "description": "A lazy \"none\" flow Collection holding 12 cells in a 150x100 box lays every row out past the box, and the unclipped overflow is tappable (clipToBounds defaults to false): cell 11 is addressable and can be tapped.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_11"
+        },
+        {
+          "action": "tapItem",
+          "id": "target",
+          "index": 11
+        }
+      ]
+    }
+  ]
+}

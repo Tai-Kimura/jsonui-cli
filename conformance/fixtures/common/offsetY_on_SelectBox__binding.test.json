@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/offsetY_on_SelectBox__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.offsetY (binding)",
+    "description": "Conformance fixture for 'offsetY' on SelectBox (section: common, class: visual). Value under test: \"@{boundOffsetY}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "offsetY_on_SelectBox__binding",
+      "description": "Conformance fixture for 'offsetY' on SelectBox (section: common, class: visual). Value under test: \"@{boundOffsetY}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_offsetY_on_SelectBox__binding"
+        }
+      ]
+    }
+  ]
+}

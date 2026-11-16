@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TabView/unselectedColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TabView.unselectedColor (binding)",
+    "description": "Conformance fixture for 'unselectedColor' on TabView (section: TabView, class: visual). Value under test: \"@{boundUnselectedColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TabView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "unselectedColor__binding",
+      "description": "Conformance fixture for 'unselectedColor' on TabView (section: TabView, class: visual). Value under test: \"@{boundUnselectedColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TabView_unselectedColor__binding"
+        }
+      ]
+    }
+  ]
+}

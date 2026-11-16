@@ -1,0 +1,675 @@
+# frozen_string_literal: true
+
+require 'swiftui/section_bounder'
+
+# All fixtures are SYNTHETIC. They replicate the measured anatomy of real
+# oversized generated functions (single-child spine -> paren-array containers
+# -> form-field stacks) without carrying any consumer content.
+RSpec.describe SjuiTools::SwiftUI::SectionBounder do
+  let(:bounder) { described_class.new }
+
+  # ---- helpers -------------------------------------------------------------
+
+  def emitted_functions(functions_text)
+    lines = functions_text.split("\n")
+    starts = lines.each_index.select { |i| lines[i] =~ /private func (\w+)/ }
+    starts.map do |s|
+      depth = 0
+      peak = 0
+      body_end = s
+      (s...lines.size).each do |i|
+        code = described_class.strip_noise(lines[i])
+        code.each_char do |ch|
+          case ch
+          when '{'
+            depth += 1
+            peak = depth if depth > peak
+          when '}'
+            depth -= 1
+          end
+        end
+        if i > s && depth <= 0
+          body_end = i
+          break
+        end
+      end
+      { name: lines[s][/func (\w+)/, 1], depth: peak, lines: body_end - s + 1,
+        text: lines[s..body_end].join("\n") }
+    end
+  end
+
+  # The property the consumer's view_semantic_fingerprint.py checks: splitting
+  # may only MOVE content lines between functions and add call scaffolding —
+  # the multiset of content lines is invariant. A cut below a binding scope
+  # declares and passes typed parameters (`func f(section: T)`, `f(section: section)`).
+  def content_lines(text)
+    text.split("\n").map(&:strip).reject do |l|
+      l.empty? ||
+        l.match?(/\A[{}()\[\],]+\z/) ||                            # pure structure
+        l.match?(/\A@ViewBuilder private func \w+\([^()]*\) -> some View \{\z/) ||
+        l.match?(/\A(view: )?AnyView\(\w+\([^()]*\)\)[,)]*\z/) ||    # call scaffolding
+        l.end_with?('AnyView(')                                     # split-open line
+    end
+  end
+
+  def deep_spine(levels, leaf: 'Text("leaf")')
+    openers = [
+      'ZStack(alignment: .topLeading) {',
+      'Group {',
+      'responsive0 {',
+      'AdvancedKeyboardAvoidingScrollView(.vertical, showsIndicators: true) {',
+    ]
+    lines = []
+    levels.times do |i|
+      lines << ('    ' * i) + (openers[i] || 'VStack(alignment: .leading, spacing: 0) {')
+    end
+    lines << ('    ' * levels) + leaf
+    (levels - 1).downto(0) { |i| lines << ('    ' * i) + '}' }
+    lines.join("\n")
+  end
+
+  # ---- the hard gate ---------------------------------------------------------
+
+  describe 'depth bounding' do
+    it 'bounds a 12-deep single-child spine to MAX_DEPTH per function' do
+      _call, functions = bounder.bound(deep_spine(12))
+      fns = emitted_functions(functions)
+      expect(fns).not_to be_empty
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::MAX_DEPTH
+      expect(bounder.waivers).to be_empty
+    end
+
+    it 'bounds mixed multi-child trees without a wrapper-chain explosion' do
+      body = <<~SWIFT
+        ZStack(alignment: .topLeading) {
+            Group {
+                responsive0 {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("a")
+                        HStack {
+                            VStack {
+                                Text("b")
+                                HStack {
+                                    Text("c")
+                                        .padding(1)
+                                }
+                            }
+                        }
+                        VStack {
+                            Text("d")
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+      SWIFT
+      _call, functions = bounder.bound(body)
+      fns = emitted_functions(functions)
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::MAX_DEPTH
+      # 9 brace levels packed at ~4 per function: a handful, not one per level.
+      expect(fns.size).to be <= 4
+    end
+
+    it 'returns the body untouched inside section0 when already within bounds' do
+      body = "VStack {\n    Text(\"small\")\n}"
+      call, functions = bounder.bound(body)
+      expect(call).to eq('AnyView(section0())')
+      fns = emitted_functions(functions)
+      expect(fns.size).to eq(1)
+      expect(fns.first[:text]).to include('Text("small")')
+    end
+  end
+
+  # ---- boundaries are erased -------------------------------------------------
+
+  describe 'AnyView boundaries' do
+    it 'erases every section call site' do
+      _call, functions = bounder.bound(deep_spine(12))
+      calls = functions.scan(/section0(?:_\d+)+\(\)/)
+      expect(calls).not_to be_empty
+      calls.each do |call|
+        expect(functions).to include("AnyView(#{call})")
+      end
+    end
+
+    it 'extracts multi-line AnyView slots preserving the slot spelling' do
+      body = <<~SWIFT
+        VStack {
+            WeightedHStack(alignment: .center, spacing: 8, children: [
+                (
+                  view: AnyView(
+                    VStack {
+                        Text("left")
+                        HStack {
+                            VStack {
+                                HStack {
+                                    Text("deep")
+                                }
+                            }
+                        }
+                    }
+                    .padding(4)
+                  ),
+                  weight: 1.0
+                ),
+                (
+                  view: AnyView(
+                    VStack {
+                        Text("right")
+                    }
+                  ),
+                  weight: 2.0
+                )
+            ], hasMatchParentCrossAxis: true)
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      expect(functions).to match(/view: AnyView\(section0_\d+\(\)\),/)
+      expect(functions).to include('], hasMatchParentCrossAxis: true)')
+      expect(functions).to include('weight: 1.0')
+      expect(functions).to include('weight: 2.0')
+      fns = emitted_functions(functions)
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::MAX_DEPTH
+    end
+  end
+
+  # ---- scope protection --------------------------------------------------------
+
+  describe 'binding scopes are never cut' do
+    it 'keeps a ForEach parameter closure body in one piece' do
+      foreach = <<~SWIFT.strip
+        ForEach(Array(data.items.enumerated()), id: \\.offset) { cellIndex, cellData in
+            HStack {
+                Text("cell")
+                    .padding(2)
+            }
+        }
+      SWIFT
+      body = deep_spine(8, leaf: foreach.split("\n").join("\n" + '    ' * 8))
+      _call, functions = bounder.bound(body)
+      # The closure body must sit in the SAME function as its ForEach opening.
+      fns = emitted_functions(functions)
+      holder = fns.find { |f| f[:text].include?('cellIndex, cellData in') }
+      expect(holder).not_to be_nil
+      expect(holder[:text]).to include('Text("cell")')
+    end
+
+    it 'keeps an action closure with its Button' do
+      body = <<~SWIFT
+        VStack {
+            Group {
+                VStack {
+                    HStack {
+                        VStack {
+                            HStack {
+                                Button(action: {
+                                    data.onTap?()
+                                }) {
+                                    Text("tap")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      fns = emitted_functions(functions)
+      holder = fns.find { |f| f[:text].include?('Button(action: {') }
+      expect(holder[:text]).to include('data.onTap?()')
+      expect(holder[:text]).to include('Text("tap")')
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::MAX_DEPTH
+    end
+
+    it 'records a waiver instead of silently shipping an uncuttable violation' do
+      # Nested control flow (binding frames) all the way down: no safe cut.
+      # Each `if let` binds a name of no known type that the leaf reads, so
+      # no `if` below the first lifts whole (a spine of plain `if`s does: the
+      # if at the budget, below).
+      lines = []
+      10.times { |i| lines << ('    ' * i) + "if let v#{i} = data.flag#{i} {" }
+      lines << ('    ' * 10) + "Text(\"#{(0...10).map { |i| "\\(v#{i})" }.join}\")"
+      9.downto(0) { |i| lines << ('    ' * i) + '}' }
+      _call, functions = bounder.bound(lines.join("\n"))
+      expect(bounder.waivers).not_to be_empty
+      expect(functions).to include('Text("\\(v0)') # still emitted
+    end
+  end
+
+  # ---- the outward last resort ------------------------------------------------
+  #
+  # A ZStack child that binds `visibility` and `scrollTo` is emitted as
+  # Group > VisibilityWrapper > ScrollViewReader > .onChange { _, id in > if >
+  # withAnimation: depth 6, and every level from the budget inward is a scope
+  # or a closure, so the chain cut had nothing to take and the body was waived
+  # (reported 2026-09-24). The nearest container OUTSIDE the budget — the
+  # VisibilityWrapper — is a safe cut. It is taken only as the last resort
+  # and only over the waiver bound, so bodies that were never waived keep
+  # their exact output (the second example is that control).
+  describe 'the outward last resort' do
+    def scroll_spine(animated: true)
+      spine = <<~SWIFT
+        VisibilityWrapper(data.listVisibility) {
+            ScrollViewReader { scrollProxy in
+                CollectionStackView(
+                    mode: .lazy,
+                    axis: .vertical
+                ) {
+                    AnyView(rows())
+                }
+                    .onChange(of: data.scrollToIndex) { _, cellId in
+                    if data.scrollAnimated {
+                        #{animated ? "withAnimation {\n                            scrollProxy.scrollTo(cellId, anchor: .bottom)\n                        }" : "scrollProxy.scrollTo(cellId, anchor: .top)"}
+                    } else {
+                        scrollProxy.scrollTo(cellId, anchor: .bottom)
+                    }
+                }
+            }
+                .accessibilityIdentifier("list")
+        }
+      SWIFT
+      "Group {\n#{spine}}"
+    end
+
+    it 'cuts at the enclosing container when nothing at or inside the budget can be cut' do
+      body = scroll_spine
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      # emitted_functions counts the `func … {` line too, so a BODY at the
+      # waiver bound measures one more here.
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::BODY_DEPTH_HARD + 1
+      cut = fns.find { |f| f[:text].lines[1].to_s.strip.start_with?('VisibilityWrapper(data.listVisibility) {') }
+      expect(cut).not_to be_nil, functions
+      root = fns.first
+      expect(root[:text]).to match(/Group \{\n\s*AnyView\(#{cut[:name]}\(\)\)\n\s*\}/)
+      expect(content_lines(functions).sort).to eq(content_lines(body).sort)
+    end
+
+    # The same spine without withAnimation is depth 5: over BODY_DEPTH_MAX,
+    # not over the waiver bound, and the VisibilityWrapper is still there to
+    # be cut. It was accepted as is before, and it still must be — the
+    # outward pass is for bodies that would otherwise be waived.
+    it 'leaves a body that is over the cutting budget but not over the waiver bound exactly as it was' do
+      body = scroll_spine(animated: false)
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      expect(emitted_functions(functions).size).to eq(1)
+      expect(content_lines(functions)).to eq(content_lines(body))
+    end
+
+    # The `if`s bind names of no known type that the leaf reads: no container
+    # to cut, and no `if` below the first that lifts whole (a spine of plain
+    # `if`s is cut by the last pass, the if at the budget).
+    it 'still waives when no container encloses the deep point and no if lifts whole' do
+      lines = []
+      7.times { |i| lines << ('    ' * i) + "if let v#{i} = data.flag#{i} {" }
+      lines << ('    ' * 7) + "Text(\"#{(0...7).map { |i| "\\(v#{i})" }.join}\")"
+      6.downto(0) { |i| lines << ('    ' * i) + '}' }
+      bounder.bound(lines.join("\n"))
+      expect(bounder.waivers.map { |w| w.to_a.last }).to include('no safe cut point')
+    end
+  end
+
+  # ---- the if at the budget ---------------------------------------------------
+  #
+  # jsonui-cli 1.9.0 (reported 2026-09-28, two consumer apps): four list
+  # screens printed "depth 7 … no safe cut" where 1.8.120 printed none. Each is
+  # a keyed Collection (cellIdProperty) with a regular-size-class variant, so
+  # its function is the size-class switch, and the compact route below it is
+  # the collection skeleton: a multi-line CollectionStackView initializer (its
+  # `) {` has no line to carry), `if count > 0`, `if let cellsData`, and the
+  # keyed loop, whose ids closure (`let ids: [AnyHashable] = { … items.map {
+  # cell in if … { … } } }()`) reaches two levels below where the loop's
+  # closure was. No container from the budget inward or outward, and
+  # pass_if_block lifts only the outermost `if` — the switch, the whole body.
+  # The last pass lifts the `if` at the budget instead: the `if let`, with
+  # `section` passed typed.
+  describe 'the if at the budget' do
+    def keyed_switch_body
+      <<~'SWIFT'
+        if horizontalSizeClass == .regular {
+            AnyView(regularRoute())
+        } else {
+            CollectionStackView(
+                mode: .lazy,
+                axis: .vertical,
+                spacing: 12
+            ) {
+                if data.rows.sections.count > 0 {
+                    let section = data.rows.sections[0]
+                    if let cellsData = section.cells?.data {
+                        let items = cellsData.enumerated().map { index, data in
+                            IdentifiedCellItem(id: (data["cellId"] as? String) ?? "\(index)", index: index, data: data)
+                        }
+                        let ids: [AnyHashable] = {
+                            var seen = Set<String>()
+                            return items.map { cell in
+                                if let key = (cell.data["cellId"] as? String), seen.insert(key).inserted { return AnyHashable([AnyHashable(0), AnyHashable(key)]) }
+                                return AnyHashable(IndexPath(item: cell.index, section: 0))
+                            }
+                        }()
+                        ForEach(zip(ids, items).map { pair in (id: pair.0, cell: pair.1) }, id: \.id) { item in
+                            let cell = item.cell
+                            RowCellView(data: cell.data).equatable()
+                                .accessibilityIdentifier("rows_item_\(cell.index)")
+                        }
+                    }
+                }
+            }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+      SWIFT
+    end
+
+    def if_spine(levels)
+      lines = []
+      levels.times { |i| lines << ('    ' * i) + "if data.flag#{i} {" }
+      lines << ('    ' * levels) + 'Text("deep")'
+      (levels - 1).downto(0) { |i| lines << ('    ' * i) + '}' }
+      lines.join("\n")
+    end
+
+    it 'lifts the if let of a keyed collection under a size-class switch, with its section typed' do
+      body = keyed_switch_body
+      expect(described_class.max_brace_depth(body.split("\n"))).to eq(7)
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      expect(fns.size).to eq(2), functions
+      # emitted_functions counts the `func … {` line: a body at BODY_DEPTH_MAX measures one more.
+      expect(fns.map { |f| f[:depth] }).to eq([described_class::BODY_DEPTH_MAX, described_class::BODY_DEPTH_MAX + 1])
+      root, lifted = fns
+      expect(lifted[:text].lines[0]).to include("private func #{lifted[:name]}(section: CollectionDataSection) -> some View {")
+      expect(lifted[:text].lines[1].strip).to eq('if let cellsData = section.cells?.data {')
+      expect(root[:text]).to match(/let section = data\.rows\.sections\[0\]\n\s*AnyView\(#{lifted[:name]}\(section: section\)\)\n\s*\}\n\s*\}\n\s*\.frame/)
+      # Put back at its call site, the lifted body is the body again, line for line.
+      inlined = root[:text].sub(/^\s*AnyView\(#{lifted[:name]}\(section: section\)\)$/) { lifted[:text].lines[1..-2].join.chomp }
+      expect(content_lines(inlined)).to eq(content_lines(body))
+    end
+
+    # From the budget outward: the parent keeps the levels above the budget
+    # and the child the rest, in one cut. Outermost first would lift the
+    # second `if` and peel one level per function (flag1, then flag2, …).
+    it 'cuts a spine of plain ifs once, at the budget' do
+      _call, functions = bounder.bound(if_spine(7))
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      expect(fns.size).to eq(2), functions
+      expect(fns[1][:text].lines[1].strip).to eq("if data.flag#{described_class::BODY_DEPTH_MAX - 1} {")
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::BODY_DEPTH_MAX + 1
+    end
+
+    it 'leaves a body that is over the cutting budget but not over the waiver bound exactly as it was' do
+      body = if_spine(described_class::BODY_DEPTH_HARD)
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      expect(emitted_functions(functions).size).to eq(1)
+      expect(content_lines(functions)).to eq(content_lines(body))
+    end
+
+    # A closure with parameters is a :scope, like a ForEach's content, but
+    # `.onChange { _, value in` runs statements: an `if` lifted out of it
+    # into a @ViewBuilder function would not compile. Only an `if` whose
+    # every enclosing level is a View container or another `if` is lifted.
+    it 'never lifts an if out of a modifier closure' do
+      body = <<~'SWIFT'
+        if data.shown {
+            Text("row")
+                .onChange(of: data.value) { _, newValue in
+                    if data.first {
+                        if data.second {
+                            if data.third {
+                                withAnimation {
+                                    data.apply()
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers.map { |w| w.to_a.last }).to eq(['no safe cut point'])
+      expect(emitted_functions(functions).size).to eq(1)
+      expect(content_lines(functions)).to eq(content_lines(body))
+    end
+  end
+
+  # ---- typed parameter passing across binding scopes -------------------------
+
+  describe 'scope-crossing cuts with typed parameters' do
+    # The exact collection anatomy the converters emit:
+    #   let section = ... / if let cellsData = ... { / ForEach(...) { ... in
+    def collection_body(cell_inner_depth: 6)
+      inner = +''
+      cell_inner_depth.times { |i| inner << ('    ' * i) + "VStack {\n" }
+      inner << ('    ' * cell_inner_depth) + "Text(\"\\(cellData[\"title\"] ?? \"\")\")\n"
+      (cell_inner_depth - 1).downto(0) { |i| inner << ('    ' * i) + "}\n" }
+      indented = inner.split("\n").map { |l| ('    ' * 3) + l }.join("\n")
+      <<~SWIFT
+        VStack {
+            let section = data.favorites.sections[0]
+            if let cellsData = section.cells?.data {
+                ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in
+        #{indented}
+                }
+            }
+        }
+      SWIFT
+    end
+
+    it 'cuts below a ForEach closure by passing its params as typed arguments' do
+      _call, functions = bounder.bound(collection_body)
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::MAX_DEPTH
+      # Some extracted function takes the closure bindings as parameters...
+      expect(functions).to match(/private func section0(?:_\d+)+\((?=.*cellData: \[String: Any\])/)
+      # ...and its call site forwards them.
+      expect(functions).to match(/AnyView\(section0(?:_\d+)+\(.*cellData: cellData.*\)\)/)
+    end
+
+    it 'does not parameterize a name the segment itself binds via if-let' do
+      # The listStyle emit cuts at the `if let cellsData = ...` line. The
+      # binding lives INSIDE the extracted block — treating it as an outer
+      # visible binding produced a call site passing an argument that exists
+      # nowhere in the caller ("cannot find 'cellsData' in scope",
+      # Collection/listStyle__* / __control/Collection__no-sections).
+      inner = +''
+      6.times { |i| inner << ('    ' * i) + "VStack {\n" }
+      inner << ('    ' * 6) + "Text(\"\\(cellIndex)\")\n"
+      5.downto(0) { |i| inner << ('    ' * i) + "}\n" }
+      indented = inner.split("\n").map { |l| ('    ' * 4) + l }.join("\n")
+      body = <<~SWIFT
+        List {
+            ForEach(Array(data.items.sections.enumerated()), id: \\.offset) { sectionIndex, section in
+                if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {
+                    ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in
+        #{indented}
+                    }
+                }
+            }
+        }
+        .listStyle(PlainListStyle())
+      SWIFT
+      call, functions = bounder.bound(body)
+      fns = emitted_functions(functions)
+      holder = fns.find { |f| f[:text].include?('if let cellsData') }
+      next expect(fns).not_to be_empty if holder.nil? # no cut at the if-let line: nothing to leak
+      holder_name = holder[:text][/func (\w+)\(/, 1]
+      # The holder must not TAKE the name it binds itself...
+      expect(holder[:text]).not_to match(/func \w+\([^)]*cellsData:/)
+      # ...and its call site (in a sibling function, or `call` when the
+      # holder is the root section) must not PASS it.
+      call_site = "#{call}\n#{functions}"[/AnyView\(#{holder_name}\([^)]*\)\)/]
+      expect(call_site).not_to be_nil
+      expect(call_site).not_to include('cellsData')
+    end
+
+    it 'detects references made only inside string interpolation' do
+      # "\(cellData["title"] ?? "")" is a real reference even though string
+      # stripping would hide it — the extracted function must take the param.
+      _call, functions = bounder.bound(collection_body)
+      holder = emitted_functions(functions).find { |f| f[:text].include?('cellData["title"]') }
+      unless holder[:text].include?('cellIndex, cellData in')
+        expect(holder[:text]).to match(/func \w+\(.*cellData: \[String: Any\]/)
+      end
+    end
+
+    it 'refuses to cut when a referenced binding has no known type' do
+      # `{ item in` — the table emission never spells the element type.
+      inner = +''
+      8.times { |i| inner << ('    ' * (i + 1)) + "VStack {\n" }
+      inner << ('    ' * 9) + "Text(item.name)\n"
+      8.downto(1) { |i| inner << ('    ' * i) + "}\n" }
+      body = <<~SWIFT
+        List {
+            ForEach(rows) { item in
+        #{inner.split("\n").map { |l| '        ' + l }.join("\n")}
+            }
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      # Every function still contains item references only where `item` is
+      # bound — nothing was stranded out of scope.
+      emitted_functions(functions).each do |f|
+        expect(f[:text]).to include('{ item in') if f[:text].include?('item.name')
+      end
+      expect(bounder.waivers).not_to be_empty
+    end
+
+    it 'never cuts a reference to the shadowed map-closure data parameter' do
+      body = <<~SWIFT
+        VStack {
+            let items = cellsData.reconfigured(cellIdProperty: "cellId", autoChangeTrackingId: true).enumerated().map { index, data in
+                IdentifiedCellItem(index: index, data: data)
+            }
+            ForEach(items) { cell in
+                Text("row")
+            }
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      holder = emitted_functions(functions).find { |f| f[:text].include?('IdentifiedCellItem(index: index, data: data)') }
+      expect(holder[:text]).to include('{ index, data in')
+    end
+  end
+
+  # ---- extraction mechanics ------------------------------------------------------
+
+  describe 'modifier chains travel with their view' do
+    it 'keeps an extracted container attached to its trailing modifiers' do
+      body = deep_spine(9).sub(
+        'Text("leaf")',
+        "VStack {\n" + ('    ' * 9) + "    Text(\"inner\")\n" + ('    ' * 9) + "}\n" +
+        ('    ' * 9) + ".padding(7)\n" + ('    ' * 9) + '.background(Color.blue)'
+      )
+      _call, functions = bounder.bound(body)
+      fns = emitted_functions(functions)
+      holder = fns.find { |f| f[:text].include?('Text("inner")') }
+      # Whichever function holds the view holds its modifiers.
+      expect(holder[:text]).to include('.padding(7)')
+      expect(holder[:text]).to include('.background(Color.blue)')
+    end
+  end
+
+  # ---- the fingerprint property ----------------------------------------------------
+
+  describe 'semantic invariance' do
+    it 'moves content lines without adding or dropping any' do
+      body = <<~SWIFT
+        ZStack(alignment: .topLeading) {
+            Group {
+                responsive0 {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("f-1")
+                            .accessibilityIdentifier("field_one")
+                        HStack {
+                            VStack {
+                                HStack {
+                                    Text("f-2")
+                                        .fontWeight(.bold)
+                                }
+                            }
+                        }
+                        Button(action: {
+                            data.onSubmit?()
+                        }) {
+                            Text("send")
+                        }
+                        .cornerRadius(4)
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+      SWIFT
+      _call, functions = bounder.bound(body)
+      expect(content_lines(functions).sort).to eq(content_lines(body).sort)
+    end
+  end
+
+  # ---- determinism ---------------------------------------------------------------
+
+  describe 'determinism' do
+    it 'is a pure function of its input' do
+      body = deep_spine(12)
+      first = described_class.new.bound(body)
+      second = described_class.new.bound(body)
+      expect(second).to eq(first)
+    end
+
+    it 'names children in document order' do
+      body = <<~SWIFT
+        VStack {
+            VStack {
+                Group {
+                    VStack {
+                        HStack {
+                            VStack {
+                                Text("first-deep")
+                            }
+                        }
+                    }
+                }
+            }
+            VStack {
+                Group {
+                    VStack {
+                        HStack {
+                            VStack {
+                                Text("second-deep")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+      SWIFT
+      _call, functions = bounder.bound(body)
+      names = functions.scan(/private func (\w+)\(\)/).flatten
+      expect(names.first).to eq('section0')
+      expect(names).to eq(names.uniq)
+      # Document order: the function containing "first-deep" is named before
+      # the one containing "second-deep".
+      fns = emitted_functions(functions)
+      first_fn = fns.find { |f| f[:text].include?('first-deep') }
+      second_fn = fns.find { |f| f[:text].include?('second-deep') }
+      expect(fns.index(first_fn)).to be < fns.index(second_fn)
+    end
+  end
+
+  # ---- metric robustness --------------------------------------------------------
+
+  describe 'measurement' do
+    it 'ignores braces and parens inside string literals' do
+      body = deep_spine(3, leaf: 'Text("{ ( specimen ) }")')
+      _call, functions = bounder.bound(body)
+      expect(functions).to include('Text("{ ( specimen ) }")')
+      expect(bounder.waivers).to be_empty
+    end
+  end
+end

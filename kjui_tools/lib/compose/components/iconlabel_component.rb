@@ -1,0 +1,308 @@
+# frozen_string_literal: true
+
+require_relative 'text_component'
+require_relative '../helpers/bound_value'
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/resource_resolver'
+require_relative '../helpers/font_spec_helper'
+require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
+
+module KjuiTools
+  module Compose
+    module Components
+      # IconLabel — an icon and a label that share a selected state.
+      #
+      # The Compose codegen had no IconLabel at all: the type fell through to
+      # `check_custom_component` and emitted `// TODO: Implement component type:
+      # IconLabel`. Only four of its attributes showed up as coverage gaps
+      # because the rest (`text`, `font`, `fontSize`, `fontColor`) are read by
+      # text_component and the scan matches attribute names, not
+      # (component, attribute) pairs.
+      #
+      # The layout follows IconLabelView.swift, which is the reference: the icon
+      # and the text sit in a Row or a Column depending on `iconPosition`, spaced
+      # by `iconMargin`, and the selected state swaps `icon_off` for `icon_on`
+      # and `fontColor` for `selectedFontColor`.
+      #
+      # The undeclared legacy spellings (`icon`, `src`, `iconSize`, `iconColor`,
+      # `tintColor`, `spacing`, `fontWeight`) are accepted too, because
+      # DynamicIconLabelComponent reads those and a layout must not change
+      # meaning between dynamic and generated mode.
+      class IconLabelComponent
+        # Matches IconLabelView.swift's own default.
+        # 5 is the cross-platform canonical (IconLabelView.swift and the ios
+        # dynamic converter both default to 5) — the KJUI dynamic 8f fallback
+        # was the deviant side (32 parity re-measure).
+        DEFAULT_ICON_MARGIN = 5
+
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          position = JsonUIShared::EnumSpelling.lowered(json_data['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
+          vertical = %w[top bottom].include?(position)
+          icon_first = !%w[right bottom].include?(position)
+
+          container = vertical ? 'Column' : 'Row'
+          spacing = icon_spacing(json_data)
+
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+
+          required_imports&.add(:arrangement)
+
+          code = indent("#{container}(", depth)
+          code += Helpers::ModifierBuilder.format(modifiers, depth)
+          code += ",\n" unless modifiers.empty?
+          code += "\n" if modifiers.empty?
+          arrangement = vertical ? 'verticalArrangement' : 'horizontalArrangement'
+          code += indent("#{arrangement} = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)}),", depth + 1) + "\n"
+          cross = vertical ? 'horizontalAlignment = Alignment.CenterHorizontally' :
+                             'verticalAlignment = Alignment.CenterVertically'
+          code += indent(cross, depth + 1) + "\n"
+          code += indent(") {", depth) + "\n"
+
+          parts = [icon_code(json_data, depth + 1, required_imports),
+                   text_code(json_data, depth + 1, required_imports)]
+          parts.reverse! unless icon_first
+          code += parts.compact.join("\n")
+          code += "\n" + indent("}", depth)
+          code
+        end
+
+        # `iconSize` is declared `["number", "array"]` — a number sizes both
+        # edges, a two-element `[width, height]` sizes them separately (rjui
+        # reads both). Only the number face was handled, so the declared array
+        # face reached the source as a Ruby literal — `Modifier.size([40, 20].dp)`
+        # is not Kotlin, which made the only two-axis spelling uncompilable.
+        # NOT the same shape as CheckBox.iconSize, which is number-only for a
+        # square glyph and must stay that way.
+        #
+        # nil when no size is declared: the icon is then drawn at the image's
+        # own size (attribute_semantics iconLabelIconSize, 2026-10-05 ruling),
+        # so the Image gets no size modifier. A fixed 24 dp drew a 64 dp
+        # asset at 24 where iOS and the declaration draw it at 64.
+        def self.icon_size_call(value)
+          if value.is_a?(Array) && value.length >= 2
+            return "size(width = #{Helpers::BoundValue.dp(value[0])}, height = #{Helpers::BoundValue.dp(value[1])})"
+          end
+
+          # A one-element array still means "both edges", the same as a number.
+          scalar = value.is_a?(Array) ? value.first : value
+          scalar.nil? ? nil : "size(#{scalar}.dp)"
+        end
+
+        # `iconMargin` is the declared row; `spacing` is the legacy spelling the
+        # dynamic runtime reads.
+        def self.icon_spacing(json_data)
+          json_data['iconMargin'] || DEFAULT_ICON_MARGIN
+        end
+
+        # `selected` chooses between icon_on/icon_off and between
+        # fontColor/selectedFontColor — without it neither pair means anything.
+        def self.selected_condition(json_data)
+          value = json_data['selected']
+          return 'true' if value == true || value == 'true'
+          return 'false' if value == false || value == 'false'
+          return "data.#{Helpers::ModifierBuilder.extract_binding_property(value)}" if
+            Helpers::ModifierBuilder.is_binding?(value)
+
+          nil
+        end
+
+        def self.icon_code(json_data, depth, required_imports)
+          on_icon = json_data['icon_on']
+          off_icon = json_data['icon_off']
+          return nil if on_icon.nil? && off_icon.nil?
+
+          condition = selected_condition(json_data)
+          required_imports&.add(:image)
+          required_imports&.add(:painter_resource)
+          required_imports&.add(:r_class)
+
+          # icon_off is the resting state, and iOS falls back to icon_on when
+          # only that was supplied (IconLabelView.iconView).
+          resting = off_icon || on_icon
+          selected = on_icon || off_icon
+          swaps = condition && condition != 'false' && selected != resting
+          painter =
+            if condition == 'true'
+              drawable(selected, required_imports)
+            elsif swaps
+              "if (#{condition}) #{drawable(selected, required_imports)} else #{drawable(resting, required_imports)}"
+            else
+              drawable(resting, required_imports)
+            end
+
+          # The label beside the icon names this control, so the icon itself
+          # is decorative (null — an empty string is still an unnamed image
+          # to TalkBack) unless the layout says otherwise.
+          icon_desc = json_data['contentDescription'] ? quote(json_data['contentDescription']) : 'null'
+          args = ["painter = #{painter}", "contentDescription = #{icon_desc}"]
+          if (size = icon_size_call(json_data['iconSize']))
+            args << "modifier = Modifier.#{size}"
+          end
+          if (filter = icon_color_filter(json_data, condition, required_imports))
+            required_imports&.add(:color_filter)
+            args << "colorFilter = #{filter}"
+          end
+          indent("Image(", depth) + "\n" + args.map { |a| indent(a, depth + 1) }.join(",\n") + "\n" + indent(")", depth)
+        end
+
+        # Tint only when a colour was asked for. iOS tints the icon with the font
+        # colour unconditionally, which would silently flatten a multi-colour
+        # asset; the dynamic runtime tints only on iconColor/tintColor, and that
+        # is the behaviour to match. selectedFontColor still reaches the icon,
+        # because recolouring on selection is the point of the attribute.
+        def self.icon_color_filter(json_data, condition, required_imports)
+          explicit = json_data['tintColor']
+          selected_color = json_data['selectedFontColor']
+          resting = explicit ? tint(explicit, required_imports) : 'null'
+
+          return (explicit ? resting : nil) unless selected_color && condition
+
+          on_tint = tint(selected_color, required_imports)
+          return on_tint if condition == 'true'
+          return explicit ? resting : nil if condition == 'false'
+
+          "if (#{condition}) #{on_tint} else #{resting}"
+        end
+
+        def self.tint(color, required_imports)
+          "ColorFilter.tint(#{Helpers::ResourceResolver.process_color(color, required_imports)})"
+        end
+
+        def self.text_code(json_data, depth, required_imports)
+          text = json_data['text']
+          return nil if text.nil?
+
+          # The text goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web): FontSpec carries the weight and size it
+          # declares, and a slot the provider leaves null draws as before (the Text's style).
+          size = json_data['fontSize']
+          required_imports&.add(:text_unit)
+          required_imports&.add(:font_style)
+          spec = Helpers::FontSpecHelper.plain_spec(font_weight(json_data), size, required_imports)
+          var = Helpers::FontSpecHelper.next_var('iconlabel')
+          code = Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth, required_imports) + "\n"
+          code += indent("Text(", depth) + "\n"
+          # required_imports must ride along: when the extractor externalized
+          # this text, the resolver emits stringResource(R.string.…) and the
+          # imports have to register with it (missing them left every
+          # IconLabel fixture uncompilable in the codegen parity host).
+          code += indent("text = #{Helpers::ResourceResolver.process_text(text, required_imports)},", depth + 1)
+
+          if (color = text_color(json_data, required_imports))
+            code += "\n" + indent("color = #{color},", depth + 1)
+          end
+          # The line box is the style's below (line: false here), drawn from the same size.
+          code += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth, required_imports, json_data, line: false)
+          # The size the text is drawn at - the provider's when it gives one, else the declared one, else the style's.
+          drawn_size = Helpers::FontScale.wrap("#{var}.size ?: TextUnit.Unspecified", json_data, required_imports)
+          # `textShadow` — same `{color, blur, offset: [x, y]}` contract as
+          # Label (the UIKit runtime passes the identical JSON to both), and
+          # this component never reached ANY shadow path (plan 49 lane C:
+          # IconLabel.textShadow). The emitter is Label's, so the two cannot
+          # drift. The style is LocalTextStyle.current.copy, never a bare
+          # TextStyle() (Label's rule, text_component.rb): the bare one dropped
+          # the Material default — 16sp on a 24sp line — so a shadowed
+          # IconLabel drew its text at 14sp on a 16.5 dp line where the
+          # dynamic face and every unshadowed IconLabel keep 16 / 24. A
+          # shadow does not change the size.
+          #
+          # The text's line is a Label's (user ruling 2026-10-05, ruling 5's
+          # ordinary line applied to IconLabel): a declared fontSize gives
+          # fontSize x 1.3, the emit Label's base_line_height_expression makes,
+          # where this kept the theme's 24 under a 20sp font (26 on a Label).
+          # Undeclared, the theme's line stands. KotlinJsonUI Dynamic:
+          # DynamicIconLabelComponent, the same rule.
+          style_parts = []
+          # Drawn by the text size rule as the size is (FontScale.line_height): a text that does not follow keeps its line
+          # box (ticket kjui-theme-line-height-scales-under-font-scaling-false).
+          # Always, as the size is (P1): with nothing declared and the default configuration jsonUILineHeight hands the
+          # theme's line back. A declared size's line (x 1.3) from the size drawn: the provider's when it gives one.
+          own_line = json_data['fontSize'] ? "(#{var}.size?.let { it * 1.3f } ?: #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)})" : nil
+          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
+          if json_data['textShadow']
+            required_imports&.add(:shadow_style)
+            style_parts << TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)
+          end
+          if style_parts.any?
+            required_imports&.add(:local_text_style)
+            code += "\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')}),", depth + 1)
+          end
+          code = code.chomp(',')
+          code += "\n" + indent(")", depth)
+          code
+        end
+
+        def self.text_color(json_data, required_imports)
+          base = json_data['fontColor']
+          selected_color = json_data['selectedFontColor']
+          condition = selected_condition(json_data)
+
+          base_expr = base ? Helpers::ResourceResolver.process_color(base, required_imports) : nil
+          return base_expr unless selected_color && condition
+
+          on_expr = Helpers::ResourceResolver.process_color(selected_color, required_imports)
+          return on_expr if condition == 'true'
+          return base_expr if condition == 'false'
+
+          "if (#{condition}) #{on_expr} else #{base_expr || 'Color.Unspecified'}"
+        end
+
+        # `font` is the declared row and carries a weight name on this component
+        # (IconLabelConverter treats `font: "bold"` as a weight, not a family);
+        # `fontWeight` is the legacy spelling the dynamic runtime reads.
+        WEIGHT_NAMES = {
+          'thin' => 'FontWeight.Thin',
+          'extralight' => 'FontWeight.ExtraLight',
+          'light' => 'FontWeight.Light',
+          'normal' => 'FontWeight.Normal',
+          'regular' => 'FontWeight.Normal',
+          'medium' => 'FontWeight.Medium',
+          'semibold' => 'FontWeight.SemiBold',
+          'bold' => 'FontWeight.Bold',
+          'extrabold' => 'FontWeight.ExtraBold',
+          'heavy' => 'FontWeight.ExtraBold',
+          'black' => 'FontWeight.Black'
+        }.freeze
+
+        def self.font_weight(json_data)
+          raw = json_data['fontWeight'] || json_data['font']
+          return nil unless raw.is_a?(String)
+
+          WEIGHT_NAMES[raw.downcase]
+        end
+
+        # A written name as it always was; a bound one looked up at run time.
+        def self.drawable(name, required_imports = nil)
+          Helpers::ResourceResolver.drawable_painter(name, required_imports)
+        end
+
+        # A Kotlin string literal — the one escaper (`$` included).
+        def self.quote(text)
+          JsonUIShared::StringLiterals.kotlin(text)
+        end
+
+        def self.indent(text, level)
+          return text if level.zero?
+
+          spaces = '    ' * level
+          text.split("\n").map { |line| line.empty? ? line : spaces + line }.join("\n")
+        end
+      end
+    end
+  end
+end

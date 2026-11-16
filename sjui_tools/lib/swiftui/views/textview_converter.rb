@@ -1,0 +1,490 @@
+#!/usr/bin/env ruby
+
+require_relative 'base_view_converter'
+require_relative 'text_style_helper'
+require_relative 'user_edit_binding_helper'
+require_relative '../helpers/string_manager_helper'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      class TextViewConverter < BaseViewConverter
+        include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
+        include SjuiTools::SwiftUI::Views::UserEditBindingHelper
+        def identifier_placed_inside?
+          true
+        end
+
+        def convert
+          id = @component['id'] || 'textEditor'
+
+          # Get the binding property from text field
+          text_binding = @component['text']
+
+          # Extract property name from binding (e.g., "@{simpleText}" -> "simpleText")
+          if text_binding && text_binding.start_with?('@{') && text_binding.end_with?('}')
+            # Two-way position: canonically a single flat identifier — the
+            # parsed path alone is emitted ('??'/'!' are validator errors)
+            property_name = SwiftUI::Binding::BindingExpression.parse(text_binding[2..-2]).path
+            binding_path = "data.#{property_name}"
+          else
+            # Fallback to ID-based naming if no binding. The state variable is
+            # injected into the generated VIEW as `@State private var …` (see
+            # add_state_variable / update_generated_body), so the reference is
+            # the bare name — a `data.` prefix points at a property the Data
+            # model never grows (caught compiling the codegen parity host:
+            # every no-binding TextView fixture failed with "no dynamic
+            # member 'targetText'"). Radio's fallback is the precedent.
+            # A literal `text` seeds the editor's initial content (TextField's
+            # literal-seed precedent) — an empty seed dropped the declared
+            # text and the editor rendered placeholder-gray (32 parity).
+            # No id: its position (position_name) — `textEditor` was every
+            # id-less TextView's name.
+            state_var = "#{@component['id'] || position_name('textEditor')}Text"
+            seed = text_binding.is_a?(String) && !text_binding.empty? ? swift_string_literal(text_binding) : '""'
+            add_state_variable(state_var, "String", seed)
+            binding_path = state_var
+          end
+
+          # TextViewWithPlaceholderを使用
+          add_line "TextViewWithPlaceholder("
+          auto_focus_var = nil   # set inside the argument block (autoFocus), read after it
+          indent do
+            # onTextChange is called from this binding's setter — the user's
+            # edits only; a programmatic change of the value does not fire it
+            # (UserEditBindingHelper).
+            editor_binding = "$#{binding_path}"
+            if handler_reference?(@component['onTextChange'])
+              handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
+              generation = user_edit_generation
+              editor_binding = user_edit_binding(editor_binding, handler_call, generation: generation)
+            end
+            add_line "text: #{editor_binding},"
+
+            # hint (placeholder) - hint takes priority, fallback to placeholder
+            hint_value = @component['hint'] || @component['placeholder']
+            if hint_value
+              if hint_value.is_a?(String) && hint_value.start_with?('@{') && hint_value.end_with?('}')
+                # Binding expression -> resolve to data property (canonical
+                # expression parsing: path + optional '?? default')
+                hint_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(hint_value[2..-2])
+                add_line "hint: #{hint_expr},"
+              else
+                # Use localized strings for snake_case hint text (unescaped:
+                # the helper escapes what it writes back)
+                hint_text = get_text_with_string_manager("\"#{hint_value}\"")
+                add_line "hint: #{hint_text},"
+              end
+            end
+
+            # hintAttributes の処理
+            if @component['hintAttributes']
+              # hintAttributesからhintColorとhintFontを取得
+              hint_attrs = @component['hintAttributes']
+
+              if hint_attrs['fontColor'] || hint_attrs['color']
+                color = get_swiftui_color(hint_attrs['fontColor'] || hint_attrs['color'])
+                add_line "hintColor: #{color},"
+              elsif @component['hintColor']
+                # 個別のhintColor属性も引き続きサポート
+                color = get_swiftui_color(@component['hintColor'])
+                add_line "hintColor: #{color},"
+              end
+
+              if hint_attrs['font']
+                add_line "hintFont: #{name_operand(hint_attrs['font'])},"
+              elsif @component['hintFont']
+                # 個別のhintFont属性も引き続きサポート
+                add_line "hintFont: #{name_operand(@component['hintFont'])},"
+              end
+
+              if hint_attrs['fontSize']
+                add_line "hintFontSize: #{number_slot(hint_attrs['fontSize'])},"
+              elsif @component['hintFontSize']
+                add_line "hintFontSize: #{number_slot(@component['hintFontSize'])},"
+              end
+
+              if hint_attrs['lineHeightMultiple']
+                add_line "hintLineHeightMultiple: #{number_slot(hint_attrs['lineHeightMultiple'])},"
+              elsif @component['hintLineHeightMultiple']
+                add_line "hintLineHeightMultiple: #{number_slot(@component['hintLineHeightMultiple'])},"
+              end
+
+              # その他のhintAttributesはコメントとして記録
+              add_line "// hintAttributes: #{hint_attrs.to_json}"
+            else
+              # hintColor (個別属性)
+              if @component['hintColor']
+                color = get_swiftui_color(@component['hintColor'])
+                add_line "hintColor: #{color},"
+              end
+
+              # hintFont (個別属性)
+              if @component['hintFont']
+                add_line "hintFont: #{name_operand(@component['hintFont'])},"
+              end
+
+              # hintFontSize (個別属性)
+              if @component['hintFontSize']
+                add_line "hintFontSize: #{number_slot(@component['hintFontSize'])},"
+              end
+
+              # hintLineHeightMultiple (個別属性)
+              if @component['hintLineHeightMultiple']
+                add_line "hintLineHeightMultiple: #{number_slot(@component['hintLineHeightMultiple'])},"
+              end
+            end
+
+            # hideOnFocused
+            if @component['hideOnFocused'] == false
+              add_line "hideOnFocused: false,"
+            end
+
+            # fontSize
+            if @component['fontSize']
+              add_line "fontSize: #{bound_number(@component['fontSize']) || @component['fontSize']},"
+            end
+
+            # fontColor
+            if @component['fontColor']
+              color = get_swiftui_color(@component['fontColor'])
+              add_line "fontColor: #{color},"
+            end
+
+            # font / fontFamily. `fontName:` is what TextViewWithPlaceholder
+            # builds `.custom(name, size:)` from — the family — and it
+            # resolves the `"bold"` weight spelling itself at run time, so the
+            # ambiguity `font` carries is already handled on the other side.
+            # `fontFamily` was read by nothing here at all, which left the
+            # declared family inert on this platform; it is the specific
+            # spelling and wins. A binding used to be pasted between the
+            # quotes and asked for a family literally called "@{fontName}".
+            font_name = @component['fontFamily'] || @component['font']
+            if font_name
+              add_line "fontName: #{bound_string(font_name) || "\"#{font_name}\""},"
+            end
+
+            # background
+            if @component['background']
+              bg_color = get_swiftui_color(@component['background'])
+              add_line "backgroundColor: #{bg_color},"
+            end
+
+            # cornerRadius
+            if @component['cornerRadius']
+              add_line "cornerRadius: #{number_slot(@component['cornerRadius'])},"
+            end
+
+            # containerInset (also accept paddings as containerInset for TextView).
+            # `edgeInset` is the UIKit spelling of the same content inset — the
+            # Label converter already reads it, and routing it here is what took
+            # TextView.edgeInset off the coverage gap ledger.
+            # `padding` too (a number): Dynamic reads it into the same inset
+            # through getPadding, and it is the element's own spacing. Read by
+            # neither the inset nor an outer `.padding` here, a TextView's
+            # `padding` was dropped (ticket ios-a-textviews-id-box-shrinks-by-
+            # its-container-inset). A bound `padding` is folded in the same way.
+            uniform_padding = @component['padding'] if @component['padding'].is_a?(Numeric) || is_binding?(@component['padding'])
+            inset = @component['containerInset'] || @component['edgeInset'] ||
+                    @component['paddings'] || uniform_padding
+            # A four-value `paddings` is [top, right, bottom, left] (the SSoT's
+            # common.paddings; SwiftJsonUI Dynamic reads a TextView's paddings
+            # so through getPadding). containerInset keeps [top, left, bottom,
+            # right], as Dynamic's TextView reads it. Until jsonui-cli 1.9.14
+            # paddings was read as containerInset is.
+            from_paddings = !@component['containerInset'] && !@component['edgeInset'] && @component['paddings']
+            if inset
+              inset = inset.is_a?(Array) ? inset.map { |v| number_slot(v) } : number_slot(inset)
+              if inset.is_a?(Array)
+                case inset.length
+                when 1
+                  add_line "containerInset: EdgeInsets(top: #{inset[0]}, leading: #{inset[0]}, bottom: #{inset[0]}, trailing: #{inset[0]}),"
+                when 2
+                  add_line "containerInset: EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[0]}, trailing: #{inset[1]}),"
+                when 4
+                  leading, trailing = from_paddings ? [inset[3], inset[1]] : [inset[1], inset[3]]
+                  add_line "containerInset: EdgeInsets(top: #{inset[0]}, leading: #{leading}, bottom: #{inset[2]}, trailing: #{trailing}),"
+                end
+              else
+                add_line "containerInset: EdgeInsets(top: #{inset}, leading: #{inset}, bottom: #{inset}, trailing: #{inset}),"
+              end
+            end
+
+            # flexible
+            if @component['flexible'] == true
+              add_line "flexible: true,"
+            end
+
+            # minHeight. Under flexible the declared height is the GROWTH
+            # FLOOR (canonical textView.flexibleHeight, shared/core/
+            # attribute_semantics.json): min = minHeight ?? height — mirrors
+            # dynamic TextViewConverter.swift.
+            if flexible_floor
+              add_line "minHeight: #{flexible_floor},"
+            end
+
+            # maxHeight
+            if @component['maxHeight']
+              add_line "maxHeight: #{number_slot(@component['maxHeight'])},"
+            end
+
+            # Focus-state binding — TextField parity: every TextView with an id
+            # binds data.<id>IsFocused (auto-added to Data by the updater) into
+            # the component, so a ViewModel can drive focus. The component keeps
+            # it in two-way sync with its internal FocusState (SwiftJsonUI
+            # TextViewWithPlaceholder `isFocused:` param, v10.3.0+).
+            # Declared LAST in the library init — Swift requires call-site
+            # argument order to match the declaration, so emit it last.
+            # `autoFocus` (2.3.22): the field takes the focus when the screen
+            # appears. With an id it is data.<id>IsFocused set on appear; with
+            # none, a local state named by its position bound the same way.
+            if @component['id']
+              focus_var = "#{to_camel_case(@component['id'])}IsFocused"
+              add_line "isFocused: $data.#{focus_var},"
+              auto_focus_var = "data.#{focus_var}" if @component['autoFocus'] == true
+            elsif @component['autoFocus'] == true
+              local_focus = "#{position_name('textView')}IsFocused"
+              @state_variables ||= []
+              @state_variables << "@State private var #{local_focus}: Bool = false"
+              add_line "isFocused: $#{local_focus},"
+              auto_focus_var = local_focus
+            end
+
+            # The id on the TextEditor itself, not around the hint
+            # (BaseViewConverter#identifier_placed_inside?). Declared after
+            # isFocused in the library init.
+            if (id_expr = inner_accessibility_identifier_expr)
+              add_line "accessibilityIdentifier: #{id_expr},"
+            end
+
+            # 最後のカンマを削除
+            if @generated_code.last.end_with?(',')
+              @generated_code[-1] = @generated_code.last.chomp(',')
+            end
+          end
+          add_line ")"
+          add_modifier_line ".onAppear { DispatchQueue.main.async { #{auto_focus_var} = true } }" if auto_focus_var
+
+          # Modifiers below attach to the CLOSED call — emitting them inside
+          # the argument block put raw `.modifier(...)` lines between
+          # labeled arguments and produced uncompilable Swift ("expected ','
+          # separator"), which is exactly how the codegen parity host caught
+          # TextView/returnKeyType__* failing to build while dynamic mode
+          # rendered them fine.
+
+          # lineBreakMode — same truncation vocabulary as Label.
+          if @component['lineBreakMode']
+            truncation = case @component['lineBreakMode']
+                         when 'Head' then '.head'
+                         when 'Middle' then '.middle'
+                         when 'Tail', 'Clip' then '.tail'
+                         end
+            add_modifier_line ".truncationMode(#{truncation})" if truncation
+          end
+
+          # returnKeyType — the soft-keyboard submit label, as on TextField.
+          if @component['returnKeyType']
+            add_modifier_line ".submitLabel(#{return_key_to_submit_label(@component['returnKeyType'])})"
+          end
+
+          # scrollEnabled: false pins the editor (iOS 16+ scrollDisabled;
+          # the package floor is 17).
+          if @component['scrollEnabled'] == false
+            add_modifier_line ".scrollDisabled(true)"
+          end
+
+          # onTextChange: wired into the `text:` binding above. It was
+          # `.onChange(of: <binding>)`, which also fired for a programmatic
+          # change of the value (ticket
+          # sjui-ontextchange-fires-on-programmatic-data-change).
+
+          # textAlign / input. TextViewWithPlaceholder takes neither as an
+          # initializer argument, and nothing here read them — both spellings
+          # were inert on this platform. Neither needs one: SwiftUI resolves
+          # `multilineTextAlignment` and `keyboardType` through the
+          # environment, so a modifier on the wrapper reaches the TextEditor
+          # (and the placeholder Text) inside it.
+          if @component['textAlign']
+            @modifier_bag.append(:component_specific,
+                                 ".multilineTextAlignment(#{text_alignment_to_swiftui(@component['textAlign'])})")
+          end
+          if @component['input']
+            @modifier_bag.append(:component_specific,
+                                 ".keyboardType(#{input_to_keyboard_type(@component['input'])})")
+          end
+
+          # TextViewWithPlaceholder handles background/cornerRadius internally
+          # Only apply frame, border, and margins here
+          # Corresponding to Dynamic mode: TextViewConverter.swift
+
+          # Apply frame modifiers
+          if @component['flexible'] == true
+            # flexible is about the height. The declared width still applies:
+            # without it a 200-wide flexible TextView took the whole width of
+            # its parent on iOS, where Android and web drew 200 (frame-parity,
+            # 2026-10-05, TextView/flexible__true). Dynamic:
+            # TextViewConverter.swift, same branch.
+            width = @component['width']
+            if width == 'matchParent'
+              @modifier_bag.append(:frame_size, '.frame(maxWidth: .infinity)')
+            elsif width.is_a?(Numeric) && width >= 0
+              @modifier_bag.append(:frame_size, ".frame(width: #{width})")
+            end
+            # Flexible: min/max as frame bounds; the declared height is the
+            # growth floor (see flexible_floor).
+            floor = flexible_floor
+            if floor && @component['maxHeight']
+              @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor}, maxHeight: #{number_slot(@component['maxHeight'])})")
+            elsif floor
+              @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor})")
+            elsif @component['maxHeight']
+              @modifier_bag.append(:frame_size, ".frame(maxHeight: #{number_slot(@component['maxHeight'])})")
+            end
+          else
+            # paddings is used as containerInset for TextView, so don't apply external padding
+            # Normal frame application
+            apply_frame_constraints
+            apply_frame_size
+          end
+
+          # Note: background and cornerRadius are handled internally by TextViewWithPlaceholder
+          # so we skip them here
+
+          # Apply border (after component's internal cornerRadius)
+          if (border_code = border_overlay)
+            @modifier_bag.register(:border, border_code)
+          end
+
+          # Apply margins (external spacing)
+          apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
+
+          # Apply other modifiers
+          alpha_value = attr_with_alias('opacity', 'alpha')
+          @modifier_bag.register(:opacity, opacity_modifier(alpha_value)) if alpha_value
+
+          # hidden — visibility:"invisible" shorthand: keep layout space,
+          # hide drawing + accessibility (never collapse)
+          hidden_value = @component['hidden']
+          if hidden_value == true
+            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
+          elsif hidden_value.is_a?(String) && hidden_value.start_with?('@{') && hidden_value.end_with?('}')
+            hidden_expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(hidden_value[2..-2])
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
+          end
+
+          apply_editable_and_keyboard
+
+          # userInteractionEnabled
+          register_hit_test_gate
+
+          generated_code
+        end
+
+        # Same mapping TextFieldConverter uses; duplicated spelling would
+        # drift, so keep the vocabulary identical to return_key_to_submit_label
+        # there.
+        # The effective minHeight. Under flexible the declared height is the
+        # GROWTH FLOOR (canonical textView.flexibleHeight, shared/core/
+        # attribute_semantics.json): min = minHeight ?? height — the view
+        # grows past it, never shrinks below it (android is the reference).
+        # Non-numeric heights (wrapContent/matchParent) don't participate.
+        def flexible_floor
+          floor = @component['minHeight'] && number_slot(@component['minHeight'])
+          return floor unless @component['flexible'] == true
+          return floor if floor
+
+          height = @component['height']
+          height.is_a?(Numeric) ? height : nil
+        end
+
+        def return_key_to_submit_label(return_key)
+          case return_key
+          when 'Done' then '.done'
+          when 'Go' then '.go'
+          when 'Next' then '.next'
+          when 'Search' then '.search'
+          when 'Send' then '.send'
+          when 'Enter', 'Return' then '.return'
+          else '.return'
+          end
+        end
+
+        private
+
+        # editable / enabled / keyboardType.
+        #
+        # `editable` and `keyboardType` are declared, honoured by web
+        # (`editable` -> readOnly, `keyboardType` -> the input type), and
+        # neither was read here — so a read-only TextView was fully editable on
+        # iOS. (Compose does NOT honour `editable` today: the implementation is
+        # in `kjui_tools/lib/xml/` only, and the XML mode was frozen on
+        # 2026-07-03. Plan 49 lane C is closing the Compose side.)
+        # `.disabled` rather than a readOnly flag because SwiftUI's
+        # TextEditor has no read-only mode; that also removes it from the focus
+        # chain, which is what "not editable" means for a keyboard user.
+        #
+        # `enabled` (common, boolean|binding) joins editable here: TextView
+        # assembles its own modifier set and never runs the base converter's
+        # enabled block, so the container fix did not reach it. Both map to
+        # `.disabled` and register() is last-wins by key, so the conditions are
+        # OR-combined into a single registration instead of clobbering.
+        def apply_editable_and_keyboard
+          conditions = []
+          conditions << disabled_condition(@component['editable'])
+          conditions << disabled_condition(@component['enabled'])
+          conditions.compact!
+          if conditions.include?('true')
+            @modifier_bag.register(:disabled, '.disabled(true)')
+          elsif conditions.any?
+            @modifier_bag.register(:disabled, ".disabled(#{conditions.join(' || ')})")
+          end
+
+          if (kb = @component['keyboardType'])
+            resolved = keyboard_type_to_swiftui(kb)
+            @modifier_bag.append(:component_specific, ".keyboardType(#{resolved})") if resolved
+          end
+        end
+
+        # The Swift condition under which this value disables the view, or nil.
+        def disabled_condition(value)
+          return nil if value.nil?
+
+          if is_binding?(value.to_s)
+            expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(value.to_s[2..-2])
+            "!(#{expr})"
+          elsif value == false || value == 'false'
+            'true'
+          end
+        end
+
+        # Shared spellings with TextField's `input` mapping; UIKit's
+        # UIKeyboardType names on the left, SwiftUI's on the right.
+        def keyboard_type_to_swiftui(value)
+          # An alias (`numbersAndPunctuation`, `search`, `text`) by its canonical
+          # spelling: a Style reaches here without `jui build`'s normalizer.
+          value = JsonUIShared::EnumSpelling.canonical(value, 'TextView', 'keyboardType')
+          case JsonUIShared::EnumSpelling.lowered(value, 'TextView', 'keyboardType').to_s.gsub(/[^a-z]/, '')
+          when 'default' then '.default'
+          when 'number', 'numberpad', 'decimal', 'decimalpad' then '.decimalPad'
+          when 'numeric', 'phone', 'phonepad' then '.phonePad'
+          when 'email', 'emailaddress' then '.emailAddress'
+          when 'url', 'weburl' then '.URL'
+          when 'alphabet', 'asciicapable' then '.asciiCapable'
+          when 'namephonepad' then '.namePhonePad'
+          when 'twitter' then '.twitter'
+          when 'websearch' then '.webSearch'
+          end
+        end
+
+        def add_state_variable(name, type, default_value)
+          @state_variables ||= []
+          @state_variables << "@State private var #{name}: #{type} = #{default_value}"
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/prompt__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.prompt (static)",
+    "description": "Conformance fixture for 'prompt' on SelectBox (section: SelectBox, class: visual). Value under test: \"Choose\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "prompt__static",
+      "description": "Conformance fixture for 'prompt' on SelectBox (section: SelectBox, class: visual). Value under test: \"Choose\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_prompt__static"
+        }
+      ]
+    }
+  ]
+}

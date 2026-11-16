@@ -1,0 +1,15 @@
+{
+ "version": 0,
+ "environments": [
+  {
+   "id": "production",
+   "kind": "staging"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "api",
+   "category": "cache"
+  }
+ ]
+}

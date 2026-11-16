@@ -1,0 +1,215 @@
+# frozen_string_literal: true
+
+# Wrap emitted Swift in enough context for a compiler to read it.
+#
+# WHY THIS EXISTS
+#
+# 56 spec files assert emitted Swift. Three of them also hand it to a
+# compiler. The other 53 assert the TEXT — `expect(code).to include('...')` —
+# and a compiler has never read a line of it.
+#
+# That is not laziness, and a generic "also parse it" helper does not fix it.
+# Measured: `-parse` accepts
+#
+#     data.collectionDataSource.getCellData(for: "ItemCell")
+#
+# with zero errors, because it is syntactically perfect Swift. Only
+# `-typecheck` rejects it — and type-checking needs TYPES, which a fragment
+# does not carry. Converter output is a View expression referencing
+# `data.<prop>` and cell views that exist only in the consumer's project.
+# That is why `compile_as_swift` sits in 3 files and not 56: the barrier is
+# the stub universe, not the matcher.
+#
+# So this file makes the stub universe cheap to declare rather than pretending
+# it is unnecessary. The spec says what its fragment needs; nothing is
+# inferred, because guessing a type is how a compile arm goes green against a
+# shape the real code never has.
+#
+# The defect this was written after: three specs pinned
+# `data.collectionDataSource.getCellData(...)` for years. Nothing declares
+# `collectionDataSource`, and `getCellData` has no implementation anywhere in
+# SwiftJsonUI. Uncompilable Swift, behind three passing examples.
+module EmittedSwift
+  # A `CollectionDataSource` shaped like the library's, for fragments that
+  # iterate one. Mirrors the real public surface
+  # (SwiftJsonUI/Classes/SwiftUI/CollectionDataSource.swift): `sections`,
+  # and per section an optional `cells` tuple of viewName + rows.
+  COLLECTION_DATA_SOURCE_STUB = <<~SWIFT
+    struct CollectionDataSection {
+        var header: (viewName: String, data: [String: Any])?
+        var cells: (viewName: String, data: [[String: Any]])?
+        var footer: (viewName: String, data: [String: Any])?
+    }
+    struct CollectionDataSource {
+        var sections: [CollectionDataSection] = []
+    }
+    // SwiftJsonUI/Classes/SwiftUI/IdentifiedCellItem.swift: the element a
+    // section's loop hands its cells when its ids are its own (cellIdProperty,
+    // or a section after the first).
+    struct IdentifiedCellItem: Identifiable, Equatable {
+        let id: String
+        let index: Int
+        let data: [String: Any]
+        init(id: String, index: Int, data: [String: Any]) { self.id = id; self.index = index; self.data = data }
+        static func == (lhs: IdentifiedCellItem, rhs: IdentifiedCellItem) -> Bool { lhs.id == rhs.id && lhs.index == rhs.index }
+    }
+    // SwiftJsonUI/Classes/SwiftUI/CellIdGenerator.swift (public since 10.x;
+    // this signature as of 10.29.5): the "cellId" every cell is handed
+    // (CollectionConverter#cell_data_arg).
+    enum CellIdGenerator {
+        static func autoId(from data: [String: Any], primaryKey: String, fallbackIndex: Int) -> String { primaryKey }
+    }
+  SWIFT
+
+  # `CollectionStackView`, the container the emitted collection code wraps
+  # itself in. Mirrored from the real declaration
+  # (SwiftJsonUI/Classes/SwiftUI/CollectionStackView.swift:60) INCLUDING the
+  # defaulted parameters, because a stub that accepts more than the library
+  # does lets a wrong argument list pass here and fail in a consumer build.
+  COLLECTION_STACK_VIEW_STUB = <<~SWIFT
+    // SwiftJsonUI CollectionReorder.swift (feature/collection-reorder, ticket jui-collection-drag-to-reorder):
+    // the value a reorderable Collection's stack carries.
+    struct CollectionReorder {
+        let isEnabled: Bool
+        let usesHandle: Bool
+        let hasLockedRows: Bool
+        let hasFixedRows: Bool
+        let onReorder: (_ section: Int, _ from: Int, _ to: Int) -> Void
+        let onReorderStart: ((_ section: Int, _ index: Int) -> Void)?
+        let onReorderEnd: ((_ section: Int) -> Void)?
+        init(isEnabled: Bool, usesHandle: Bool = false, hasLockedRows: Bool = false, hasFixedRows: Bool = false,
+             onReorderStart: ((_ section: Int, _ index: Int) -> Void)? = nil, onReorderEnd: ((_ section: Int) -> Void)? = nil,
+             onReorder: @escaping (_ section: Int, _ from: Int, _ to: Int) -> Void) {
+            self.isEnabled = isEnabled; self.usesHandle = usesHandle; self.hasLockedRows = hasLockedRows; self.hasFixedRows = hasFixedRows
+            self.onReorderStart = onReorderStart; self.onReorderEnd = onReorderEnd; self.onReorder = onReorder
+        }
+    }
+    enum CollectionStackMode { case lazy, eager, none }
+    enum CollectionStackAxis { case vertical, horizontal }
+    struct CollectionStackView<Content: View>: View {
+        let content: () -> Content
+        init(
+            mode: CollectionStackMode,
+            axis: CollectionStackAxis = .vertical,
+            horizontalAlignment: HorizontalAlignment = .leading,
+            verticalAlignment: VerticalAlignment = .center,
+            spacing: CGFloat = 0,
+            showsIndicators: Bool = true,
+            scrollDisabled: Bool = false,
+            defaultScrollAnchor: UnitPoint? = nil,
+            insetLeading: CGFloat = 0,
+            insetTrailing: CGFloat = 0,
+            contentInsets: EdgeInsets? = nil,
+            fillsCrossAxis: Bool = false,
+            reorder: CollectionReorder? = nil,
+            @ViewBuilder content: @escaping () -> Content
+        ) { self.content = content }
+        var body: some View { content() }
+    }
+  SWIFT
+
+  # A generated cell view: `init(data: Any)` is the wrapper contract the
+  # collection call sites use, and Equatable is required where they chain
+  # `.equatable()`.
+  def cell_view_stub(*names)
+    names.map do |name|
+      <<~SWIFT
+        struct #{name}: View, Equatable {
+            init(data: Any) {}
+            static func == (lhs: Self, rhs: Self) -> Bool { true }
+            var body: some View { Text("cell") }
+        }
+      SWIFT
+    end.join("\n")
+  end
+
+  # Library surface that almost all emitted view code touches, so it is
+  # included by default rather than repeated per spec. `.localized()` alone
+  # appears 596 times in the generated corpus.
+  #
+  # Mirrored from the real declarations — `localized` is a METHOD with
+  # defaulted parameters (Classes/Extensions/StringExtension.swift:12), not a
+  # computed property. A stub that made it a property would accept
+  # `"x".localized` and reject the `"x".localized()` the emitter actually
+  # writes, which is a stub disagreeing with the library in the direction
+  # that matters.
+  #
+  # `SwiftJsonUIConfiguration` is NOT here: swift_compiler.rb's own
+  # `mock_types` already declares it, and a second declaration is a
+  # redeclaration error rather than a harmless duplicate.
+  #
+  # `CollectionContentFit` (Classes/SwiftUI/CollectionContentFit.swift) wraps
+  # every scrolling Collection whose scroll-axis size is wrapContent or
+  # undeclared (the orchestrator's ruling 2026-09-27), so most Collection emits touch it: the
+  # Layout as the library declares it, `init(axis:along:across:)` (SwiftJsonUI
+  # 10.29.0; `across` fits a horizontal row's wrapContent height), and the
+  # `contentFit(_:)` modifier a wrapContent axis with a max emits, and nothing
+  # more.
+  # SwiftJsonUI 10.29.16 CollectionScrollMemory.swift, transcribed: the
+  # signatures, not the behaviour — a type-check, not the library. Every
+  # Collection with an id and a scrollTo emits `.collectionScrollEntry`
+  # (kjui-collection-scrollto-ignored-after-visibility-gone).
+  SCROLL_MEMORY_STUB = <<~SWIFT
+    extension View {
+        func collectionScrollEntry<Value: Hashable>(_ id: String?, value: Value, perform: @escaping (Value) -> Void) -> some View { self }
+        func providesCollectionScrollMemory() -> some View { self }
+    }
+  SWIFT
+
+  LIBRARY_STUBS = <<~SWIFT
+    extension String {
+        func localized(tableName: String? = nil, bundle: Bundle? = nil,
+                       value: String? = nil, comment: String = "") -> String { self }
+    }
+    struct CollectionContentFit: Layout {
+        let axis: Axis
+        init(axis: Axis, along: Bool = true, across: Bool = false) { self.axis = axis }
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize { .zero }
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {}
+    }
+    extension View {
+        func contentFit(_ axis: Axis) -> some View { CollectionContentFit(axis: axis) { self } }
+        // SwiftJsonUI 10.45.0 SegmentFitsItsLabels.swift: a wrapContent Segment (2.5.47).
+        func segmentFitsItsLabels() -> some View { self }
+    }
+    #{SCROLL_MEMORY_STUB}
+  SWIFT
+
+  # Emitted Swift that belongs in a `var body: some View`.
+  #
+  # `data` is a list of Swift property DECLARATIONS, verbatim — not names and
+  # not inferred types. A fragment reading `data.rows` needs the spec to say
+  # what `rows` is, and saying it wrong is how the arm passes against a type
+  # the generator never produces.
+  def compilable_view(fragment, data: [], stubs: '')
+    properties = Array(data).map { |d| "    #{d}" }.join("\n")
+    indented = fragment.to_s.lines.map { |l| "        #{l}" }.join
+    <<~SWIFT
+      #{LIBRARY_STUBS}
+      #{stubs}
+      struct TestData {
+      #{properties}
+      }
+
+      struct EmittedHost: View {
+          let data = TestData()
+          var body: some View {
+      #{indented}
+          }
+      }
+    SWIFT
+  end
+
+  # Emitted Swift that belongs inside a data model declaration.
+  def compilable_data(fragment, stubs: '')
+    <<~SWIFT
+      #{LIBRARY_STUBS}
+      #{stubs}
+      struct TestData {
+      #{fragment.to_s.lines.map { |l| "    #{l}" }.join}
+      }
+    SWIFT
+  end
+end
+
+RSpec.configure { |config| config.include EmittedSwift }

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TabView/selectedIndex__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TabView.selectedIndex (static)",
+    "description": "Conformance fixture for 'selectedIndex' on TabView (section: TabView, class: visual). Value under test: 1.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TabView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedIndex__static",
+      "description": "Conformance fixture for 'selectedIndex' on TabView (section: TabView, class: visual). Value under test: 1.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TabView_selectedIndex__static"
+        }
+      ]
+    }
+  ]
+}

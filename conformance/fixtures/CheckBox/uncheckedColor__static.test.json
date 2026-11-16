@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/uncheckedColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.uncheckedColor (static)",
+    "description": "Conformance fixture for 'uncheckedColor' on CheckBox (section: CheckBox, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "uncheckedColor__static",
+      "description": "Conformance fixture for 'uncheckedColor' on CheckBox (section: CheckBox, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_uncheckedColor__static"
+        }
+      ]
+    }
+  ]
+}

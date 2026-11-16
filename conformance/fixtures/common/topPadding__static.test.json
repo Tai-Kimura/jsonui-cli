@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/topPadding__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.topPadding (static)",
+    "description": "Conformance fixture for 'topPadding' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "topPadding__static",
+      "description": "Conformance fixture for 'topPadding' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_topPadding__static"
+        }
+      ]
+    }
+  ]
+}

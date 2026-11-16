@@ -1,0 +1,220 @@
+"""Does a declaration that names a file actually name one?
+
+Four declarations across two tools point at files — `source.layout`,
+`source.document`, `sources[].layout` / `.document`, and (in the doc tool)
+`relatedFiles[].path`. None of them was ever resolved. A test naming a
+layout that does not exist validated clean, `Errors: 0, Warnings: 0`; a spec
+repository was measured with 11 of 353 `relatedFiles` paths pointing at
+files that are not there, across three specs, with the run reporting PASSED.
+
+It stayed hidden the way its two siblings did this week: **the neighbour
+being checked reads as evidence that this one is**. `relatedFiles[].type` is
+validated against an allow-list and errors on a bad value, so `relatedFiles`
+looks like a checked declaration — and `path`, sitting beside something that
+is guarded, is not suspected. The same shape as a schema whose
+`additionalProperties: false` was enforced while its `required` was not.
+
+It also decides what a green run means. Rewriting one `source.layout` to a
+path that does not exist and re-running produced the same PASSED as before,
+so the green was explained equally well by "the paths are right" and by
+"nothing looked at the paths".
+
+**A warning, on purpose, and not permanently.** One repository already has
+11 findings and nobody knows how many the others have, so shipping this as
+an error would turn a gate red in places that cannot act on it that day —
+which is how a gate teaches people to skip it. Each project measures its own
+count first; the weight moves to error once they reach zero. That intent
+belongs in the message, because "temporarily a warning" and "a warning
+forever" are indistinguishable to a reader, and the second is the one that
+gets ignored.
+
+Resolution is deliberately generous — every plausible root is tried and the
+finding only appears when the path is under NONE of them. A false positive
+here costs more than a miss: this check's whole purpose is that people act
+on it, and the first thing that stops them is one wrong finding.
+
+**Considered and declined: reporting that one file mixes bases.** Once the
+check tries several roots it can also say WHICH one answered, and a run
+where `source.layout` resolves from the test file while `source.document`
+resolves from the repository root looks like a convention nobody wrote
+down. Measured before proposing it, on the project that found the two
+defects above: 85 of 85 `layout` declarations use the test-relative
+spelling and 85 of 85 `document` declarations use the root-relative one.
+The mixing is inside every single `source` block, and it is not drift — the
+two keys name different kinds of thing (an implementation artefact the test
+points at, and a generated document that belongs to the repository), so the
+bases differ for a reason. A finding here would fire 85 times on a project
+that is completely consistent, which is the same shape as the 402 false
+positives this module has already produced once.
+
+The reporter's counter-proposal is the one worth building IF anyone ever
+measures a case: not "this file mixes bases" but **"this key is spelled
+from different bases within one project"** — same key, two spellings, which
+is a genuine deviation rather than two conventions. Their count for it is
+0/85 on both keys, so there is nothing to detect yet and nothing to tune a
+threshold against. Re-visit when a project measures a non-zero count; the
+unit is the KEY, not the file.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+#: Roots a declared path may be written relative to, resolved once from the
+#: config the run read and pushed in — the same shape as the platform
+#: declaration, and for the same reason: a validator that searches for a
+#: config from the file it is checking answers a different question in a
+#: split tree, which has already gone wrong three times here.
+_ROOTS: dict = {}
+
+#: Kinds whose configured directory does not exist, so the check declined to
+#: run. Reported once per run rather than silently skipped: a check that
+#: quietly does nothing is indistinguishable from one that found nothing, and
+#: that difference is the reason this whole file exists.
+_SKIPPED: set = set()
+
+#: kind -> (config key, default directory). ONE declaration: the roots are
+#: built from it, and the caller that has to name a missing directory reads
+#: it back rather than carrying its own copy.
+#:
+#: It carried one: the note naming the absent directory spelled
+#: `'layouts_directory' if kind == 'layout' else 'spec_directory'`, which
+#: answers "spec_directory" for every kind that is not `layout` — including
+#: a third one nobody has added yet. The same shape as a `counted:` line
+#: that listed its trees instead of deriving them, and it goes wrong the
+#: same way: silently, and only for the case that did not exist yet.
+PATH_KINDS: dict = {
+    "layout": ("layouts_directory", "docs/screens/layouts"),
+    "document": ("spec_directory", "docs/screens/json"),
+}
+
+
+def config_key_for(kind: str) -> str:
+    """The `jui.config.json` key that declares where *kind* lives."""
+    return PATH_KINDS[kind][0]
+
+
+def set_path_roots(project_root=None, config=None):
+    """Declare where declared paths resolve from (`None` clears them).
+
+    Cleared means silent: a run that cannot tell where the project is has no
+    business reporting that a path is missing from it.
+    """
+    _ROOTS.clear()
+    _SKIPPED.clear()
+    if project_root is None:
+        return
+    root = Path(project_root)
+    config = config or {}
+    _ROOTS["project"] = root
+    for kind, (config_key, default) in PATH_KINDS.items():
+        _ROOTS[kind] = root / config.get(config_key, default)
+    # Every declared boundary above the project, not just the project. In a
+    # multi-app repository the config a run reads is the APP's, and paths
+    # written from the repository root resolve under none of the roots
+    # above it. Measured on one such project: 201 `source.document`
+    # declarations, every one of them correct, and every one of them
+    # unreachable from the app. Same defect the doc side carried, found on
+    # the doc side first.
+    bases = [root]
+    for parent in root.resolve().parents:
+        if ((parent / "jui.config.json").is_file()
+                or (parent / ".git").exists()):
+            bases.append(parent)
+    _ROOTS["bases"] = bases
+
+
+def skipped_kinds() -> list:
+    return sorted(_SKIPPED)
+
+
+def _root_for(kind: str):
+    """The directory this kind resolves under, or None when it is unusable.
+
+    A project that keeps its layouts somewhere this run cannot name would
+    otherwise have every single reference reported as missing — hundreds of
+    findings, none of them actionable, on the first run after upgrading.
+    Declining is the right answer; declining SILENTLY is not, so the caller
+    is told.
+    """
+    root = _ROOTS.get(kind)
+    if root is None:
+        return None
+    if not root.is_dir():
+        _SKIPPED.add(kind)
+        return None
+    return root
+
+
+def _candidates(value: str, kind: str, test_file):
+    kind_root = _root_for(kind)
+    if kind_root is not None:
+        yield kind_root / value
+    # Every declared boundary from the project up to the repository root:
+    # the spellings in use are written from whichever of them the author
+    # had in mind, and this check is not the place to choose between them.
+    for base in _ROOTS.get("bases", ()):
+        yield base / value
+    if test_file is not None:
+        # The declaration's own file. Excluded in the first version, on the
+        # reasoning that the driver resolves a layout from the layouts
+        # directory rather than from beside the test — which is true, and
+        # was the wrong thing to reason about. The spelling actually in use
+        # is an explicit `../../../docs/...` chain FROM THE TEST FILE, 201
+        # times in one project, and none of it resolves from any other
+        # base. A relative path is written relative to something, and the
+        # file it is written in is the one candidate that is always
+        # available.
+        yield Path(test_file).parent / value
+
+
+def resolves(value, kind: str, test_file=None) -> bool:
+    """True when *value* names a file under any root this run knows about.
+
+    Also true when there is nothing to resolve against, so a caller cannot
+    turn "we do not know" into a finding.
+
+    🚨 THE TEST FILE'S OWN DIRECTORY *IS* A CANDIDATE, and this paragraph
+    used to say the opposite. It carried the first version's reasoning —
+    "the driver resolves a layout from the layouts directory, not from beside
+    the test" — which is true and was the wrong thing to reason about. That
+    retraction is written fifteen lines above, at the `yield` this docstring
+    describes; only the docstring was left saying the withdrawn thing.
+
+    The spelling actually in use is an explicit `../../../docs/...` chain
+    FROM THE TEST FILE, 201 times in one project, resolving from no other
+    base. A relative path is written relative to something, and the file it
+    is written in is the one candidate always available.
+
+    ⚠️ A docstring is the copy a reader trusts when the code disagrees with
+    it, because the code looks like an implementation detail and the prose
+    looks like the decision. Its arms had already moved; nothing failed.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return True          # a shape problem, reported by the shape check
+    if Path(value).is_absolute():
+        return Path(value).exists()
+    if not _ROOTS:
+        return True          # no project — nothing to resolve against
+    if _root_for(kind) is None:
+        # The configured directory for this kind is not on disk, so this
+        # run cannot tell a missing file from a layout it cannot name.
+        # Declining still beats guessing even though other candidates
+        # exist: the paths written relative to that directory would all be
+        # reported, which is the mass false positive this guard is for.
+        return True
+    return any(candidate.exists()
+               for candidate in _candidates(value.strip(), kind, test_file))
+
+
+def unresolved_message(key: str, value: str, kind: str) -> str:
+    where = _ROOTS.get(kind)
+    under = f" (looked under {where}" if where is not None else ""
+    if where is not None:
+        under += f" and {_ROOTS['project']})"
+    return (
+        f"'{key}' names a file that does not exist: {value}{under}. "
+        "A warning for now — projects are measuring their existing counts "
+        "and this becomes an error once they reach zero, so it is worth "
+        "clearing rather than living with."
+    )

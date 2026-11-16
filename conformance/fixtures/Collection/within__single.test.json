@@ -1,0 +1,45 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/within__single.layout.json"
+  },
+  "metadata": {
+    "name": "conformance within__single",
+    "description": "A cell with one child still has that child under its item address.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection",
+      "within"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "within__single",
+      "description": "A cell with one child still has that child under its item address.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_2"
+        },
+        {
+          "assert": "text",
+          "id": "within_only",
+          "within": "target_item_1",
+          "equals": "Cell 1"
+        },
+        {
+          "assert": "count",
+          "id": "within_only",
+          "within": "target_item_2",
+          "equals": 1
+        }
+      ]
+    }
+  ]
+}

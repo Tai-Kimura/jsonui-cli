@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Blur/effectStyle__dark.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Blur.effectStyle (dark)",
+    "description": "Conformance fixture for 'effectStyle' on Blur (section: Blur, class: visual). Value under test: \"Dark\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Blur"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "effectStyle__dark",
+      "description": "Conformance fixture for 'effectStyle' on Blur (section: Blur, class: visual). Value under test: \"Dark\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Blur_effectStyle__dark"
+        }
+      ]
+    }
+  ]
+}

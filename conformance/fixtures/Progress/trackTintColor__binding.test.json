@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Progress/trackTintColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Progress.trackTintColor (binding)",
+    "description": "Conformance fixture for 'trackTintColor' on Progress (section: Progress, class: visual). Value under test: \"@{boundTrackTintColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Progress"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "trackTintColor__binding",
+      "description": "Conformance fixture for 'trackTintColor' on Progress (section: Progress, class: visual). Value under test: \"@{boundTrackTintColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Progress_trackTintColor__binding"
+        }
+      ]
+    }
+  ]
+}

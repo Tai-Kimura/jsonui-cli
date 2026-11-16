@@ -1,0 +1,45 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellChildTap__bare_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance cellChildTap__bare_2",
+    "description": "A cell whose root declares no id is still tappable by its item address, and the tap does not cost the children their identifiers.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellChildTap__bare_2",
+      "description": "A cell whose root declares no id is still tappable by its item address, and the tap does not cost the children their identifiers.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_0"
+        },
+        {
+          "action": "tapItem",
+          "id": "target",
+          "index": 0
+        },
+        {
+          "action": "waitFor",
+          "id": "cell_child_a"
+        },
+        {
+          "action": "waitFor",
+          "id": "cell_child_b"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TabView/selectedIndex__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TabView.selectedIndex (binding)",
+    "description": "Conformance fixture for 'selectedIndex' on TabView (section: TabView, class: visual). Value under test: \"@{boundSelectedIndex}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TabView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedIndex__binding",
+      "description": "Conformance fixture for 'selectedIndex' on TabView (section: TabView, class: visual). Value under test: \"@{boundSelectedIndex}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TabView_selectedIndex__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "type": "View",
+  "orientation": "vertical",
+  "padding": 16,
+  "background": "#FFFFFF",
+  "child": [
+    {
+      "type": "Text",
+      "text": "Title",
+      "fontSize": 20,
+      "fontWeight": "bold"
+    },
+    {
+      "type": "View",
+      "orientation": "horizontal",
+      "spacing": 8,
+      "child": [
+        {
+          "type": "Image",
+          "src": "icon_user",
+          "size": 48
+        },
+        {
+          "type": "View",
+          "orientation": "vertical",
+          "child": [
+            {
+              "type": "Text",
+              "text": "@{userName}"
+            },
+            {
+              "type": "Text",
+              "text": "@{userEmail}",
+              "fontColor": "#666666"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Button",
+      "text": "Submit",
+      "onclick": "handleSubmit",
+      "background": "#007AFF",
+      "fontColor": "#FFFFFF"
+    }
+  ]
+}

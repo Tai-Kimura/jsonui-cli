@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/centerVertical__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.centerVertical (false)",
+    "description": "Conformance fixture for 'centerVertical' on View (section: common, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "centerVertical__false",
+      "description": "Conformance fixture for 'centerVertical' on View (section: common, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_centerVertical__false"
+        }
+      ]
+    }
+  ]
+}

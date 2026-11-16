@@ -1,0 +1,3858 @@
+#!/usr/bin/env python3
+"""
+JsonUI Test CLI
+
+Command-line interface for validating and generating test files.
+For documentation generation, use jsonui-doc (document_tools).
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from datetime import datetime
+
+from . import __version__
+from .validator import TestValidator
+from .report import load_results_file, generate_junit, generate_html
+from .validation.toolchain import unstamped_platforms
+from .test_dirs import TEST_DIR_DEFAULT, TEST_DIR_KEY, declared_test_files
+
+
+def cmd_validate(args):
+    """Handle validate command."""
+    validator = TestValidator()
+    total_errors = 0
+    total_warnings = 0
+    files_checked = 0
+    valid_test_files = []
+
+    # Rebuild a stale `generated/` before anything is counted. Generation used
+    # to run after the summary, so `Files:` reported the tree the *previous*
+    # run had left behind — the same input printed two different totals
+    # depending on whether that run had rebuilt or not.
+    if not getattr(args, "no_mock_check", False):
+        regen_rc = _regenerate_stale_mocks(getattr(args, "config", None))
+        if regen_rc != 0:
+            return regen_rc
+
+    # Collect files
+    files_to_validate = []
+    for path in args.files:
+        p = Path(path)
+        if p.is_dir():
+            # Collect test files
+            files_to_validate.extend(p.rglob("*.test.json"))
+            # Collect mock definition files
+            files_to_validate.extend(p.rglob("*.mock.json"))
+            # Collect description files in descriptions folders
+            for desc_dir in p.rglob("descriptions"):
+                if desc_dir.is_dir():
+                    files_to_validate.extend(desc_dir.glob("*.json"))
+        elif p.exists():
+            files_to_validate.append(p)
+        else:
+            print(f"Warning: Path not found: {path}", file=sys.stderr)
+
+    # The mock directory is named in config, not on the command line, and a
+    # project's tests and its mocks are routinely different trees. The drift
+    # check has always resolved mockDir from config — file validation only saw
+    # what sat under the paths given, so `validate <testDir>` ran the contract
+    # check over mocks it never opened. A mock with a malformed `$schema` or an
+    # unknown key passed the gate a project actually runs and failed only when
+    # someone pointed the command straight at the mocks.
+    # Compared resolved: the command line may name a directory absolutely while
+    # config resolves mockDir relative to the config file, and the same file
+    # under two spellings would be validated — and counted — twice.
+    already = {p.resolve() for p in files_to_validate}
+    files_to_validate.extend(
+        p for p in _configured_mock_files(getattr(args, "config", None))
+        if p.resolve() not in already
+    )
+
+    # Tell the reference check where this run's config says the mocks are, and
+    # how far it may look if it says nothing. Without the first, that check
+    # walks up from each test file taking the first `mocks/` it meets, which in
+    # a split tree is never the declared one — one stray `*.mock.json` in an
+    # ancestor replaced the whole operationId index and turned every mock
+    # reference in every test into an error.
+    #
+    # The boundary is the half that was missing. It used to be an optional
+    # argument, passed by the unchecked-mock warning and by nothing else, so a
+    # project that declared no mockDir still had that walk run to the
+    # filesystem root: measured, a decoy above the project root supplied the
+    # index and failed the run. Declaring nothing is not a reason to search
+    # outside your own project. It is set here so no caller has to remember it.
+    from .validation.mock import set_mock_source
+    set_mock_source(
+        directory=_resolve_mock_dir(getattr(args, "config", None)),
+        boundary=_project_root(getattr(args, "config", None)),
+    )
+
+    # Same shape, same reason: resolved once from the config this run read,
+    # then pushed in, so no validator searches for it from a test file.
+    from .validation.step import PLATFORM_CONSTRAINT, set_project_platforms
+    declared_platforms = _project_platforms(getattr(args, "config", None))
+    set_project_platforms(declared_platforms)
+
+    # Where a declaration that names a file resolves from. Same shape again,
+    # and the same reason: a validator that searched for a config starting
+    # from the file it is checking answers a different question in a split
+    # tree. Cleared to None when the run cannot tell where the project is,
+    # which makes the check silent rather than wrong.
+    #
+    # The WHOLE config document, not `_load_mock_config` — that returns the
+    # `mock` section, which has no `layouts_directory` or `spec_directory`,
+    # so every project fell back to the defaults and the check silently ran
+    # against directories that do not exist. It then reported "no
+    # layouts_directory under <root>" and stood down. Measured on a project
+    # that declares both: `root/declared` is a directory, `root/default` is
+    # not — the declaration resolved and was never read. The check shipped
+    # switched off wherever the directories are not at their default paths,
+    # which is exactly the projects it was written for.
+    from .validation.declared_paths import set_path_roots
+    _root = _project_root(getattr(args, "config", None))
+    set_path_roots(_root, _read_config_doc(getattr(args, "config", None))[0]
+                   if _root else None)
+    # And the layouts a step's element ids are checked against: the config
+    # this run read, for the same reason (element_ids' docstring).
+    from .validation.element_ids import set_run_project
+    set_run_project(*_read_config_doc(getattr(args, "config", None)))
+    # And the layouts a step's screen values are checked against — the same
+    # config, for the same reason (screen_ids' docstring).
+    from .validation.screen_ids import set_run_config
+    set_run_config(*_read_config_doc(getattr(args, "config", None)))
+    platform_warnings = 0
+    # INFO: printed, never counted in `Warnings:` and never the exit.
+    total_infos = 0
+    from collections import Counter
+    element_totals: Counter = Counter()
+    element_unchecked: dict = {}
+    screen_totals: Counter = Counter()
+    screen_unchecked: dict = {}
+
+    if not files_to_validate:
+        print("No test or description files found")
+        return 1
+
+    # Validate each file
+    for file_path in sorted(files_to_validate):
+        files_checked += 1
+        result = validator.validate_file(file_path)
+
+        if args.verbose or result.errors or result.warnings or (result.infos and not args.quiet):
+            print(f"\n{file_path}")
+
+        if result.errors:
+            for error in result.errors:
+                print(error)
+            total_errors += len(result.errors)
+
+        platform_warnings += sum(1 for w in result.warnings
+                                 if w.kind == PLATFORM_CONSTRAINT)
+
+        if result.warnings and not args.quiet:
+            for warning in result.warnings:
+                print(warning)
+            total_warnings += len(result.warnings)
+
+        if result.infos and not args.quiet:
+            for info in result.infos:
+                print(info)
+        total_infos += len(result.infos)
+        screen_totals.update(result.screen_ids)
+        if result.screen_ids_unchecked_why:
+            why = result.screen_ids_unchecked_why
+            screen_unchecked[why] = screen_unchecked.get(why, 0) + result.screen_ids["not_checked"]
+        element_totals.update(result.element_ids)
+        if result.element_ids_unchecked_why:
+            why = result.element_ids_unchecked_why
+            element_unchecked[why] = element_unchecked.get(why, 0) + result.element_ids["named"]
+
+        if result.is_valid and not result.warnings and args.verbose:
+            print("  OK")
+
+        if result.is_valid and Path(file_path).name.endswith(".test.json"):
+            valid_test_files.append(Path(file_path))
+
+    # The screen values the steps name, checked against the run's layouts:
+    # a run where none could be checked used to print nothing, the same as
+    # a run where all passed.
+    screen_named = screen_totals["checked"] + screen_totals["not_checked"]
+    if screen_named and not args.quiet:
+        print(f"\n[INFO] screen ids: {screen_named} named in the steps — "
+              f"{screen_totals['checked']} checked, {screen_totals['not_checked']} not checked")
+        for why, n in sorted(screen_unchecked.items()):
+            print(f"[INFO] screen ids: {n} not checked — {why}")
+
+    # The element ids the steps name (design U8 (5)): the count and its
+    # denominator on one line — named is the sum of the five — and, while a
+    # release is announced, the one line that says when "on no layout"
+    # becomes a WARNING. A run that checked none says why instead of a clean
+    # line; a `test.appOwnedIds` entry no step of the run named is named.
+    # Set below when ids are on no layout and this tree cannot decide their
+    # level: the run FAILS (element_ids.LEVEL_UNKNOWN_FAILS says why and how
+    # to fix it). Until jsonui-cli 1.9.8 they were listed as INFO and the run
+    # passed — the gate silently off (ticket
+    # gate-readers-without-shared-core-fall-silent-five-more).
+    # Decided apart from the printing, so --quiet fails the same run.
+    from .validation.element_ids import level_unknown as _element_level_unknown
+    import jsonui_test_cli as _jtc
+    element_level_unknown = bool(element_totals["missing"]) and \
+        _element_level_unknown(_jtc.__version__) is not None
+    if element_totals["named"] and not args.quiet:
+        from .validation.element_ids import gate_notice, level_unknown, unnamed_app_owned
+        print(f"\n[INFO] element ids: {element_totals['named']} named in the steps — "
+              f"{element_totals['on_layout']} on a layout, {element_totals['app_owned']} "
+              f"declared in test.appOwnedIds, {element_totals['missing']} on no layout, "
+              f"{element_totals['cannot_check']} cannot check, "
+              f"{element_totals['not_checked']} not checked")
+        unnamed = unnamed_app_owned()
+        if unnamed:
+            print(f"[INFO] test.appOwnedIds: {len(unnamed)} entr{'y' if len(unnamed) == 1 else 'ies'} "
+                  f"no step in this run names ({', '.join(unnamed)}) — remove it if the "
+                  f"app no longer draws it")
+        for why, n in sorted(element_unchecked.items()):
+            print(f"[INFO] element ids: {n} in files whose layouts were not read — {why}")
+        if element_totals["missing"]:
+            # The version the check itself read (validation/validator.py).
+            import jsonui_test_cli
+            notice = gate_notice(jsonui_test_cli.__version__)
+            unknown = level_unknown(jsonui_test_cli.__version__)
+            if notice:
+                print(f"[INFO] {notice}")
+            elif unknown:
+                from .validation.element_ids import LEVEL_UNKNOWN_FAILS
+                print(f"[ERROR] the level of {element_totals['missing']} element id(s) on no "
+                      f"layout cannot be decided — {unknown}; " + LEVEL_UNKNOWN_FAILS)
+
+    # Mock contract drift, on the same gate. `--check` existed but nothing
+    # called it, so a mock encoding a contract the server does not have kept
+    # the suite green (mock-contract-validation-does-not-run).
+    #
+    # Run before the summary so the summary can report what it found. An
+    # orphaned mock is one whose body is compared to nothing, so a rename
+    # upstream can silently retire a chunk of the contract check while every
+    # line a reader looks at still says PASSED.
+    mock_rc = 0
+    mock_errors = 0
+    orphans = None
+    unchecked_mocks = None
+    uncounted = {}
+    if total_errors == 0 and not getattr(args, "no_mock_check", False):
+        mock_rc, orphans, mock_errors, uncounted = _check_mocks_against_swagger(
+            getattr(args, "config", None))
+        if orphans is None:
+            unchecked_mocks = _warn_unchecked_mocks(
+                getattr(args, "config", None), files_to_validate)
+
+    # A project that builds for one platform can silence the other platforms'
+    # warnings by declaring `platforms`. Say so only when there is something to
+    # silence: a run with no such warnings has nothing to explain, and a note
+    # on every run would be the thing this whole gate exists to avoid — a
+    # constant line that a new one hides behind.
+    #
+    # Worded as "not found, so nothing was suppressed" rather than "not read":
+    # the failure this has to catch is a project that HAS the declaration and
+    # is being validated from somewhere the config is not.
+    if declared_platforms is None and platform_warnings and not args.quiet:
+        print(f"\n[WARN] {platform_warnings} platform-specific warning(s) "
+              f"above. No 'platforms' declaration was found in the config this "
+              f"run read, so none were suppressed — a project that targets one "
+              f"platform can declare it to silence the others.")
+
+    # A key can be spelled correctly and still be ignored: the schema is the
+    # authoring side, the driver is the runtime, and they ship separately. An
+    # ignored declaration falls back to the default behaviour, so the file
+    # does the very thing it declared it would not — and nothing in that
+    # output points at the declaration.
+    from .schema import KEY_DRIVER_REQUIREMENTS
+    from .validation.runtime_support import (
+        check_declarations, collect_declared_keys, platform_roots_from_config)
+    # The driver lives under the platform's root on a `jui init` layout
+    # (`platforms.web.root`), read from the same config the run loaded.
+    _runtime_root = _project_root(getattr(args, "config", None))
+    runtime_errors, runtime_notes = check_declarations(
+        collect_declared_keys(valid_test_files, set(KEY_DRIVER_REQUIREMENTS)),
+        KEY_DRIVER_REQUIREMENTS,
+        _runtime_root,
+        platform_roots_from_config(_read_config_doc(getattr(args, "config", None))[0], _runtime_root),
+    )
+    # The toolchain this project vendored, against the one running the gate.
+    # Both values live inside the tool — the stamp `jui sync_tool` writes and
+    # this CLI's own version — so a consumer comparing them in a pretest is
+    # recomputing what the tool already knows, in as many places as it has
+    # projects.
+    from .validation.toolchain import sync_meta_mismatches
+    for message in sync_meta_mismatches(_root, __version__):
+        print(f"[WARN] {message}")
+        total_warnings += 1
+    # A platform with no stamped version is SKIPPED by the comparison above,
+    # and skipping is silent — which reads identically to "in step". Say it.
+    # Printed, not counted: an unstamped platform is a gap in the record, not
+    # a mismatch, and counting it would fail gates for stamps that predate
+    # versioned stamping.
+    _note = unstamped_note(_root)
+    if _note:
+        print(_note)
+
+    # A check that declined to run says so. Silence here would be the very
+    # confusion this check exists to remove: "no dangling paths" and "the
+    # path check never ran" would print identically.
+    from .validation.declared_paths import config_key_for, skipped_kinds
+    #
+    # Printed, but NOT counted. It is a statement about coverage, not a
+    # finding about this project's files: nothing here is wrong and there is
+    # nothing to fix, so counting it puts a permanent +1 on every project
+    # that has no layouts_directory — the standing warning that teaches
+    # people to stop reading the count. `Unchecked mocks:` is the same
+    # distinction already made in this summary. Measured on the conformance
+    # fixtures, whose whole assertion is `Errors: 0, Warnings: 0`.
+    for kind in skipped_kinds():
+        print(_skipped_path_note(kind, _root))
+
+    # ⚠️ Two kinds of `[WARN]` reach a reader, and only one moves the
+    # counter. The line is drawn on whether the reader can clear it:
+    #
+    #   counted     — a declaration the installed driver cannot read; a
+    #                 vendored toolchain older than this CLI. One command
+    #                 fixes each, and a warning with a one-line remedy is
+    #                 doing its job by staying until someone runs it.
+    #   not counted — the mock gate's uncompared scenarios. Three reasons,
+    #                 not one, and the summary now names them separately:
+    #                 a status no operation declares can never be cleared
+    #                 (form B, non-gating BY RULING); a scenario declaring
+    #                 its own `undeclaredStatus` should not be; a scenario
+    #                 with no status at all CAN be, and is the one this
+    #                 blanket rule was hiding.
+    #
+    # A consumer running "keep Warnings at zero so a new one is visible"
+    # measured both and asked, because the SAME label carries the two.
+    # That is the shape `[NOTE]` was split apart for earlier in this
+    # release, and the honest answer is that the split here is by remedy
+    # rather than by kind — so it is written down instead of encoded in a
+    # third label. Renaming the label a third time in one day would cost
+    # every lane another baseline for a distinction they can read here.
+    for note in runtime_notes:
+        print(f"[WARN] {note}")
+        total_warnings += 1
+    for message in runtime_errors:
+        print(f"[ERROR] {message}")
+        total_errors += 1
+
+    # Run-scoped defaults live in config, so no test file can carry their
+    # mistakes to this report. They are counted as errors of this run because
+    # the install below is gated on the count: a tier this CLI does not
+    # recognise must not reach a device, where it would simply never match
+    # and leave the lane in whatever orientation it booted in — with every
+    # assertion still passing, in the orientation nobody chose.
+    from .run_defaults import validate_orientation_defaults
+    _run_cfg, _ = _load_test_config(getattr(args, "config", None))
+    for message in validate_orientation_defaults(_run_cfg):
+        print(f"[ERROR] {message}")
+        total_errors += 1
+
+    # The mock gate's findings are errors of this run, so they are added to
+    # the count rather than carried beside it.
+    #
+    # The headline was patched to read `mock_rc` after a run printed PASSED
+    # and exited 1. `Errors:` is the next line and was not patched, so the
+    # same run then printed `Errors: 0` alongside exit 1 — and a consumer
+    # greps that line. Patching the individual line is what left the second
+    # one: the word, the count and the exit code have to be three readings
+    # of ONE number, not three lines that each learn about the mock gate
+    # separately. `mock_rc` is non-zero exactly when the gate found
+    # something, so the two cannot disagree.
+    total_errors += mock_errors
+
+    # `Warnings:` deliberately does NOT take the mock gate's warnings, and
+    # the asymmetry with the line above is the point rather than an
+    # oversight — a consumer asked, having read the `Errors:` fix and been
+    # unable to tell which of the two this was.
+    #
+    # `Errors:` had to move because it contradicted `Result:` and the exit
+    # code: three readings of one number that disagreed. Nothing contradicts
+    # here. A mock warning is non-gating by construction, and the ones that
+    # persist are non-gating BY RULING — form B is a status no operation
+    # declares, which the same release decided is a premise rather than a
+    # declarable, so it can never be cleared. Counting it would put a
+    # permanent +1 on every project that has one, which is the standing
+    # warning that teaches people to stop reading the count. Two lanes run a
+    # "keep Warnings at zero so a new one is visible" discipline; this is
+    # what lets a permanent B coexist with it.
+    #
+    # The mock findings are not hidden by this — `mock contract:` reports
+    # them with their own denominator, which is the line to read for them.
+    # Two counts answering two questions, not one count with a hole in it.
+    #
+    # WHERE A FINDING CAN COME OUT — four exits, not one. Every wrong
+    # sentence written about this file so far came from checking one of
+    # them and saying something about "output":
+    #
+    #   1 denominator   the `mock contract:` line (`contract_summary`)
+    #   2 printers      `_print_uncompared` / `_print_drift_findings`
+    #   3 counter       `Warnings:` / `Errors:`
+    #   4 exit code
+    #
+    # Measured on one `validate` run per finding, with a control confirming
+    # the finding was actually on the report (an absent line proves nothing
+    # about a finding that never occurred):
+    #
+    #   finding                    1        2        3        4
+    #   stale generated body       NAMES    silent   no       0
+    #   misnamed file              silent   silent   no       0
+    #   optional-field omission    silent   silent   no       0
+    #   uncompared scenario        NAMES    [WARN]   no       0
+    #
+    # Two corrections live in that table:
+    #
+    # - `a10c5f56` said actionable mock warnings were "excluded by the same
+    #   blanket rule" from the counter. Written from exit 3 alone.
+    # - the correction to it said `validate` "never prints them". Written
+    #   from exit 2 alone. Also wrong: exit 1 names stale bodies, and a
+    #   consumer had the line on screen the whole time.
+    #
+    # The same mistake twice, from opposite directions, because both tried
+    # to answer "does it show up" with ONE predicate. It takes four.
+    #
+    # Non-gating is deliberate for the stale/misnamed/optional row:
+    # regenerating clears them, so they follow the ORPHAN convention. That
+    # is now said next to the denominator line rather than only here.
+    #
+    # Still open, and visible in the summary rather than in a comment: a
+    # scenario with NO STATUS is uncounted and IS clearable (adding one
+    # fixes it; the mock editor schema already marks `status` required).
+    # Moving it into `Warnings:` would change the baseline of every project
+    # that has one, so it is named in the footnote and left where it is.
+
+    # Contracts coverage (design §2.6 / §6.1, P3a): a section, and from
+    # VALIDATE_GATE_FROM on a gate. Computed HERE, before the summary, so
+    # that when it gates, `Result:`, the summary line and the exit code are
+    # three readings of one decision — not a PASSED followed by a FAILED.
+    # A run stopped by its own errors says coverage did not run.
+    from .contracts_coverage import gate_is_on, gate_unreadable, validate_section
+    coverage_lines, coverage_gate = validate_section(
+        _project_root(getattr(args, "config", None)), __version__,
+        skipped=getattr(args, "no_coverage_check", False),
+        blocked_by=total_errors or (1 if mock_rc else 0))
+    coverage_gates = gate_is_on(__version__) and coverage_gate is not None
+    # Coverage ran, and this tree cannot read whether it gates: a FAILED run,
+    # not a PASSED one with a note (GATE_UNREADABLE says why and how to fix).
+    # Until jsonui-cli 1.9.7 it exited 0 — the instrument not run, read as
+    # passed.
+    coverage_unreadable = coverage_gate is not None and gate_unreadable()
+    coverage_fails = (coverage_gates and coverage_gate["fails"]) or coverage_unreadable
+    gate_fails = coverage_fails or element_level_unknown
+
+    # Summary
+    print(f"\n{'='*50}")
+    status = ("PASSED" if total_errors == 0 and mock_rc == 0 and not gate_fails
+              else "FAILED")
+    print(f"Result: {status}")
+    summary = f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}"
+    # Omitted, not zeroed, when the check did not run: "Orphan mocks: 0" from a
+    # run that never looked would be the same sentence as a clean result.
+    if orphans is not None:
+        summary += f", Orphan mocks: {orphans}"
+    # Same rule as above, other direction: a run that could not check its
+    # mocks must not print the line a run with no mocks prints.
+    if unchecked_mocks:
+        summary += f", Unchecked mocks: {unchecked_mocks}"
+    # THE COUNT AND ITS DENOMINATOR ON ONE LINE. `Warnings: 0` means two
+    # different things depending on whether the path check ran, and the
+    # `[NOTE]` above says so — several lines up, on the other side of the
+    # mock-contract block and a divider. A face collecting "0 findings" from
+    # every screen reads the summary line, not the transcript; one project
+    # was in a position to report zero with TWO kinds declined.
+    #
+    # Measured on one test file declaring a missing layout and a missing
+    # document: `Warnings: 2` with both directories present, `Warnings: 0`
+    # with neither, `Warnings: 1` with one. Same file, same declarations —
+    # the number moves with the directories.
+    #
+    # Named, not counted: "2 kinds skipped" leaves the reader unable to
+    # decide what their own zero covers. Suffixed conditionally, like
+    # `Orphan mocks:` and `Unchecked mocks:` above — a run with nothing
+    # skipped gains no line and no field, because a standing line is the one
+    # the next finding hides behind.
+    if skipped_kinds():
+        summary += f", Path checks skipped: {', '.join(skipped_kinds())}"
+    # Named apart from `Warnings:`, which it never moves; only when there is
+    # one (a standing `Info: 0` would be a line nobody reads).
+    if total_infos:
+        summary += f", Info: {total_infos} (not counted)"
+    # Only once it gates: before that the section reports and moves nothing,
+    # and a field on every run would be a standing line.
+    if coverage_unreadable:
+        summary += ", Coverage: FAILED (gate unreadable in this tool tree)"
+    elif coverage_gates:
+        summary += (f", Coverage: {'FAILED' if coverage_fails else 'passed'} "
+                    f"(exit {coverage_gate['exit']}"
+                    + (f"; {'; '.join(coverage_gate['why'])}" if coverage_gate["why"] else "")
+                    + ")")
+    print(summary)
+    _print_uncounted_footnote(uncounted, command="validate")
+    _print_editor_schema_drift(getattr(args, "config", None))
+
+    # The section is printed after the summary; it was computed before it,
+    # so the summary could already count it.
+    print()
+    for line in coverage_lines:
+        print(line)
+
+    if total_errors > 0:
+        return 1
+    if mock_rc != 0:
+        return mock_rc
+
+    # Success-gated flatten-install: distribute validated tests to the platform
+    # locations declared in config (no-op when nothing is configured).
+    if not getattr(args, "no_install", False):
+        install_rc = _install_validated_tests(valid_test_files, getattr(args, "config", None))
+        if install_rc != 0:
+            return install_rc
+
+    # After the install (red-check xxiv): a coverage failure does not keep
+    # valid tests off the devices, and the summary above already said FAILED.
+    if gate_fails:
+        return 1
+    return 0
+
+
+def unstamped_note(project_root):
+    """The NOTE line for platforms the version comparison skipped, or None.
+
+    🚨 EXTRACTED 2026-09-08 BECAUSE THE PRINT WAS UNCOVERED. The mouth had
+    one arm — `test_the_cli_actually_calls_it` — and it was a source read for
+    the call spelling. A mutation that kept the call and disabled the `if`
+    left the whole suite green: the NOTE became unreachable and nothing said
+    so. The arm's LABEL was honest ("calls it"); the gap was that "calls it"
+    and "says it" are two claims and only one had an arm.
+
+    ⚠️ THE SPELLING THE ARM LOOKS FOR IS DELIBERATELY NOT WRITTEN OUT HERE.
+    The first draft of this docstring quoted it, and the arm went green
+    against a source that no longer made the call — it was matching this
+    comment. That is the defect v1.8.58 shipped a fix for, reproduced while
+    writing the fix. A source-reading arm cannot tell an implementation from
+    a sentence about one, so prose in the window it scans must not spell the
+    thing it scans for.
+
+    ⚠️ Returning the text instead of printing it is what makes the guard and
+    the wording testable without driving `cmd_validate`, which needs a whole
+    project on disk. The print itself stays a one-liner at the call site so
+    that a source arm can cover the remaining inch.
+
+    Printed, not counted: an unstamped platform is a gap in the record, not a
+    mismatch, and counting it would fail gates for stamps that predate
+    versioned stamping.
+    """
+    names = unstamped_platforms(project_root)
+    if not names:
+        return None
+    return (f"[NOTE] {len(names)} platform(s) carry no stamped version "
+            f"({', '.join(names)}), so the toolchain comparison SKIPPED "
+            f"them — this is not a statement that they are in step. Run "
+            f"`jui sync_tool` to stamp them.")
+
+
+def _print_editor_schema_drift(config_path):
+    """Name the editor-schema copies this CLI has outrun.
+
+    Each mock says `"$schema": "./.mock.schema.json"`, so THE EDITOR READS THE
+    COPY, not the schema shipped in this package. The copies are written by
+    `mock generate`, and by a validate run only when it rebuilds generated
+    mocks — a project that triggers neither keeps whatever it was first
+    given, and no gate anywhere reads them: `Warnings:`, `No drift` and
+    `0 stale` are all silent about it. The count covers only copies with a
+    reader (a mock beside them); see editor_schema_drift for why an orphan
+    copy is not this note's business.
+
+    NOT ADDED TO `Warnings:`. That count is a baseline for several consumers,
+    and this would move it for every project at once for a condition none of
+    them created — the same reason the uncounted footnote sits outside it.
+    Exit code is untouched: this is a fact about the editor, not the run.
+
+    THE THREE-LINE SHAPE IS LOAD-BEARING — do not "tidy" it into one line.
+    A consumer's shape gate filters finding-shaped lines (leading-bracket
+    prefixes) out of
+    its skeleton, so the [NOTE] head itself is invisible to at least one
+    face's gate; what fired there was the INDENTED CONTINUATION lines
+    slipping past the filter (measured by that face on this note's first
+    day out). A one-line rewrite silences that gate without failing any
+    test here.
+
+    The line names the direction that misleads. A stale copy that allows a
+    dropped key costs one warning; a stale copy MISSING a key this CLI accepts
+    makes the editor mark a correct declaration invalid, because the copies
+    say `additionalProperties: false`. An author with a red editor has a
+    reason to delete a line that was right, and that is the half worth a
+    sentence.
+    """
+    from .mock.generate import editor_schema_drift
+    total, stale, missing = editor_schema_drift(_resolve_mock_dir(config_path))
+    if not stale:
+        return
+    print(f"[NOTE] {stale} of {total} .mock.schema.json copies are behind this "
+          f"CLI ({__version__}).")
+    if missing:
+        print(f"       {missing} lack a key this CLI accepts, so an editor "
+              "reading them marks a correct declaration invalid.")
+    print("       `jsonui-test mock generate` rewrites them (so does a "
+          "validate run that rebuilds generated mocks).")
+    print("       A copy in a directory holding no mocks has no reader and "
+          "is not counted here; delete it by hand if you want it gone.")
+
+
+def _resolve_mock_dir(config_path):
+    """Absolute mockDir from config, or None when the project has no mocks.
+
+    Relative paths resolve against the config file, not the cwd — the gate is
+    run from wherever the project's scripts happen to sit.
+    """
+    config, cfg_path = _load_mock_config(config_path)
+    mock_dir = config.get("mockDir")
+    if not mock_dir:
+        return None
+    root = cfg_path.parent if cfg_path else Path(".")
+    mock_path = Path(mock_dir)
+    if not mock_path.is_absolute():
+        mock_path = root / mock_path
+    return mock_path if mock_path.exists() else None
+
+
+def _configured_mock_files(config_path):
+    """Every `*.mock.json` under the configured mockDir.
+
+    Silent and empty when the project declares no mocks, so this costs
+    nothing for the projects that do not use them.
+    """
+    mock_path = _resolve_mock_dir(config_path)
+    if mock_path is None:
+        return []
+    return sorted(mock_path.rglob("*.mock.json"))
+
+
+def _warn_unchecked_mocks(config_path, validated_files):
+    """Say so when mock files exist but nothing is declared to check them.
+
+    Fixing the orphan count only stops the false reassurance: with no
+    `Orphan mocks:` line, a project whose mocks are entirely outside the gate
+    prints exactly what a project with no mocks prints. Silence is not
+    information. One consumer carried 152 mock files for six weeks with no
+    `mock` block at all; `mock generate --check` cannot report this, because
+    it cannot start without that declaration — the absence of a check is not
+    detectable by the check. So it is asked here, on the gate that runs
+    either way.
+
+    Counted from the files this run already collected, not from `mockDir`.
+    An earlier draft asked `_configured_mock_files`, which needs `mockDir` to
+    find anything — so the one configuration that prompted this warning, a
+    project with no `mock` block whatsoever, was the single case it stayed
+    quiet for. Reported by the lane that wrote the ticket, measured against
+    the unpushed working tree. The collected list needs no discovery rule of
+    its own: these are the files the run just validated.
+
+    A warning, never the exit code: keeping mocks only to serve a dev server,
+    with no contract to check them against, is a legitimate setup. This asks;
+    it does not decide.
+
+    Returns the count for the summary line, or the string "unknown" when the
+    mocks cannot be located at all. "unknown" rather than a silent omission:
+    not knowing how many is itself the finding, and the slot has to say
+    something or the summary reads clean again. The printed line alone
+    left `Files: 154, Errors: 0, Warnings: 0` byte-identical to a project with
+    no mocks at all — `Warnings:` counts per-file findings and this is a
+    project-level one, which is coherent but invisible to anyone reading the
+    last line or grepping it. That is the defect this release fixed one level
+    up, reappearing one level down. It gets its own field rather than joining
+    `Warnings:`, because a project gating on `Warnings: 0` would then fail on
+    a finding declared non-gating.
+    """
+    if _mock_gate_inputs(config_path) is not None:
+        return None
+    config, _cfg_path = _load_mock_config(config_path)
+
+    mock_files = [p for p in validated_files if p.name.endswith(".mock.json")]
+
+    # A declared mockDir that does not resolve. No discovery and no guessing:
+    # the project said where its mocks are, and that path is not there, so the
+    # gate cannot have run.
+    #
+    # This is the failure a rename produces, which is how it actually happens:
+    # a lane moved its mocks between trees and rewrote mockDir on the same day.
+    # One wrong character and the contract check for every one of them stops,
+    # with every gate still green.
+    #
+    # How many mocks the gate SHOULD have checked is unknowable — mockDir
+    # pointed at nothing, and wherever they went is not stated anywhere. So
+    # the count stays "unknown" rather than being filled in with a number that
+    # would read as the intended set.
+    #
+    # But when the mocks happen to sit under the validated path, this run did
+    # collect and validate them, and their number is a fact it already has. An
+    # earlier version of this branch returned before counting and its comment
+    # claimed there was nothing to count; a lane whose mocks live under
+    # `tests/` measured `Files: 154` — two tests and 152 mocks — against a
+    # warning that admitted to knowing nothing. Reported as a separate
+    # sentence, not as the count: the two sets are not known to be the same
+    # one, and printing 152 in the slot would claim they are.
+    if config.get("mockDir") and _resolve_mock_dir(config_path) is None:
+        collected = (f" {len(mock_files)} .mock.json file(s) were collected "
+                     f"from the validated path; whether those are the ones "
+                     f"mock.mockDir meant is not knowable from here."
+                     if mock_files else "")
+        print(f"\n[WARN] mock.mockDir is declared as "
+              f"{config['mockDir']!r} but that path does not exist — the mock "
+              f"contract check did not run, and how many mocks it should have "
+              f"checked cannot be determined.{collected}")
+        return "unknown"
+
+    if not mock_files:
+        return _unchecked_mocks_elsewhere(config_path, validated_files)
+    if not config.get("swagger"):
+        missing = "mock.swagger is not declared"
+    else:
+        missing = "no declared mock.swagger could be resolved"
+    print(f"\n[WARN] {len(mock_files)} mock file(s) were validated, but "
+          f"{missing} — the mock contract check did not run.")
+    return len(mock_files)
+
+
+def _project_root(config_path):
+    """The directory this run treats as the project, or None.
+
+    The config `validate` actually loaded, not the nearest one above some
+    file: the gate's inputs come from that config, so anything scoped to
+    "this project" has to mean the same directory the gate means. `.git` is
+    the fallback for a checkout with no config — a boundary definition, not a
+    second rule for where mocks live.
+    """
+    _config, cfg_path = _load_mock_config(config_path)
+    if cfg_path:
+        return cfg_path.resolve().parent
+    here = Path.cwd().resolve()
+    for parent in [here, *here.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
+def _unchecked_mocks_elsewhere(config_path, validated_files):
+    """Mocks that exist outside the validated path, with nothing declaring them.
+
+    The counting warning above reads the collected files, so it cannot see a
+    project whose mocks live in another tree entirely and whose config says
+    nothing — the collected list is empty and the run looks like one with no
+    mocks. That is the configuration the ticket was written about.
+
+    Bounded by `_project_root`. Unbounded, the convention walks to the
+    filesystem root: measured, a single `mocks/` directory one level above a
+    workspace resolves for every project inside it, and the projects it would
+    then talk about are the ones with no mocks at all — the exact false
+    positive that gets a check switched off.
+
+    Silence stays silence. Finding nothing here is not evidence that there is
+    nothing: a project can keep its mocks somewhere this convention does not
+    reach, and this returns None then, the same as for a project with no mocks
+    at all. So it adds a way to speak, never a way to reassure — no
+    `Unchecked mocks: 0`, which would turn "did not find" into "counted none".
+    """
+    from .validation.mock import find_mock_dir
+
+    boundary = _project_root(config_path)
+    if boundary is None:
+        return None
+
+    # Two starting points, both inside the boundary. A test file finds mocks
+    # kept beside the tests; the project root finds mocks kept beside the
+    # config. Neither alone covers a split tree — tests in one tree and the
+    # app (config and mocks) in another — because the walk from a test file
+    # never passes through the app directory, and that is the layout two
+    # consumers actually use.
+    starts = [p for p in validated_files if p.name.endswith(".test.json")][:1]
+    starts.append(boundary / "jui.config.json")   # walks from `boundary`
+
+    # Deduplicated on the resolved directory, then on the files: the two
+    # starts reach the same place whenever tests and config share a tree,
+    # which is the common layout, and counting it twice would put a number in
+    # the summary that matches nothing on disk.
+    found: dict = {}
+    for start in starts:
+        mock_dir = find_mock_dir(start)
+        if mock_dir is None:
+            continue
+        for path in mock_dir.rglob("*.mock.json"):
+            found[path.resolve()] = mock_dir
+    if not found:
+        return None
+
+    # The directory is in the sentence deliberately. A project may keep
+    # `*.mock.json` files for something other than this contract check; the
+    # warning is still true of them, and only the project knows the intent, so
+    # it says what it found and where rather than deciding. Silencing it is a
+    # declaration either way — declare `mock.swagger`, or do not name the
+    # files `*.mock.json` — and naming the directory is what makes that
+    # choice available to the reader.
+    where = ", ".join(sorted({str(d) for d in found.values()}))
+    print(f"\n[WARN] {len(found)} mock file(s) found under {where}, but no "
+          f"mock.swagger is declared — the mock contract check did not run.")
+    return len(found)
+
+
+def _mock_gate_inputs(config_path):
+    """(resolved swaggers, mockDir, config) for the mock gate, or None.
+
+    None means the project has no mocks to check, which keeps every mock step
+    free for the projects that do not use them.
+    """
+    config, cfg_path = _load_mock_config(config_path)
+    swaggers = config.get("swagger") or []
+    # One resolution shared with the file collector: two copies of this is how
+    # the drift check ended up reading a directory the validator never opened.
+    mock_path = _resolve_mock_dir(config_path)
+    if not swaggers or mock_path is None:
+        return None
+    root = cfg_path.parent if cfg_path else Path(".")
+    resolved = _resolve_swaggers(swaggers, root, cfg_path)
+    if not resolved:
+        return None
+    return resolved, mock_path, config
+
+
+def _regenerate_stale_mocks(config_path):
+    """Rebuild `generated/` when it is missing or older than its inputs.
+
+    Runs BEFORE the files are collected. `generated/` is meant to be
+    gitignorable, so it has to rebuild itself on a fresh clone or a first CI
+    run — but the rebuild used to happen after the count, so `Files:` reported
+    whatever the *previous* run had left behind. The same input printed 267 on
+    the run that rebuilt and 306 on the next one.
+
+    The swagger is not the only input. Adding a hand-written mock for an
+    operation retires the generated copy of it, so a trigger watching only
+    the swagger left that copy in place until the schema next changed — and
+    `Files:` counted it, moving by one for a reason that has nothing to do
+    with the change the reader just made. Small on its own, but it is
+    indistinguishable from the count instability this trigger was rewritten
+    to remove, which is the part that matters: a reader cannot tell the
+    residue from the bug.
+    """
+    from .mock.generate import (
+        GENERATED_DIR, expected_generated_relpaths, generate,
+    )
+
+    inputs = _mock_gate_inputs(config_path)
+    if inputs is None:
+        return 0
+    resolved, mock_path, _config = inputs
+    scope = _load_path_scope(config_path)
+
+    gen_root = mock_path / GENERATED_DIR
+    # Presence before freshness. A deleted mock has no mtime to compare, so
+    # a timestamp rule reports a complete tree however much is missing from
+    # it — the route simply 404s and the reason is nowhere.
+    on_disk = {str(p.relative_to(mock_path))
+               for p in gen_root.rglob("*.mock.json")}
+    missing = expected_generated_relpaths(resolved, scope) - on_disk
+    if missing:
+        return _rebuild_generated(
+            resolved, mock_path, scope,
+            f"{len(missing)} expected file(s) were missing")
+    # Which input is newest is kept, not just how new it is. The count on
+    # its own sent a reader to `git log` on the OpenAPI document twice in
+    # one day to work out whether a rebuild came from the input or from a
+    # new tool version — a question this function has already answered by
+    # the time it prints, and one the answer to is always the same: the
+    # version is not read here at all.
+    newest_input, newest_kind = 0.0, None
+    for source in resolved:
+        path = Path(source)
+        if path.exists() and path.stat().st_mtime > newest_input:
+            newest_input = path.stat().st_mtime
+            newest_kind = "the OpenAPI document"
+    # Hand-written mocks are inputs too: one of them appearing is what makes a
+    # generated file redundant.
+    for p in mock_path.rglob("*.mock.json"):
+        if gen_root in p.parents:
+            continue
+        if p.stat().st_mtime > newest_input:
+            newest_input = p.stat().st_mtime
+            newest_kind = "a hand-written mock"
+    # The OLDEST generated file decides, not the newest. `max` asks "has
+    # anything been generated since the inputs changed", which one touched
+    # file answers for the whole directory — so a single fresh mock kept
+    # every stale sibling stale, and the worst case is that DAMAGING a
+    # generated file raises its mtime and switches off the rebuild that
+    # would have repaired it. `min` asks the question the caller means:
+    # is all of it at least as new as the inputs.
+    generated_at = min(
+        (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
+    if generated_at >= newest_input:
+        return 0
+    return _rebuild_generated(
+        resolved, mock_path, scope,
+        f"{newest_kind or 'an input'} is newer than the generated tree")
+
+
+def _scenario_names(gen_root: Path) -> dict:
+    """`{relpath: {scenario names}}` for the generated tree, best effort."""
+    table: dict = {}
+    if not gen_root.exists():
+        return table
+    for p in sorted(gen_root.rglob("*.mock.json")):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        scenarios = data.get("scenarios")
+        if isinstance(scenarios, dict):
+            # Keyed on the path RELATIVE to the generated root, as the
+            # docstring always said. `p.name` was the basename, and the
+            # generated tree is `generated/<tag>/<operationId>.mock.json` —
+            # so one operationId scaffolded under two tags collapsed to a
+            # single entry, and whichever sorted last decided what the
+            # comparison below saw. The printed name was ambiguous for the
+            # same reason.
+            table[str(p.relative_to(gen_root))] = set(scenarios)
+    return table
+
+
+def _rebuild_generated(resolved, mock_path, scope, reason: str) -> int:
+    from .mock.generate import EDITOR_SCHEMA_FILENAME, GENERATED_DIR, generate
+
+    gen_root = mock_path / GENERATED_DIR
+    # Whether there was a tree at all, kept separately from what was in it:
+    # a first build has an empty `before` and every file is "new", which is
+    # not a repair and must not be reported as one.
+    had_tree = gen_root.exists()
+    before = _scenario_names(gen_root)
+    # Every file the rebuild may delete, by path — not `_scenario_names`,
+    # which skips a file it cannot parse, and a file that is not valid JSON
+    # is deleted all the same.
+    files_before = _generated_files(gen_root, EDITOR_SCHEMA_FILENAME)
+    try:
+        built = generate(resolved, mock_path, scope=scope)
+    except (OSError, ValueError, KeyError) as e:
+        # Running the suite against an empty generated/ turns every
+        # unmocked operation into a 404 and a confusing red.
+        print(f"\n{'='*50}")
+        print(f"Mock generation failed: {e}")
+        return 1
+    if built.created:
+        # The count says what happened; the reason says why, and without it
+        # a reader has to rule out the tool version by hand. They cannot do
+        # that from here — so the line says the version is not an input,
+        # rather than leaving the likeliest wrong explanation standing.
+        # It is the likeliest because this line tends to appear in the same
+        # session as a version bump.
+        print(f"\nRegenerated {len(built.created)} mock file(s) "
+              f"into {mock_path.name}/{GENERATED_DIR}/ — {reason} "
+              f"(the tool version is not an input to this decision)")
+    # Name what came BACK, not just how many files were written. This
+    # rebuild runs before the contract check, so anything it restores is
+    # something the check will not report — and the two lines a reader
+    # actually sees, "Regenerated N mock file(s)" and "PASSED", do not say
+    # that a scenario was missing a moment ago. A consumer deleted one,
+    # got a green run, and could not tell from the output that the tree had
+    # been repaired underneath the check.
+    #
+    # File counts answer "what did this run do". They do not answer "what
+    # did this run hide".
+    # TWO THINGS CAN HAVE HAPPENED, AND THEY ARE NOT ONE SENTENCE.
+    #
+    # This used to be a single line, `restored a scenario the tree was
+    # missing`, guarded by `if name in before` — which excluded the case the
+    # comment above describes. A whole file that was deleted is absent from
+    # `before`, so its key is not there to match, and the run that quietly
+    # put it back printed nothing. Measured, on a fixture, with the file
+    # confirmed gone and then confirmed back:
+    #
+    #   whole generated file deleted -> restored, silently, PASSED, exit 0
+    #   one scenario deleted from a file -> not rebuilt at all; reported
+    #       loudly as [ABSENT] and exit 1, which is correct and not this
+    #   swagger gains a response -> the file IS rewritten, and the old line
+    #       fired, calling a legitimate ADDITION "a scenario the tree was
+    #       missing"
+    #
+    # So the one path that could print it printed a false description, and
+    # the path it was written for could not print at all. Relaxing the guard
+    # alone would have turned a silent branch into a lying one.
+    after = _scenario_names(gen_root)
+    if had_tree:
+        # A file that was not there and is now. `had_tree` excludes the
+        # first build, where every file is new and nothing was repaired.
+        for rel in sorted(set(after) - set(before)):
+            print(f"  regenerated a file that was missing from the tree "
+                  f"— {rel}")
+    for rel in sorted(set(after) & set(before)):
+        gained = after[rel] - before[rel]
+        if gained:
+            # Deliberately NOT called a restoration. The measured cause is a
+            # swagger that grew a response; whether a scenario had also been
+            # deleted is not knowable from here, and "restored" asserts it.
+            print(f"  generation added a scenario this file did not have "
+                  f"— {rel}: {', '.join(sorted(gained))}")
+    # AND WHAT WENT. The rebuild empties generated/ and writes back only what
+    # the in-scope swagger produces (mock/generate.py `_clear_generated`), so
+    # a file no in-scope operation generates — an operation the swagger
+    # dropped, one the scope no longer covers, a file someone put there by
+    # hand — is deleted. That prune is intended: generated/ is a pure
+    # function of the swagger. It was also SILENT, and it runs under
+    # `validate --no-install` too (that flag skips the install, not this
+    # rebuild): a consumer project measured two files vanishing from one
+    # tag directory of generated/ — a mock and the editor schema copy that
+    # went with it — on a run that printed nothing about either (2026-09-28).
+    files_after = _generated_files(gen_root, EDITOR_SCHEMA_FILENAME)
+    for rel in sorted(files_before - files_after):
+        if Path(rel).name == EDITOR_SCHEMA_FILENAME:
+            # Not a mock: the editor schema copy is placed only in a
+            # directory that still holds generated mocks, so it goes when
+            # the last one there does.
+            print(f"  removed the editor schema copy of a directory with no "
+                  f"generated mock left — {rel}")
+        else:
+            print(f"  removed a file no in-scope operation generates — {rel}")
+    return 0
+
+
+def _generated_files(gen_root: Path, schema_filename: str) -> set:
+    """Relative paths of every mock and editor schema copy under generated/."""
+    if not gen_root.exists():
+        return set()
+    return {str(p.relative_to(gen_root))
+            for pattern in ("*.mock.json", schema_filename)
+            for p in gen_root.rglob(pattern)}
+
+
+def _print_drift_findings(report):
+    """Every finding that fails the check, on both commands that print them.
+
+    One printer, because the two used to disagree about what a red run even
+    contains: this path listed four kinds and `mock generate --check` listed
+    six, so a run gated by one of the other two printed the "Mock contract
+    drift:" header with nothing under it and then a remedy for findings it
+    had not shown. Adding a gating bucket has to reach every reader of one,
+    which is what a shared printer means and a copied loop does not.
+    """
+    for rel in report.missing:
+        print(f"  [MISSING] {rel} (in swagger, no mock file)")
+    for rel in report.orphaned:
+        print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
+    for msg in report.drifted:
+        print(f"  [DRIFT]   {msg}")
+    for msg in report.absent_generated:
+        # generated/ is a pure function of the swagger, so there is no state
+        # in which one of its scenarios is legitimately missing — it was
+        # edited, or a generation run was interrupted.
+        print(f"  [ABSENT]  {msg}\n"
+              "            generated/ is derived from the swagger; run "
+              "`jsonui-test mock generate` to restore it")
+    for msg in report.unmatched_generated:
+        # The mirror of [ABSENT]: holding a status the swagger no longer
+        # declares is as impossible a state as missing one. A consumer
+        # measured what it costs — an end-to-end suite green against a 409
+        # the implementation had no branch for.
+        print(f"  [EXTRA]   {msg}\n"
+              "            generated/ is derived from the swagger; run "
+              "`jsonui-test mock generate` to drop it")
+    for msg in report.extra_generated:
+        # The other direction of the same set difference. Reported under the
+        # same label as its sibling because the reader's remedy is identical
+        # — regenerate — and splitting the label would suggest the two
+        # states differ in what to do about them.
+        print(f"  [EXTRA]   {msg}\n"
+              "            generated/ is derived from the swagger; run "
+              "`jsonui-test mock generate` to drop it")
+    for msg in report.unmatched_borrowed:
+        # A hand-written scenario answering a status this operation does not
+        # declare, in a form where the contract declares it SOMEWHERE — so
+        # the code was taken from elsewhere in the contract. The finding
+        # carries the form and its remedy; they are opposite (A: the
+        # swagger for this operation is short one response; C: the mock may
+        # be answering a branch the implementation does not have).
+        print(f"  [STATUS]  {msg}")
+    for drift in report.errors:
+        print(f"  [BODY]    {drift}")
+
+
+def _print_body_drift_remedy(report, swaggers, mock_dir, scope):
+    """Say which body findings `--update-default` will actually close.
+
+    The remedy used to be printed for every body finding, and it is a merge
+    that only touches the `default` scenario and never overwrites a value —
+    so on a stale `error_422`, or on a `default` whose value is the wrong
+    type, running it repairs nothing and the same check comes back
+    identical. A remedy that cannot work is worse than none: the reader runs
+    it, nothing changes, and the gate is what stops being believed.
+
+    Which findings it closes is asked of the merge itself, in dry-run,
+    rather than re-derived from the kind of drift. A second implementation
+    of "what a merge can decide" would diverge silently the day the merge's
+    policy changes — and the knowledge is already there: `--update-default`
+    prints these same files under "violations a merge cannot decide".
+    """
+    from .mock.generate import update_default
+
+    upd = update_default(swaggers, mock_dir, dry_run=True, scope=scope)
+    blocked = {rel for rel, _ in upd.needs_review}
+    # Both halves come from the merge: `repaired` says it would change this
+    # scenario's body at all, `needs_review` says what it leaves behind.
+    # A file it would touch but not finish still needs a person.
+    fixable = {(rel, scenario)
+               for rel, scenarios in upd.repaired.items()
+               if rel not in blocked
+               for scenario in scenarios}
+    by_merge = [d for d in report.errors if (d.rel, d.scenario) in fixable]
+    by_hand = [d for d in report.errors if (d.rel, d.scenario) not in fixable]
+
+    if by_merge:
+        print("\nRefresh these with `jsonui-test mock generate "
+              "--update-default` (hand-grown scenarios are preserved):")
+        for drift in by_merge:
+            print(f"  {drift.rel}  {drift.scenario}")
+    if by_hand:
+        print(f"\n{len(by_hand)} finding(s) a merge cannot decide — "
+              "`--update-default` never overwrites a value and only touches "
+              "`default`, so it would leave these unchanged. Fix by hand, "
+              "keeping your test data:")
+        for drift in by_hand:
+            print(f"  {drift.rel}  {drift.scenario}")
+
+
+def _check_mocks_against_swagger(config_path):
+    """Check the mocks against swagger.
+
+    Returns (exit code, orphan count, error count).
+
+    The orphan count is returned rather than only printed: an orphaned mock is
+    a mock whose body stops being compared to anything, and a check that
+    quietly shrinks its own scope is the one failure a reader cannot see in a
+    pass/fail line. The error count is returned for the same reason one step
+    up — the caller's `Errors:` line read zero on a run this gate failed.
+    """
+    from .mock.generate import generate, CheckReport
+
+    inputs = _mock_gate_inputs(config_path)
+    if inputs is None:
+        # None, not 0: the caller omits the count when the gate did not run,
+        # and returning 0 made every mock-less project print the sentence a
+        # clean result prints. Same reason below — a report we cannot read is
+        # not a report of zero orphans.
+        return 0, None, 0, {}
+    resolved, mock_path, config = inputs
+    scope = _load_path_scope(config_path)
+
+    from .mock.openapi import OpenApiLoadError
+
+    try:
+        report = generate(resolved, mock_path, check=True, scope=scope,
+                          strict=bool(config.get("checkOptionalFields", False)))
+    except OpenApiLoadError as exc:   # a document the gate cannot read is one error line, not a traceback
+        print(f"\nError: {exc}")
+        return 1, None, 1, {}
+    if not isinstance(report, CheckReport):
+        return 0, None, 0, {}
+    orphans = len(report.orphaned)
+    # What the check measured, on every run that reaches it — before the
+    # early return, because a clean result was where this went missing.
+    #
+    # `mock generate --check` enumerates the not-compared scenarios; this
+    # path printed four kinds of finding and nothing else, so a scenario the
+    # contract does not declare a status for was invisible here whether the
+    # run was red or green. One reached a consumer as an E2E test that was
+    # green on a branch the implementation cannot take — the check had
+    # measured it and said so only on the other command.
+    print(f"\n{report.contract_summary}")
+    uncounted = _print_uncompared(report)
+    # What this gate is looking at, said where it prints its verdict.
+    #
+    # `stale generated bodies` USED TO BE IN THIS LIST and had to come out:
+    # the summary line printed one line above names them
+    # (`contract_summary` has a `stale_generated` clause), so the footnote
+    # contradicted the line it hangs under. It was written from a
+    # measurement of the two PRINTERS, which is one exit of four — see the
+    # table at the counter below.
+    #
+    # The two that remain were measured the same way and with a control:
+    # fixtures that genuinely produce a `misnamed` entry and a note-only
+    # body (confirmed on the report object) produce no line here at all.
+    print("  (this line reports gating findings and uncompared scenarios; "
+          "misnamed files and optional-field omissions appear only in "
+          "`jsonui-test mock generate --check`)")
+    if report.stale_generated:
+        # The convention, next to the number it explains. Named on the line
+        # above, not counted, and not a failure — regenerating clears them,
+        # so they follow the ORPHAN convention deliberately rather than by
+        # omission. A consumer read the count, ran `mock generate --check`
+        # to chase it, found that green too, and reasonably took the pair
+        # for a bug. Saying "does not fail, by convention" is what turns
+        # two green exits from a contradiction into a rule.
+        print("  (generated bodies are refreshed by `jsonui-test mock "
+              "generate`, so a stale one is reported and does NOT fail this "
+              "check — the same convention orphans follow)")
+    if not report.has_drift:
+        return 0, orphans, 0, uncounted
+
+    print(f"\n{'='*50}")
+    print("Mock contract drift:")
+    _print_drift_findings(report)
+    print(f"\n{report.drift_summary}")
+    if report.errors:
+        _print_body_drift_remedy(report, resolved, mock_path, scope)
+    print("\nPass --no-mock-check to skip this gate.")
+    # The count the caller prints as `Errors:`, from the same buckets the
+    # exit code is decided by.
+    return (1, orphans, sum(count for _, count in report.gating), uncounted)
+
+
+def _print_uncompared(report):
+    """List the scenarios the contract check could not compare.
+
+    Not a gate: a scenario may legitimately declare a status the swagger
+    does not, and failing on it is how a check gets switched off. But the
+    number belongs on screen — it is the one that should be walking towards
+    zero, and a test asserting a shape nothing compared is a test that can
+    be green for a branch the implementation does not have.
+
+    The label carries the WEIGHT, which is why these are `[WARN]` and the
+    gating ones are `[STATUS]`. `[NOTE]` used to name two unrelated findings
+    — this one and a body that omits only optional fields — separated by
+    nothing but whether the line ended in " — not compared"; a consumer with
+    93 of them could not break its own count down. Splitting the label by
+    KIND alone would have rebuilt the same problem one step along, because
+    the undeclared-status findings do not share a weight: two of the three
+    forms gate. So the rule is that a reader knows the weight from the
+    label, and `[ABSENT]`/`[EXTRA]`/`[STATUS]` gate while
+    `[WARN]`/`[OPTIONAL]`/`[SCOPE]`/`[NAME]` do not.
+
+    Returns the count per `UNMATCHED_NOTE_CLASSES`, because the summary has
+    to say why these are not in `Warnings:` and the three reasons are not
+    one reason. Classified by the module that BUILDS the notes, so a reword
+    there cannot silently reclassify them here.
+    """
+    # `unmatched_notes`, not `unmatched`: the gated subsets of it are
+    # printed as [EXTRA] and [STATUS], and printing them here too put one
+    # scenario on screen twice under two labels that contradict each other —
+    # one saying the run failed on it, the other that it was not compared.
+    uncounted = _print_uncompared_notes(report)
+    if report.out_of_scope:
+        # `[ORPHAN] (mock file, not in swagger)` is the only thing this path
+        # ever said about an unmatched mock, and for these files it would be
+        # false twice over: the swagger declares the route, and the reason
+        # they are unmatched is this project's own path scope. `mock
+        # generate --check` distinguishes them; here they were simply
+        # absent, so a reader comparing the two commands saw one report a
+        # set of files the other never mentioned. Counted rather than
+        # listed — this is a permanent line and the set is often large.
+        print(f"  [SCOPE]   {len(report.out_of_scope)} mock(s) outside "
+              f"this project's API paths ({report.scope_note or 'all paths'})"
+              " — not checked, listed by `mock generate --check`")
+    return uncounted
+
+
+def _print_uncompared_notes(report) -> dict:
+    """Print the not-compared scenarios and count them by class.
+
+    Split out of `_print_uncompared` for `mock generate --check`, which
+    prints the same line and needs the same count but lists its
+    out-of-scope mocks one per file, so it must not also print the scope
+    SUMMARY this function's caller adds.
+
+    The split is the point of the change it came from. `--check` carried its
+    own copy of this loop, emitting `  [WARN]    {note} — not compared`
+    byte-for-byte identically, and only THIS copy ever learned to classify
+    — so the command that shows every class showed no class, and the command
+    that classifies cannot reach one of them. Two copies of a line, one of
+    which learned something: the shape `GATING_BUCKETS` and `PATH_KINDS`
+    exist to prevent. One printer, every caller.
+    """
+    from .mock.generate import UNMATCHED_NOTE_CLASSES, classify_unmatched_note
+
+    uncounted = {name: 0 for name in UNMATCHED_NOTE_CLASSES}
+    for note in report.unmatched_notes:
+        print(f"  [WARN]    {note} — not compared")
+        uncounted[classify_unmatched_note(note)] += 1
+    return uncounted
+
+
+def _skipped_path_note(kind: str, root) -> str:
+    """The note naming the directory a declined path check wanted.
+
+    A function rather than an f-string in the loop, because the loop can
+    only ever be exercised for the kinds something actually resolves
+    against — today `layout` and `document`. The key is DERIVED from the
+    kind table, and the spelling it replaced (`'layouts_directory' if kind
+    == 'layout' else 'spec_directory'`) answers identically for both of
+    them: red-checking the change through the loop came back green, because
+    no reachable case can tell the two apart. The case that can is a third
+    kind, and it is reachable here.
+    """
+    from .validation.declared_paths import config_key_for
+
+    return (f"[NOTE] declared {kind} paths were not resolved: no "
+            f"{config_key_for(kind)} under {root} — declare it in "
+            "jui.config.json to turn this check on")
+
+
+#: How the footnote opens on each command. The CLAUSES below are one
+#: sentence each wherever they print — what differs is the denominator the
+#: number is absent from. `validate` has a `Warnings:` count; `mock generate
+#: --check` has no counter at all, only an exit code these do not move, so
+#: "not counted in Warnings:" would name a line that command never prints.
+#:
+#: A table rather than a default, so a third caller has to answer the
+#: question rather than inherit the first caller's answer.
+UNCOUNTED_LEAD = {
+    "validate": "{total} finding(s) above are not counted in Warnings:",
+    "check": "{total} finding(s) above do not fail this check:",
+}
+
+
+def _print_uncounted_footnote(uncounted: dict, *, command: str) -> None:
+    """Say how many findings above do not move this command's count, and
+    why — in as many sentences as there are reasons.
+
+    A summary key was the other candidate (`Unactionable: 93`). Not taken:
+    it creates a new thing to grep and a permanently non-zero NUMBER, which
+    invites the "keep it at zero" discipline onto a count that can never be
+    zero — the standing warning that teaches people to stop reading. A
+    footnote carries the same number without becoming a field, so a lane
+    running `Warnings: 0` keeps its baseline exactly as it is.
+
+    THE REASONS ARE NOT ONE REASON. "Cannot be cleared" and "should not be
+    cleared" are different sentences; written as one, a reader takes the
+    second for the first and waits for a release that makes it fixable. And
+    a third was found while writing this — a scenario with no status at all
+    is uncounted AND clearable, which the blanket rule had hidden from
+    everyone including the two people who wrote the rule down.
+    """
+    total = sum(uncounted.values())
+    if not total:
+        return
+    print(UNCOUNTED_LEAD[command].format(total=total))
+    if uncounted.get("no-remedy"):
+        print(f"  {uncounted['no-remedy']}: a status no operation declares. "
+              "There is no remedy — such a code is a premise, not something "
+              "a scenario can declare.")
+    if uncounted.get("declared"):
+        print(f"  {uncounted['declared']}: the scenario declares its own "
+              "`undeclaredStatus`. Clearing it would undo a decision "
+              "somebody made on purpose.")
+    if uncounted.get("actionable"):
+        # Deliberately worded as an exception to the two above rather than
+        # alongside them: this one CAN be cleared, and saying so in the same
+        # breath as "no remedy" is how it stayed invisible.
+        #
+        # WHICH COMMAND THIS FIRES ON: `check`, never `validate`. Measured
+        # both ways, on the hand-written and the generated side: a scenario
+        # with no status is ITSELF a validation error, and the mock gate
+        # runs only `if total_errors == 0`, so the run that could produce
+        # this finding exits 1 several screens earlier. It is not a
+        # coincidence of one fixture — the note is built on `status is
+        # None`, the validator errors on anything that is not an int in
+        # 100..599, and the first set is a strict subset of the second, over
+        # the same files (both sides walk `_resolve_mock_dir()` for
+        # `*.mock.json`). Two modules have to change together to open it.
+        #
+        # That is why this clause was unreachable from the only command that
+        # printed the footnote, while the command where the finding actually
+        # appears printed no classification at all. The fix was to give
+        # `--check` this footnote, not to reword a sentence about a case
+        # `validate` cannot show.
+        print(f"  {uncounted['actionable']}: a scenario with no status at "
+              "all — this one CAN be cleared by adding one (the mock editor "
+              "schema already marks `status` required), and is not counted "
+              "only because it arrives through the same channel.")
+
+
+def _load_test_config(explicit_path=None):
+    """Read the 'test' section from jui.config.json (or an explicit config path).
+
+    Returns (test_config_dict, config_path_or_None).
+    """
+    candidates = [Path(explicit_path)] if explicit_path else [
+        Path("jui.config.json"), Path("jsonui-test.config.json")]
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data.get("test", {}), c
+            except (OSError, json.JSONDecodeError):
+                pass
+    return {}, None
+
+
+# addMedia fixture types shared by the iOS/Android drivers.
+MEDIA_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".mp4")
+
+
+def _resolve_media_files(test_config, project_root):
+    """Collect addMedia fixtures from `test.mediaDir` (default tests/media)."""
+    media_dir = Path(test_config.get("mediaDir") or "tests/media")
+    if not media_dir.is_absolute():
+        media_dir = project_root / media_dir
+    if not media_dir.is_dir():
+        return []
+    return sorted(
+        p for p in media_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in MEDIA_EXTENSIONS
+    )
+
+
+#: Where a project's `.test.json` sources live, for deciding whether a run
+#: saw all of them. `tests` matches `mediaDir`'s default (`tests/media`) and
+#: the layout `generate test screen` writes into. The rule itself is in
+#: test_dirs.py, which `jui viz` loads too.
+
+
+def _declared_test_files(test_config, project_root):
+    """Every `*.test.json` under the declared test directory, or None.
+
+    None means the directory is not there — the run cannot establish what
+    the full set IS, which is a different answer from "the full set is
+    empty" and has to stay distinguishable at the call site.
+
+    This is the DENOMINATOR the install clean was missing. The clean
+    removes a destination file whose source was deleted; deciding that a
+    source was deleted requires having looked everywhere it could be. The
+    command line is not that — one file passed to `validate` is a complete
+    answer about one file and no answer at all about the rest.
+    """
+    return declared_test_files(test_config, project_root)
+
+
+def _install_validated_tests(valid_test_files, config_path):
+    """Flatten-install valid .test.json files per config. Returns exit code."""
+    from .install import resolve_targets, flatten_install
+    from .run_defaults import SIDECAR_FILENAME
+
+    test_config, cfg_path = _load_test_config(config_path)
+    if not cfg_path:
+        return 0  # no config → validate-only
+
+    project_root = cfg_path.parent
+    targets = resolve_targets(test_config, project_root)
+    if not targets:
+        return 0  # no install destinations declared → validate-only
+
+    media_files = _resolve_media_files(test_config, project_root)
+
+    # IS THIS RUN A FULL SYNC? The clean wipes the whole destination and the
+    # repopulate refills it from the command line, so when those two sets
+    # differ the run deletes work it never looked at. Measured on a real
+    # project: one file passed to `validate` took a destination from 63
+    # tests to 1, and the destination is gitignored, so nothing a person
+    # would check showed it.
+    #
+    # The count was ON SCREEN the whole time — `Installed 2 test file(s) → 2
+    # target(s) (cleaned 126 stale)` — and did not stop anybody, including
+    # the person who ran it. Two numbers in one sentence with nothing
+    # comparing them, printed after `Result: PASSED`, in the same words a
+    # healthy full sync uses. So this is a comparison, not a louder line.
+    #
+    # `None` (no declared test directory) is NOT treated as "nothing to
+    # cover": a run that cannot establish the full set must not delete on
+    # the strength of not knowing.
+    declared = _declared_test_files(test_config, project_root)
+    covered = {Path(f).resolve() for f in valid_test_files}
+    full_sync = declared is not None and declared <= covered
+
+    from .run_defaults import build_sidecar
+
+    report = flatten_install(valid_test_files, targets,
+                             media_files=media_files, clean=full_sync,
+                             sidecar=build_sidecar(test_config))
+
+    if report.has_collision:
+        print(f"\n{'='*50}")
+        print("Install ABORTED: duplicate file names (flat layout needs unique names per target):")
+        for platform, name, srcs in report.collisions:
+            print(f"  [COLLISION] {name} ({platform})")
+            for src in srcs:
+                print(f"              {src}")
+        return 1
+
+    print(f"\n{'='*50}")
+    print(f"Installed {len(report.copied)} test file(s) → {len(targets)} target(s)"
+          f" (cleaned {report.removed} stale):")
+    if report.clean_skipped:
+        # Named where the count would have been, so the run says what it did
+        # NOT do rather than printing a smaller number for the same word. A
+        # full sync prints nothing here and is byte-identical to before.
+        if declared is None:
+            root = test_config.get(TEST_DIR_KEY) or TEST_DIR_DEFAULT
+            print(f"  partial run — stale files left in place: no {root}/ "
+                  f"under {project_root}, so this run cannot tell which "
+                  f"installed tests still have a source "
+                  f"(declare test.{TEST_DIR_KEY} to turn the clean on)")
+        else:
+            print(f"  partial run — stale files left in place: this run "
+                  f"covered {len(covered)} of {len(declared)} declared "
+                  f"test(s), so a missing one may simply not have been "
+                  f"passed to this command")
+    for platform, dest in report.targets:
+        installed = len(report.installed.get(platform, []))
+        details = []
+        skipped = len(report.skipped_files.get(platform, []))
+        if skipped:
+            details.append(f"{skipped} skipped")
+        pruned = len(report.pruned_cases.get(platform, []))
+        if pruned:
+            details.append(f"{pruned} case(s) pruned")
+        flows = report.skipped_flows.get(platform, [])
+        if flows:
+            details.append(f"{len(flows)} flow(s) dropped: {', '.join(flows)}")
+        media = len(report.media_copied.get(platform, []))
+        if media:
+            details.append(f"{media} media file(s) → media/")
+        if any(pf == platform for pf, _ in report.sidecars):
+            declared = len(build_sidecar(test_config)["orientation"])
+            details.append(
+                f"{SIDECAR_FILENAME} ({declared} orientation default(s))")
+        detail = f" ({', '.join(details)})" if details else ""
+        print(f"  {platform}: {installed} test(s){detail} → {dest}")
+    return 0
+
+
+def cmd_generate_test_screen(args):
+    """Handle 'generate test screen' command - create screen test file template."""
+    name = args.name
+    output_path = args.path
+
+    # Determine output path if not specified
+    if not output_path:
+        output_path = f"tests/screens/{name.lower()}/{name.lower()}.test.json"
+
+    # Create test template
+    test_template = {
+        "type": "screen",
+        "metadata": {
+            "name": f"{name}_test",
+            "description": f"Tests for {name} screen"
+        },
+        "cases": [
+            {
+                "name": "initial_display",
+                "description": "Verify initial screen state",
+                "steps": [
+                    {"assert": "visible", "id": "TODO_element_id"}
+                ]
+            }
+        ]
+    }
+
+    # Add platform if specified
+    if args.platform:
+        test_template["platform"] = args.platform
+
+    # Write file
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output, 'w', encoding='utf-8') as f:
+        json.dump(test_template, f, indent=2, ensure_ascii=False)
+
+    print(f"Created screen test file: {output}")
+    print(f"  Edit the file to add proper element IDs and test cases.")
+
+    return 0
+
+
+def cmd_generate_test_flow(args):
+    """Handle 'generate test flow' command - create flow test file template."""
+    name = args.name
+    output_path = args.path
+
+    # Determine output path if not specified
+    if not output_path:
+        output_path = f"tests/flows/{name.lower()}/{name.lower()}.test.json"
+
+    # Create flow test template
+    test_template = {
+        "type": "flow",
+        "metadata": {
+            "name": f"{name}_flow",
+            "description": f"{name} flow test"
+        },
+        "steps": [
+            {"action": "waitFor", "id": "TODO_start_screen"},
+            {"action": "tap", "id": "TODO_element_id"},
+            {"assert": "visible", "id": "TODO_end_screen"}
+        ]
+    }
+
+    # Add platform if specified
+    if args.platform:
+        test_template["platform"] = args.platform
+
+    # Write file
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output, 'w', encoding='utf-8') as f:
+        json.dump(test_template, f, indent=2, ensure_ascii=False)
+
+    print(f"Created flow test file: {output}")
+    print(f"  Edit the file to add proper element IDs and test steps.")
+
+    return 0
+
+
+_BRANCH_TEST_GLOBS = ("*.branches.test.ts", "*BranchesTest.kt", "*BranchesTest.swift")
+
+
+def _sibling_branch_tests(report) -> list[str]:
+    """Names of other generated branch-test files beside the one just written."""
+    if not report.test_file:
+        return []
+    directory = report.test_file.parent
+    names: set[str] = set()
+    for pattern in _BRANCH_TEST_GLOBS:
+        for path in directory.rglob(pattern):
+            if path != report.test_file:
+                names.add(path.name)
+    return sorted(names)
+
+
+def _print_model_change_note(absent, orphans):
+    """Say what an `[ABSENT]` parent means, once, when it can only mean this.
+
+    The check named the file and stopped. A consumer upgrading across the
+    change that made parent+subSpecs ONE screen sees the parent reported
+    absent and its old per-sub-spec files sitting there unmentioned, and has
+    to work out the model change from a red that does not describe it —
+    which took several steps, starting from an unrelated import error.
+
+    Printed only when both halves are present: an absent parent AND leftover
+    files named after its sub-specs. That pairing has one explanation. An
+    absent file on its own has several, and guessing at the reader's
+    situation is how an explanation becomes noise.
+    """
+    if not (absent and orphans):
+        return
+    print("\n  A parent spec and its subSpecs are ONE screen, and generate "
+          "one set of\n  files under the parent's name. These "
+          f"{len(orphans)} file(s) are named after a\n  sub-spec, so nothing "
+          "regenerates them:")
+    for path in orphans:
+        print(f"    {path}")
+    print("  Migration: regenerate (the parent's files appear), then delete "
+          "the files\n  above. Mocks first — the generator resolves routes "
+          "through them, so a\n  branch-tests run before `mock generate` "
+          "reports routes it cannot see.")
+
+
+def _branch_check_summary(reports: list, scanned: int, orphans=(),
+                          orphaned_screens=None) -> int:
+    """Print the check verdict for `generate branch-tests --check`.
+
+    Findings are folded by path, not by screen. The runtime is one file the
+    whole output directory shares, so a release that changes its shape
+    drifts every screen at once — listing it per screen reports nine
+    findings for one stale file and puts the reader to work nine times.
+    """
+    drifted: dict[Path, None] = {}
+    absent: dict[Path, None] = {}
+    matched: dict[Path, None] = {}
+    stale_screens = 0
+    # A screen whose branches all belong to other platforms produces no file
+    # here, so there is nothing to compare. Counted apart from "up to date"
+    # because it was never a candidate — and apart from a scan that reached
+    # nothing, which is the failure this summary exists to make visible.
+    not_applicable = [r for r in reports if not r.platform_applicable]
+    # Collected from the not-applicable reports too, and only from them: a
+    # leftover exists BECAUSE the screen stopped being applicable, so the
+    # filter that removes those reports from the comparison is exactly the
+    # one that hid this finding from every gate.
+    stale: dict[Path, None] = {}
+    stale_orphan: dict[Path, None] = {}
+    unowned: dict[Path, None] = {}
+    for report in reports:
+        for path in getattr(report, "stale", ()):
+            stale[path] = None
+        for path in getattr(report, "unowned", ()):
+            unowned[path] = None
+    reports = [r for r in reports if r.platform_applicable]
+    for report in reports:
+        for path in report.drifted:
+            drifted[path] = None
+        for path in report.absent:
+            absent[path] = None
+        for path in report.matched:
+            matched[path] = None
+        if report.drifted or report.absent:
+            stale_screens += 1
+
+    for path in absent:
+        print(f"  [ABSENT]  {path} (never generated)")
+    _print_model_change_note(absent, orphans)
+    if orphaned_screens is not None:
+        for path, screen in zip(orphaned_screens.tests, orphaned_screens.screens):
+            # Gating, as the retired leftovers above are: a screen that left
+            # the scan is counted by nothing else, so its test kept compiling
+            # against what was removed while every count stayed green.
+            print(f"  [RETIRED] {path} ('{screen}' no longer declares "
+                  "branchContracts; regenerate to remove it)")
+            stale_orphan[path] = None
+        for harness in orphaned_screens.harnesses:
+            print(f"  [WARN]    {harness} is the harness of a screen that no "
+                  "longer declares branchContracts — consumer-owned, not this "
+                  "tool's to remove")
+    for path in stale:
+        # Gating. `--check` did not count a screen that is not applicable to
+        # this platform, so a leftover from before the branches moved was
+        # reported by neither command — and a leftover that still PASSES is
+        # the worse direction, reading as "this screen has branch tests
+        # here" about a screen that has none.
+        print(f"  [RETIRED] {path} (this screen no longer generates a test "
+              "for this platform; regenerate to remove it)")
+    for path in unowned:
+        print(f"  [WARN]    {path} sits where a generated test would be "
+              "without an @generated banner — not this tool's to remove")
+    for path in drifted:
+        print(f"  [DRIFT]   {path}")
+    for report in reports:
+        if report.harness_absent:
+            # Consumer-owned, so never compared and never a failure — but a
+            # check that said nothing would call a project up to date whose
+            # generated tests cannot compile.
+            print(f"  [WARN]    {report.harness_file} — harness missing; "
+                  "the generated test imports it (run without --check to "
+                  "emit a skeleton)")
+    # The app's one hook, said once however many screens call it.
+    for hook in sorted({str(r.conditions_hook_file) for r in reports
+                        if getattr(r, "conditions_hook_absent", False)}):
+        print(f"  [WARN]    {hook} — harness-conditions hook missing; every "
+              "generated test calls arrangeCondition (run without --check to "
+              "emit a skeleton)")
+    # A note, never a failure: the file is the consumer's. But the fix ships
+    # in a skeleton that never overwrites an existing harness, so without
+    # naming the file the release reaches only projects that scaffold a NEW
+    # screen — and the projects that hit the defect are precisely the ones
+    # with harnesses already.
+    _print_invoke_port_notes(r.harness_file for r in reports
+                             if r.harness_lacks_invoke)
+
+    screens = len(reports)
+    skipped = (f", {len(not_applicable)} not applicable to this platform"
+               if not_applicable else "")
+    print(f"\nbranch tests: {screens} screen(s) declaring branchContracts "
+          f"of {scanned} spec(s) scanned{skipped} — {screens - stale_screens} "
+          f"up to date, {stale_screens} stale "
+          # `retired`, not `stale`: the word is already taken two clauses
+          # earlier by `stale_screens`, which counts screens whose copies are
+          # out of date. This counts FILES that should no longer exist at
+          # all. A consumer read the line while both were zero and flagged
+          # that a non-zero run would leave the reader asking which `stale`
+          # they were looking at — the one-label-two-meanings shape this
+          # release split `[NOTE]` apart to remove, reappearing in a summary
+          # line three commits later.
+          f"({len(matched)} file(s) current, {len(drifted)} drifted, "
+          f"{len(absent)} absent, {len(stale) + len(stale_orphan)} retired)")
+    if drifted or absent or stale or stale_orphan:
+        print("Regenerate with the same command without --check.")
+        return 1
+    return 0
+
+
+def cmd_contracts_baseline(args):
+    """Handle 'contracts baseline' — record today's coverage debt, or shrink it.
+
+    Design §6.1 P3c. No file: write the current entries — only with
+    `--initial` (v4.21: accepting all current debt is the user's decision).
+    A file: write only what it AND the current run hold. The tool never adds an entry; a new one
+    is closed (Task 6 of the define agent) or added by hand, where the diff shows it.
+
+    Nothing is written while the run holds what cannot be baselined (the gate
+    fails on it whatever the file says): under a row that could not be
+    evaluated, or a screen that could not be read, the statuses were never
+    counted — a first write would record a floor, and a shrink would drop
+    entries as closed that were only unmeasured.
+    """
+    from . import contracts_baseline as cb
+    from .contracts_coverage import (
+        EXIT_CANNOT_START, EXIT_UNCOVERED, CannotStart, load_project, run_coverage,
+    )
+
+    try:
+        project = load_project(Path.cwd())
+        path = cb.path_for(project.spec_dir)
+        recorded = cb.load(path)
+        report = run_coverage(Path.cwd())
+    except (CannotStart, ValueError) as e:
+        print(f"contracts baseline: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    blocking = [f"{b.platform}: {cause} {n}" for b in report.platforms
+                for cause, n in cb.unbaselinable(b).items()]
+    if blocking:
+        print(f"contracts baseline: nothing written — the gate fails on these whatever "
+              f"the baseline says, and what they hide was never counted: "
+              f"{'; '.join(blocking)}. Fix them, then run it again.", file=sys.stderr)
+        return EXIT_UNCOVERED
+    entries, removed, kept, new, hidden, vanished = cb.shrink(report.entries, recorded,
+                                                              cb.measured(report))
+    if recorded is None and not entries:
+        print(f"nothing to record — no entry keeps coverage from exit 0; {path} not written")
+        return 0
+    if recorded is None and not args.initial:
+        # A latch, not a switch (v4.21): the first recording accepts every
+        # entry there is as debt, which is the user's decision — made on
+        # purpose, never by an agent running the command it was told to run.
+        print(f"contracts baseline: nothing written — recording the first baseline accepts "
+              f"all current debt ({len(entries)} entr{'y' if len(entries) == 1 else 'ies'}) — "
+              "the user's decision; run with --initial", file=sys.stderr)
+        return EXIT_UNCOVERED
+    text = cb.dump(entries)
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        verb = "unchanged"
+    else:
+        verb = "wrote" if recorded is None else "updated"
+        path.write_text(text, encoding="utf-8")
+    print(f"{verb} {path}")
+    print(f"removed {removed} · kept {kept}"
+          + (f" ({hidden} unmeasured now — not closed, kept)" if hidden else "")
+          + (f" ({vanished} vanished — not closed, kept; remove or re-key them by hand)"
+             if vanished else "")
+          + f" · new {new} not added" + (" (close them, or add by hand)" if new else ""))
+    return 0
+
+
+def cmd_contracts_coverage(args):
+    """Handle 'contracts coverage' — API outcomes no branch contract answers."""
+    from .contracts_coverage import (
+        EXIT_CANNOT_START, CannotStart, CoverageTotalsError, format_text, run_coverage,
+        to_json,
+    )
+
+    try:
+        report = run_coverage(Path.cwd(), platforms=args.platform, screen=args.screen)
+    except CannotStart as e:
+        if args.as_json:
+            print(json.dumps({"exit": EXIT_CANNOT_START, "verdict": "cannot_start",
+                              "error": str(e)}, indent=2, ensure_ascii=False))
+        else:
+            print(f"contracts coverage: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    except CoverageTotalsError as e:
+        # A defect in this tool, not in the project: no table is printed,
+        # because one whose parts do not add up to its whole would be read.
+        if args.as_json:
+            print(json.dumps({"exit": EXIT_CANNOT_START, "verdict": "totals_do_not_close",
+                              "error": str(e)}, indent=2, ensure_ascii=False))
+        else:
+            print(f"contracts coverage: {e} — nothing printed; this is a defect "
+                  "in the tool, please report it", file=sys.stderr)
+        return EXIT_CANNOT_START
+    if args.as_json:
+        print(json.dumps(to_json(report), indent=2, ensure_ascii=False))
+    else:
+        for line in format_text(report):
+            print(line)
+    return report.exit
+
+
+def cmd_generate_unit_stubs(args):
+    """Handle 'generate unit-stubs' — declared-vs-implemented case sets."""
+    from pathlib import Path as _Path
+
+    from .unit_contracts import (
+        UnitContractError,
+        check_unit_contracts,
+        format_report,
+    )
+
+    project_root = _Path.cwd()
+    try:
+        report = check_unit_contracts(project_root, getattr(args, "spec_dir", None))
+    except UnitContractError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    for line in format_report(report):
+        print(line)
+
+    if getattr(args, "check", False):
+        # Non-zero on drift OR on anything that could not be checked: a
+        # platform whose test root is undeclared produces no findings, and
+        # reporting that as clean is the shape this whole command exists to
+        # stop.
+        return 0 if report.ok else 1
+
+    from .unit_contracts import write_stubs
+
+    try:
+        touched = write_stubs(project_root, report,
+                              dry_run=getattr(args, "dry_run", False))
+    except UnitContractError as e:
+        # Same standing as the refusal above it: a name that cannot be an
+        # identifier, or a missing test module, stops the run with a sentence
+        # rather than a traceback -- which would read as a fault in the tool
+        # rather than in the declaration it is naming.
+        print(f"ERROR: {e}")
+        return 1
+    # A name several targets declare, with fewer tests than targets and none
+    # a target's name places, is MISSING for `--check` ("at least N") — but
+    # which target lacks it cannot be told, so no stub can be written for it.
+    # Saying "every declared case has an implementation" and exiting 0 there
+    # contradicted the MISSING line printed just above.
+    unwritable = [(platform, name, short)
+                  for platform in report.platforms
+                  for name, short in sorted(report.short.get(platform, {}).items())]
+    # Names whose tests may all be there but cannot be placed: `--check`
+    # does not fail on them, and neither does this — but they are not
+    # "implemented" either.
+    unplaced = sum(1 for platform in report.platforms for name in report.unattributed(platform)
+                   if name not in report.short.get(platform, {}))
+    if not touched:
+        # `missing == 0` has two states and they are opposite facts: every
+        # case is implemented, or nothing was compared. write_stubs skips
+        # platforms it could not scan, so an undeclared or absent test
+        # directory reaches here looking exactly like a finished project —
+        # and this is the first command anyone runs, so a mistyped
+        # unitTestsDir would read as "done".
+        if report.unscannable or report.problems:
+            print(
+                "  no stubs written — but nothing was compared on "
+                f"{len(report.unscannable)} platform(s); this is NOT "
+                "'every case is implemented'. See the lines above"
+            )
+            return 1
+        if report.declaring_specs and not report.cases:
+            print(
+                "  no stubs written — no case could be read from the "
+                "unitContracts block(s) above, so there was nothing to write"
+            )
+            return 1
+        if unwritable:
+            _print_unwritable(unwritable)
+            return 1
+        if unplaced:
+            print(f"  no stubs to write — every declared case has an implementation or a "
+                  f"test no target's name places ({unplaced} UNATTRIBUTED line(s) above: not checked)")
+            return 0
+        print("  no stubs to write — every declared case has an implementation")
+        return 0
+    verb = "would write" if getattr(args, "dry_run", False) else "wrote"
+    for path, action, count in touched:
+        print(f"  {action:9s} {path}  ({count} stub(s)) [{verb}]")
+    print(
+        "  ⚠️  stubs fail rather than pass: a stub that passes is a case "
+        "reporting success without a body"
+    )
+    if unwritable:
+        _print_unwritable(unwritable)
+        return 1
+    return 0
+
+
+def _print_unwritable(unwritable) -> None:
+    """The MISSING cases `generate` cannot write a stub for."""
+    total = sum(short for _platform, _name, short in unwritable)
+    print(f"  no stub can be written for {total} missing case(s): the targets that lack "
+          f"them cannot be told apart, because the tests of the case are in no target's "
+          f"class, describe or file (the MISSING \"at least\" line(s) above):")
+    for platform, name, short in unwritable:
+        print(f"    {platform}: {name}  (at least {short})")
+    print("  put each target's test of the case in its own class, describe or file "
+          "(the name `generate` gives a target's stubs), then run this again")
+
+
+def cmd_generate_branch_tests(args):
+    """Handle 'generate branch-tests' — vitest tests from branchContracts."""
+    from .branch_tests import (
+        BranchTestGenerationError, discover_branch_screens,
+        generate_branch_tests,
+    )
+
+    check = getattr(args, "check", False)
+    screens = [args.screen] if args.screen else []
+    scanned_count = len(screens)
+    if not screens:
+        if args.spec:
+            print("Error: --spec names one file, so a screen name is required "
+                  "(omit both to scan every spec in spec_directory)",
+                  file=sys.stderr)
+            return 1
+        try:
+            screens, scanned, spec_problems = discover_branch_screens(Path.cwd())
+        except BranchTestGenerationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        scanned_count = len(scanned)
+        if spec_problems:
+            # Reported before the count, and fatal on its own. A refused
+            # parent leaves this scan with a SMALLER denominator and no other
+            # symptom: every remaining number agrees with every other, and the
+            # run reads as a clean pass over a project one screen shorter.
+            for problem in spec_problems:
+                print(f"  PROBLEM  {problem}", file=sys.stderr)
+            print(f"{len(spec_problems)} spec(s) were not read, so the "
+                  f"{scanned_count} spec(s) scanned below do not cover them.",
+                  file=sys.stderr)
+            return 1
+        if not screens:
+            # Not a green: a scan that reaches nothing and a project with
+            # nothing to generate produce the same "0 drifted", and this is
+            # the form a check silently stops covering anything.
+            print(f"Error: no screen declares branchContracts.methods "
+                  f"({scanned_count} spec(s) scanned) — nothing to "
+                  f"{'check' if check else 'generate'}", file=sys.stderr)
+            return 1
+
+    # Read once for the whole run: the app contracts spec is the project's,
+    # not a screen's, and a rule that fails to load must stop generation
+    # rather than quietly admit nothing.
+    from .branch_tests import _app_rules_for_generation
+    try:
+        app_rules = _app_rules_for_generation(Path.cwd())
+    except BranchTestGenerationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    named_one = bool(args.screen)
+    # The screens that declare branchContracts NOW. A whole-project run has
+    # them already; a run that named one screen reads them only to say what
+    # is left behind (None: the scan could not be completed, so nothing is
+    # said rather than something guessed).
+    live = None if named_one else set(screens)
+    if named_one:
+        live = _live_branch_screens()
+    reports = []
+    failures: list[tuple[str, str]] = []
+    for screen in screens:
+        rc, report, error = _generate_one_branch_test(args, screen, app_rules)
+        if rc:
+            if named_one:
+                # One screen was asked for, so its failure is the answer.
+                print(f"Error: {error}", file=sys.stderr)
+                if live is not None and screen not in live:
+                    # The screen was named, so the run knows it: a test it
+                    # generated before its spec (or its contracts) went is
+                    # retired here, and its harness is named.
+                    _print_orphaned_screens(
+                        _orphans(args, live, only=screen, retire=not check),
+                        removed=not check, note=check, stream=sys.stderr)
+                return rc
+            # Across a whole project, stopping at the first screen that
+            # cannot generate hides every screen after it — including the
+            # ones that are fine, and including other failures. A consumer
+            # lost the entire iOS run to one screen this way.
+            failures.append((screen, error))
+            continue
+        reports.append(report)
+
+    for screen, error in failures:
+        print(f"  [FAILED]  {screen}: {error}", file=sys.stderr)
+
+    from .branch_tests import UNMATCHED_GATE_UNAVAILABLE, unmatched_gate_unavailable
+    # A whole-project run retires the tests of screens that left the scan;
+    # a run that named one screen only names them (it was not asked about
+    # the others). Check mode deletes nothing. The screen just generated is
+    # live whatever the scan says (`--spec` may point outside spec_directory).
+    if named_one and live is not None:
+        live = live | {args.screen}
+    orphans = (_orphans(args, live, retire=not (check or named_one))
+               if live is not None else None)
+    if check:
+        from .branch_tests import orphaned_sub_spec_artefacts
+        rc = _branch_check_summary(
+            reports, scanned_count,
+            orphaned_sub_spec_artefacts(
+                Path.cwd(), _branch_dirs(args)[0], args.platform),
+            orphaned_screens=None if named_one else orphans)
+        if named_one and orphans is not None:
+            _print_orphaned_screens(orphans, removed=False, note=True)
+        if failures:
+            # Not verifiable is not verified: a screen that cannot be
+            # generated cannot be compared to what is on disk either.
+            print(f"{len(failures)} screen(s) could not be generated, so they "
+                  f"were not checked.", file=sys.stderr)
+            return 1
+        if unmatched_gate_unavailable():
+            # The expected files were generated as if nothing gated them.
+            print(UNMATCHED_GATE_UNAVAILABLE, file=sys.stderr)
+            return 1
+        if named_one and _named_screen_skipped(reports, args):
+            return 1
+        return rc
+    if failures:
+        for report in reports:
+            _print_branch_generation(report, show_siblings=False)
+        if orphans is not None:
+            _print_orphaned_screens(orphans, removed=not named_one, note=named_one)
+        _print_invoke_port_notes(r.harness_file for r in reports
+                                 if r.harness_lacks_invoke)
+        generated, skipped = _branch_generated_and_skipped(reports)
+        print(f"\nGenerated {generated} screen(s)"
+              + (f", {skipped} skipped" if skipped else "")
+              + f"; {len(failures)} failed.", file=sys.stderr)
+        # Said on this path too: files were written, so the question "which
+        # version wrote them" has an answer here and it is the same one.
+        _print_branch_toolchain(generated, skipped)
+        return 1
+    for report in reports:
+        # The "regenerate the siblings too" note answers a question that
+        # only arises when one screen was regenerated on its own.
+        _print_branch_generation(report, show_siblings=len(reports) == 1)
+    if orphans is not None:
+        _print_orphaned_screens(orphans, removed=not named_one, note=named_one)
+    _print_invoke_port_notes(r.harness_file for r in reports
+                             if r.harness_lacks_invoke)
+    print(app_rules.note())
+    if app_rules.conditions_note():
+        print(app_rules.conditions_note())
+    from .branch_tests import unmatched_gate_note
+    if unmatched_gate_note():
+        print(unmatched_gate_note())
+    _print_branch_toolchain(*_branch_generated_and_skipped(reports))
+    # The files are written; the run still FAILS when it could not read
+    # whether they gate (UNMATCHED_GATE_UNAVAILABLE, printed just above).
+    # Until jsonui-cli 1.9.8 this exited 0.
+    if unmatched_gate_unavailable():
+        return 1
+    if named_one and _named_screen_skipped(reports, args):
+        return 1
+    return 0
+
+
+def _live_branch_screens():
+    """The screens declaring branchContracts now, or None if unreadable."""
+    from .branch_tests import BranchTestGenerationError, discover_branch_screens
+    try:
+        screens, _, problems = discover_branch_screens(Path.cwd())
+    except BranchTestGenerationError:
+        return None
+    if problems:
+        # A spec that was not read may be the one that still declares the
+        # screen; calling its test an orphan would be a guess.
+        return None
+    return set(screens)
+
+
+def _orphans(args, live, *, only=None, retire=False):
+    from .branch_tests import orphaned_screen_tests
+    out_dir, harness_dir = _branch_dirs(args)
+    return orphaned_screen_tests(
+        Path.cwd(), out_dir, harness_dir, args.platform, args.package, live,
+        only=only, retire=retire)
+
+
+def _print_orphaned_screens(orphans, *, removed: bool, note: bool = False,
+                            stream=None) -> None:
+    """Name the tests of screens that no longer declare branchContracts.
+
+    The test is this tool's and goes (or, in a check or a one-screen run, is
+    named); the harness beside it is the consumer's and is only ever named —
+    with the screen gone it imports a ViewModel that may no longer exist, so
+    it is the next thing the test build trips over.
+    """
+    if not orphans.tests:
+        return
+    out = stream if stream is not None else sys.stdout
+    for path, screen in zip(orphans.tests, orphans.screens):
+        if removed:
+            print(f"  removed {path} ('{screen}' no longer declares "
+                  "branchContracts — its spec or its contracts are gone)",
+                  file=out)
+        elif note:
+            print(f"  note: {path} belongs to '{screen}', which no longer "
+                  "declares branchContracts — run `jsonui-test generate "
+                  "branch-tests` without a screen name to remove it", file=out)
+    for harness in orphans.harnesses:
+        print(f"  [WARN] {harness} is the harness of a screen that no longer "
+              "declares branchContracts — consumer-owned, left alone; delete "
+              "it by hand if the screen is gone", file=out)
+
+
+def _branch_generated_and_skipped(reports) -> tuple[int, int]:
+    """Screens that produced a test, and screens skipped for this platform.
+
+    A skipped screen has a report too — it says why nothing was written and
+    what it retired — so `len(reports)` is not the number generated. Until
+    2.5.11 the run counted it as one: a screen named on a platform it does
+    not target printed "Skipped" and then "1 screen(s) generated", exited 0,
+    and wrote nothing. A consumer read the MCP result as a generation and
+    found the 0 files only in git status.
+    """
+    skipped = sum(1 for r in reports if not r.platform_applicable)
+    return len(reports) - skipped, skipped
+
+
+def _named_screen_skipped(reports, args) -> bool:
+    """Say so and answer True when the one screen asked for was skipped.
+
+    Naming a screen asks for that screen's tests; a run that skipped it
+    produced no answer, and exit 0 (MCP: `success: true`) read as one. A
+    whole-project scan skipping some screens is ordinary and keeps its exit
+    code — only the named form fails, the way a scan that reaches nothing
+    does.
+    """
+    if not reports or reports[0].platform_applicable:
+        return False
+    report = reports[0]
+    why = ("this platform is outside its platforms (jui.config.json platforms ∩ "
+           "its metadata.platforms)" if getattr(report, "platform_excluded", False)
+           else "every branch it declares belongs to another platform")
+    print(f"Error: '{report.screen}' was skipped on {args.platform} — {why} — so "
+          f"nothing was {'checked' if getattr(args, 'check', False) else 'generated'}. "
+          f"Pass --platform for a platform the screen targets.", file=sys.stderr)
+    return True
+
+
+def _print_branch_toolchain(count: int, skipped: int = 0) -> None:
+    """Name the version that produced these files, once per run.
+
+    Bootstrap is not an operation any lane performs, so it leaves no trace
+    in their record. One lane regenerated with a renderer that had arrived
+    minutes earlier and could not say, while doing it, which version had
+    written the files; they settled it afterwards by re-running `--check`
+    and finding nothing stale. That is a RECONCILIATION, and it only works
+    while the tree still matches — it cannot answer the same question about
+    a commit from last week.
+
+    PRINTED, NEVER EMBEDDED. A version baked into the generated files would
+    drift every one of them on every release, and `--check` would lose the
+    difference between "the generator changed" and "the number did" — which
+    is the one distinction it exists to make.
+
+    Not printed by `--check`: that command reports on files it did not
+    write, so naming the running version beside its verdict would read as a
+    claim about what produced them.
+    """
+    # `count` is the screens that produced a test; a skipped screen is said
+    # apart, never in it.
+    tail = f", {skipped} skipped (not for this platform)" if skipped else ""
+    print(f"\n{count} screen(s) generated by jsonui-test {__version__}{tail}.")
+
+
+def _branch_dirs(args):
+    """`(out_dir, harness_dir)` for this run, defaults remapped per platform.
+
+    One definition, because the check summary needs the same answer to find
+    the leftovers of the old layout — and a second copy of a per-platform
+    default is a second copy that goes stale on the platform nobody is
+    looking at.
+    """
+    out_dir = args.out_dir
+    harness_dir = args.harness_dir
+    if args.platform == "android":
+        # Kotlin sources live under the JVM test source root by default.
+        if out_dir == "tests/unit/generated":
+            out_dir = "app/src/test/java"
+        if harness_dir == "tests/unit/branch-harness":
+            harness_dir = "app/src/test/java"
+    elif args.platform == "ios":
+        # Swift sources default to a Tests/ folder; with Xcode's
+        # file-system-synchronized groups, point --out-dir at the unit
+        # test target's folder instead.
+        if out_dir == "tests/unit/generated":
+            out_dir = "Tests/Generated"
+        if harness_dir == "tests/unit/branch-harness":
+            harness_dir = "Tests/Generated"
+    return out_dir, harness_dir
+
+
+def _generate_one_branch_test(args, screen: str, app_rules=None):
+    """Generate (or check) one screen. Returns (exit_code, report, error)."""
+    from .branch_tests import BranchTestGenerationError, generate_branch_tests
+
+    try:
+        out_dir, harness_dir = _branch_dirs(args)
+        # Same precedence as `mock generate` / `mock serve`: the flag, then
+        # the project's own declaration, then the default. Reading only the
+        # flag sent projects whose mocks live outside the app directory to a
+        # path they never configured, and the failure named the missing
+        # scenario rather than the directory that was searched.
+        mock_config, _ = _load_mock_config(None)
+        mocks_dir = args.mocks_dir or mock_config.get("mockDir") or "tests/mocks"
+        report = generate_branch_tests(
+            screen,
+            project_root=Path.cwd(),
+            spec_path=args.spec,
+            out_dir=out_dir,
+            harness_dir=harness_dir,
+            mocks_dir=mocks_dir,
+            platform=args.platform,
+            package=args.package,
+            module=args.module,
+            check=getattr(args, "check", False),
+            # The same `platforms` the rest of this tool reads, from the
+            # config the run was pointed at: a platform outside
+            # config ∩ metadata.platforms generates nothing for the screen.
+            config_platforms=_project_platforms(None),
+            condition_controls=getattr(args, "condition_controls", False),
+            app_rules=app_rules,
+        )
+    except BranchTestGenerationError as e:
+        return 1, None, str(e)
+    return 0, report, ""
+
+
+def _print_invoke_port_notes(paths, stream=None) -> None:
+    """Say WHY once, then name each file on its own line.
+
+    Measured on a consumer face with thirteen harnesses: the explanation was
+    printed verbatim thirteen times — 13 of 16 lines, 5,390 bytes, and
+    exactly ONE distinct body. A paragraph repeated per file is not thirteen
+    findings; it is one finding and twelve copies, and the copies are what
+    push the real lines off a reader's screen.
+
+    The per-file line keeps `has no \u0060invoke(\u0060` and stays one line per
+    file, because a consumer counts the work with
+    `grep -c 'has no .invoke('`. Folding the prose must not change that
+    count — the number of lines IS the number of files, before and after.
+    """
+    paths = list(paths)
+    if not paths:
+        return
+    out = stream if stream is not None else sys.stdout
+    print(
+        "  note: %d harness(es) below predate `invoke`. Reading a callback "
+        "with readField returns the ViewModel method, not the registered "
+        "arrow, and binding it with .call(vm) passes while the arrow never "
+        "runs. Port `invoke` and `settle` from a freshly generated skeleton. "
+        "A per-row closure carrying a row id is not in the store and is "
+        "meant to throw — call the ViewModel method for those. Nothing the "
+        "generator emits calls `invoke`, so porting shows up in no test "
+        "count and no coverage number — press a handler whose destination "
+        "differs by route to see it." % len(paths),
+        file=out,
+    )
+    for path in paths:
+        print(f"  note: {path} has no `invoke(`", file=out)
+
+
+def _print_branch_generation(report, show_siblings: bool = True) -> None:
+    if getattr(report, "platform_excluded", False):
+        print(f"Skipped '{report.screen}': this platform is outside the "
+              "screen's platforms (jui.config.json platforms ∩ its "
+              "metadata.platforms), so nothing is generated for it")
+        for path in report.stale:
+            print(f"  removed {path} (generated for this screen before the "
+                  "platform was excluded)")
+        for path in report.unowned:
+            print(f"  [WARN] {path} is where this screen's generated test "
+                  "would be, but it carries no @generated banner — left "
+                  "alone; delete it by hand if it is a stale copy")
+        return
+    if not report.platform_applicable:
+        print(f"Skipped '{report.screen}': every branch it declares belongs "
+              f"to another platform ({report.platform_skipped} scoped away), "
+              f"so there is no assertion to emit")
+        for path in report.stale:
+            # Said, not done silently. The consumer who reported this went
+            # looking for a misspelt `platforms` declaration, because the
+            # run said "skipped" while the old test kept failing — so the
+            # line that says the screen was skipped is the line that has to
+            # account for what was left behind.
+            print(f"  removed {path} (generated for this screen before its "
+                  "branches moved to another platform)")
+        for path in report.unowned:
+            print(f"  [WARN] {path} is where this screen's generated test "
+                  "would be, but it carries no @generated banner — left "
+                  "alone; delete it by hand if it is a stale copy")
+        return
+    print(f"Generated branch tests for '{report.screen}':")
+    for line in getattr(report, "route_overlaps", ()):
+        print(f"  info {line}")
+    also = getattr(report, "also_statuses_rows", 0)
+    print(f"  {report.test_file}  "
+          f"({report.declared_branches} declared branch(es), "
+          + (f"{also} more from alsoStatuses, " if also else "")
+          + f"{report.note_branches} note-only listed as comments)")
+    print(f"  {report.runtime_file}  (shared runtime)")
+    controls = getattr(report, "condition_controls", 0)
+    if controls:
+        # Only when asked for and there are any.
+        print(f"  condition controls: {controls} (each runs its row with every harness "
+              f"condition at its default; condition_without_effect is printed when it holds)")
+    siblings = _sibling_branch_tests(report) if show_siblings else []
+    if siblings:
+        # The runtime is one file for the whole directory, so a release that
+        # changes its shape leaves every screen that was not regenerated
+        # referring to the old one. The unit of regeneration is the project,
+        # not the screen — which nothing said until someone regenerated a
+        # single screen and had to fix 30 others.
+        print(f"  note: {len(siblings)} other generated test file(s) share this "
+              f"runtime — regenerate them too if it changed shape "
+              f"({', '.join(siblings[:4])}"
+              f"{', …' if len(siblings) > 4 else ''})")
+    if report.harness_created:
+        print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
+    else:
+        print(f"  {report.harness_file}  (existing harness kept)")
+    if getattr(report, "conditions_hook_created", False):
+        # Once per app: the first screen generated creates it, and every
+        # screen's tests call it before building the harness.
+        print(f"  {report.conditions_hook_file}  (NEW harness-conditions hook "
+              "skeleton, one per app — implement arrangeCondition(); until then "
+              "every branch test throws in it)")
+    # Named with its source. Two readers, on the same day, one working from a
+    # real corpus and one writing a fixture, both predicted this list from the
+    # contract's `when: {api.<op>: …}` clauses and both were wrong — the
+    # contract's api references are the only mention of an API a spec reader
+    # sees, and the declarations this list actually comes from live in a
+    # different section with no stated link to the generated output. Two
+    # independent readings of the same wrong provenance is a property of the
+    # output, not of the readers.
+    print(f"  routes: {', '.join(report.routes) or '(none)'}"
+          f"  (from dataFlow.repositories[].methods[].endpoint, "
+          f"not from the contract's api references)")
+    if report.side_routes:
+        # Only when there are any, so an app without them prints what it did.
+        print(f"  side routes: {', '.join(report.side_routes)}  (apiOutcomeRules "
+              f"sideCalls this screen does not declare — served with the mock's "
+              f"default scenario, admitted only for the rule's statuses)")
+
+
+def cmd_generate_description(args):
+    """Handle 'generate description' command - create description JSON file for a specific test case."""
+    test_type = args.test_type  # "screen" or "flow"
+    name = args.name
+    case_name = args.case_name
+    output_path = args.path
+
+    # Determine output path if not specified
+    if not output_path:
+        output_path = f"tests/{test_type}s/{name.lower()}/descriptions/{case_name}.json"
+
+    # Create description JSON
+    description_data = {
+        "case_name": case_name,
+        "summary": "",
+        "preconditions": [],
+        "test_procedure": [],
+        "expected_results": [],
+        "notes": "",
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat()
+    }
+
+    # Write file
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output, 'w', encoding='utf-8') as f:
+        json.dump(description_data, f, indent=2, ensure_ascii=False)
+
+    print(f"Created description file: {output}")
+    print(f"  Edit the file to add test documentation.")
+    print(f"\nTo link to test file, add 'descriptionFile' to the case:")
+    print(f'  "descriptionFile": "descriptions/{case_name}.json"')
+
+    return 0
+
+
+def cmd_report(args):
+    """Handle 'report' command - convert results JSON to JUnit XML or HTML."""
+    runs = []
+    total_errors = 0
+
+    for path in args.files:
+        file_path = Path(path)
+        if not file_path.exists():
+            print(f"Error: Results file not found: {path}", file=sys.stderr)
+            total_errors += 1
+            continue
+
+        data, errors = load_results_file(file_path)
+        if errors:
+            print(f"\n{file_path}", file=sys.stderr)
+            for error in errors:
+                print(f"  [ERROR] {error}", file=sys.stderr)
+            total_errors += len(errors)
+            continue
+
+        runs.append(data)
+
+    if total_errors > 0:
+        print(f"\nError: {total_errors} error(s) in results file(s). "
+              f"Input must match results.schema.json (jsonui-test-results format).", file=sys.stderr)
+        return 1
+
+    if args.format == "junit":
+        content = generate_junit(runs)
+        default_output = "report.xml"
+    else:
+        content = generate_html(runs)
+        default_output = "report.html"
+
+    output = Path(args.output) if args.output else Path(default_output)
+    if output.parent != Path('.'):
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+    total_cases = sum(len(s.get("results", [])) for run in runs for s in run.get("suites", []))
+    print(f"Created {args.format} report: {output}")
+    print(f"  Files: {len(runs)}, Test cases: {total_cases}")
+
+    return 0
+
+
+def _read_config_doc(explicit_path=None):
+    """The whole jui.config.json document, or ({}, None) when there is none."""
+    candidates = [Path(explicit_path)] if explicit_path else [
+        Path("jui.config.json"), Path("jsonui-test.config.json")]
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    return json.load(f), c
+            except (OSError, json.JSONDecodeError):
+                pass
+    return {}, None
+
+
+def _project_platforms(explicit_path=None):
+    """Platforms the project targets, from the config this run loaded.
+
+    `None` when the config is absent or declares no `platforms`, which leaves
+    every platform warning exactly as it was before the key was consulted —
+    absence has to mean "warn", never "assume web".
+
+    Read from the config the run was pointed at (`--config`, else
+    `jui.config.json` beside the invocation) rather than searched for from a
+    test file. A tests-in-the-parent-repository layout puts the app's config
+    off the ancestor path of its own tests, so a walk-up finds a config that
+    declares no platforms and the declaration silently does nothing. That
+    shape has already produced two defects in this tool.
+    """
+    data, config_path = _read_config_doc(explicit_path)
+    if config_path is None:
+        return None
+    platforms = data.get("platforms")
+    if isinstance(platforms, dict):
+        platforms = list(platforms)
+    if not isinstance(platforms, list) or not platforms:
+        return None
+    return [p for p in platforms if isinstance(p, str)] or None
+
+
+def _load_mock_config(explicit_path=None):
+    """Read the 'mock' section from jui.config.json (or an explicit config path).
+
+    `swagger` is normalised to a list here rather than at each call site: a
+    bare string is the obvious thing to write, and every consumer of this
+    config iterates the value — so a string was opened one character at a
+    time and failed with `Is a directory: '.'`, an error that points at the
+    filesystem instead of at the key.
+    """
+    data, c = _read_config_doc(explicit_path)
+    if c is None:
+        return {}, None
+    config = dict(data.get("mock", data))
+    swagger = config.get("swagger")
+    if isinstance(swagger, str):
+        config["swagger"] = [swagger]
+    elif swagger is not None and not isinstance(swagger, list):
+        print(f"Warning: mock.swagger in {c} is "
+              f"{type(swagger).__name__}; expected a path or a list "
+              "of paths — ignoring", file=sys.stderr)
+        config["swagger"] = []
+    return config, c
+
+
+def _load_path_scope(explicit_path=None):
+    """The endpoints this project declares it consumes.
+
+    Read from the same config the DTO codegen already filters on
+    (`api.schemas.include_paths` / `exclude_paths`), so a shared swagger's
+    other realms stop being counted as mocks this project owes.
+    """
+    from .mock.scope import PathScope
+
+    data, _ = _read_config_doc(explicit_path)
+    return PathScope.from_config(data)
+
+
+def _resolve_swaggers(swaggers, root, config_path):
+    """Absolute swagger paths, reporting the ones the config points nowhere at."""
+    resolved = []
+    for entry in swaggers:
+        path = Path(entry)
+        if not path.is_absolute():
+            path = root / path
+        if not path.is_file():
+            where = f" (mock.swagger in {config_path})" if config_path else ""
+            print(f"Warning: swagger not found: {path}{where}", file=sys.stderr)
+            continue
+        resolved.append(str(path))
+    return resolved
+
+
+def cmd_mock_generate(args):
+    """Scaffold or diff mock definition files from OpenAPI specs."""
+    from .mock.generate import generate, update_default, GenerateReport, CheckReport
+    from .mock.openapi import OpenApiLoadError
+
+    try:
+        return _mock_generate(args, generate, update_default, GenerateReport, CheckReport)
+    except OpenApiLoadError as exc:   # one line naming the document, not a traceback
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _mock_generate(args, generate, update_default, GenerateReport, CheckReport):
+    config, _ = _load_mock_config(getattr(args, "config", None))
+    swaggers = list(args.swagger) if args.swagger else list(config.get("swagger") or [])
+    mock_dir = args.out or config.get("mockDir", "tests/mocks")
+    if not swaggers:
+        print("Error: no swagger specified (use --swagger or set mock.swagger in jui.config.json)", file=sys.stderr)
+        return 1
+
+    if getattr(args, "update_default", False):
+        dry_run = getattr(args, "dry_run", False)
+        upd = update_default(swaggers, mock_dir, dry_run=dry_run,
+                             scope=_load_path_scope(getattr(args, "config", None)))
+        for rel in upd.updated:
+            paths = upd.added.get(rel)
+            detail = f" (+{', '.join(paths)})" if paths else " (source route)"
+            print(f"  [{'WOULD UPDATE' if dry_run else 'UPDATED'}] {rel}{detail}")
+        verb = "Would repair" if dry_run else "Repaired"
+        print(f"\n{verb} the default scenario of {len(upd.updated)} mock file(s), "
+              f"{len(upd.unchanged)} already current, {len(upd.skipped)} not present "
+              f"(run without --update-default to scaffold those).")
+        print("Only missing required fields were added — no existing value was "
+              "overwritten, nothing was removed, and other scenarios were not touched.")
+        for w in upd.warnings:
+            print(f"  [WARN] {w}")
+        if upd.schemas:
+            print(f"Placed the editor schema in {len(upd.schemas)} directory(ies).")
+        if upd.needs_review:
+            print(f"\n{len(upd.needs_review)} mock(s) have violations a merge cannot "
+                  "decide — fix these by hand, keeping your test data:")
+            for rel, problems in upd.needs_review:
+                print(f"  {rel}")
+                for problem in problems:
+                    print(f"    {problem}")
+        return 0
+
+    report = generate(swaggers, mock_dir, check=args.check,
+                      strict=getattr(args, "strict", False),
+                      scope=_load_path_scope(getattr(args, "config", None)))
+
+    if isinstance(report, CheckReport):
+        # WHAT THIS RUN MEASURED, ahead of what it found — the same line
+        # `validate` prints, from the same property, in the same position.
+        # This command had no denominator at all: it listed findings and
+        # then closed with "No drift: mocks are in sync with swagger.", so a
+        # tree with three scenarios nobody compared reported the sentence a
+        # fully-compared tree reports. Same shape as `copied 0` and
+        # `Warnings: 0` — a run that did not look, printed in the words of a
+        # run that looked and found nothing.
+        #
+        # It adds a line to this command's output. That was weighed against
+        # keeping it: a lane grepping three known words had already missed a
+        # whole release's additions, so the grep baseline is not an asset
+        # being protected here — it is the thing already failing. The
+        # release note names this printing surface instead.
+        print(f"\n{report.contract_summary}")
+        # The gating findings, from the printer the validate gate also uses.
+        _print_drift_findings(report)
+        for rel in report.out_of_scope:
+            print(f"  [SCOPE]   {rel} — outside this project's API paths, "
+                  "safe to delete")
+        for msg in report.absent_handwritten:
+            print(f"  [WARN]    {msg}")
+        for drift in report.stale_generated:
+            # Same visibility channel as the hand-written findings, but a
+            # warning: regenerating fixes it, so it never gates (the ORPHAN
+            # convention). It used to be detected and then shown nowhere.
+            if drift.regenerating_helps:
+                remedy = "stale generated body — regenerating fixes it"
+            else:
+                # Measured, not assumed: this file already equals what
+                # generation produces, so telling the reader to regenerate
+                # sends them round a loop with no exit.
+                remedy = ("the generator produced this body — regenerating "
+                          "will not change it; the schema cannot be "
+                          "synthesised here (self-reference), so supply the "
+                          "value in a hand-written overlay")
+            print(f"  [WARN]    {drift}\n            {remedy}")
+        notes = [d for d in report.bodies
+                 if d.is_note_only and not d.generated and not report.strict]
+        for drift in notes:
+            # `[OPTIONAL]`, not `[NOTE]`: one label used to cover both this
+            # (a body that spells out fewer optional fields than the schema
+            # has) and the `[STATUS]` findings below, which are a different
+            # question entirely. A consumer could not split its own count
+            # between them.
+            print(f"  [OPTIONAL] {drift}")
+        for rel in report.misnamed:
+            print(f"  [NAME]    {rel}")
+        # What is left after the gating subsets ([EXTRA], [STATUS]) have
+        # been printed above — form B, scenarios that declared their own
+        # `undeclaredStatus`, and scenarios with no status at all. `[WARN]`
+        # because the label carries the weight: these do not fail the check.
+        #
+        # From the shared printer. The copy that used to live here printed
+        # the identical line and counted nothing, so the three classes
+        # arrived on screen indistinguishable — including the one class that
+        # CAN be cleared, which only this command can show.
+        uncounted = _print_uncompared_notes(report)
+        for warning in report.warnings:
+            print(f"  [WARN]    {warning}")
+        if report.scope_note:
+            print(f"\nAPI path scope: {report.scope_note} "
+                  f"({report.scope_excluded} endpoint(s) outside it, not checked)")
+        # Before the verdict, so it reaches every exit below rather than
+        # only the green one — a reader whose run failed on something else
+        # still has uncompared scenarios to read about.
+        _print_uncounted_footnote(uncounted, command="check")
+        if report.has_drift:
+            # From `CheckReport.gating`, the same declaration `has_drift`
+            # reads. Hand-counted, this line named four buckets while the
+            # gate read five, so a run failing on the fifth printed four
+            # zeroes above its own non-zero exit code.
+            print(f"\n{report.drift_summary}")
+            if report.errors:
+                _print_body_drift_remedy(
+                    report, swaggers, mock_dir,
+                    _load_path_scope(getattr(args, "config", None)))
+            return 1
+        if report.stale_generated:
+            # "No drift: in sync" would be misinformation here — the check
+            # measured these bodies as stale and merely chose not to gate.
+            print(f"\nNo drift in hand-written mocks; "
+                  f"{len(report.stale_generated)} generated body(ies) are "
+                  "stale — refresh with 'jsonui-test mock generate' "
+                  "(hand-written scenarios are preserved).")
+            return 0
+        if report.unmatched_notes:
+            # Same rule as the stale-generated sentence above, and the
+            # reason the denominator line was added: "in sync" is what a run
+            # with nothing uncompared says, and printing it under a contract
+            # line that names three uncompared scenarios puts a
+            # contradiction in one output.
+            print(f"\nNo drift in the {report.compared} scenario(s) "
+                  f"compared; {len(report.unmatched_notes)} scenario(s) "
+                  "were not compared — the contract line above says why.")
+            return 0
+        print("No drift: mocks are in sync with swagger.")
+        return 0
+
+    for w in report.warnings:
+        print(f"  [WARN] {w}")
+    print(f"\nGenerated {len(report.created)} mock file(s) into "
+          f"{mock_dir}/generated/ (rewritten each run — safe to gitignore); "
+          f"{len(report.overlaid)} route(s) overlaid by hand-written mock(s).")
+    if report.out_of_scope:
+        print(f"{len(report.out_of_scope)} endpoint(s) outside this project's "
+              "API paths were not scaffolded.")
+    if report.schemas:
+        print(f"Placed the editor schema ({len(report.schemas)} directory(ies)) "
+              "so the `$schema` line in each mock resolves while you edit it.")
+    return 0
+
+
+def _make_artifacts_post_run_hook(explicit_config):
+    """Post-run hook for `mock serve --artifacts`: pull artifacts for the target.
+
+    RunManager wraps the hook in try/except and logs failures to its own
+    line buffer, so this never crashes the server.
+    """
+    from . import artifacts
+
+    def hook(target, returncode):
+        platform = str(target).lower()
+        if platform not in ("ios", "android", "web"):
+            return  # custom targets have no known artifact source
+        test_cfg, cfg_path = _load_test_config(explicit_config)
+        project_root = cfg_path.parent if cfg_path else Path(".")
+        out_root = artifacts.resolve_out_root(test_cfg, project_root)
+        if platform == "ios":
+            result = artifacts.pull_ios(test_cfg, project_root, out_root)
+        elif platform == "android":
+            result = artifacts.pull_android(test_cfg, project_root, out_root)
+        else:
+            result = artifacts.pull_web(test_cfg, project_root, out_root)
+        line = f"[artifacts] {platform}: {len(result.files)} file(s) -> {result.stamp_dir or out_root}"
+        if result.skipped:
+            line += f" (skipped: {'; '.join(result.skipped)})"
+        print(line, flush=True)
+
+    return hook
+
+
+def cmd_mock_identity(args):
+    """Ask a running mock server whose corpus it serves, and (by default)
+    refuse if it is not this project's.
+
+    The check a health check cannot do: HTTP 200 on the panel says a mock is
+    listening, not whose. Measured 2026-09-04 — a server that failed to bind
+    left another project's mock on the port, the 200 passed, and five tests
+    ran against the wrong corpus and were read as regressions.
+
+    Run it after starting the server AND after the run: the port can change
+    hands in between, and nothing in the results says so afterwards.
+    """
+    import urllib.error
+    import urllib.request
+
+    config, _cfg_path = _load_mock_config(getattr(args, "config", None))
+    port = args.port if args.port is not None else config.get("server", {}).get("port", 8790)
+    url = f"http://127.0.0.1:{port}/__jsonui__/identity"
+    try:
+        req = urllib.request.Request(url, headers={"Host": f"127.0.0.1:{port}"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            identity = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # Something IS listening, it just has no identity to give. Measured
+        # 2026-09-04 against a server from before this endpoint existed: the
+        # path fell through to the admin router and came back 401, and
+        # reporting that as "nothing answered" would send the caller to start
+        # a server that is already running. Distinct outcome, distinct code.
+        print(
+            f"mock identity: port {port} answered {e.code} — a server is running but has no "
+            "identity endpoint (it predates it, or it is not a jsonui mock). Whose corpus it "
+            "serves cannot be determined; upgrade it or stop it.",
+            file=sys.stderr,
+        )
+        return 3
+    except (urllib.error.URLError, OSError) as e:
+        # Nothing listening is a distinct outcome from the wrong mock
+        # listening, and the caller must be able to tell them apart.
+        print(f"mock identity: nothing answered on port {port} ({e})", file=sys.stderr)
+        return 2
+
+    # No config file in the tree means the project root is where the caller
+    # is standing — the same place `mock serve` would take it from.
+    expected = str(Path(getattr(args, "expect_root", None)
+                        or _project_root(getattr(args, "config", None))
+                        or Path.cwd()).resolve())
+    actual = identity.get("projectRoot", "")
+    print(json.dumps(identity, indent=2))
+    if getattr(args, "any_project", False):
+        return 0
+    if actual != expected:
+        print(
+            f"mock identity: port {port} is serving '{actual}', not '{expected}' — "
+            "another project's mock holds this port. Its corpus would answer this "
+            "run's requests and the failures would look like your change.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def cmd_mock_serve(args):
+    """Start the local mock server + control panel."""
+    from .mock.contract import ContractIndex, ContractLog
+    from .mock.server import MockStore, MockServer, RunManager
+
+    config, config_path = _load_mock_config(getattr(args, "config", None))
+    mock_dir = args.mock_dir or config.get("mockDir", "tests/mocks")
+    # `is not None` (not `or`): --port 0 means "pick an ephemeral port" and
+    # must not fall through to the config/default port.
+    port = args.port if args.port is not None else config.get("server", {}).get("port", 8790)
+    run_targets = config.get("runTargets", {})
+    project_root = config_path.parent if config_path else Path(".")
+
+    if not Path(mock_dir).exists():
+        # generate creates mockDir even when the project's path scope
+        # matches 0 endpoints, so a missing dir really does mean generate
+        # has not run (older tool versions skipped the mkdir on the
+        # 0-endpoint path and made this hint a loop).
+        print(f"Error: mock dir not found: {mock_dir} (run 'jsonui-test mock generate' first — "
+              "it creates the directory even when 0 endpoints are in scope)", file=sys.stderr)
+        return 1
+
+    post_run_hook = None
+    if getattr(args, "artifacts", False):
+        post_run_hook = _make_artifacts_post_run_hook(getattr(args, "config", None))
+
+    # Request-contract checking. On by default: a mock that answers a
+    # request the real API would reject is the failure mode this exists for,
+    # and an opt-in check is one nobody opts into.
+    contract = ContractIndex()
+    contract_log = ContractLog()
+    if config.get("validateRequests", True) and not getattr(args, "no_validate_requests", False):
+        contract = ContractIndex.load(list(config.get("swagger") or []))
+        for line in contract.unread:
+            print(f"  request validation: {line}")
+        if not contract:
+            print("  request validation: off (" + ("no swagger could be read" if contract.unread else "no swagger configured") + ")")
+
+    store = MockStore.load(mock_dir)
+    server = MockServer(store, RunManager(run_targets, project_root,
+                                          post_run_hook=post_run_hook,
+                                          contract_log=contract_log),
+                        port=port, contract=contract, contract_log=contract_log,
+                        # For `identity`: which swagger this corpus came from.
+                        swagger=list(config.get("swagger") or []))
+    # Bind BEFORE printing the banner: consumers parse the URL/token from
+    # stdout as the "server is up" signal, so a banner followed by a bind
+    # failure reads as a successful start. Bind also resolves port 0 to
+    # the real ephemeral port.
+    try:
+        server.bind()
+    except OSError as e:
+        reason = e.strerror or str(e)
+        print(f"Error: cannot bind 127.0.0.1:{port} ({reason})", file=sys.stderr)
+        return 1
+    print(f"JsonUI mock server: http://127.0.0.1:{server.port}")
+    print(f"  loaded {len(store.endpoints)} endpoint(s) from {mock_dir}/")
+    if not store.endpoints:
+        # A servable state, not an error: mock-independent tests (security
+        # regressions and the like) still need the server up. Say what a
+        # request will get so an empty scope is diagnosable from the banner.
+        print("  0 endpoints — every request will 404. If you expected mocks, "
+              "check the swagger against this project's API path scope.")
+    if store.overrides:
+        # A hand-written mock silently shadowing a generated one is the
+        # confusing case, so say so.
+        print(f"  {len(store.overrides)} hand-written mock(s) overlay the generated tree:")
+        for rel in store.overrides[:10]:
+            print(f"    {rel}")
+        if len(store.overrides) > 10:
+            print(f"    ... and {len(store.overrides) - 10} more")
+    print(f"  control panel: http://127.0.0.1:{server.port}/__jsonui__/panel")
+    # flush: piped stdout is block-buffered and serve_forever() never
+    # returns — without an explicit flush the banner (and the admin token,
+    # whose only channel is stdout) never reaches the consumer.
+    print(f"  admin token:   {server.token}", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nshutting down")
+        server.shutdown()
+    # Violations from requests made outside a panel-driven run (a suite
+    # pointed straight at the server) would otherwise go unreported.
+    summary = contract_log.summary()
+    if summary:
+        print()
+        for line in summary:
+            print(line)
+        return 1
+    return 0
+
+
+def cmd_artifacts_pull(args):
+    """Pull test artifacts (xcresult attachments / on-device files) locally."""
+    from . import artifacts
+
+    test_cfg, cfg_path = _load_test_config(getattr(args, "config", None))
+    project_root = cfg_path.parent if cfg_path else Path(".")
+    out_root = artifacts.resolve_out_root(test_cfg, project_root, override=args.out)
+
+    platforms = ["ios", "android", "web"] if args.platform == "all" else [args.platform]
+    results = []
+    for platform in platforms:
+        try:
+            if platform == "ios":
+                results.append(artifacts.pull_ios(
+                    test_cfg, project_root, out_root,
+                    xcresult_override=args.xcresult))
+            elif platform == "android":
+                results.append(artifacts.pull_android(
+                    test_cfg, project_root, out_root,
+                    serial_override=args.serial, clean=args.clean))
+            else:
+                results.append(artifacts.pull_web(
+                    test_cfg, project_root, out_root, clean=args.clean))
+        except artifacts.ArtifactsConfigError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    files = [f for r in results for f in r.files]
+    skipped = [f"{r.platform}: {reason}" for r in results for reason in r.skipped]
+
+    if args.json:
+        print(json.dumps({
+            "outputDir": str(out_root),
+            "files": files,
+            "skipped": skipped,
+        }, ensure_ascii=False, indent=2))
+    else:
+        for r in results:
+            if r.files:
+                print(f"{r.platform}: pulled {len(r.files)} file(s) -> {r.stamp_dir}")
+            for reason in r.skipped:
+                print(f"{r.platform}: skipped ({reason})")
+        print(f"Output dir: {out_root}")
+
+    return artifacts.pull_exit_code(args.platform, results)
+
+
+def cmd_artifacts_status(args):
+    """Show resolved artifacts config and files currently in the artifacts dir."""
+    from . import artifacts
+
+    test_cfg, cfg_path = _load_test_config(getattr(args, "config", None))
+    project_root = cfg_path.parent if cfg_path else Path(".")
+    info = artifacts.status(test_cfg, project_root)
+
+    if args.json:
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+    else:
+        print(f"Artifacts dir: {info['artifactsDir']}")
+        print(f"  ios.xcresult:   {info['ios']['xcresult'] or '(none found)'}")
+        print(f"  android.appId:  {info['android']['appId'] or '(not set)'}")
+        print(f"  android.serial: {info['android']['serial'] or '(default device)'}")
+        print(f"  existing files: {len(info['existing'])}")
+        for f in info["existing"]:
+            print(f"    {f}")
+
+    return 0
+
+
+def cmd_artifacts_prune_legacy(args):
+    """List (default) or delete (--yes) the suites left in the flat legacy Android mirror."""
+    from . import artifacts
+
+    test_cfg, _cfg_path = _load_test_config(getattr(args, "config", None))
+    info = artifacts.prune_legacy_android(test_cfg, serial_override=args.serial, yes=args.yes)
+
+    if args.json:
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+    else:
+        print(f"Legacy mirror: {info['root']}")
+        if info["suites"]:
+            verb = "deleted" if not info["dryRun"] else "would delete"
+            print(f"  suite dirs ({verb}, {len(info['suites'])}):")
+            for name in info["suites"]:
+                mark = "  x" if name in info["deleted"] else "   "
+                print(f"  {mark} {name}")
+        else:
+            print("  suite dirs: none")
+        if info["packages"]:
+            print(f"  left alone (other apps' scoped mirrors, {len(info['packages'])}):")
+            for name in info["packages"]:
+                print(f"      {name}")
+        for reason in info["skipped"]:
+            print(f"  skipped ({reason})")
+        if info["dryRun"] and info["suites"]:
+            print("  dry run — nothing deleted. This root has no app dimension: entries can belong to any app "
+                  "that ran on this device with an android driver < 1.8.9. Re-run with --yes only once every "
+                  "app on the device writes the scoped mirror (driver >= 1.8.9).")
+
+    return 1 if info["skipped"] and not info["suites"] and not info["packages"] else 0
+
+
+def _steps_use_add_media(steps):
+    """True if any step (or nested repeat/retry step) is an addMedia step
+    reachable on iOS (i.e. not gated off ios by its own `when.platform`)."""
+    for step in steps or []:
+        if not isinstance(step, dict):
+            continue
+        when = step.get("when")
+        when_platform = when.get("platform") if isinstance(when, dict) else None
+        if when_platform is not None:
+            allowed = when_platform if isinstance(when_platform, list) else [when_platform]
+            if "ios" not in allowed and "all" not in allowed:
+                continue
+        if step.get("action") == "addMedia":
+            return True
+        if _steps_use_add_media(step.get("steps")):
+            return True
+    return False
+
+
+def _platform_reaches_ios(value):
+    """Mirror of the install-time platform-membership rules, for target ios."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value in ("all", "ios")
+    if isinstance(value, list):
+        return "ios" in value
+    return True
+
+
+def _platform_reaches_android(value):
+    """Mirror of the install-time platform-membership rules, for target android."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value in ("all", "android")
+    if isinstance(value, list):
+        return "android" in value
+    return True
+
+
+def _test_android_deny_permissions(data):
+    """Cross-platform permission names a parsed test file declares deny on Android."""
+    if not isinstance(data, dict):
+        return set()
+    if not _platform_reaches_android(data.get("platform")):
+        return set()
+    permissions = (data.get("launch") or {}).get("permissions")
+    if not isinstance(permissions, dict):
+        return set()
+    return {name for name, value in permissions.items() if value == "deny"}
+
+
+def _requested_permissions_from_dumpsys(text, app_id):
+    """The package's requested permissions, or None when undeterminable.
+
+    None is the loud-fail signal: the package header is missing, so nothing
+    was read about this app (not installed, or dumpsys said something else
+    entirely). A present package with no 'requested permissions:' section is
+    an app that requests nothing — an empty set, which IS a determination.
+    The distinction keeps an unrelated pm failure from reading as a
+    vacuously-satisfied deny.
+    """
+    if f"Package [{app_id}]" not in text:
+        return None
+    requested = set()
+    in_section = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "requested permissions:":
+            in_section = True
+            continue
+        if in_section:
+            if not line.startswith(" ") or stripped.endswith(":"):
+                break
+            requested.add(stripped.split(":")[0])
+    return requested
+
+
+def _classify_deny_revokes(deny_names, requested_permissions, permission_map):
+    """Split declared denies into (to_revoke, vacuous) [(name, permission)].
+
+    A name outside the map is skipped, matching the Android driver's apply
+    loop; unknown-name detection is the validator's job.
+    """
+    to_revoke, vacuous = [], []
+    for name in sorted(deny_names):
+        permission = permission_map.get(name)
+        if permission is None:
+            continue
+        if permission in requested_permissions:
+            to_revoke.append((name, permission))
+        else:
+            vacuous.append((name, permission))
+    return to_revoke, vacuous
+
+
+def _test_uses_add_media_on_ios(data):
+    """True if a parsed test file can execute an addMedia step on iOS."""
+    if not isinstance(data, dict):
+        return False
+    if not _platform_reaches_ios(data.get("platform")):
+        return False
+    if data.get("type") == "screen":
+        for case in data.get("cases") or []:
+            if not isinstance(case, dict):
+                continue
+            if not _platform_reaches_ios(case.get("platform")):
+                continue
+            if _steps_use_add_media(case.get("steps")):
+                return True
+        return False
+    return any(_steps_use_add_media(data.get(k)) for k in ("setup", "steps", "teardown"))
+
+
+def cmd_pregrant(args):
+    """Establish per-run permission baselines before the test process exists.
+
+    iOS: pre-grant photo-library add access to the UITest runner (addMedia
+    seeds the photo library from the xctrunner process; granting before
+    xcodebuild means no alert ever appears — probed on iOS 18.6, the service
+    must be `photos-add`, and the grant works pre-install).
+
+    Android: pre-revoke every permission the test files declare deny.
+    Measured 2026-09-02: a granted runtime permission cannot be denied from
+    inside an instrumentation run (`pm revoke` kills the instrumented
+    process; appops is a silent no-op on permission-backed ops), and grants
+    persist across update-installs — so the denied baseline the driver's
+    deny-assert relies on is made here, where there is no process to kill.
+
+    Each arm no-ops when its scan finds nothing, so running both (the
+    default) is safe on single-platform projects.
+    """
+    test_config, cfg_path = _load_test_config(getattr(args, "config", None))
+    files = _discover_test_files(args, cfg_path)
+    platform = getattr(args, "platform", None)
+    rc = 0
+    if platform in (None, "ios"):
+        rc = _pregrant_ios(args, test_config, files) or rc
+    if platform in (None, "android"):
+        rc = _pregrant_android(args, test_config, files) or rc
+    return rc
+
+
+def _discover_test_files(args, cfg_path):
+    paths = getattr(args, "paths", None) or []
+    files = []
+    if paths:
+        for p in paths:
+            pp = Path(p)
+            if pp.is_dir():
+                files.extend(sorted(pp.rglob("*.test.json")))
+            elif pp.exists():
+                files.append(pp)
+            else:
+                print(f"Warning: Path not found: {p}", file=sys.stderr)
+    else:
+        root = cfg_path.parent if cfg_path else Path(".")
+        tests_dir = root / "tests"
+        if tests_dir.is_dir():
+            files = sorted(tests_dir.rglob("*.test.json"))
+    return files
+
+
+def _pregrant_ios(args, test_config, files):
+    import subprocess
+
+    # 1) Scan for addMedia usage reachable on iOS.
+    uses = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if _test_uses_add_media_on_ios(data):
+            uses.append(f)
+    if not uses and not getattr(args, "force", False):
+        print("pregrant: no iOS-reachable addMedia steps found — nothing to grant")
+        return 0
+
+    # 2) UITest bundle id → runner id (<bundle-id>.xctrunner).
+    bundle_id = getattr(args, "bundle_id", None)
+    if not bundle_id:
+        ios_entry = (test_config.get("install") or {}).get("ios")
+        if isinstance(ios_entry, dict):
+            bundle_id = ios_entry.get("uitestBundleId") or ios_entry.get("uitest_bundle_id")
+    if not bundle_id:
+        print("pregrant: UITest bundle id unknown — pass --bundle-id or set "
+              "test.install.ios.uitestBundleId in the config", file=sys.stderr)
+        return 1
+    runner_id = bundle_id if bundle_id.endswith(".xctrunner") else bundle_id + ".xctrunner"
+
+    # 3) Simulator UDID (simctl privacy needs a booted device).
+    udid = getattr(args, "udid", None)
+    if not udid:
+        try:
+            out = subprocess.run(
+                ["xcrun", "simctl", "list", "devices", "booted", "-j"],
+                capture_output=True, text=True, check=True).stdout
+            devices = [d for devs in json.loads(out).get("devices", {}).values()
+                       for d in devs if d.get("state") == "Booted"]
+        except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            print(f"pregrant: could not list booted simulators: {e}", file=sys.stderr)
+            return 1
+        if len(devices) == 1:
+            udid = devices[0]["udid"]
+        elif not devices:
+            print("pregrant: no booted simulator — boot one first "
+                  "(simctl privacy needs a booted device)", file=sys.stderr)
+            return 1
+        else:
+            print("pregrant: multiple booted simulators — pass --udid:", file=sys.stderr)
+            for d in devices:
+                print(f"  {d['udid']}  {d.get('name', '?')}", file=sys.stderr)
+            return 1
+
+    # 4) Grant.
+    cmd = ["xcrun", "simctl", "privacy", udid, "grant", "photos-add", runner_id]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(f"pregrant: {' '.join(cmd)} failed: {proc.stderr.strip()}", file=sys.stderr)
+        return 1
+    print(f"pregrant: granted photos-add to {runner_id} on {udid}"
+          f" ({len(uses)} test file(s) use addMedia)")
+    return 0
+
+
+def _pregrant_android(args, test_config, files):
+    import subprocess
+    from jsonui_test_cli.artifacts import find_adb
+    from jsonui_test_cli.schema import ANDROID_PERMISSION_MAP
+
+    # 1) Union of deny declarations reachable on Android.
+    deny_names = set()
+    declaring = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        names = _test_android_deny_permissions(data)
+        if names:
+            deny_names |= names
+            declaring.append(f)
+    if not deny_names:
+        print(f"pregrant(android): 0 deny declaration(s) across {len(files)} "
+              "file(s) — nothing to revoke")
+        return 0
+
+    # 2) The app under test.
+    app_id = getattr(args, "app_id", None)
+    if not app_id:
+        install_entry = (test_config.get("install") or {}).get("android")
+        if isinstance(install_entry, dict):
+            app_id = install_entry.get("applicationId") or install_entry.get("application_id")
+    if not app_id:
+        artifacts_entry = (test_config.get("artifacts") or {}).get("android")
+        if isinstance(artifacts_entry, dict):
+            app_id = artifacts_entry.get("appId")
+    if not app_id:
+        print("pregrant(android): app id unknown — pass --app-id or set "
+              "test.install.android.applicationId in the config", file=sys.stderr)
+        return 1
+
+    # 3) adb + device, same conventions as artifacts pull.
+    android_cfg = (test_config.get("artifacts") or {}).get("android") or {}
+    adb = find_adb(android_cfg)
+    if not adb:
+        print("pregrant(android): adb not found (config test.artifacts.android.adb, "
+              "PATH, ANDROID_HOME/ANDROID_SDK_ROOT)", file=sys.stderr)
+        return 1
+    serial = getattr(args, "serial", None) or android_cfg.get("serial")
+    try:
+        out = subprocess.run([adb, "devices"], capture_output=True, text=True,
+                             check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        print(f"pregrant(android): could not list devices: {e}", file=sys.stderr)
+        return 1
+    devices = [line.split("\t")[0] for line in out.splitlines()[1:]
+               if "\tdevice" in line]
+    if serial:
+        if serial not in devices:
+            print(f"pregrant(android): device '{serial}' is not connected "
+                  f"(saw: {', '.join(devices) or 'none'})", file=sys.stderr)
+            return 1
+    elif len(devices) == 1:
+        serial = devices[0]
+    elif not devices:
+        print("pregrant(android): no device/emulator connected", file=sys.stderr)
+        return 1
+    else:
+        print("pregrant(android): multiple devices — pass --serial:", file=sys.stderr)
+        for d in devices:
+            print(f"  {d}", file=sys.stderr)
+        return 1
+
+    # 4) Three-way judgment: revoke / vacuously satisfied / cannot determine.
+    #    The read of requested permissions is deliberate: pm error output must
+    #    never be swallowed into "vacuously satisfied".
+    proc = subprocess.run([adb, "-s", serial, "shell", "dumpsys", "package", app_id],
+                          capture_output=True, text=True)
+    requested = (_requested_permissions_from_dumpsys(proc.stdout, app_id)
+                 if proc.returncode == 0 else None)
+    if requested is None:
+        print(f"pregrant(android): cannot determine which permissions '{app_id}' "
+              f"requests on {serial} — is the app installed? Install it first, "
+              "then pregrant. Refusing to guess: an unrelated pm failure must "
+              "not read as a vacuously-satisfied deny.", file=sys.stderr)
+        return 1
+
+    to_revoke, vacuous = _classify_deny_revokes(deny_names, requested,
+                                                ANDROID_PERMISSION_MAP)
+    for name, permission in to_revoke:
+        proc = subprocess.run([adb, "-s", serial, "shell", "pm", "revoke",
+                               app_id, permission], capture_output=True, text=True)
+        blob = (proc.stderr or "") + (proc.stdout or "")
+        if proc.returncode != 0 or "Exception" in blob or "Error" in blob:
+            print(f"pregrant(android): pm revoke {app_id} {permission} failed: "
+                  f"{blob.strip()}", file=sys.stderr)
+            return 1
+    for name, permission in vacuous:
+        print(f"pregrant(android): note — '{name}' ({permission}) is not requested "
+              f"by {app_id}; its deny is vacuously satisfied")
+    print(f"pregrant(android): revoked {len(to_revoke)} permission(s) on {app_id}: "
+          f"{', '.join(p for _, p in to_revoke) or '-'} "
+          f"({len(declaring)} test file(s) declare deny)")
+    return 0
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        prog="jsonui-test",
+        description="JsonUI Test CLI - Validate and generate test files"
+    )
+    parser.add_argument(
+        "--version", "-V",
+        action="version",
+        version=f"%(prog)s {__version__}"
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # Validate command
+    validate_parser = subparsers.add_parser(
+        "validate",
+        aliases=["v"],
+        help="Validate test files"
+    )
+    validate_parser.add_argument(
+        "files",
+        nargs="+",
+        help="Files or directories to validate"
+    )
+    validate_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Show all files, including valid ones"
+    )
+    validate_parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Hide warnings, show only errors"
+    )
+    validate_parser.add_argument(
+        "--no-install",
+        action="store_true",
+        help="Validate only; skip flatten-install even if test.install is configured. "
+             "A stale mocks generated/ tree is still rebuilt (and files no in-scope "
+             "operation generates are removed, each one named); --no-mock-check "
+             "skips that"
+    )
+    validate_parser.add_argument(
+        "--no-mock-check",
+        action="store_true",
+        help="Skip the mock-vs-swagger contract check (runs when mock.swagger "
+             "and mock.mockDir are configured)"
+    )
+    validate_parser.add_argument(
+        "--config",
+        help="Config file for test.install destinations (default: jui.config.json)"
+    )
+    validate_parser.add_argument(
+        "--no-coverage-check",
+        action="store_true",
+        help="Skip the contracts coverage section (said, not silent: the run "
+             "prints 'coverage skipped'). The section reports `contracts "
+             "coverage`, and fails on it from the release the section names"
+    )
+
+    # Generate command with subcommands
+    generate_parser = subparsers.add_parser(
+        "generate",
+        aliases=["g"],
+        help="Generate test files and descriptions"
+    )
+    generate_subparsers = generate_parser.add_subparsers(dest="generate_type", help="Generation type")
+
+    # Generate test subcommand with screen/flow subcommands
+    gen_test_parser = generate_subparsers.add_parser(
+        "test",
+        aliases=["t"],
+        help="Generate test file template"
+    )
+    gen_test_subparsers = gen_test_parser.add_subparsers(dest="test_type", help="Test type")
+
+    # Generate test screen subcommand
+    gen_test_screen_parser = gen_test_subparsers.add_parser(
+        "screen",
+        help="Generate screen test file template"
+    )
+    gen_test_screen_parser.add_argument(
+        "name",
+        help="Screen name (e.g., login, home)"
+    )
+    gen_test_screen_parser.add_argument(
+        "--path",
+        help="Output test file path (default: tests/screens/<name>/<name>.test.json)"
+    )
+    gen_test_screen_parser.add_argument(
+        "-p", "--platform",
+        choices=["ios", "android", "web", "all"],
+        help="Target platform"
+    )
+
+    # Generate test flow subcommand
+    gen_test_flow_parser = gen_test_subparsers.add_parser(
+        "flow",
+        help="Generate flow test file template"
+    )
+    gen_test_flow_parser.add_argument(
+        "name",
+        help="Flow name (e.g., login, checkout)"
+    )
+    gen_test_flow_parser.add_argument(
+        "--path",
+        help="Output test file path (default: tests/flows/<name>/<name>.test.json)"
+    )
+    gen_test_flow_parser.add_argument(
+        "-p", "--platform",
+        choices=["ios", "android", "web", "all"],
+        help="Target platform"
+    )
+
+    # Generate branch-tests subcommand (P2: vitest tests from branchContracts)
+    gen_branch_parser = generate_subparsers.add_parser(
+        "branch-tests",
+        help="Generate web (vitest) unit tests from the screen spec's branchContracts"
+    )
+    gen_branch_parser.add_argument(
+        "screen", nargs="?",
+        help="Screen name in snake_case (resolves <spec_directory>/<screen>"
+             ".spec.json). Omit to cover every spec in spec_directory that "
+             "declares branchContracts — the unit of regeneration is the "
+             "project, because the runtime is one shared file"
+    )
+    gen_branch_parser.add_argument(
+        "--check", action="store_true",
+        help="Report drift against the @generated files on disk and exit "
+             "non-zero; write nothing. The embedded scenario bodies are "
+             "copies of the mock files, and no other gate compares them"
+    )
+    gen_branch_parser.add_argument(
+        "--spec",
+        help="Explicit spec file path (overrides spec_directory resolution)"
+    )
+    gen_branch_parser.add_argument(
+        "--out-dir", default="tests/unit/generated",
+        help="Output directory for @generated test + runtime files"
+    )
+    gen_branch_parser.add_argument(
+        "--harness-dir", default="tests/unit/branch-harness",
+        help="Consumer-owned harness directory (skeleton emitted only if absent)"
+    )
+    gen_branch_parser.add_argument(
+        "--mocks-dir", default=None,
+        help="Directory scanned for *.mock.json scenario files "
+             "(default: mock.mockDir or tests/mocks)"
+    )
+    gen_branch_parser.add_argument(
+        "-p", "--platform", choices=["web", "android", "ios"], default="web",
+        help="Target platform: web emits vitest TS (default); android emits "
+             "Kotlin JUnit4 (Robolectric + MockWebServer); ios emits Swift "
+             "XCTest (URLProtocol interception)"
+    )
+    gen_branch_parser.add_argument(
+        "--package",
+        help="Kotlin package for generated test sources (required for android)"
+    )
+    gen_branch_parser.add_argument(
+        "--module",
+        help="App module name for @testable import (required for ios)"
+    )
+    gen_branch_parser.add_argument(
+        "--condition-controls", action="store_true",
+        help="For each row that names a harness condition away from its default, "
+             "also emit a control that runs the row with every default and never "
+             "fails; it prints condition_without_effect when the row still holds "
+             "(the condition changes nothing the row asserts). Doubles those rows"
+    )
+
+    # Unit contracts: the spec declares the SET of hand-written cases; the
+    # bodies stay hand-written. Generating bodies was measured and does not
+    # reach the target (branchContracts moves the contracted methods by 4.3
+    # points), so what the spec buys here is that two faces cannot drift.
+    gen_unit_parser = generate_subparsers.add_parser(
+        "unit-stubs",
+        help="Write stubs for spec-declared unitContracts cases that have no "
+             "implementation yet; never touches an existing body"
+    )
+    gen_unit_parser.add_argument(
+        "--check", action="store_true",
+        help="Compare the declared set against the implemented one and exit "
+             "non-zero on drift (declared-but-missing, implemented-but-"
+             "undeclared, declared for two platforms and present on one). "
+             "Writes nothing"
+    )
+    gen_unit_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Report what would be written without writing it"
+    )
+    gen_unit_parser.add_argument(
+        "--spec-dir",
+        help="Spec directory (default: spec_directory from jui.config.json)"
+    )
+
+    # Generate description subcommand with screen/flow subcommands
+    gen_desc_parser = generate_subparsers.add_parser(
+        "description",
+        aliases=["d", "desc"],
+        help="Generate description JSON file for a test case"
+    )
+    gen_desc_subparsers = gen_desc_parser.add_subparsers(dest="test_type", help="Test type")
+
+    # Generate description screen subcommand
+    gen_desc_screen_parser = gen_desc_subparsers.add_parser(
+        "screen",
+        help="Generate description for screen test case"
+    )
+    gen_desc_screen_parser.add_argument(
+        "name",
+        help="Screen name (e.g., login, home)"
+    )
+    gen_desc_screen_parser.add_argument(
+        "case_name",
+        help="Test case name (e.g., initial_display, error_case_1)"
+    )
+    gen_desc_screen_parser.add_argument(
+        "--path",
+        help="Output file path (default: tests/screens/<name>/descriptions/<case_name>.json)"
+    )
+
+    # Generate description flow subcommand
+    gen_desc_flow_parser = gen_desc_subparsers.add_parser(
+        "flow",
+        help="Generate description for flow test case"
+    )
+    gen_desc_flow_parser.add_argument(
+        "name",
+        help="Flow name (e.g., login, checkout)"
+    )
+    gen_desc_flow_parser.add_argument(
+        "case_name",
+        help="Test case name (e.g., happy_path, error_handling)"
+    )
+    gen_desc_flow_parser.add_argument(
+        "--path",
+        help="Output file path (default: tests/flows/<name>/descriptions/<case_name>.json)"
+    )
+
+    # Report command
+    report_parser = subparsers.add_parser(
+        "report",
+        aliases=["r"],
+        help="Convert results JSON (results.schema.json) to JUnit XML or HTML"
+    )
+    report_parser.add_argument(
+        "files",
+        nargs="+",
+        help="Results JSON files to convert (multiple inputs merge into one report)"
+    )
+    report_parser.add_argument(
+        "-f", "--format",
+        choices=["junit", "html"],
+        required=True,
+        help="Report format"
+    )
+    report_parser.add_argument(
+        "-o", "--output",
+        help="Output file path (default: report.xml / report.html)"
+    )
+
+    # Mock command (nested: mock generate | mock serve)
+    mock_parser = subparsers.add_parser(
+        "mock",
+        aliases=["m"],
+        help="Generate and serve API mocks from OpenAPI"
+    )
+    mock_subparsers = mock_parser.add_subparsers(dest="mock_action", help="Mock action")
+
+    mock_gen_parser = mock_subparsers.add_parser("generate", help="Scaffold mock files from swagger")
+    mock_gen_parser.add_argument("--swagger", action="append", help="Path to an OpenAPI file, JSON or YAML (repeatable)")
+    mock_gen_parser.add_argument("--out", help="Output mock dir (default: mock.mockDir or tests/mocks)")
+    mock_gen_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    mock_gen_parser.add_argument("--check", action="store_true", help="Report drift vs swagger, do not write")
+    mock_gen_parser.add_argument(
+        "--strict", action="store_true",
+        help="With --check, treat a missing OPTIONAL field as drift too "
+             "(same as mock.checkOptionalFields=true). Off by default: "
+             "omitting an optional field is a valid instance, and failing on "
+             "it buries the real violations",
+    )
+    mock_gen_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="With --update-default, report what would change without writing",
+    )
+    mock_gen_parser.add_argument(
+        "--update-default", action="store_true",
+        help="Repair each existing mock's default scenario: add the required "
+             "fields the contract has and the body lacks, refresh the source "
+             "route, and change nothing else. No existing value is overwritten",
+    )
+
+    mock_serve_parser = mock_subparsers.add_parser("serve", help="Run the mock server + panel")
+    mock_serve_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
+    mock_serve_parser.add_argument("--mock-dir", help="Mock dir (default: mock.mockDir or tests/mocks)")
+    mock_serve_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    mock_serve_parser.add_argument(
+        "--no-validate-requests", action="store_true",
+        help="Do not check requests against the swagger contract "
+             "(same as mock.validateRequests=false)",
+    )
+    mock_serve_parser.add_argument("--artifacts", action="store_true",
+                                   help="After an ios/android run target finishes, pull its artifacts automatically")
+
+    mock_identity_parser = mock_subparsers.add_parser(
+        "identity",
+        help="Ask the running mock server whose corpus it serves (1 = another project, 2 = nothing answers, 3 = answered without an identity)")
+    mock_identity_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
+    mock_identity_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    mock_identity_parser.add_argument("--expect-root", help="Project root to require (default: this project's)")
+    mock_identity_parser.add_argument("--any-project", action="store_true",
+                                      help="Only report the identity; do not fail on a mismatch")
+
+    # Artifacts command (nested: artifacts pull | artifacts status)
+    artifacts_parser = subparsers.add_parser(
+        "artifacts",
+        aliases=["a"],
+        help="Pull test artifacts (screenshots/recordings) from devices and xcresults"
+    )
+    artifacts_subparsers = artifacts_parser.add_subparsers(dest="artifacts_action", help="Artifacts action")
+
+    artifacts_pull_parser = artifacts_subparsers.add_parser(
+        "pull", help="Pull artifacts into the artifacts dir")
+    artifacts_pull_parser.add_argument("--platform", choices=["ios", "android", "web", "all"], default="all",
+                                       help="Platform to pull from (default: all)")
+    artifacts_pull_parser.add_argument("--xcresult",
+                                       help="Explicit .xcresult path or glob (overrides test.artifacts.ios.xcresult)")
+    artifacts_pull_parser.add_argument("--serial",
+                                       help="adb device serial (overrides test.artifacts.android.serial)")
+    artifacts_pull_parser.add_argument("--out",
+                                       help="Output dir (overrides test.artifacts.dir, default: tests/artifacts)")
+    artifacts_pull_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    artifacts_pull_parser.add_argument("--clean", action="store_true",
+                                       help="Remove pulled artifact dirs from the Android device after pulling")
+    artifacts_pull_parser.add_argument("--json", action="store_true",
+                                       help="Print result as a single JSON object")
+
+    artifacts_status_parser = artifacts_subparsers.add_parser(
+        "status", help="Show resolved artifacts config and existing files")
+    artifacts_status_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    artifacts_status_parser.add_argument("--json", action="store_true",
+                                         help="Print status as a single JSON object")
+
+    artifacts_prune_parser = artifacts_subparsers.add_parser(
+        "prune-legacy",
+        help="List (default) or delete (--yes) the suites left in the flat legacy Android mirror "
+             "/data/local/tmp/jsonui-artifacts — the one deliberate exit from it; pull --clean never touches it")
+    artifacts_prune_parser.add_argument("--serial",
+                                        help="adb device serial (overrides test.artifacts.android.serial)")
+    artifacts_prune_parser.add_argument("--yes", action="store_true",
+                                        help="Actually delete the listed suite dirs (default is a dry run)")
+    artifacts_prune_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    artifacts_prune_parser.add_argument("--json", action="store_true",
+                                        help="Print result as a single JSON object")
+
+    # Pregrant command (iOS addMedia)
+    contracts_parser = subparsers.add_parser(
+        "contracts",
+        help="Contract-gap checks: which API outcomes the branch contracts answer")
+    contracts_subparsers = contracts_parser.add_subparsers(
+        dest="contracts_action", help="Contracts action")
+    baseline_parser = contracts_subparsers.add_parser(
+        "baseline",
+        help="Record the entries that make contracts coverage exit non-zero in "
+             "<spec_directory>/contracts_coverage_baseline.json — all of them when "
+             "there is no file (only with --initial), and otherwise only those still "
+             "present or unmeasured now (it only shrinks; a new entry is closed or "
+             "added by hand). validate's gate fails on entries not in it and on "
+             "entries in it that are closed")
+    baseline_parser.add_argument(
+        "--initial", action="store_true",
+        help="Write the FIRST baseline: it accepts every current entry as debt, "
+             "which is the user's decision. Without it, a run with no file writes "
+             "nothing")
+    coverage_parser = contracts_subparsers.add_parser(
+        "coverage",
+        help="Every response status the OpenAPI declares for an operation a "
+             "screen reaches, bucketed: answered by a row, excluded with a "
+             "reason, unmeasured, or uncovered. Exit 0 pass / 1 uncovered or a "
+             "declaration error / 2 cannot start / 3 unmeasured, per platform, "
+             "composed 2 > 1 > 3 > 0. `validate` reports it, and fails on it "
+             "from the release its section names")
+    coverage_parser.add_argument("screen", nargs="?", help="One screen (default: all)")
+    coverage_parser.add_argument(
+        "--platform", action="append", choices=["web", "android", "ios"],
+        help="Platform block(s) to report (default: jui.config.json platforms)")
+    coverage_parser.add_argument("--json", dest="as_json", action="store_true",
+                                 help="Machine-readable output")
+
+    pregrant_parser = subparsers.add_parser(
+        "pregrant",
+        help="Establish per-run permission baselines before the test process "
+             "exists: iOS grants photos-add so addMedia never prompts; "
+             "Android revokes every permission the tests declare deny "
+             "(run before xcodebuild / connectedAndroidTest)")
+    pregrant_parser.add_argument(
+        "paths", nargs="*",
+        help="Test files/dirs to scan (default: tests/)")
+    pregrant_parser.add_argument(
+        "--platform", choices=["ios", "android"],
+        help="Limit to one platform (default: both — each arm no-ops when "
+             "its scan finds nothing)")
+    pregrant_parser.add_argument(
+        "--app-id",
+        help="Android application id to revoke on (default: "
+             "test.install.android.applicationId, falling back to "
+             "test.artifacts.android.appId)")
+    pregrant_parser.add_argument(
+        "--serial",
+        help="adb device serial (default: test.artifacts.android.serial, "
+             "or the single connected device)")
+    pregrant_parser.add_argument(
+        "--bundle-id",
+        help="UITest target bundle id ('.xctrunner' appended automatically; "
+             "default: test.install.ios.uitestBundleId from config)")
+    pregrant_parser.add_argument(
+        "--udid", help="Simulator UDID (default: the single booted simulator)")
+    pregrant_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    pregrant_parser.add_argument(
+        "--force", action="store_true",
+        help="Grant even when no addMedia usage is found")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 0
+
+    if args.command in ["validate", "v"]:
+        return cmd_validate(args)
+    elif args.command in ["report", "r"]:
+        return cmd_report(args)
+    elif args.command in ["mock", "m"]:
+        if getattr(args, "mock_action", None) == "generate":
+            return cmd_mock_generate(args)
+        elif getattr(args, "mock_action", None) == "serve":
+            return cmd_mock_serve(args)
+        elif getattr(args, "mock_action", None) == "identity":
+            return cmd_mock_identity(args)
+        mock_parser.print_help()
+        return 0
+    elif args.command in ["artifacts", "a"]:
+        if getattr(args, "artifacts_action", None) == "pull":
+            return cmd_artifacts_pull(args)
+        elif getattr(args, "artifacts_action", None) == "status":
+            return cmd_artifacts_status(args)
+        elif getattr(args, "artifacts_action", None) == "prune-legacy":
+            return cmd_artifacts_prune_legacy(args)
+        artifacts_parser.print_help()
+        return 0
+    elif args.command == "pregrant":
+        return cmd_pregrant(args)
+    elif args.command == "contracts":
+        if getattr(args, "contracts_action", None) == "coverage":
+            return cmd_contracts_coverage(args)
+        if getattr(args, "contracts_action", None) == "baseline":
+            return cmd_contracts_baseline(args)
+        contracts_parser.print_help()
+        return 0
+    elif args.command in ["generate", "g"]:
+        # Check for subcommand
+        if hasattr(args, 'generate_type') and args.generate_type:
+            if args.generate_type in ["test", "t"]:
+                # Check for test type subcommand
+                if hasattr(args, 'test_type') and args.test_type:
+                    if args.test_type == "screen":
+                        return cmd_generate_test_screen(args)
+                    elif args.test_type == "flow":
+                        return cmd_generate_test_flow(args)
+                gen_test_parser.print_help()
+                return 0
+            elif args.generate_type == "branch-tests":
+                return cmd_generate_branch_tests(args)
+            elif args.generate_type == "unit-stubs":
+                return cmd_generate_unit_stubs(args)
+            elif args.generate_type in ["description", "d", "desc"]:
+                # Check for test type subcommand
+                if hasattr(args, 'test_type') and args.test_type:
+                    if args.test_type in ["screen", "flow"]:
+                        return cmd_generate_description(args)
+                gen_desc_parser.print_help()
+                return 0
+        else:
+            generate_parser.print_help()
+            return 0
+    else:
+        parser.print_help()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

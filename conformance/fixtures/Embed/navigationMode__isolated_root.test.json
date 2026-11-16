@@ -1,0 +1,39 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Embed/navigationMode__isolated_root.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Embed.navigationMode (isolated_root)",
+    "description": "Embed semantic conformance fixture (isolated_root). Companion embedded screens live under fixtures/Embed/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "embed",
+      "Embed"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "navigationMode__isolated_root",
+      "description": "Embed semantic conformance fixture (isolated_root). Companion embedded screens live under fixtures/Embed/__screens/ — see manifest 'companions'.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "embed-root-label",
+          "equals": "embed-root"
+        },
+        {
+          "assert": "text",
+          "id": "host-marker",
+          "equals": "host"
+        }
+      ]
+    }
+  ]
+}

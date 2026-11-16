@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minBottomMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minBottomMargin (binding)",
+    "description": "Conformance fixture for 'minBottomMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMinBottomMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minBottomMargin__binding",
+      "description": "Conformance fixture for 'minBottomMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMinBottomMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

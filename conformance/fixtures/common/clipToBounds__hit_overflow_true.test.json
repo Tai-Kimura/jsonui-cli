@@ -1,0 +1,43 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/clipToBounds__hit_overflow_true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.clipToBounds (hit_overflow_true)",
+    "description": "Interactive conformance fixture for 'clipToBounds' on View (section: common, case: hit_overflow_true). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "clipToBounds__hit_overflow_true",
+      "description": "Interactive conformance fixture for 'clipToBounds' on View (section: common, case: hit_overflow_true). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "ready"
+        },
+        {
+          "action": "tap",
+          "id": "under_button"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "under"
+        }
+      ]
+    }
+  ]
+}

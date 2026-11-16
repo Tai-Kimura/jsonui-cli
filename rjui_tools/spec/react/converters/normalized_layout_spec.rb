@@ -1,0 +1,196 @@
+#!/usr/bin/env ruby
+
+require_relative '../../spec_helper'
+require_relative '../../support/typescript_compiler'
+require_relative '../../../lib/react/converters/base_converter'
+require_relative '../../../lib/react/converters/button_converter'
+require_relative '../../../lib/react/converters/slider_converter'
+require_relative '../../../lib/react/converters/tab_view_converter'
+require_relative '../../../lib/react/converters/view_converter'
+
+# Stage A (renderer SSoT): converters take the canonical-only attribute
+# lookup path when the layout carried the `$jui` L1 marker
+# (config['_layout_normalized'] set by ReactGenerator#generate), and keep
+# the legacy alias-fallback path for raw (L0) layouts.
+RSpec.describe 'L1-normalized layout consumption' do
+  let(:l0_config) { {} }
+  let(:l1_config) { { '_layout_normalized' => true } }
+
+  describe RjuiTools::React::Converters::BaseConverter do
+    def classes_for(json, config)
+      RjuiTools::React::Converters::ViewConverter.new(json, config).convert
+    end
+
+    it 'reads the alpha alias on L0 layouts' do
+      jsx = classes_for({ 'type' => 'View', 'alpha' => 0.5 }, l0_config)
+      expect(jsx).to include('opacity-50')
+    end
+
+    it 'prefers canonical opacity over the alias' do
+      jsx = classes_for({ 'type' => 'View', 'opacity' => 0.3, 'alpha' => 0.5 }, l0_config)
+      expect(jsx).to include('opacity-30')
+      expect(jsx).not_to include('opacity-50')
+    end
+
+    it 'ignores the alias on L1 layouts (canonical-only path)' do
+      jsx = classes_for({ 'type' => 'View', 'alpha' => 0.5 }, l1_config)
+      expect(jsx).not_to include('opacity-50')
+    end
+
+    it 'reads canonical opacity on L1 layouts' do
+      jsx = classes_for({ 'type' => 'View', 'opacity' => 0.5 }, l1_config)
+      expect(jsx).to include('opacity-50')
+    end
+  end
+
+  describe RjuiTools::React::Converters::ButtonConverter do
+    # highlightBackground is a standalone attribute (highlighted state),
+    # NOT a definitions alias of tapBackground — the runtimes keep the
+    # two states distinct. On the web both map onto the single
+    # hover/active affordance, identically on L0 and L1 (the normalizer
+    # does not rewrite it).
+    it 'maps standalone highlightBackground to hover/active classes on L0' do
+      jsx = described_class.new(
+        { 'type' => 'Button', 'text' => 'Tap', 'highlightBackground' => '#FF0000' }, l0_config
+      ).convert
+      expect(jsx).to include('hover:bg-[#FF0000]')
+      expect(jsx).to include('active:bg-[#FF0000]')
+    end
+
+    it 'maps standalone highlightBackground on L1 as well (not an alias)' do
+      jsx = described_class.new(
+        { 'type' => 'Button', 'text' => 'Tap', 'highlightBackground' => '#FF0000' }, l1_config
+      ).convert
+      expect(jsx).to include('hover:bg-[#FF0000]')
+    end
+
+    it 'prefers tapBackground when both tap and highlight backgrounds are set' do
+      jsx = described_class.new(
+        { 'type' => 'Button', 'text' => 'Tap',
+          'tapBackground' => '#0000FF', 'highlightBackground' => '#FF0000' }, l0_config
+      ).convert
+      expect(jsx).to include('hover:bg-[#0000FF]')
+      expect(jsx).not_to include('hover:bg-[#FF0000]')
+    end
+
+    it 'maps the hilightColor alias on L0 and ignores it on L1' do
+      l0 = described_class.new(
+        { 'type' => 'Button', 'text' => 'Tap', 'hilightColor' => '#00FF00' }, l0_config
+      ).convert
+      l1 = described_class.new(
+        { 'type' => 'Button', 'text' => 'Tap', 'hilightColor' => '#00FF00' }, l1_config
+      ).convert
+      expect(l0).to include('hover:text-[#00FF00]')
+      expect(l1).not_to include('hover:text-[#00FF00]')
+    end
+  end
+
+  describe RjuiTools::React::Converters::SliderConverter do
+    it 'reads canonical minimum/maximum' do
+      jsx = described_class.new(
+        { 'type' => 'Slider', 'minimum' => 5, 'maximum' => 50 }, l0_config
+      ).convert
+      expect(jsx).to include('min={5} max={50}')
+    end
+
+    it 'falls back to minimumValue/maximumValue aliases on L0' do
+      jsx = described_class.new(
+        { 'type' => 'Slider', 'minimumValue' => 5, 'maximumValue' => 50 }, l0_config
+      ).convert
+      expect(jsx).to include('min={5} max={50}')
+    end
+
+    it 'falls back to minValue/maxValue aliases on L0' do
+      jsx = described_class.new(
+        { 'type' => 'Slider', 'minValue' => 5, 'maxValue' => 50 }, l0_config
+      ).convert
+      expect(jsx).to include('min={5} max={50}')
+    end
+
+    it 'ignores alias spellings on L1' do
+      jsx = described_class.new(
+        { 'type' => 'Slider', 'minimumValue' => 5, 'maximumValue' => 50 }, l1_config
+      ).convert
+      expect(jsx).to include('min={0} max={1}')
+    end
+
+    it 'accepts the onValueChanged alias on L0 only' do
+      json = { 'type' => 'Slider', 'onValueChanged' => '@{onSlide}' }
+      l0 = described_class.new(json, l0_config).convert
+      l1 = described_class.new(json, l1_config).convert
+      expect(l0).to include('data.onSlide?.(Number(e.target.value))')
+      expect(l1).not_to include('data.onSlide')
+    end
+  end
+
+  describe RjuiTools::React::Converters::TabViewConverter do
+    let(:json) do
+      {
+        'type' => 'TabView',
+        'tabs' => [{ 'title' => 'One' }, { 'title' => 'Two' }],
+        'selectedTabIndex' => '@{tabIndex}',
+        'onPageChanged' => '@{onTab}'
+      }
+    end
+
+    it 'resolves selectedTabIndex / onPageChanged aliases on L0' do
+      jsx = described_class.new(json, l0_config).convert
+      expect(jsx).to include('data.tabIndex')
+      expect(jsx).to include('data.onTab')
+    end
+
+    it 'ignores alias spellings on L1' do
+      jsx = described_class.new(json, l1_config).convert
+      expect(jsx).not_to include('data.tabIndex')
+      expect(jsx).not_to include('data.onTab')
+    end
+
+    it 'resolves canonical selectedIndex / onValueChange on both paths' do
+      canonical = json.merge(
+        'selectedIndex' => '@{tabIndex}', 'onValueChange' => '@{onTab}'
+      )
+      [l0_config, l1_config].each do |config|
+        jsx = described_class.new(canonical, config).convert
+        expect(jsx).to include('data.tabIndex')
+        expect(jsx).to include('data.onTab')
+      end
+    end
+  end
+
+  # Both paths' emits, as a component returns them, under --strict: what the
+  # alias fallback writes on L0 and what the canonical-only path writes on
+  # L1 are both code a consumer compiles. `data` is typed as the data model
+  # declares these bindings; the range input's handler is typed by lib.dom.
+  it 'writes TSX that compiles on both paths', :typescript_compile do
+    c = RjuiTools::React::Converters
+    tab = { 'type' => 'TabView', 'tabs' => [{ 'title' => 'One' }, { 'title' => 'Two' }],
+            'selectedTabIndex' => '@{tabIndex}', 'onPageChanged' => '@{onTab}' }
+    nodes = [
+      [c::ViewConverter, { 'type' => 'View', 'alpha' => 0.5 }],
+      [c::ViewConverter, { 'type' => 'View', 'opacity' => 0.3, 'alpha' => 0.5 }],
+      [c::ButtonConverter, { 'type' => 'Button', 'text' => 'Tap', 'tapBackground' => '#0000FF',
+                             'highlightBackground' => '#FF0000', 'hilightColor' => '#00FF00' }],
+      [c::SliderConverter, { 'type' => 'Slider', 'minimumValue' => 5, 'maximumValue' => 50 }],
+      [c::SliderConverter, { 'type' => 'Slider', 'minValue' => 5, 'maxValue' => 50, 'onValueChanged' => '@{onSlide}' }],
+      [c::TabViewConverter, tab],
+      [c::TabViewConverter, tab.merge('selectedIndex' => '@{tabIndex}', 'onValueChange' => '@{onTab}')]
+    ]
+    elements = [l0_config, l1_config].flat_map { |config| nodes.map { |klass, json| klass.new(json, config).convert } }
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace JSX {
+        interface IntrinsicElements {
+          input: { [attr: string]: unknown; onChange?: (e: { target: HTMLInputElement }) => void };
+        }
+      }
+      declare const data: {
+        onSlide?: (value: number) => void; tabIndex?: number; onTab?: (index: number) => void;
+        selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void; setTabIndex?: (index: number) => void;
+      };
+      declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+      // The file's helper (ReactGenerator writes it where a file uses it): a
+      // TabView's onValueChange is called on a change of the selection.
+      declare const JsonUIValueChange: <T>(props: { value: T; onChange: (value: T) => void }) => JSX.Element;
+      declare const Circle: (props: { className?: string }) => JSX.Element;
+    TS
+  end
+end

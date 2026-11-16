@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/bottomPadding__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.bottomPadding (binding)",
+    "description": "Conformance fixture for 'bottomPadding' on View (section: common, class: visual). Value under test: \"@{boundBottomPadding}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "bottomPadding__binding",
+      "description": "Conformance fixture for 'bottomPadding' on View (section: common, class: visual). Value under test: \"@{boundBottomPadding}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_bottomPadding__binding"
+        }
+      ]
+    }
+  ]
+}

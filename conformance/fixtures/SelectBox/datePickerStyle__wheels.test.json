@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/datePickerStyle__wheels.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.datePickerStyle (wheels)",
+    "description": "Conformance fixture for 'datePickerStyle' on SelectBox (section: SelectBox, class: visual). Value under test: \"wheels\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "datePickerStyle__wheels",
+      "description": "Conformance fixture for 'datePickerStyle' on SelectBox (section: SelectBox, class: visual). Value under test: \"wheels\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_datePickerStyle__wheels"
+        }
+      ]
+    }
+  ]
+}

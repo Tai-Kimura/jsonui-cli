@@ -1,0 +1,42 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "conformanceResult",
+      "class": "String",
+      "defaultValue": "ready"
+    },
+    {
+      "name": "conformanceFire",
+      "class": "(Boolean) -> Void"
+    }
+  ],
+  "child": [
+    {
+      "type": "Switch",
+      "id": "target",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "onValueChange": "@{conformanceFire}"
+    },
+    {
+      "type": "Label",
+      "id": "mirror",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{conformanceResult}"
+    }
+  ]
+}

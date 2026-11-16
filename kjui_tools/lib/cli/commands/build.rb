@@ -1,0 +1,833 @@
+# frozen_string_literal: true
+
+require 'optparse'
+require 'json'
+require_relative '../../core/config_manager'
+require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/attribute_validator'
+require_relative '../../core/binding_validator'
+require_relative '../../core/normalization'
+require_relative '../../core/layout_variant'
+require_relative '../../core/screen_index'
+require_relative '../../core/generated_orphans'
+
+module KjuiTools
+  module CLI
+    module Commands
+      class Build
+        def run(args)
+          options = parse_options(args)
+
+          # Detect mode
+          mode = options[:mode] || Core::ConfigManager.get('mode') || 'compose'
+
+          # The app's own component spellings, before anything reads a layout:
+          # the validators and the data model classify a node by the type it
+          # is drawn as, and a registered spelling is drawn as written
+          # (shared/core/type_synonyms.rb, TypeSynonyms.app_types).
+          require_relative '../../compose/compose_builder'
+          JsonUIShared::TypeSynonyms.app_types = Compose::ComposeBuilder.custom_component_types
+
+          # Store validation results
+          @validation_warnings = []
+          @outside_infos = []
+          @binding_infos = []
+          @validation_errors = 0
+          @binding_errors = []
+          @structural_errors = []
+          @collection_cells = []
+
+          case mode
+          when 'xml', 'all'
+            build_xml(options)
+          end
+
+          if mode == 'compose' || mode == 'all'
+            # What Debug (KotlinJsonUI Dynamic) draws for the app's own
+            # components, against what this build draws: named, not changed.
+            require_relative '../../compose/app_component_dynamic_check'
+            Compose::AppComponentDynamicCheck.warnings(
+              Core::ConfigManager.load_config,
+              mappings: Compose::ComposeBuilder.custom_component_types,
+              converter_class: ->(type) { Compose::ComposeBuilder.custom_component_class(type) }
+            ).each { |line| Core::Logger.warn line }
+            build_compose(options)
+          end
+
+          # Print validation summary if there were warnings
+          print_validation_summary if options[:validate] != false && @validation_warnings.any?
+          print_outside_infos
+
+          # A `child`/`children` that does not hold nodes is not a style
+          # question the author can weigh: the renderer wraps it, iterates
+          # it, matches nothing, and emits a view with no children in it.
+          # Before this, that run printed one warning among many and then
+          # said "Compose build completed!" — the generated file claims to
+          # be the layout and is empty. Fail like the other two tools do.
+          if @structural_errors.any?
+            Core::Logger.error structural_failure_headline(@structural_errors)
+            @structural_errors.each { |e| Core::Logger.error "  #{e}" }
+            exit 1
+          end
+
+          # Error-severity canonical binding rules (binding_semantics.json
+          # validatorRules) always fail the build, strict or not
+          if @binding_errors.any?
+            Core::Logger.error "Build failed: #{@binding_errors.size} binding error(s) (canonical severity: error)"
+            exit 1
+          end
+
+          # Exit with error code if strict mode and there were validation errors
+          if options[:strict] && @validation_errors > 0
+            Core::Logger.error "Build failed: #{@validation_errors} validation error(s)"
+            exit 1
+          end
+        end
+
+        # Two counts, because they differ: one layout with two non-node
+        # children is two entries but one file. Saying "2 layout(s)" there
+        # sends the reader looking for a second file.
+        #
+        # And the views are not hypothetical. Generation runs before this
+        # check — as it does for binding errors, measured — so the empty
+        # file is already in the tree and it compiles. "would be empty"
+        # invites the reader to think there is nothing to clean up.
+        def structural_failure_headline(entries)
+          # `map { }.compact`, not `filter_map`: the vendored tools run under
+          # whatever ruby the project has, and until jsonui-cli 1.9.0 (floor
+          # 3.2 since) that could be 2.6, which has no filter_map.
+          files = entries.map { |e| e[/\A\[([^\]]+)\]/, 1] }.compact.uniq
+          "Build failed: #{entries.size} non-node child(ren) in #{files.size} layout(s). " \
+            'Their generated views were already written and are empty — ' \
+            'the files are in the tree and compile:'
+        end
+
+        private
+
+        def parse_options(args)
+          options = {}
+
+          OptionParser.new do |opts|
+            opts.banner = "Usage: kjui build [options]"
+
+            opts.on('--mode MODE', ['all', 'xml', 'compose'],
+                    'Build mode (all, xml, compose)') do |mode|
+              options[:mode] = mode
+            end
+
+            opts.on('--clean', 'Clean cache before building') do
+              options[:clean] = true
+            end
+
+            opts.on('--no-validate', 'Skip JSON attribute validation') do
+              options[:validate] = false
+            end
+
+            opts.on('--strict', 'Fail build on validation errors') do
+              options[:strict] = true
+            end
+
+            opts.on('-h', '--help', 'Show this help message') do
+              puts opts
+              exit
+            end
+          end.parse!(args)
+
+          # Validation is enabled by default
+          options[:validate] = true if options[:validate].nil?
+
+          options
+        end
+
+        # The attributes this build left out as another mode's or platform's
+        # (AttributeValidatorCore#take_outside_infos), named with their file.
+        def collect_outside_infos(validator, relative_path)
+          validator.take_outside_infos.each do |info|
+            (@outside_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
+          # and the bound values with a limitation declared on this face
+          # (AttributeValidatorCore#take_binding_infos), printed the same way
+          validator.take_binding_infos.each do |info|
+            (@binding_infos ||= []) << validator.info_line("[#{relative_path}] #{info}")
+          end
+        end
+
+        # Printed only in a verbose build (DEBUG in the environment, the
+        # switch kjui's own debug output reads — `DEBUG=1 jui build`): a
+        # default build prints what it printed before.
+        def print_outside_infos
+          return unless Core::AttributeValidator.verbose_build?
+
+          unless @outside_infos.nil? || @outside_infos.empty?
+            Core::Logger.info "Not built here (another mode or platform): #{@outside_infos.length} attribute(s)"
+            @outside_infos.each { |line| puts line }
+          end
+          return if @binding_infos.nil? || @binding_infos.empty?
+
+          Core::Logger.info "Bound with a limitation on this platform: #{@binding_infos.length} attribute(s)"
+          @binding_infos.each { |line| puts line }
+        end
+
+        def print_validation_summary
+          Core::Logger.info "-" * 60
+          Core::Logger.warn "Validation Summary: #{@validation_warnings.length} warning(s) found"
+          @validation_warnings.each do |warning|
+            puts "  \e[33m#{warning}\e[0m"
+          end
+        end
+
+        # Validate a JSON component and all its children recursively
+        # @param json_data [Hash] The JSON component to validate
+        # @param validator [AttributeValidator] The validator instance
+        # @param file_name [String] The name of the file being validated
+        # @param parent_orientation [String, nil] The orientation of the parent component
+        # Validate the layouts codegen will skip this run — the Compose
+        # counterpart of the sjui pass, same three checks the conversion loop
+        # performs, so a finding does not depend on which files were dirty.
+        # The layouts refused while building: each mark is a layout and where
+        # its build began in the stage ledger, so its stretch runs to the next
+        # mark (or the end).
+        # The bindings of every layout this run builds, and of its variants,
+        # before any writer runs — counted as the build loop counted them
+        # (warnings into the summary). build_file writes a base with its
+        # variants, so an ERROR in either blocks the base, which is refused
+        # (not cached).
+        def prevalidate_bindings(files, layouts_dir, binding_validator)
+          files.each do |json_file|
+            found = 0
+            [json_file, *JsonUIShared::LayoutVariant.variants_for(json_file).values].each do |file|
+              rel = Pathname.new(file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              begin
+                json = JSON.parse(File.read(file))
+              rescue StandardError
+                next # the build loop reports a layout it cannot read
+              end
+              warnings = binding_validator.validate(json, rel, layouts_dir)
+              @binding_errors.concat(binding_validator.errors)
+              found += binding_validator.errors.length
+              next if warnings.empty?
+
+              @validation_warnings.concat(warnings)
+              Core::Logger.warn "  #{warnings.length} binding warning(s) in #{rel}"
+            end
+            next if found.zero?
+
+            JsonUI::StageFailures.block_layout(json_file, "#{found} binding error(s)")
+            (@refused_layouts ||= []) << json_file
+          end
+        end
+
+        def refused_in(marks)
+          entries = JsonUI::StageFailures.entries
+          marks.each_with_index.map do |(file, start), i|
+            stop = marks[i + 1] ? marks[i + 1][1] : entries.size
+            file if entries[start...stop].any? { |e| e[:stage] == 'layout' }
+          end.compact
+        end
+
+        def validate_cached_layouts(files, layouts_dir, validator, binding_validator)
+          return if files.nil? || files.empty?
+
+          files.each do |json_file|
+            # A cached screen's variant files are cached with it, and are
+            # checked with it, as the conversion loop checks them. Until
+            # 1.9.0 only the base was: a variant that a component change
+            # made invalid (a Box made a leaf, the layout files untouched)
+            # was neither refused nor named on a cached run — sjui printed
+            # "all cached" and exited 0 (measured 2026-09-26).
+            [json_file, *JsonUIShared::LayoutVariant.variants_for(json_file).values].each do |file|
+              validate_cached_layout(file, json_file, layouts_dir, validator, binding_validator)
+            end
+          end
+        end
+
+        # One cached layout file (a base or one of its variants): the three
+        # checks the conversion loop performs. A refusal is recorded against
+        # the base, which is what the next build converts.
+        def validate_cached_layout(json_file, base_file, layouts_dir, validator, binding_validator)
+          relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+
+          begin
+            json_data = JSON.parse(File.read(json_file))
+          rescue JSON::ParserError => e
+            Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            # Refused like a layout the checks refuse, so the next build
+            # converts it — as sjui does with the same file (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            (@refused_layouts ||= []) << base_file
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record('layout', "#{json_file} could not be read: #{e.message}")
+            return
+          end
+
+          if validator
+            validator.normalized = Core::Normalization.canonicalized?(json_data)
+            warnings = validate_json(json_data, validator, File.basename(json_file, '.json'))
+            collect_outside_infos(validator, relative_path)
+            if warnings.any?
+              @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+              @validation_errors += warnings.length
+              Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
+            end
+          end
+
+          if binding_validator
+            binding_warnings = binding_validator.validate(json_data, relative_path, layouts_dir)
+            @binding_errors.concat(binding_validator.errors) if @binding_errors
+            if binding_warnings.any?
+              @validation_warnings.concat(binding_warnings)
+              @validation_errors += binding_warnings.length
+              Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
+            end
+          end
+
+          # The tree the layout draws, as the builder reads it: styles
+          # merged, includes expanded (until 1.9.0 the includes were not,
+          # so a violation inside one was never seen here). A copy: the
+          # expander rewrites the tree it is given.
+          require_relative '../../compose/include_expander'
+          merged = Compose::StyleLoader.load_and_merge(JSON.parse(JSON.generate(json_data)))
+          merged = Compose::IncludeExpander.process_includes(merged, File.dirname(json_file), nil, layouts_dir)
+          shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+            merged, source_path: File.basename(json_file),
+            extension_definitions: Core::AttributeValidator.extension_definitions(:compose)
+          )
+          return if shared_warnings.empty?
+
+          JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+          return unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+          reason = shared_warnings.select { |w| w[:level] == :error }
+                                  .map { |w| w[:message] }.join('; ')
+          (@refused_layouts ||= []) << base_file
+          begin
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{json_file} was not generated: #{reason}"
+            )
+          rescue LoadError
+            nil
+          end
+        end
+
+        def validate_json(json_data, validator, file_name, parent_orientation = nil)
+          return [] unless json_data.is_a?(Hash)
+
+          warnings = validator.validate(json_data, nil, parent_orientation)
+
+          # Get this component's orientation for passing to children
+          current_orientation = json_data['orientation']
+
+          # Validate children recursively
+          children = json_data['child'] || json_data['children'] || []
+          children = [children] unless children.is_a?(Array)
+
+          children.each do |child|
+            warnings.concat(validate_json(child, validator, file_name, current_orientation)) if child.is_a?(Hash)
+          end
+
+          # Validate sections (for Collection/Table)
+          # Section headers, footers, and cells are top-level components, so parent_orientation is nil
+          if json_data['sections'].is_a?(Array)
+            json_data['sections'].each do |section|
+              if section.is_a?(Hash)
+                ['header', 'footer', 'cell'].each do |key|
+                  warnings.concat(validate_json(section[key], validator, file_name, nil)) if section[key].is_a?(Hash)
+                end
+              end
+            end
+          end
+
+          warnings
+        end
+
+        def build_xml(options = {})
+          Core::Logger.info "Building XML View files..."
+
+          # Setup project paths
+          Core::ProjectFinder.setup_paths
+
+          require_relative '../../xml/xml_builder'
+          builder = Xml::XmlBuilder.new
+
+          # Pass validation options to builder
+          builder.validation_enabled = options[:validate]
+          builder.validation_callback = ->(file, warnings) {
+            if warnings.any?
+              @validation_warnings.concat(warnings.map { |w| "[#{file}] #{w}" })
+              @validation_errors += warnings.length
+            end
+          } if options[:validate]
+
+          builder.build(options)
+
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
+
+          Core::Logger.success "XML build completed!"
+        end
+
+        def build_compose(options = {})
+          Core::Logger.info "Building Compose files..."
+
+          # Converters that predate the v1.8.56 template fix keep the old
+          # shape, and a template fix does not reach them. Reported, never
+          # enforced — see ConverterTestTagAudit for why both numbers print.
+          require_relative '../../compose/converter_test_tag_audit'
+          Compose::ConverterTestTagAudit.findings.each do |line|
+            Core::Logger.warn line
+          end
+
+          # Setup project paths
+          Core::ProjectFinder.setup_paths
+
+          require_relative '../../compose/compose_builder'
+          require_relative '../../compose/build_cache_manager'
+
+          config = Core::ConfigManager.load_config
+          source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          source_directory = config['source_directory'] || 'src/main'
+          layouts_dir = File.join(source_path, source_directory, config['layouts_directory'] || 'assets/Layouts')
+
+          # A Layouts directory that is not there is a named failure, as on
+          # rjui and sjui — until 1.9.0 it was "No JSON files found" and
+          # exit 0, the answer an empty directory gets (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          unless Dir.exist?(layouts_dir)
+            Core::Logger.error "Layouts directory not found: #{layouts_dir}"
+            Core::Logger.error "Nothing was built. Check layouts_directory in kjui.config.json, or run 'kjui init'."
+            exit 1
+          end
+
+          # Initialize cache manager
+          # The cache manager is told the directories build.rb resolved; it
+          # must not rebuild them from `source_path` (it used to, and with a
+          # non-empty `source_directory` it looked in a directory that does
+          # not exist, so nothing was ever cached).
+          styles_dir = File.join(source_path, source_directory, config['styles_directory'] || 'assets/Styles')
+          cache_manager = Compose::BuildCacheManager.new(
+            source_path, layouts_dir: layouts_dir, styles_dir: styles_dir
+          )
+
+          # Clean cache if --clean option is specified
+          if options[:clean]
+            Core::Logger.info "Cleaning build cache..."
+            cache_manager.clean_cache
+          end
+
+          last_updated = cache_manager.load_last_updated
+          # The tool, a component (definition / converter) or the config
+          # changed since the last build: nothing it generated can be kept.
+          inputs = cache_manager.inputs_digest(config)
+          if cache_manager.inputs_changed?(inputs) && !last_updated.empty?
+            Core::Logger.info "The tool, a component or the config changed since the last build — every layout is converted"
+            last_updated = {}
+          end
+          last_including_files = cache_manager.load_last_including_files
+          style_dependencies = cache_manager.load_style_dependencies
+          @refused_layouts = []
+
+          # Process all JSON files in Layouts directory (excluding Resources folder)
+          all_json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).select do |file|
+            JsonUIShared::ScreenIndex.layout_path?(layouts_dir, file)
+          end
+          # Responsive variant files (home@regular.json) are built alongside
+          # their base screen, never standalone — but they stay in the
+          # resources scan (their strings localize like any layout).
+          json_files = all_json_files.reject do |file|
+            JsonUIShared::LayoutVariant.variant?(file)
+          end
+
+          if json_files.empty?
+            Core::Logger.warn "No JSON files found in #{layouts_dir}"
+            # Nothing to build is not a failure — but what the stages before
+            # this one could not do still is: it was recorded and then never
+            # written, so the ledger came back empty (measured on 0f7140a3:
+            # SwiftUI, colors.json unparseable, no layouts yet — exit 0, 0
+            # entries). Ticket uikit-build-reports-success-after-a-binding-error.
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.report!(Core::Logger)
+            JsonUI::StageFailures.conclude(Core::Logger, nil) if JsonUI::StageFailures.any?
+            return
+          end
+
+          # Extract resources before processing layouts
+          require_relative '../../core/resources_manager'
+          require_relative '../../core/plural_validator'
+          resources_manager = Core::ResourcesManager.new(config, source_path)
+          begin
+            resources_manager.extract_resources(all_json_files)
+          rescue JsonUIShared::PluralValidator::ValidationError => e
+            Core::Logger.error e.message
+            exit 1
+          end
+          Core::Logger.info "-" * 60
+
+          # Track new includes and style dependencies
+          new_including_files = {}
+          new_style_dependencies = {}
+          failed_files = []
+
+          # Filter files that need update
+          files_to_update = []
+          json_files.each do |json_file|
+            file_name = File.basename(json_file, '.json')
+
+            # Check if file needs update. A dirty variant file re-builds its
+            # base screen (the dispatch + variant view live there).
+            variant_dirty = JsonUIShared::LayoutVariant.variants_for(json_file).values.any? do |vf|
+              cache_manager.needs_update?(vf, last_updated, layouts_dir, last_including_files, style_dependencies)
+            end
+            if variant_dirty || cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies)
+              files_to_update << json_file
+            else
+              # Keep existing includes and style dependencies for unchanged files
+              new_including_files[file_name] = last_including_files[file_name] if last_including_files[file_name]
+              new_style_dependencies[file_name] = style_dependencies[file_name] if style_dependencies[file_name]
+            end
+          end
+
+          # Initialize validators if validation is enabled
+          validator = options[:validate] ? Core::AttributeValidator.new(:compose) : nil
+          binding_validator = options[:validate] ? Core::BindingValidator.new : nil
+
+          # Bindings first, for every layout this run builds (variants
+          # included — build_file writes them with their base): one whose
+          # bindings carry an ERROR is not written by any writer below, Data
+          # or Compose, and is not cached (StageFailures.block_layout). Until
+          # jsonui-cli 1.9.8 they were checked in the build loop, after the
+          # Data models were written.
+          require_relative '../../core/stage_failures'
+          prevalidate_bindings(files_to_update, layouts_dir, binding_validator) if binding_validator
+
+          # Update data models first (always run to ensure data models are in sync)
+          require_relative '../../compose/data_model_updater'
+          data_updater = Compose::DataModelUpdater.new
+          data_updater.update_data_models(files_to_update)
+
+          # Validation is a function of the TREE, not of build history.
+          #
+          # The `return` below used to sit ahead of these validators AND of
+          # `StageFailures.report!`, so an all-cached run built no validator,
+          # found nothing, and wrote no ledger — the same gate iOS was missing
+          # until 1.8.44, reachable here through the cache instead.
+          #
+          # (This said the cache was latent — `save_cache` looked for layouts
+          # under `<source_path>/assets/Layouts`, so nothing was ever cached.
+          # The cache manager is given `layouts_dir` since 9fa01aa6, and it is
+          # active: a probe with `source_directory` app/src/main printed "all
+          # cached" on its second build, 2026-09-26.)
+          cached_files = json_files - files_to_update
+          validate_cached_layouts(cached_files, layouts_dir, validator, binding_validator)
+
+          if files_to_update.empty?
+            Core::Logger.info "No files need updating (all cached)"
+            # Deliberately NOT `return`: `StageFailures.report!` is below, and
+            # a refused layout has to be named on every run.
+          else
+            Core::Logger.info "Updating #{files_to_update.length} of #{json_files.length} files..."
+          end
+
+          builder = Compose::ComposeBuilder.new
+
+          # Where each layout's build begins in the stage ledger: a layout is
+          # refused when a `layout` entry lands in its stretch (the builder
+          # records refusals, base and variants).
+          require_relative '../../core/stage_failures'
+          build_marks = []
+          files_to_update.each do |json_file|
+            build_marks << [json_file, JsonUI::StageFailures.entries.size]
+            relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+            file_name = File.basename(json_file, '.json')
+
+            begin
+              # Read and parse JSON
+              json_content = File.read(json_file)
+              json_data = JSON.parse(json_content)
+              collect_collection_cells(json_data)
+
+              # Validate attributes if enabled
+              if validator
+                # L1-normalized layouts (`$jui` marker from `jui build`)
+                # take the canonical-only validation path; raw layouts
+                # keep the alias-tolerant L0 path.
+                validator.normalized = Core::Normalization.canonicalized?(json_data)
+                # Structural violations accumulate across the recursion (see
+                # AttributeValidator#structural_errors) — clear per file.
+                validator.reset_structural_errors!
+                warnings = validate_json(json_data, validator, file_name)
+                collect_outside_infos(validator, relative_path)
+                @structural_errors.concat(
+                  validator.structural_errors.map { |e| "[#{relative_path}] #{e}" }
+                )
+                if warnings.any?
+                  @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+                  @validation_errors += warnings.length
+                  Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
+                end
+              end
+
+              # Bindings were validated before any writer ran
+              # (prevalidate_bindings); a layout with an ERROR — in itself or
+              # a variant — is not written and not cached.
+              next if JsonUI::StageFailures.layout_blocked?(json_file)
+
+              # Validate variant files with the same validators (they are
+              # not in json_files — the builder emits them with the base)
+              JsonUIShared::LayoutVariant.variants_for(json_file).each_value do |variant_file|
+                next unless validator
+                variant_rel = Pathname.new(variant_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+                begin
+                  variant_data = JSON.parse(File.read(variant_file))
+                rescue JSON::ParserError
+                  next
+                end
+                if validator
+                  validator.normalized = Core::Normalization.canonicalized?(variant_data)
+                  validator.reset_structural_errors!
+                  v_warnings = validate_json(variant_data, validator, File.basename(variant_file, '.json'))
+                  collect_outside_infos(validator, variant_rel)
+                  @structural_errors.concat(
+                    validator.structural_errors.map { |e| "[#{variant_rel}] #{e}" }
+                  )
+                  if v_warnings.any?
+                    @validation_warnings.concat(v_warnings.map { |w| "[#{variant_rel}] #{w}" })
+                    @validation_errors += v_warnings.length
+                    Core::Logger.warn "  #{v_warnings.length} attribute warning(s) in #{variant_rel}"
+                  end
+                end
+              end
+
+              # Extract includes and styles for cache tracking
+              includes = cache_manager.extract_includes(json_data)
+              styles = cache_manager.extract_styles(json_data)
+
+              new_including_files[file_name] = includes if includes.any?
+              new_style_dependencies[file_name] = styles if styles.any?
+
+              # Build Compose file
+              Core::Logger.info "Processing: #{relative_path}"
+              builder.build_file(json_file)
+
+            rescue JSON::ParserError => e
+              Core::Logger.error "Failed to parse #{json_file}: #{e.message}"
+              failed_files << relative_path
+            rescue => e
+              Core::Logger.error "Failed to process #{json_file}: #{e.message}"
+              failed_files << relative_path
+            end
+          end
+
+          # Save cache for next build — every layout but the ones not built.
+          not_built = (@refused_layouts + refused_in(build_marks)).map { |f| File.basename(f, '.json') } +
+                      failed_files.map { |f| File.basename(f, '.json') }
+          cache_manager.save_inputs(inputs)
+          cache_manager.save_cache(
+            new_including_files, new_style_dependencies,
+            json_files.map { |f| File.basename(f, '.json') },
+            not_built: not_built
+          )
+
+          prune_layout_orphans(builder)
+
+          # A per-file failure used to be logged and stepped over, and the
+          # build still ended with "completed!". The layout keeps whatever the
+          # scaffold left behind — `build_file` creates the placeholder view
+          # BEFORE it can raise — so the run produces a tree that is missing
+          # generated code for those layouts while reporting success.
+          #
+          # That was survivable only because the placeholder used to name a
+          # data property and the Kotlin compiler caught it. Making the
+          # placeholder data-independent (so it compiles anywhere) removed the
+          # last thing that noticed, which is exactly how a partial build
+          # turned into a silent one. The build has to say so itself.
+          # Plan 49 lane C, G's finding.
+          # ComposeBuilder catches per-file exceptions itself, so most
+          # failures never reach the rescue above — they arrive here.
+          failed_files.concat(builder.failed_files.map { |f| f.sub("#{layouts_dir}/", '') })
+          failed_files.uniq!
+
+          unless failed_files.empty?
+            Core::Logger.error "#{failed_files.length} layout(s) failed to build:"
+            failed_files.each { |f| Core::Logger.error "  #{f}" }
+            exit 1
+          end
+
+          missing_modifier = cell_views_missing_modifier(source_path, config)
+          unless missing_modifier.empty?
+            Core::Logger.error "#{missing_modifier.length} cell view(s) take no `modifier` parameter, " \
+                               "but every Collection passes one (the cell's test address):"
+            missing_modifier.each { |f| Core::Logger.error "  #{f}" }
+            Core::Logger.error "  add `modifier: Modifier = Modifier` and forward it to the " \
+                               "GeneratedView — `jui generate cell` emits that shape."
+            exit 1
+          end
+
+          # Belt and braces for the same failure mode arriving another way:
+          # whatever the reason, a view still carrying the scaffold
+          # placeholder has no generated code in it.
+          stranded = stranded_placeholder_views(source_path, config)
+          unless stranded.empty?
+            Core::Logger.error "#{stranded.length} view(s) still contain the scaffold placeholder — " \
+                               "their generated code was never written:"
+            stranded.first(20).each { |f| Core::Logger.error "  #{f}" }
+            Core::Logger.error "  … #{stranded.length - 20} more" if stranded.length > 20
+            exit 1
+          end
+
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
+
+          # Until 1.9.0 "Compose build completed!" came directly under the
+          # list of stages that had not (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          JsonUI::StageFailures.conclude(Core::Logger, 'Compose build completed!')
+        end
+
+        # Cell views a Collection renders, by class name. Collected while the
+        # layouts are parsed because that is the only place that knows which
+        # views are used AS CELLS — the same file used as a screen has no such
+        # requirement.
+        def collect_collection_cells(node)
+          case node
+          when Hash
+            # The spellings the converter factory draws as a Collection, as
+            # written (type names are case-sensitive, 1.9.0).
+            if %w[Table Collection].include?(node['type'])
+              Array(node['sections']).each do |section|
+                next unless section.is_a?(Hash)
+                cell = section['cell']
+                @collection_cells << cell if cell.is_a?(String) && !cell.empty?
+              end
+            end
+            node.each_value { |v| collect_collection_cells(v) }
+          when Array
+            node.each { |v| collect_collection_cells(v) }
+          end
+        end
+
+        # Every Collection arm passes `modifier = Modifier.testTag(...)` into
+        # the cell view, so a cell view that takes no `modifier` does not
+        # compile — 11 errors out of kotlinc, naming the call sites rather
+        # than the four files to change.
+        #
+        # `jui generate cell` has always emitted the parameter; the screen
+        # scaffold did not until now, so a View created as a screen and later
+        # used as a cell is missing it. That was survivable while two arms
+        # (flow, non-lazy horizontal) passed no modifier at all — they were
+        # the last place such a view could still be used. Giving those arms
+        # their cell addresses took that away, which is how a consumer found
+        # this.
+        #
+        # Named here so the build says which files to fix instead of leaving
+        # it to the Kotlin compiler's call-site errors.
+        def cell_views_missing_modifier(source_path, config)
+          return [] if @collection_cells.nil? || @collection_cells.empty?
+
+          require_relative '../../compose/components/collection_component'
+
+          view_dir = File.join(source_path, config['source_directory'] || 'src/main',
+                               config['view_directory'] || 'kotlin/views')
+          return [] unless Dir.exist?(view_dir)
+
+          # `map { }.compact`, not `filter_map`: the vendored tools run under
+          # whatever ruby the project has, and until jsonui-cli 1.9.0 that
+          # could be 2.6, which has no filter_map. Second time that day in
+          # this file — the first is three methods up.
+          @collection_cells.uniq.map do |cell|
+            # Same derivation CollectionComponent uses to name the call
+            # it emits — reused rather than re-spelled, so the check
+            # looks for the file the generated code will reference.
+            class_name = Compose::Components::CollectionComponent.cell_class_name(cell)
+            next nil unless class_name
+            file = Dir.glob(File.join(view_dir, '**', "#{class_name}View.kt")).first
+            next nil unless file
+
+            body = File.read(file)
+            # Anchored on the `) {` that opens the body: a non-greedy match to
+            # the first `)` stops inside `viewModel = viewModel()` and reports
+            # every compliant cell.
+            signature = body[/fun\s+#{Regexp.escape(class_name)}View\s*\((.*?)\)\s*\{/m, 1]
+            next nil if signature.nil? || signature.include?('modifier')
+
+            file.sub("#{source_path}/", '')
+          end.compact
+        end
+
+        # A deleted layout's outputs, by the rule the three faces share
+        # (lib/core/generated_orphans.rb). The Data model carries @generated
+        # and is deleted. The GeneratedView (and a variant's) carries no
+        # @generated line — the generator rewrites its GENERATED_CODE block and
+        # leaves the rest as the scaffold wrote it — but it is a generated file
+        # all the same, not a place for hand-written code (ruling 2026-11-13,
+        # ticket jui-build-leaves-orphan-protocol-and-kjui-view-after-screen-
+        # removal: left behind, it names the deleted ViewModel and the app no
+        # longer compiles). It is deleted, and named in a warning when it held
+        # lines its scaffold does not have (ViewGenerator.scaffold_only?). One a
+        # MOVED layout left behind is found by the path generated_view_dir
+        # gives, and deleted the same way. A hand-written View and ViewModel of
+        # the same name are named, not deleted.
+        def prune_layout_orphans(builder)
+          require_relative '../../compose/data_model_updater'
+          require_relative '../../compose/generators/view_generator'
+          orphans = JsonUIShared::GeneratedOrphans
+          kinds = [
+            orphans::Kind.new(dir: Compose::DataModelUpdater.new.data_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.kt\z/),
+            orphans::Kind.new(dir: builder.view_dir, owner: :block,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.kt\z/,
+                              home_dir: ->(rel) { builder.generated_view_dir(rel) },
+                              scaffold: lambda { |path|
+                                Compose::Generators::ViewGenerator.scaffold_only?(File.read(path))
+                              }),
+            orphans::Kind.new(dir: builder.view_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.kt\z/),
+            orphans::Kind.new(dir: builder.viewmodel_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)ViewModel\.kt\z/)
+          ]
+          result = orphans.sweep(layouts_dir: builder.layouts_dir, kinds: kinds)
+          base = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          orphans.report_lines(result, base: base).each do |level, line|
+            level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
+          end
+          warn_hand_written_generated_views(builder.view_dir, base)
+        end
+
+        # A GeneratedView is generated (ruling 2026-11-13): the build rewrites
+        # its blocks and the rest is the scaffold. A line written by hand
+        # outside the blocks is in the wrong place — it is lost when the layout
+        # goes (the file is deleted then) — so a living one that holds such a
+        # line is named, one warning line each. Measured 2026-11-13: none of
+        # 236 GeneratedViews in two consumer apps holds one.
+        HAND_WRITTEN_GENERATED_VIEW = 'is a generated file, but it holds lines outside its GENERATED_CODE block ' \
+                                      'that its scaffold does not have; move them into the View — the build ' \
+                                      'deletes this file when its layout goes'
+
+        def warn_hand_written_generated_views(view_dir, base)
+          return unless view_dir && Dir.exist?(view_dir)
+
+          Dir.glob(File.join(view_dir, '**', '*GeneratedView.kt')).sort.each do |path|
+            next if Compose::Generators::ViewGenerator.scaffold_only?(File.read(path))
+
+            Core::Logger.warn("#{path.sub(%r{\A#{Regexp.escape(base)}/}, '')} #{HAND_WRITTEN_GENERATED_VIEW}")
+          end
+        end
+
+        # Views whose GENERATED_CODE block still holds the scaffold
+        # placeholder. Compiling is not evidence that a view was generated —
+        # the placeholder compiles fine and draws a plausible screen.
+        def stranded_placeholder_views(source_path, config)
+          require_relative '../../compose/generators/view_generator'
+          view_dir = File.join(source_path, config['source_directory'] || 'src/main',
+                               config['view_directory'] || 'kotlin/views')
+          return [] unless Dir.exist?(view_dir)
+
+          Dir.glob(File.join(view_dir, '**', '*GeneratedView.kt')).select do |f|
+            File.read(f).include?(Compose::Generators::ViewGenerator::SCAFFOLD_PLACEHOLDER)
+          end.map { |f| f.sub("#{source_path}/", '') }
+        end
+      end
+    end
+  end
+end

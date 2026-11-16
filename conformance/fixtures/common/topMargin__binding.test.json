@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/topMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.topMargin (binding)",
+    "description": "Conformance fixture for 'topMargin' on View (section: common, class: visual). Value under test: \"@{boundTopMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "topMargin__binding",
+      "description": "Conformance fixture for 'topMargin' on View (section: common, class: visual). Value under test: \"@{boundTopMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_topMargin__binding"
+        }
+      ]
+    }
+  ]
+}

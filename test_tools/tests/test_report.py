@@ -1,0 +1,221 @@
+"""Tests for the report module (results contract: skipReason + skip accounting)."""
+
+import pytest
+import sys
+from pathlib import Path
+
+# Add package to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from jsonui_test_cli.report import (
+    generate_html,
+    generate_junit,
+    summarize_skips,
+    validate_results_data,
+)
+
+
+def _result(status="passed", test_name="login", case_name="case1", **extra):
+    item = {"testName": test_name, "caseName": case_name, "status": status, "durationMs": 10}
+    item.update(extra)
+    return item
+
+
+def _run(results, platform="web"):
+    return {
+        "format": "jsonui-test-results",
+        "version": 1,
+        "platform": platform,
+        "suites": [{"suiteName": "suite1", "results": results}],
+    }
+
+
+class TestSkipReasonValidation:
+    """Tests for the optional 'skipReason' result key (results.schema.json)."""
+
+    def test_valid_skip_reasons(self):
+        for reason in ["platform", "responsive"]:
+            data = _run([_result(status="skipped", skipReason=reason)])
+            errors = validate_results_data(data, "test")
+            assert errors == [], reason
+
+    def test_skipped_without_reason_still_valid(self):
+        # skipReason is optional; an old driver that emits bare skips stays valid
+        data = _run([_result(status="skipped")])
+        assert validate_results_data(data, "test") == []
+
+    def test_invalid_skip_reason_value(self):
+        data = _run([_result(status="skipped", skipReason="flaky")])
+        errors = validate_results_data(data, "test")
+        assert any("'skipReason' must be one of" in e for e in errors)
+
+    def test_skip_reason_without_skipped_status(self):
+        # Only meaningful when status is 'skipped' — reason on passed/failed is an error
+        for status in ["passed", "failed"]:
+            data = _run([_result(status=status, skipReason="responsive")])
+            errors = validate_results_data(data, "test")
+            assert any("only meaningful when status is 'skipped'" in e for e in errors), status
+
+    def test_failure_reason_mirrors_the_skip_reason_rules(self):
+        # skipReason has been an enum since it existed; failures had only
+        # prose, so consumers matched on sentences and one aggregation went
+        # silent when a sentence was deleted. Same shape, same rules.
+        for reason in ["element-not-found", "timeout", "assertion", "invalid-test",
+                       "mock", "launch", "action"]:
+            data = _run([_result(status="failed", failureReason=reason)])
+            assert validate_results_data(data, "test") == [], reason
+
+    def test_failed_without_a_reason_stays_valid(self):
+        # Optional: a driver that predates the field emits nothing, and absent
+        # has to read as unknown rather than as "no reason".
+        data = _run([_result(status="failed")])
+        assert validate_results_data(data, "test") == []
+
+    def test_invalid_failure_reason_value(self):
+        data = _run([_result(status="failed", failureReason="flaky")])
+        errors = validate_results_data(data, "test")
+        assert any("'failureReason' must be one of" in e for e in errors)
+
+    def test_failure_reason_without_failed_status(self):
+        for status in ["passed", "skipped"]:
+            data = _run([_result(status=status, failureReason="timeout")])
+            errors = validate_results_data(data, "test")
+            assert any("only meaningful when status is 'failed'" in e for e in errors), status
+
+    def test_other_without_prose_is_rejected(self):
+        # 'other' means the driver could not classify it, so the prose is the
+        # only thing still carrying the reason. Bare, it turns an unclassified
+        # failure into one that looks classified.
+        data = _run([_result(status="failed", failureReason="other")])
+        errors = validate_results_data(data, "test")
+        assert any("'other' means unclassified" in e for e in errors)
+
+    def test_other_with_prose_is_accepted(self):
+        # Positive control for the arm above: 'other' is a legitimate value,
+        # it just may not travel alone.
+        data = _run([_result(status="failed", failureReason="other",
+                             error="screenshot comparison returned a null image")])
+        assert validate_results_data(data, "test") == []
+
+    def test_version_must_stay_1(self):
+        data = _run([_result()])
+        data["version"] = 2
+        errors = validate_results_data(data, "test")
+        assert any("'version' must be 1" in e for e in errors)
+
+
+class TestSummarizeSkips:
+    """Tests for skip-reason aggregation and the permanently-skipped flag."""
+
+    def test_counts_by_reason(self):
+        runs = [_run([
+            _result(status="skipped", case_name="a", skipReason="platform"),
+            _result(status="skipped", case_name="b", skipReason="responsive"),
+            _result(status="skipped", case_name="c", skipReason="responsive"),
+            _result(status="skipped", case_name="d"),
+            _result(status="passed", case_name="e"),
+        ])]
+        summary = summarize_skips(runs)
+        assert summary["reasonCounts"] == {"platform": 1, "responsive": 2, "unspecified": 1}
+
+    def test_permanently_skipped_flagged(self):
+        # 'tablet_only :: regular_case' is skipped in every run -> flagged
+        runs = [
+            _run([_result(status="skipped", test_name="tablet_only", case_name="regular_case",
+                          skipReason="responsive")], platform="ios"),
+            _run([_result(status="skipped", test_name="tablet_only", case_name="regular_case",
+                          skipReason="responsive")], platform="android"),
+        ]
+        summary = summarize_skips(runs)
+        assert summary["permanentlySkipped"] == ["tablet_only :: regular_case"]
+
+    def test_exercised_somewhere_not_flagged(self):
+        # skipped on ios but passed on web -> exercised, not permanently skipped
+        runs = [
+            _run([_result(status="skipped", skipReason="responsive")], platform="ios"),
+            _run([_result(status="passed")], platform="web"),
+        ]
+        summary = summarize_skips(runs)
+        assert summary["permanentlySkipped"] == []
+
+    def test_no_skips(self):
+        summary = summarize_skips([_run([_result()])])
+        assert summary["reasonCounts"] == {}
+        assert summary["permanentlySkipped"] == []
+
+
+class TestReportOutput:
+    """Tests for skipReason surfacing in JUnit / HTML output."""
+
+    def test_junit_skipped_message_carries_reason(self):
+        xml = generate_junit([_run([_result(status="skipped", skipReason="responsive")])])
+        assert 'message="skipped-responsive"' in xml
+
+    def test_junit_skipped_without_reason_has_no_message(self):
+        xml = generate_junit([_run([_result(status="skipped")])])
+        assert "<skipped />" in xml or "<skipped/>" in xml
+
+    def test_junit_lists_permanently_skipped(self):
+        xml = generate_junit([_run([
+            _result(status="skipped", test_name="tablet_only", case_name="regular_case",
+                    skipReason="responsive"),
+        ])])
+        assert "permanently skipped" in xml
+        assert "tablet_only :: regular_case" in xml
+
+    def test_html_summary_shows_skip_reason_breakdown(self):
+        html = generate_html([_run([
+            _result(status="skipped", case_name="a", skipReason="platform"),
+            _result(status="skipped", case_name="b", skipReason="responsive"),
+            _result(status="passed", case_name="c"),
+        ])])
+        assert "platform 1" in html
+        assert "responsive 1" in html
+
+    def test_html_lists_permanently_skipped(self):
+        html = generate_html([_run([
+            _result(status="skipped", test_name="tablet_only", case_name="regular_case",
+                    skipReason="responsive"),
+            _result(status="passed", test_name="login", case_name="ok"),
+        ])])
+        assert "Permanently skipped" in html
+        assert "tablet_only :: regular_case" in html
+        assert "login :: ok" not in html
+
+    def test_html_no_permanently_skipped_section_when_all_exercised(self):
+        html = generate_html([_run([_result(status="passed")])])
+        assert "Permanently skipped" not in html
+
+    def test_html_status_badge_carries_reason(self):
+        html = generate_html([_run([_result(status="skipped", skipReason="responsive")])])
+        assert "skipped (responsive)" in html
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+# --- default-location keys (run / app / suites[].file) -----------------------
+
+def _default_location_results(**top):
+    data = {"format": "jsonui-test-results", "version": 1, "platform": "android",
+            "generatedAt": "2026-10-18T09:00:00Z",
+            "run": "3f2a1b4c-0d5e-4f60-8a71-92b3c4d5e6f7", "app": "com.example.app",
+            "suites": [{"suiteName": "Login", "file": "screens/login.test.json",
+                        "results": [{"testName": "Login", "caseName": "ok", "status": "passed", "durationMs": 1}]}]}
+    data.update(top)
+    return data
+
+
+def test_default_location_keys_are_accepted():
+    from jsonui_test_cli.report import validate_results_data
+    assert validate_results_data(_default_location_results(), "f") == []
+
+
+def test_default_location_keys_are_type_checked():
+    from jsonui_test_cli.report import validate_results_data
+    assert any("'run'" in e for e in validate_results_data(_default_location_results(run="RUN-1"), "f"))
+    assert any("'app'" in e for e in validate_results_data(_default_location_results(app=3), "f"))
+    bad = _default_location_results()
+    bad["suites"][0]["file"] = ["screens/login.test.json"]
+    assert any("'file'" in e for e in validate_results_data(bad, "f"))

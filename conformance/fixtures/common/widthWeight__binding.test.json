@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/widthWeight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.widthWeight (binding)",
+    "description": "Conformance fixture for 'widthWeight' on View (section: common, class: visual). Value under test: \"@{boundWidthWeight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "widthWeight__binding",
+      "description": "Conformance fixture for 'widthWeight' on View (section: common, class: visual). Value under test: \"@{boundWidthWeight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_widthWeight__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "jsonui-test-vitest-pin",
+  "private": true,
+  "description": "The vitest the agent-reporter arm runs (test_branch_notices_reach_agent_runs.py). Pinned: the arm measures what a reporter of THIS release shows. Install with `npm ci --prefix test_tools/tests/fixtures/vitest-pin`.",
+  "type": "module",
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

@@ -1,0 +1,417 @@
+# frozen_string_literal: true
+
+require_relative '../../spec_helper'
+require 'react/converters/collection_converter'
+
+RSpec.describe RjuiTools::React::Converters::CollectionConverter do
+  let(:default_config) { { 'use_tailwind' => true } }
+
+  def create_converter(json_data, config = nil)
+    described_class.new(json_data, config || default_config)
+  end
+
+  describe '#convert' do
+    context 'basic collection with single column' do
+      it 'generates list layout' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'] })
+        result = converter.convert
+        expect(result).to include('<div')
+        expect(result).to include('flex flex-col')
+      end
+    end
+
+    context 'with multiple columns' do
+      it 'generates grid layout' do
+        converter = create_converter({ 'class' => 'Collection', 'columnCount' => 3, 'cellClasses' => ['ItemCell'] })
+        result = converter.convert
+        expect(result).to include('grid')
+        expect(result).to include('grid-cols-3')
+      end
+    end
+
+    context 'with horizontal layout' do
+      it 'generates horizontal scroll layout' do
+        converter = create_converter({ 'class' => 'Collection', 'layout' => 'horizontal', 'cellClasses' => ['ItemCell'] })
+        result = converter.convert
+        expect(result).to include('flex flex-row')
+        expect(result).to include('overflow-x-auto')
+      end
+    end
+
+    context 'with flow layout' do
+      # 33 acceptance: Collection/layout__flow(_2) measured web-only inert —
+      # flow fell through to the single-column list and rendered ≡ vertical.
+      it 'generates a wrapping row instead of the vertical list' do
+        converter = create_converter({ 'class' => 'Collection', 'layout' => 'flow', 'cellClasses' => ['ItemCell'] })
+        result = converter.convert
+        expect(result).to include('flex flex-row flex-wrap content-start')
+        expect(result).not_to include('flex flex-col')
+      end
+
+      it "accepts the declared 'Flow' spelling case-insensitively" do
+        converter = create_converter({ 'class' => 'Collection', 'layout' => 'Flow', 'cellClasses' => ['ItemCell'] })
+        expect(converter.convert).to include('flex-wrap')
+      end
+
+      # 2026-08-03 unification: LeftAligned IS flow; the accepted spellings
+      # survive as aliases.
+      it "treats the 'leftAligned' / 'LeftAligned' aliases as flow" do
+        %w[leftAligned LeftAligned].each do |spelling|
+          converter = create_converter({ 'class' => 'Collection', 'layout' => spelling, 'cellClasses' => ['ItemCell'] })
+          expect(converter.convert).to include('flex-wrap'), "expected layout: #{spelling} to wrap"
+        end
+      end
+
+      it 'maps lineSpacing to the line gap and itemSpacing to the in-line gap' do
+        converter = create_converter({ 'class' => 'Collection', 'layout' => 'flow',
+                                       'lineSpacing' => 4, 'itemSpacing' => 8, 'cellClasses' => ['ItemCell'] })
+        expect(converter.convert).to include('gap-x-[0.5rem] gap-y-[0.25rem]')
+      end
+
+      it 'wins over the horizontalScroll boolean (declared layout first, like sjui/kjui)' do
+        converter = create_converter({ 'class' => 'Collection', 'layout' => 'flow',
+                                       'horizontalScroll' => true, 'cellClasses' => ['ItemCell'] })
+        result = converter.convert
+        expect(result).to include('flex-wrap')
+        expect(result).not_to include('overflow-x-auto')
+      end
+    end
+
+    context 'with itemSpacing' do
+      it 'applies gap spacing' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'itemSpacing' => 8 })
+        result = converter.convert
+        expect(result).to include('gap-[0.5rem]')
+      end
+    end
+
+    # `columnSpacing` is the SSoT's name for the column gap, and it was read
+    # only in the horizontal branch — so every Collection that declares
+    # `columns` (the grid branch) ignored it. Plan 34 measured the fixture
+    # pixel-identical to its control on web while both mobile platforms
+    # honoured it.
+    context 'with columnSpacing' do
+      # Between the columns only (attribute_semantics.json ->
+      # collectionSpacing): until jsonui-cli 1.9.0 this wrote `gap-[0.5rem]`,
+      # which spaced the rows by it too.
+      it 'applies it as the column gap of a grid, and only there' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
+                                       'columns' => 2, 'columnSpacing' => 8 })
+        result = converter.convert
+        expect(result).to include('gap-x-[0.5rem]')
+        expect(result).not_to include('gap-[0.5rem]')
+        expect(result).not_to include('gap-y-')
+      end
+
+      it 'applies it as the in-line gap of a flow layout' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
+                                       'layout' => 'flow', 'columnSpacing' => 8, 'lineSpacing' => 4 })
+        expect(converter.convert).to include('gap-x-[0.5rem] gap-y-[0.25rem]')
+      end
+
+      # The columns take columnSpacing ahead of itemSpacing; the rows, with no
+      # lineSpacing, take itemSpacing (until jsonui-cli 1.9.0 they took the
+      # columnSpacing).
+      it 'is read ahead of the legacy itemSpacing spelling, which spaces the rows' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
+                                       'columns' => 2, 'columnSpacing' => 8, 'itemSpacing' => 16 })
+        result = converter.convert
+        expect(result).to include('gap-x-[0.5rem] gap-y-[1rem]')
+        expect(result).not_to include('gap-[0.5rem]')
+      end
+    end
+
+    context 'with items binding' do
+      # The cells come from the data's sections (a CollectionDataSource), as
+      # on sjui and kjui — this mapped `items` itself as an array until
+      # jsonui-cli 1.9.0 (collection_classes_and_page_change_spec.rb has the
+      # route table and the typed tsc arm).
+      it 'maps every data section, keyed by section and cell' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
+        result = converter.convert
+        expect(result).to include('{(data.listItems?.sections ?? []).map((section, sectionIndex) =>')
+        expect(result).to include('(section.cells?.data ?? []).map((cellData, cellIndex) => (')
+        expect(result).to include('key={`${sectionIndex}_${cellIndex}`}')
+        expect(result).to include('data={cellData}')
+      end
+
+      # Regression: rjui-collection-cells-missing-item-index-id — kjui
+      # testTag parity so jsonui-test-runner's tapItem can click
+      # #{collectionId}_item_{index}.
+      it 'passes the {id}_item_{index} identifier to each cell (legacy path)' do
+        converter = create_converter({ 'class' => 'Collection', 'id' => 'tag_chip_row',
+                                       'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
+        result = converter.convert
+        # Counted across the data sections (ticket jui-collection-item-identifier-repeats-per-section).
+        expect(result).to include('id={`tag_chip_row_item_${(data.listItems?.sections ?? []).slice(0, sectionIndex).reduce((n, s) => n + (s.cells?.data?.length ?? 0), 0) + cellIndex}`} data={cellData} />')
+      end
+
+      # A cell's address counts the cells of the sections before its own (user ruling 2026-11-14, ticket
+      # jui-collection-item-identifier-repeats-per-section): the first section's are cellIndex, a later one's start
+      # after them. They restarted at 0 per section, so two sections each had an `_item_0`.
+      it 'counts a sectioned Collection\'s addresses across the sections' do
+        result = create_converter({ 'class' => 'Collection', 'id' => 'stops', 'items' => '@{rows}',
+                                    'sections' => [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell' }] }).convert
+        ids = result.scan(/id=\{`stops_item_\$\{([^`]*)\}`\}/).flatten
+        expect(ids.size).to eq(2), result
+        expect(ids[0]).to eq('cellIndex')
+        # the header-only section draws no cells and is not counted
+        expect(ids[1]).to eq('(data.rows?.sections?.[0]?.cells?.data?.length ?? 0) + cellIndex')
+      end
+
+      it 'omits the item identifier when the collection has no literal id' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
+        expect(converter.convert).not_to include('_item_')
+      end
+    end
+
+    context 'with headerClasses' do
+      it 'includes header component' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'headerClasses' => ['HeaderView'] })
+        result = converter.convert
+        expect(result).to include('<HeaderView />')
+      end
+    end
+
+    context 'with footerClasses' do
+      it 'includes footer component' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'footerClasses' => ['FooterView'] })
+        result = converter.convert
+        expect(result).to include('<FooterView />')
+      end
+    end
+
+    context 'with sections' do
+      it 'generates section-based rendering with nullish coalescing' do
+        json = {
+          'class' => 'Collection',
+          'sections' => [
+            { 'header' => 'SectionHeader', 'cell' => 'ItemCell', 'footer' => 'SectionFooter' }
+          ],
+          'items' => '@{sectionData}'
+        }
+        converter = create_converter(json)
+        result = converter.convert
+        expect(result).to include('SectionHeader')
+        expect(result).to include('SectionFooter')
+        # Updated expectation: uses nullish coalescing with array
+        expect(result).to include('sections?.[0]?.cells?.data ?? []')
+      end
+
+      it 'passes the {id}_item_{index} identifier to each cell (sections path)' do
+        json = {
+          'class' => 'Collection',
+          'id' => 'item_sections_collection',
+          'sections' => [{ 'cell' => 'FeeCell' }],
+          'items' => '@{sectionData}'
+        }
+        result = create_converter(json).convert
+        expect(result).to include('id={`item_sections_collection_item_${cellIndex}`}')
+      end
+    end
+
+    context 'with insets' do
+      it 'applies padding from insets' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'insets' => [10, 20, 10, 20] })
+        result = converter.convert
+        expect(result).to include('pt-[0.625rem]')
+        expect(result).to include('pl-[1.25rem]')
+        expect(result).to include('pb-[0.625rem]')
+        expect(result).to include('pr-[1.25rem]')
+      end
+    end
+
+    # The element is named as the import names it (React::ComponentName).
+    # Until 1.9.0 these two asserted UIKit-migration renames —
+    # ProductCollectionViewCell → ProductView, ProductCell → ProductCellView —
+    # which the import never made, so the file named a component it had not
+    # imported (collection_classes_and_page_change_spec.rb, tsc TS2304).
+    context 'cell class name conversion' do
+      context 'with CollectionViewCell suffix' do
+        it 'keeps the PascalCase name the import uses' do
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCollectionViewCell'], 'items' => '@{rows}' })
+          result = converter.convert
+          expect(result).to include('<ProductCollectionViewCell ')
+          expect(result).not_to include('ProductView')
+        end
+      end
+
+      context 'with Cell suffix' do
+        it 'keeps the PascalCase name the import uses' do
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCell'], 'items' => '@{rows}' })
+          result = converter.convert
+          expect(result).to include('<ProductCell ')
+          expect(result).not_to include('ProductCellView')
+        end
+      end
+
+      context 'with path-based reference' do
+        it 'converts to PascalCase' do
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['components/product_item'], 'items' => '@{rows}' })
+          result = converter.convert
+          expect(result).to include('ProductItem')
+        end
+      end
+    end
+
+    context 'with testId' do
+      it 'generates data-testid attribute' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'testId' => 'product-list' })
+        result = converter.convert
+        expect(result).to include('data-testid="product-list"')
+      end
+    end
+
+    context 'with visibility binding' do
+      it 'wraps with conditional rendering' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'visibility' => '@{showList}' })
+        result = converter.convert
+        expect(result).to include('{data.showList !== "gone" &&')
+      end
+    end
+
+    context 'with lazy: "none"' do
+      it 'drops overflow-y-auto for single column' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'lazy' => 'none' })
+        result = converter.convert
+        expect(result).to include('flex flex-col')
+        expect(result).not_to include('overflow-y-auto')
+      end
+
+      it 'drops overflow-x-auto for horizontal' do
+        converter = create_converter({ 'class' => 'Collection', 'layout' => 'horizontal', 'cellClasses' => ['ItemCell'], 'lazy' => 'none' })
+        result = converter.convert
+        expect(result).to include('flex flex-row')
+        expect(result).not_to include('overflow-x-auto')
+        expect(result).not_to include('flex-nowrap')
+      end
+
+      it 'keeps overflow classes when lazy attribute is absent (defaults to "lazy")' do
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'] })
+        result = converter.convert
+        expect(result).to include('overflow-y-auto')
+      end
+    end
+
+    # Regression: jui-collection-columns-data-binding-support.
+    # Tailwind's JIT can't see `grid-cols-${variable}` at build time, so a
+    # `@{prop}` binding cannot reach the class string. Emit the bare `grid`
+    # class and push `gridTemplateColumns: \`repeat(${data.prop}, minmax(0,
+    # 1fr))\`` into the inline style attribute instead. A literal int keeps
+    # the existing `grid-cols-N` shortcut.
+    context 'with `columns: "@{prop}"` data binding' do
+      it 'emits `grid` class but no `grid-cols-N` Tailwind class' do
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => '@{gridColumnCount}',
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).to include('grid')
+        expect(result).not_to match(/grid-cols-\d+/)
+      end
+
+      it 'emits `gridTemplateColumns: `repeat(${data.<prop>}, minmax(0, 1fr))`` as inline style' do
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => '@{gridColumnCount}',
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).to include('gridTemplateColumns: `repeat(${data.gridColumnCount}, minmax(0, 1fr))`')
+      end
+
+      it 'keeps the literal `grid-cols-N` class for static integer columns' do
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => 5,
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).to include('grid-cols-5')
+        expect(result).not_to include('gridTemplateColumns')
+      end
+
+      it 'forces the grid path even when the binding could resolve to 1' do
+        # A literal `columns: 1` routes through the `flex flex-col` list
+        # path. A binding can't take that path because its runtime value
+        # might be >1; the grid layout structure must stay stable across
+        # runtime changes.
+        converter = create_converter({
+          'class' => 'Collection',
+          'columns' => '@{gridColumnCount}',
+          'cellClasses' => ['ItemCell']
+        })
+        result = converter.convert
+        expect(result).not_to include('flex flex-col')
+      end
+    end
+
+    # Scroll control. The element side lives here; the effects that drive it
+    # are hoisted by ReactGenerator (react_generator_spec).
+    context 'scroll control' do
+      def scrolling(extra)
+        create_converter(
+          { 'class' => 'Collection', 'id' => 'item_list', 'items' => '@{listData}',
+            'cellClasses' => ['ItemCell'] }.merge(extra)
+        ).convert
+      end
+
+      it 'attaches the ref the hoisted effects target' do
+        expect(scrolling('scrollTo' => '@{scrollIndex}')).to include('ref={itemListRef}')
+      end
+
+      %w[defaultScrollAnchor currentPage onItemAppear].each do |attr|
+        it "attaches the ref for #{attr}" do
+          value = attr == 'defaultScrollAnchor' ? 'bottom' : '@{x}'
+          expect(scrolling(attr => value)).to include('ref={itemListRef}')
+        end
+      end
+
+      it 'attaches no ref when no scroll control is declared' do
+        expect(scrolling({})).not_to include('ref=')
+      end
+
+      # Without a literal id there is no stable variable name for the
+      # converter and the generator to agree on, so the attributes would
+      # silently do nothing.
+      it 'warns instead of silently dropping the attributes when the id is missing' do
+        converter = create_converter(
+          { 'class' => 'Collection', 'scrollTo' => '@{scrollIndex}', 'cellClasses' => ['ItemCell'] }
+        )
+        expect { converter.convert }.to output(/\[WARN\].*\[rjui\] Collection: .*literal `id`/).to_stdout
+      end
+
+      # currentPage read-back: `data.on<Prop>Change` is the same write-back
+      # convention the inputs use, and comparing against the bound value keeps
+      # a scroll from firing the handler on every frame.
+      it 'reports the page back through the derived change handler' do
+        result = scrolling('currentPage' => '@{page}')
+        expect(result).to include('onScroll={')
+        expect(result).to include('currentCollectionPage(itemListRef.current, false)')
+        expect(result).to include('if (page !== data.page) data.onPageChange?.(page)')
+      end
+
+      it 'measures the horizontal axis for a horizontal collection' do
+        result = scrolling('currentPage' => '@{page}', 'orientation' => 'horizontal')
+        expect(result).to include('currentCollectionPage(itemListRef.current, true)')
+      end
+
+      it 'adds no scroll handler without currentPage' do
+        expect(scrolling('scrollTo' => '@{scrollIndex}')).not_to include('onScroll=')
+      end
+
+      # The snap points have to be on the children, and the children are user
+      # cell components — hence the arbitrary-variant class.
+      it 'snaps children for paging' do
+        expect(scrolling('paging' => true)).to include('snap-y snap-mandatory [&>*]:snap-start')
+        expect(scrolling('paging' => true, 'orientation' => 'horizontal'))
+          .to include('snap-x snap-mandatory [&>*]:snap-start')
+      end
+
+      it 'does not snap without paging' do
+        expect(scrolling({})).not_to include('snap-')
+      end
+    end
+  end
+end

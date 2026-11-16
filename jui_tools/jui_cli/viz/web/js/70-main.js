@@ -1,0 +1,96 @@
+/* ---------- controls and main loop ---------- */
+// Demo: the script's clock, with play / speed. Live: the wall clock (the local time of day in seconds), no
+// controls; the state comes from the server (25-net.js).
+let simT = START_AT, prevSim = -0.001, playing = true, speed = 1, lastMs = performance.now(), lastPanel = -1e9, lastBoard = -1e9;
+$('btn-play').addEventListener('click', (e) => { playing = !playing; e.currentTarget.textContent = playing ? tl('demo.pause') : tl('demo.play'); e.currentTarget.setAttribute('aria-pressed', String(!playing)); });
+$('btn-speed').addEventListener('click', (e) => { speed = speed === 1 ? 3 : 1; e.currentTarget.textContent = tl('demo.speed', { n: speed }); });
+
+/* ?fps=1: frames per second in the corner, from the requestAnimationFrame intervals (plan 10 §7). */
+const fpsMeter = new URLSearchParams(location.search).get('fps') === '1' ? { el: document.createElement('p'), n: 0, from: performance.now() } : null;
+if (fpsMeter) { fpsMeter.el.className = 'fps-meter'; fpsMeter.el.setAttribute('aria-hidden', 'true'); document.body.append(fpsMeter.el); }
+
+/* The real time between two frames drives what animates (a pose blending into the next, eases, the camera following),
+   up to FRAME_DT_MAX: on a busy machine the page draws a frame every second or more, and a step capped at 0.05 s made
+   all of it crawl (a 0.4 s pose blend took 8 frames however far apart; ticket 2026-10-19-jui-viz-walk-stretches-with-
+   frame-gaps). Past 1 s everything that eases has arrived anyway; what steps physics (the vacuum's collisions, falling
+   petals, smoke, the shredder's bits) keeps its own 0.1 s step. The demo's script clock keeps the 0.05 s step: it
+   plays its script frame by frame and must not jump. */
+const FRAME_DT_MAX = 1;
+function frame(ms) {
+  const rawDt = Math.max(0, (ms - lastMs) / 1000);
+  const dt = Math.min(0.05, rawDt);
+  lastMs = ms;
+  if (SOURCE.mode === 'demo') {
+    if (playing) simT += dt * speed;
+    const t = ((simT % LOOP) + LOOP) % LOOP;
+    emitEvents(prevSim, simT); prevSim = simT;
+    latestModel = computeModel(t, Math.floor(simT / LOOP));
+    VIZ_CLOCK.at = demoClockMs(t);   // the demo clock (5:00 → 23:00 a loop): the sky and b4's hours
+    updateRobotStates(simT, t, latestModel.perms);
+  } else {
+    simT = secOfDay(Date.now());
+    latestModel = computeModel();
+  }
+  if (has3D) {
+    if (ms - lastBoard > 200 && !TOWER.on) { redrawBoards(latestModel, ms / 1000); lastBoard = ms; }   // the building hides the boards
+    update3D(latestModel, ms / 1000, Math.min(FRAME_DT_MAX, rawDt));
+    billsFrame(ms);   // 54-bills.js
+  }
+  if (ms - lastPanel > 250) {
+    renderPanel(latestModel);
+    renderTicker();
+    renderWhiteboard(latestModel, false);
+    renderTaskBoard(latestModel);
+    renderRobot(latestModel);
+    renderLog(false);
+    pricesPanel();
+    $('chip-clock').textContent = fmtClock(BASE_CLOCK + simT);
+    if (SOURCE.mode === 'live') liveChrome();
+    floorNavSync();
+    if (SOURCE.mode === 'demo') { const el = $('demo-clock'); el.hidden = false; setText(el, tl('demo.clock', { time: fmtClock(Math.floor(demoHour(latestModel.t) * 3600)).slice(0, 5) })); }
+    lastPanel = ms;
+  }
+  if (fpsMeter) {
+    fpsMeter.n += 1;
+    if (ms - fpsMeter.from >= 1000) { fpsMeter.el.textContent = `${Math.round((fpsMeter.n * 1000) / (ms - fpsMeter.from))} fps`; fpsMeter.n = 0; fpsMeter.from = ms; }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- live only: the connection chip, no-session and source-error notes (plan 07 §5) ---------- */
+function liveChrome() {
+  if (SOURCE.mode !== 'live') return;
+  renderUsage(vizNow());   // the time to each reset counts down between slices
+  const chip = document.querySelector('.chip.demo');
+  if (chip) {
+    const ok = NET.state === 'connected';
+    const net = ok ? 'connected' : NET.state === 'connecting' && !LIVE.connectedOnce ? 'connecting' : 'reconnecting';
+    setText(chip, tl({ connected: 'net.connected', connecting: 'net.connecting', reconnecting: 'net.reconnecting' }[net]));
+    chip.dataset.conn = ok ? 'ok' : 'wait';
+    chip.dataset.net = net;   // what the words say, in any language (the browser tests wait on it)
+  }
+  const empty = $('live-empty');
+  if (empty) empty.hidden = !SOURCE.connected || SESSIONS.length > 0;
+  const err = $('live-error');
+  if (err) { err.hidden = !LIVE.serverError; setText(err, LIVE.serverError ? tl('net.source.error', { error: LIVE.serverError }) : ''); }
+}
+if (SOURCE.mode === 'live') {
+  document.body.dataset.mode = 'live';
+  const hookChip = document.querySelector('.chips .chip[data-hook-chip]');
+  if (hookChip) hookChip.textContent = location.host;
+  for (const id of ['btn-play', 'btn-speed']) $(id).hidden = true;   // demo only
+  liveChrome();
+}
+
+if (SOURCE.mode === 'demo') updateRobotStates(simT, START_AT, latestModel.perms);
+paintScopeButtons();
+renderPanel(latestModel);
+if (UI.project !== 'all' && SOURCE.mode === 'demo') focusProject(UI.project, true);
+const redrawAll = () => { fontRedraws.forEach((fn) => fn()); if (has3D) redrawBoards(latestModel, 0, true); };
+Promise.all([
+  document.fonts.load(`40px ${FONT_DISPLAY}`, tl('font.sample.display')),
+  document.fonts.load(`700 40px ${FONT_MONO}`, '{ }$✓▶○⚠#'),
+  document.fonts.load(`700 16px ${FONT_BODY}`, tl('font.sample.body')),
+]).then(redrawAll, redrawAll);
+requestAnimationFrame(frame);
+if (SOURCE.mode === 'live') { LIVE.uiReady = true; netConnect(); }

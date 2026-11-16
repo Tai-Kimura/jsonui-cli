@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/fontWeight__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.fontWeight (binding)",
+    "description": "Conformance fixture for 'fontWeight' on Button (section: Button, class: visual). Value under test: \"@{boundFontWeight}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontWeight__binding",
+      "description": "Conformance fixture for 'fontWeight' on Button (section: Button, class: visual). Value under test: \"@{boundFontWeight}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_fontWeight__binding"
+        }
+      ]
+    }
+  ]
+}

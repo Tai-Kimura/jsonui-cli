@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellWidth__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.cellWidth (static)",
+    "description": "Conformance fixture for 'cellWidth' on Collection (section: Collection, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellWidth__static",
+      "description": "Conformance fixture for 'cellWidth' on Collection (section: Collection, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_cellWidth__static"
+        }
+      ]
+    }
+  ]
+}

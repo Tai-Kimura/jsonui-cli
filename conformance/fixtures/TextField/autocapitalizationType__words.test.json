@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/autocapitalizationType__words.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.autocapitalizationType (words)",
+    "description": "Conformance fixture for 'autocapitalizationType' on TextField (section: TextField, class: visual). Value under test: \"words\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "autocapitalizationType__words",
+      "description": "Conformance fixture for 'autocapitalizationType' on TextField (section: TextField, class: visual). Value under test: \"words\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_autocapitalizationType__words"
+        }
+      ]
+    }
+  ]
+}

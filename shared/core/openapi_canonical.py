@@ -1,0 +1,1515 @@
+"""Resolution of `@canonical` references in a spec's dataFlow.
+
+A spec method that names an `endpoint` is already pointing at an operation in
+the API canon. Writing its `params` and `returnType` out by hand copies what
+the canon already says: measured across four consumer faces, 320 declarations
+name an endpoint, 318 resolve, and 205 of those (64%) carry a parameter list
+that is derivable from the operation — 138 of them differing only in naming
+convention (`venueId` where the canon says `venue_id`).
+
+So the reference is spelled instead of the copy:
+
+    { "name": "getBookmarks",
+      "endpoint": "GET /api/user/bookmarks",
+      "params": "@canonical" }
+
+and where the canon cannot say it, or should not, the value is written
+directly as before. The two mix in one list, which is the point — a method may
+take everything the operation declares plus a client-side callback that no
+OpenAPI document will ever contain:
+
+    "params": ["@canonical", {"name": "onProgress", "type": "((Int) -> Void)?"}]
+
+Absence is NOT the reference. `params` is already absent on five declarations
+in the corpus and means "no parameters" there; a mark that has to be written
+cannot be confused with a field nobody filled in.
+
+`returnType` is deliberately not `@canonical`. A spec's return type is the
+domain type and the canon's is the wire type, and they legitimately differ —
+`[ItemSummary]` against `ItemSearchResponse`, `UserProfile` against
+`UserProfileResponse`. Only `@canonical.wire`, which says "the wire type is
+what I mean", lifts it.
+
+This module is the single implementation. `jsonui-doc` validates specs and
+`jui build` generates repository stubs from the same fields; resolving the
+mark in each would be two answers to one question, and they would drift.
+Loaded from the installed tool tree the same way `attribute_definitions.json`
+is — see `load_openapi_canonical()` in either tool.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+CANONICAL_MARKER = "@canonical"
+CANONICAL_WIRE_MARKER = "@canonical.wire"
+
+HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+
+#: Parameter locations the client's transport layer supplies, not the caller.
+#: Excluded from expansion — and the corpus shows why in the bluntest way: the
+#: only two header parameters in it are `X-Client-Latitude` / `X-Client-Longitude`,
+#: geo values a client injects, whose names are not identifiers in any target
+#: language. Measured: zero header or cookie parameters in the other two
+#: canons, so excluding them changes nothing already converted.
+TRANSPORT_PARAM_LOCATIONS = frozenset({"header", "cookie"})
+
+#: `GET /api/venues/{venue_id}` — the verb is not constrained to HTTP here.
+#: Non-HTTP transports (RTDB, WebSocket, GraphQL) are declared the same way and
+#: are legal; they simply never resolve, and asking for `@canonical` on one is
+#: an error the caller reports rather than something this module guesses at.
+ENDPOINT_RE = re.compile(r"^(\w+)\s+(\S+)$")
+
+_PATH_VAR_RE = re.compile(r"\{[^}]*\}")
+#: `:itemId` — a third notation, three declarations of it in the corpus.
+_COLON_VAR_RE = re.compile(r"(?<=/):[A-Za-z_][A-Za-z0-9_]*")
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+# --------------------------------------------------------------------------- #
+# naming
+# --------------------------------------------------------------------------- #
+
+def to_snake(name: str) -> str:
+    return _CAMEL_BOUNDARY_RE.sub("_", name).lower().replace("__", "_")
+
+
+def to_camel(name: str) -> str:
+    head, *rest = name.split("_")
+    return head + "".join(p[:1].upper() + p[1:] for p in rest if p)
+
+
+#: `spec.canonical_param_case` in jui.config.json. Defaults to `asIs` — the
+#: canon's own spelling — because a default that renamed would rewrite 43% of
+#: the corpus's parameter names the first time a project adopted the mark, and
+#: those names are argument labels in three platforms' generated code.
+#:
+#: Deliberately NOT `api.platforms.web.case_convention`: that one names how a
+#: TypeScript DTO spells its fields, and a spec parameter is platform-agnostic.
+#: Same word, different question.
+PARAM_CASE_CONVENTIONS = ("asIs", "camelCase", "snake_case")
+
+
+def apply_case(name: str, convention: str | None) -> str:
+    """Spell a canonical parameter name the way this project writes them.
+
+    43% of the corpus differs from the canon by nothing but this, so it is the
+    single biggest reason a declaration cannot use the mark as written.
+    """
+    if convention in ("camelCase", "camel"):
+        return to_camel(name)
+    if convention in ("snake_case", "snake"):
+        return to_snake(name)
+    return name
+
+
+def names_match(a: str, b: str) -> bool:
+    """Equality modulo naming convention, for reporting rather than resolving."""
+    return a == b or to_snake(a) == to_snake(b)
+
+
+# --------------------------------------------------------------------------- #
+# the canon
+# --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class CanonicalParam:
+    name: str
+    type: str
+    required: bool = False
+    #: `path` / `query` / `body`. Only `path` is refused inside a `wrapped`
+    #: clause: a path variable is interpolated into the URL, so no object
+    #: carries it. Query parameters are carried by filter objects routinely —
+    #: measured, 16 across one face — and the first version of this rule
+    #: refused them, on a corpus measurement whose glob had silently matched
+    #: nothing for half the faces.
+    location: str = "body"
+    #: Set when the canon declares this field as a string `enum`. The
+    #: expansion still resolves it to `String` — the type the specs are
+    #: written in — but the DTO generated from the same schema holds a
+    #: generated enum, so a repository written against both has to convert
+    #: at the boundary. That conversion is where a `rawValue` lookup returns
+    #: nil and the value disappears, which is the failure this whole family
+    #: of work is about, so the gap is named rather than left to be found.
+    #:
+    #: Carries the name the DTO generator would derive
+    #: (`{ParentSchema}{PascalField}`, `openapi_loader.py`), so a project can
+    #: count its own occurrences and see what typing them would produce.
+    enum_type: str = ""
+
+    def as_spec_param(self, convention: str | None = None) -> dict:
+        return {"name": apply_case(self.name, convention), "type": self.type}
+
+
+@dataclass(frozen=True)
+class CanonicalOperation:
+    """One OpenAPI operation, reduced to what a spec declaration needs."""
+
+    path: str                       # as written in the document
+    method: str
+    params: tuple = ()              # tuple[CanonicalParam, ...]
+    wire_type: str = ""             # 200 response `$ref` name, "" if inline
+    source: str = ""                # document that declared it
+    #: Properties the body schema calls `required` while the body itself is
+    #: optional. They resolve optional, correctly — a caller may omit the
+    #: whole body, so nothing inside it can be unconditionally required — but
+    #: the reason sits two levels away from the symptom.
+    muted_required: tuple = ()
+    #: Declarations no argument holds because one of the same name came
+    #: first ("query k"; a path and a query parameter both named `k`, a body
+    #: property named like a parameter) — a method takes one argument per
+    #: name. Said where the mark expands, not dropped without a word.
+    shadowed: tuple = ()
+    #: Whether the operation declares a `requestBody` at all. False is what
+    #: `request_body_absence` reads: a contract row cannot match a body the
+    #: operation never sends.
+    has_request_body: bool = True
+
+    def spec_params(self, convention: str | None = None) -> list:
+        return [p.as_spec_param(convention) for p in self.params]
+
+
+def normalize_path(path: str) -> str:
+    """`/api/venues/{venue_id}` and `/api/venues/{venueId}` are one route.
+
+    Path-variable *spelling* is a real finding — it is 71 of the differences
+    on one face alone — but it is a finding about the declaration, not a
+    reason to fail to match the operation it obviously names. `:itemId`
+    collapses the same way; the corpus has three of those.
+    """
+    bare = path.split("?")[0].rstrip("/") or "/"
+    return _COLON_VAR_RE.sub("{}", _PATH_VAR_RE.sub("{}", bare))
+
+
+def _schema_type(schema: dict, schemas: dict, depth: int = 0) -> str:
+    """OpenAPI schema -> the type vocabulary specs are written in.
+
+    Matches what the corpus already uses (`String`, `Int?`, `[String]`,
+    `[String: Any]`, and bare schema names) rather than introducing a third
+    spelling that neither platform codegen would recognise.
+    """
+    if not isinstance(schema, dict) or depth > 6:
+        return "[String: Any]"
+    ref = schema.get("$ref")
+    if ref:
+        return ref.rsplit("/", 1)[-1]
+    for combinator in ("allOf", "oneOf", "anyOf"):
+        members = schema.get(combinator)
+        if isinstance(members, list) and members:
+            # A nullable member is spelled `anyOf: [X, null]` by several
+            # generators; the non-null member is the type.
+            for member in members:
+                if isinstance(member, dict) and member.get("type") != "null":
+                    return _schema_type(member, schemas, depth + 1)
+    kind = schema.get("type")
+    if kind == "array":
+        return f"[{_schema_type(schema.get('items') or {}, schemas, depth + 1)}]"
+    return {
+        "string": "String",
+        "integer": "Int",
+        "number": "Double",
+        "boolean": "Bool",
+    }.get(kind, "[String: Any]")
+
+
+_ENUM_NAME_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _pascal_field(field: str) -> str:
+    parts = [p for p in _ENUM_NAME_SPLIT_RE.sub("_", field).split("_") if p]
+    return "".join(p[:1].upper() + p[1:] for p in parts)
+
+
+def _derived_enum_name(parent: str, field: str, prop: dict) -> str:
+    """The enum type the DTO generator derives for an INLINE enum.
+
+    Mirrors `openapi_loader._field_type`, which derives
+    `x-jui-name or f"{parent_name}{_pascal(field_name)}"` for a `string` OR
+    `integer` field carrying `enum`, and recurses into `items` with
+    `field_name + "_item"` for arrays — so an array of enums becomes
+    `{Parent}{Field}Item` and the expansion widens it to `[String]`. That is
+    the same gap as the scalar case, so it is counted the same way.
+
+    The two derivations live in different layers — `shared/core` is below
+    `jui_tools` and cannot import it — so a test holds them together rather
+    than a shared call.
+
+    Only INLINE enums. A `$ref` to a named enum schema already resolves to
+    that name through `_schema_type`, so protocol and DTO agree and there is
+    nothing to report.
+    """
+    if not parent or not isinstance(prop, dict):
+        return ""
+    if prop.get("type") == "array":
+        items = prop.get("items")
+        return _derived_enum_name(parent, field + "_item", items) \
+            if isinstance(items, dict) else ""
+    if not (prop.get("enum") and prop.get("type") in ("string", "integer")):
+        return ""
+    return str(prop.get("x-jui-name") or "") or parent + _pascal_field(field)
+
+
+def _deref(schema: dict, schemas: dict) -> dict:
+    ref = (schema or {}).get("$ref")
+    if ref:
+        return schemas.get(ref.rsplit("/", 1)[-1], {}) or {}
+    return schema or {}
+
+
+def _local_ref(doc: dict, ref) -> dict | None:
+    """The object a local JSON pointer (`#/components/parameters/Id`) names,
+    or None — a reference into another file, or one that names nothing."""
+    if not isinstance(ref, str) or not ref.startswith("#/"):
+        return None
+    node = doc
+    for part in ref[2:].split("/"):
+        part = part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node if isinstance(node, dict) else None
+
+
+def _declared_parameters(doc: dict, raw) -> dict:
+    """`{(in, name): parameter}` of one level's `parameters`, a local `$ref`
+    followed, in document order."""
+    out: dict = {}
+    for p in raw if isinstance(raw, list) else []:
+        if isinstance(p, dict) and "$ref" in p:
+            p = _local_ref(doc, p["$ref"])
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        out.setdefault((str(p.get("in") or "query"), p["name"]), p)
+    return out
+
+
+def path_item_operations(doc: dict, path_item):
+    """`(verb, operation, parameters)` for each operation of a path item.
+
+    `parameters` is what OpenAPI says the operation takes: the path item's
+    own `parameters` — which every operation under it inherits — with the
+    operation's, a parameter of the same `name` and `in` written on the
+    operation taking the inherited one's place. A local `$ref`, on a
+    parameter or on the path item itself (3.1 `components.pathItems`), is
+    followed. Until jsonui-cli 2.3.36 the canon read the operation's own
+    `parameters` and nothing else: a `{id}` written once on the path item was
+    no argument of the generated method, and a `$ref` parameter was none
+    either, without a word (ticket jui-openapi-canonical-ignores-path-item-
+    parameters). `jsonui-doc` `openapi-diff` read them this way already.
+    """
+    if isinstance(path_item, dict) and "$ref" in path_item:
+        path_item = _local_ref(doc, path_item["$ref"])
+    if not isinstance(path_item, dict):
+        return
+    inherited = _declared_parameters(doc, path_item.get("parameters"))
+    for verb, op in path_item.items():
+        if str(verb).upper() not in HTTP_METHODS or not isinstance(op, dict):
+            continue
+        merged = dict(inherited)
+        # an inherited key keeps its place; the operation's value replaces it
+        merged.update(_declared_parameters(doc, op.get("parameters")))
+        yield verb, op, list(merged.values())
+
+
+def _operation_params(op: dict, schemas: dict, parameters=None, shadowed=None) -> list:
+    """Every declared argument, in document order.
+
+    `in` is filtered only for locations the transport layer fills
+    (`TRANSPORT_PARAM_LOCATIONS`). A path parameter is an argument the caller
+    supplies exactly like a query one, so `{venue_id}` becomes `venueId` in
+    the generated signature. That means **renaming a path
+    variable moves every referencing spec's signature**, which is not obvious
+    — route matching normalizes path-variable spelling away, so the same
+    rename is invisible to resolution while being load-bearing for expansion.
+    Found by a consumer lane reading this function after being told the
+    opposite.
+    """
+    params: list = []
+    seen: set = set()
+    for p in (op.get("parameters") or []) if parameters is None else parameters:
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        if p.get("in") in TRANSPORT_PARAM_LOCATIONS:
+            continue
+        name = p["name"]
+        if name in seen:
+            if shadowed is not None:
+                shadowed.append(f"{p.get('in') or 'query'} {name}")
+            continue
+        seen.add(name)
+        required = bool(p.get("required"))
+        t = _schema_type(p.get("schema") or {}, schemas)
+        params.append(CanonicalParam(name, t if required else f"{t}?", required,
+                                     location=str(p.get("in") or "query")))
+
+    body = ((op.get("requestBody") or {}).get("content") or {})
+    body_ref = ((body.get("application/json") or {}).get("schema") or {}).get("$ref")
+    # The name is what the DTO is generated under, and `_deref` drops it.
+    body_name = body_ref.rsplit("/", 1)[-1] if body_ref else ""
+    body_schema = _deref((body.get("application/json") or {}).get("schema") or {},
+                         schemas)
+    body_required = bool((op.get("requestBody") or {}).get("required"))
+    required_props = set(body_schema.get("required") or [])
+    for name, prop in (body_schema.get("properties") or {}).items():
+        if name in seen:
+            if shadowed is not None:
+                shadowed.append(f"body {name}")
+            continue
+        seen.add(name)
+        required = body_required and name in required_props
+        t = _schema_type(prop or {}, schemas)
+        params.append(CanonicalParam(name, t if required else f"{t}?", required,
+                                     location="body",
+                                     enum_type=_derived_enum_name(body_name, name, prop)))
+    return params
+
+
+def _muted_required(op: dict, schemas: dict) -> list:
+    """Body properties declared `required` under a body that is not required.
+
+    `requestBody.required` says the body may be omitted; `schema.required`
+    says which properties must be present *if it is*. A flat parameter list
+    cannot express "all or none", so these resolve optional — which is right,
+    and which reads exactly like the declaration was ignored.
+
+    Zero occurrences across every consumer canon measured (three canons,
+    81 + 76 + 119 request bodies). Carried anyway because the corpus being clean is not
+    the net working, and because schema-level `required` is the form people
+    reach for first.
+    """
+    rb = op.get("requestBody")
+    if not isinstance(rb, dict) or rb.get("required"):
+        return []
+    schema = _deref(((rb.get("content") or {}).get("application/json") or {})
+                    .get("schema") or {}, schemas)
+    return sorted(schema.get("required") or [])
+
+
+def _response_wire_type(op: dict) -> str:
+    responses = op.get("responses") or {}
+    for code in ("200", "201", "202"):
+        content = ((responses.get(code) or {}).get("content") or {})
+        schema = (content.get("application/json") or {}).get("schema") or {}
+        ref = schema.get("$ref")
+        if ref:
+            return ref.rsplit("/", 1)[-1]
+    return ""
+
+
+def index_documents(documents) -> dict:
+    """`{(normalized path, METHOD): CanonicalOperation}` from OpenAPI docs.
+
+    `documents` is an iterable of `(source_label, parsed_document)`. Parsing is
+    the caller's job because the two tools reach their documents differently —
+    one from `api_directory`, one from the build config — and neither should
+    have to grow the other's file-finding rules to share this.
+    """
+    index: dict = {}
+    for source, doc in documents:
+        if not isinstance(doc, dict):
+            continue
+        # An api_directory holds more than OpenAPI documents in practice
+        # (generated HTML sidecars, fixtures, config). Indexing a file that
+        # merely happens to have a `paths` key would put routes in the canon
+        # that nothing published.
+        if "openapi" not in doc and "swagger" not in doc:
+            continue
+        schemas = ((doc.get("components") or {}).get("schemas") or {})
+        for path, item in (doc.get("paths") or {}).items():
+            for verb, op, parameters in path_item_operations(doc, item):
+                key = (normalize_path(path), verb.upper())
+                # First document wins: re-indexing an operation would let the
+                # order files happen to be read in decide the answer.
+                if key in index:
+                    continue
+                shadowed: list = []
+                index[key] = CanonicalOperation(
+                    path=path,
+                    method=verb.upper(),
+                    params=tuple(_operation_params(op, schemas, parameters, shadowed)),
+                    wire_type=_response_wire_type(op),
+                    source=source,
+                    muted_required=tuple(_muted_required(op, schemas)),
+                    has_request_body=bool(op.get("requestBody")),
+                    shadowed=tuple(shadowed),
+                )
+    return index
+
+
+def load_documents(api_dir, *, want_yaml=True, unread=None):
+    """`(source, document)` pairs for every OpenAPI file under a directory.
+
+    YAML needs PyYAML. Returning half an index would report every route that
+    lives in a YAML document as missing, so the shortfall is reported to the
+    caller instead of absorbed: `(pairs, missing_yaml_count)`. A YAML document
+    the family's load halts on (a key JSON would not hold as written, `NO:`;
+    openapi_file.YamlTypedKey) is left out too, its one line appended to
+    `unread` — said with its reason, not as its routes missing.
+    """
+    api_dir = Path(api_dir)
+    if not api_dir.is_dir():
+        return [], 0
+    pairs = []
+    for p in sorted(api_dir.rglob("*.json")):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                pairs.append((str(p), json.load(f)))
+        except (OSError, json.JSONDecodeError):
+            continue
+    yaml_docs = sorted(api_dir.rglob("*.yaml")) + sorted(api_dir.rglob("*.yml"))
+    if not yaml_docs or not want_yaml:
+        return pairs, 0
+    try:
+        import yaml
+    except ImportError:
+        return pairs, len(yaml_docs)
+    of = _openapi_file_module()
+    for p in yaml_docs:
+        try:
+            text = p.read_text(encoding="utf-8")
+            # the family's one YAML load (openapi_file.load_yaml): a date stays a string and a key is a string, as in
+            # the same document's JSON — the mock and this index read one document one way (2.3.21)
+            pairs.append((str(p), of.load_yaml(text, yaml) if of is not None else yaml.safe_load(text)))
+        except (OSError, Exception) as exc:  # noqa: B014 - yaml raises its own tree
+            if of is not None and isinstance(exc, of.YamlTypedKey) and unread is not None:
+                unread.append(f"{p}: {exc}")
+            continue
+    return pairs, 0
+
+
+def _openapi_file_module():
+    """Sibling module openapi_file.py, loaded the way the tools load this one (None when it is not there)."""
+    name = "_jsonui_shared_core_openapi_file"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).resolve().parent / "openapi_file.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+#: `find_api_directories` and `param_case_for` lived here until v1.7.8. They
+#: answered "which config owns this spec" without following `extends`, so they
+#: returned a different answer than `build_spec_canon_context` — and
+#: `param_case_for` had no callers at all. A consumer lane measured the helper
+#: directly, got None, and had to switch to the real CLI to learn the
+#: behaviour was in fact correct. A dead path that answers the same question
+#: differently is how this defect returns; removed rather than fixed.
+
+
+
+
+
+@dataclass(frozen=True)
+class SpecCanonContext:
+    """The canon and the naming convention, from ONE config.
+
+    They used to be resolved separately, and a split tree pulled them apart:
+    the API documents came from the repository-root config while the naming
+    convention was looked for by walking up from the spec, which in that
+    layout never reaches the app's config at all. Measured — expansion spelled
+    parameters `camelCase` and the divergence check compared against the
+    document's raw spelling **in the same run**, so a project that set the
+    convention could not write a `canonicalDivergence` in either spelling.
+
+    The same shape as the mockDir defect three days earlier: a declared config
+    losing to a path walk. That one was fixed by making the declaration
+    outrank the search; this reintroduced the search as the only path for a
+    new setting. So the config that answers is the config the run loaded, and
+    it answers both questions or neither.
+    """
+
+    index: dict
+    convention: str | None = None
+    config_path: object = None
+    #: `extends` pointers that named nothing. A declaration that cannot be
+    #: resolved is not the same as no declaration: one is a typo, the other is
+    #: a project that has not adopted the pointer, and they used to produce
+    #: byte-identical output. Reported, never absorbed.
+    unresolved_extends: tuple = ()
+    #: Top-level keys no tool reads, in the configs this context read. A
+    #: misspelled key is not a broken declaration — it is no declaration — so
+    #: it produced exactly the output of a project that never configured the
+    #: thing. `extends` was found to fail this way the same day it shipped.
+    unknown_config_keys: tuple = ()
+    #: YAML documents that could not be read for want of PyYAML. Half an index
+    #: is worse than none — every route living in those documents would be
+    #: reported as missing — so the shortfall is carried to the caller rather
+    #: than absorbed into a smaller index.
+    missing_yaml: int = 0
+    #: YAML documents the family's load halted on (`NO:` read as a bool key,
+    #: openapi_file.YamlTypedKey), one line each. Their routes are not in the
+    #: index; without this line a mark into one read "not declared in any
+    #: OpenAPI document" — the wrong reason (2.3.21).
+    unread_yaml: tuple = ()
+    #: The directory the answering config's `api_directory` resolved to, so an
+    #: empty index can be reported with the place that was actually searched.
+    #: "No OpenAPI document was found" without the where sent a consumer lane
+    #: hunting through three hypotheses it could not distinguish.
+    api_dir: object = None
+    #: Declared values no tool accepts, in the configs this context read —
+    #: `canonical_param_case: "camelcase"` spelled every parameter the
+    #: document's way with nothing said, exactly the shape a broken `extends`
+    #: value had before v1.7.9. A declaration whose value resolves to nothing
+    #: is a broken declaration; reported, never absorbed into the default.
+    invalid_config_values: tuple = ()
+
+
+def _note(problems, cfg, target, what) -> None:
+    if problems is None:
+        return
+    problems.append(
+        f"{cfg}: 'extends' {what} ({target!r}) — the settings it points at, "
+        "including `spec.canonical_param_case`, are not being read. Fix the "
+        "path, or remove the key if this project does not use one.")
+
+
+def _read_config(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return config if isinstance(config, dict) else None
+
+
+def _note_unknown_keys(sink, cfg, config) -> None:
+    """Keys nothing reads, from the shared declaration in `config_keys`."""
+    if sink is None:
+        return
+    keys = _config_keys_module()
+    if keys is None:
+        return
+    unknown = keys.unknown_keys(config)
+    if unknown:
+        sink.append(keys.message(cfg, unknown))
+
+
+def _config_keys_module():
+    """Sibling module, loaded the way the tools load this one."""
+    global _CONFIG_KEYS
+    try:
+        return _CONFIG_KEYS
+    except NameError:
+        pass
+    import importlib.util
+    path = Path(__file__).resolve().parent / "config_keys.py"
+    if not path.is_file():
+        _CONFIG_KEYS = None
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "_jsonui_shared_core_config_keys", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    _CONFIG_KEYS = module
+    return module
+
+
+def _follow_extends(root, cfg, config, problems=None, _depth=0, unknown=None):
+    """`extends` names the config that actually owns this tree.
+
+    A face whose specs live in one tree and whose build config lives in
+    another has nothing on the specs' ancestry that identifies the owning
+    config — so the answer came from whichever directory the command happened
+    to run in, and `jui build` (run from the app) and `jsonui-doc` (run from
+    the repository root) read different configs for the same spec. Same
+    declared-config-losing-to-a-search shape as mockDir and the parameter-case
+    setting, one level further out: this time the search was over configs.
+
+    So the stub config the specs' ancestry does reach names its owner, and the
+    pointer is followed. Consumers were already writing that pointer in a
+    `_note` for humans; this reads the same fact.
+    """
+    if _depth > 4:
+        _note(problems, cfg, config.get("extends"),
+              "follows more than four `extends` hops")
+        return root, cfg, config
+    target = config.get("extends")
+    if target is None:
+        return root, cfg, config
+    if not isinstance(target, str) or not target.strip():
+        _note(problems, cfg, target, "is not a path")
+        return root, cfg, config
+    resolved = (root / target).resolve()
+    if resolved.is_dir():
+        resolved = resolved / "jui.config.json"
+    if not resolved.is_file():
+        # Silence here made a typo and an absent pointer produce byte-identical
+        # output: the settings simply did not arrive, and the only visible
+        # effect was parameter names spelled the document's way. A/B was the
+        # only way to notice. An `extends` that is written is a statement of
+        # intent; one that is absent is not.
+        _note(problems, cfg, target, "names no file")
+        return root, cfg, config
+    extended = _read_config(resolved)
+    if extended is None:
+        _note(problems, cfg, target, "names a file that is not readable JSON")
+        return root, cfg, config
+    # The named config replaces this one rather than layering under it: the
+    # stub exists to point, and merging would put two answers back in play.
+    _note_unknown_keys(unknown, resolved, extended)
+    return _follow_extends(resolved.parent, resolved, extended, problems,
+                           _depth + 1, unknown)
+
+
+#: Every config key the walk below reads. A declaration, not documentation:
+#: the split-tree test suite iterates this and REFUSES a key that has no
+#: broken-declaration probe. Four key families produced eight versions of the
+#: same defect — a declaration falling quietly to the default or the search
+#: when it fails to resolve, with the landing spot able to answer, so every
+#: check downstream stays correctly silent (mockDir v1.6.52-55, the
+#: convention v1.7.4/6/8, `extends` v1.7.9/10/11, api_directory v1.7.17) —
+#: before a consumer lane tabulated them and named the rule: a new declared
+#: key ships WITH the shot at its empty-resolution case, or it does not ship.
+WALK_READS = ("extends", "api_directory", "spec.canonical_param_case")
+
+
+def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
+    """Resolve the canon and the convention together, preferring the run's config.
+
+    Candidate order is explicit config, then the caller's roots (its working
+    directory — the one `jui` itself resolves from), then the spec's ancestors.
+    The first candidate holding OpenAPI documents answers both questions, so
+    the two cannot come from different files.
+    """
+    candidates: list = []
+    seen: set = set()
+
+    def add(path):
+        if path is None:
+            return
+        path = Path(path)
+        if path.is_file():
+            path = path.parent
+        path = path.resolve()
+        if path not in seen:
+            seen.add(path)
+            candidates.append(path)
+
+    add(config_path)
+    # The spec's own ancestry first, nearest outward: it identifies which face
+    # the spec belongs to, which the working directory does not — that is only
+    # where the command happened to be typed. Ordering it the other way made
+    # `jui build` (run from the app) and `jsonui-doc` (run from the repository
+    # root) read different configs for the same spec, in the same tree.
+    #
+    # This is only correct because a stub on that ancestry can name its owner
+    # through `extends`. Without it the nearest config is whatever partial one
+    # happens to sit there, which is why the working directory was tried first
+    # in the version before this.
+    if spec_path is not None:
+        for parent in list(Path(spec_path).resolve().parents)[:8]:
+            add(parent)
+    for root in extra_roots:
+        add(root)
+        if root is not None:
+            for parent in list(Path(root).resolve().parents)[:8]:
+                add(parent)
+
+    fallback_convention = None
+    problems: list = []
+    unknown: list = []
+    invalid_values: list = []
+    unread: list = []
+    answer = None
+    for root in candidates:
+        cfg = root / "jui.config.json"
+        if not cfg.is_file():
+            continue
+        config = _read_config(cfg)
+        if config is None:
+            continue
+        _note_unknown_keys(unknown, cfg, config)
+        root, cfg, config = _follow_extends(root, cfg, config, problems,
+                                            unknown=unknown)
+        spec_cfg = config.get("spec")
+        declared = (spec_cfg or {}).get("canonical_param_case") \
+            if isinstance(spec_cfg, dict) else None
+        if declared is not None and declared not in PARAM_CASE_CONVENTIONS:
+            # `apply_case` treats anything it does not recognise as `asIs`,
+            # so a typo here spelled every parameter the document's way with
+            # nothing said — measured: 'camelcase', 'CamelCase' and
+            # 'camel_case' all resolved silently. Fifth instance of the one
+            # shape (a declaration falling quietly to the default), found by
+            # sweeping the walk's other declared keys after a consumer lane
+            # tabulated the first four.
+            invalid_values.append(
+                f"{cfg}: spec.canonical_param_case is {declared!r}, which no "
+                f"tool reads — the run proceeds as 'asIs' (the document's own "
+                f"spelling). Valid values: {', '.join(PARAM_CASE_CONVENTIONS)}."
+            )
+            declared = None
+        if declared and fallback_convention is None:
+            fallback_convention = declared
+
+        declares_api = "api_directory" in config
+        api_dir = (root / config.get("api_directory", "docs/api")).resolve()
+        documents, missing = load_documents(api_dir, unread=unread)
+        if missing:
+            # Half an index is worse than none, so this config cannot answer —
+            # but the walk continues, because the configs after it still have
+            # `extends` pointers and keys worth looking at.
+            if answer is None:
+                answer = SpecCanonContext(index={}, convention=declared,
+                                          config_path=cfg,
+                                          missing_yaml=missing,
+                                          api_dir=api_dir)
+            continue
+        index = index_documents(documents)
+        if answer is None and (index or declares_api):
+            # This config answers both. Not "this config for the routes and
+            # whichever other one happened to declare a convention".
+            #
+            # `declares_api` keeps a config that NAMES a directory the answer
+            # even when that directory holds nothing. Without it, a broken
+            # `api_directory` fell through to whatever shallower config the
+            # walk reached next — in the measured case a repository-root `{}`
+            # whose DEFAULT directory held the real documents — so the canon
+            # arrived from one config and the convention silently reverted to
+            # another's absence, the exact split v1.7.6 closed. A declared
+            # value that resolves to nothing is a broken declaration and must
+            # surface as one (empty index → the "nothing was compared" notice
+            # downstream); it is not permission to keep searching. Same ruling
+            # as `extends` in v1.7.9: writing the key is a statement of
+            # intent, and only a config that says nothing about the API lets
+            # the walk continue past it. Found by a consumer lane that shot
+            # the side the acceptance had not: pointed its `api_directory` at
+            # a missing path and got 44 convention-shifted divergence errors
+            # instead of the notice.
+            #
+            # Recorded, not returned: returning here stopped the walk, so a
+            # stub further along the ancestry was never opened and its
+            # `extends` and its unknown keys were never looked at. Which
+            # config answers and which configs were examined are two
+            # questions, and short-circuiting the first silently narrowed the
+            # second. Found by a lane that measured the two orderings.
+            answer = SpecCanonContext(index=index, convention=declared,
+                                      config_path=cfg, api_dir=api_dir)
+
+    if answer is not None:
+        return SpecCanonContext(index=answer.index,
+                                convention=answer.convention,
+                                config_path=answer.config_path,
+                                missing_yaml=answer.missing_yaml,
+                                unread_yaml=tuple(dict.fromkeys(unread)),
+                                api_dir=answer.api_dir,
+                                unresolved_extends=tuple(problems),
+                                unknown_config_keys=tuple(unknown),
+                                invalid_config_values=tuple(invalid_values))
+    return SpecCanonContext(index={}, convention=fallback_convention,
+                            config_path=None,
+                            unread_yaml=tuple(dict.fromkeys(unread)),
+                            unresolved_extends=tuple(problems),
+                            unknown_config_keys=tuple(unknown),
+                            invalid_config_values=tuple(invalid_values))
+
+
+def lookup(index: dict, endpoint: str):
+    """`(operation, reason)` — reason is set only when there is no operation.
+
+    Reasons are `malformed`, `non_http`, `path_missing`, `method_missing`, so
+    a caller can word its own message; this module never decides whether a
+    miss is an error, because it is one for `@canonical` and a warning for a
+    hand-written declaration.
+    """
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        return None, "malformed"
+    m = ENDPOINT_RE.match(endpoint.strip())
+    if not m:
+        return None, "malformed"
+    verb = m.group(1).upper()
+    if verb not in HTTP_METHODS:
+        return None, "non_http"
+    key = (normalize_path(m.group(2)), verb)
+    if key in index:
+        return index[key], ""
+    if any(k[0] == key[0] for k in index):
+        return None, "method_missing"
+    return None, "path_missing"
+
+
+# --------------------------------------------------------------------------- #
+# request bodies
+# --------------------------------------------------------------------------- #
+
+#: Methods that carry no request body, whatever a document says: a browser's
+#: `fetch` refuses a body on them, and OpenAPI gives `requestBody` no meaning
+#: there.
+BODYLESS_METHODS = frozenset({"GET", "HEAD"})
+
+
+def request_body_absence(endpoint: str, index: dict | None = None) -> str | None:
+    """Why the operation `endpoint` (`"<METHOD> <path>"`) sends no request
+    body, or None when it does or this cannot tell.
+
+    The one answer to "has this operation a body" for the tools that read a
+    branch contract's `api.<op>.request` (a partial match on the request
+    BODY — `jsonui-doc validate spec`, and `jsonui-test generate
+    branch-tests` / `contracts coverage` through the same route binding):
+    GET / HEAD never have one; any other method has none when the API
+    canon (`index`, from `index_documents`) holds the operation and it
+    declares no `requestBody`. An operation the canon does not hold, or no
+    canon at all, is not judged — absent from the document is not "no body".
+    """
+    if not isinstance(endpoint, str):
+        return None
+    m = ENDPOINT_RE.match(endpoint.strip())
+    if not m:
+        return None
+    verb, path = m.group(1).upper(), m.group(2)
+    if verb not in HTTP_METHODS:
+        return None
+    if verb in BODYLESS_METHODS:
+        return f"{verb} {path} sends no request body ({verb} carries none)"
+    if index:
+        operation, _reason = lookup(index, f"{verb} {path}")
+        if operation is not None and not operation.has_request_body:
+            where = f" in {operation.source}" if operation.source else ""
+            return (f"{verb} {path} sends no request body (the operation{where} "
+                    "declares no requestBody)")
+    return None
+
+
+def request_match_on_bodyless_message(op: str, absence: str) -> str:
+    """The sentence every gate says for `api.<op>.request` on an operation
+    `request_body_absence` calls bodyless — one wording, so the generator and
+    the validator name the same defect the same way."""
+    return (f"'api.{op}.request' is a partial match on the request body, and {absence} "
+            "— the row can never pass, whatever the view model sends. The URL's "
+            "query and path are not recorded; a query expectation has no row "
+            "vocabulary (assert it in a unitContracts case). Remove the "
+            f"'.request' key, or write 'api.{op}': \"called\" for the reach.")
+
+
+# --------------------------------------------------------------------------- #
+# the mark
+# --------------------------------------------------------------------------- #
+
+def is_canonical_params(declared) -> bool:
+    """Does this `params` value ask for resolution at all?"""
+    if declared == CANONICAL_MARKER:
+        return True
+    return (isinstance(declared, list)
+            and any(x == CANONICAL_MARKER for x in declared))
+
+
+def is_canonical_return(declared) -> bool:
+    return declared == CANONICAL_WIRE_MARKER
+
+
+@dataclass
+class Resolution:
+    """What the mark expanded to, what stopped it, and what to say about it."""
+
+    params: list = field(default_factory=list)
+    return_type: str = ""
+    errors: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
+    #: `(arg name, expanded type, enum the DTO holds)` for arguments the
+    #: canon declares as an inline enum. Deliberately NOT a warning — see
+    #: :func:`iter_widened_enums`.
+    widened_enums: list = field(default_factory=list)
+
+
+def resolve_params(declared, operation, convention=None) -> Resolution:
+    """Expand `@canonical` in place, keeping hand-written entries around it.
+
+    Order is the declaration's: the mark expands where it sits, so a method
+    that wants its own argument first can put it first. Hand-written entries
+    win on name collision — the whole reason the two mix in one list is that
+    the author is saying something the canon does not.
+    """
+    res = Resolution()
+    if not is_canonical_params(declared):
+        res.params = list(declared) if isinstance(declared, list) else []
+        return res
+    if operation is None:
+        res.errors.append(
+            f"'{CANONICAL_MARKER}' needs an endpoint that resolves to an "
+            "operation in the API canon")
+        return res
+
+    entries = declared if isinstance(declared, list) else [declared]
+    written = {e.get("name") for e in entries
+               if isinstance(e, dict) and e.get("name")}
+    # Fields the canon declares as a string enum. The expansion resolves them
+    # to `String` — the vocabulary specs are written in — while the DTO
+    # generated from the same schema holds a generated enum, so a repository
+    # written against both converts at the boundary, and a failed `rawValue`
+    # lookup there is exactly how a value disappears silently. Naming the
+    # gap does not close it; it lets a project count its own occurrences,
+    # which is what deciding to close it needs. Reported per method through
+    # the caller's existing warning channel: `jui build` prints these, and
+    # `jsonui-doc`'s spec validation carries the same text as structured
+    # warnings, so a project that does not run a build in CI can still count.
+    # Keyed by the spelling that reaches the signature — `spec_params`
+    # applies the naming convention, so the raw wire name would miss.
+    widened = {apply_case(p.name, convention): p.enum_type
+               for p in operation.params if p.enum_type}
+    out: list = []
+    for entry in entries:
+        if entry == CANONICAL_MARKER:
+            for p in operation.spec_params(convention):
+                # A hand-written entry of the same name replaces it rather
+                # than sitting beside it; two params with one name is not a
+                # signature any platform will generate.
+                if p["name"] in written or any(
+                        names_match(p["name"], w) for w in written):
+                    continue
+                out.append(p)
+        elif isinstance(entry, dict):
+            out.append(entry)
+        else:
+            res.errors.append(
+                f"unexpected params entry {entry!r}: expected an object or "
+                f"'{CANONICAL_MARKER}'")
+    res.params = out
+    res.widened_enums = [
+        (o["name"], o.get("type"), widened[o["name"]])
+        for o in out
+        if isinstance(o, dict) and o.get("name") in widened
+        # A hand-written entry replaced the canonical one — the author is
+        # saying something the canon does not, and the type is theirs.
+        and o.get("name") not in written
+    ]
+    return res
+
+
+def iter_marked_methods(spec_data):
+    """`(label, method)` for every dataFlow method carrying a mark.
+
+    The walk is here, not in each tool, for the same reason the index is: two
+    walks would disagree the first time either learned about a section the
+    other did not.
+    """
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in MARKABLE_SECTIONS:
+        items = data_flow.get(section)
+        if not isinstance(items, list):
+            continue
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            methods = item.get("methods")
+            if not isinstance(methods, list):
+                continue
+            for j, method in enumerate(methods):
+                if not isinstance(method, dict):
+                    continue
+                if (is_canonical_params(method.get("params"))
+                        or is_canonical_return(method.get("returnType"))):
+                    yield f"dataFlow.{section}[{i}].methods[{j}]", method
+
+
+#: dataFlow sections whose methods may name a transport. `viewModel` is not
+#: one of them — the architecture rule is that a ViewModel never calls an API
+#: directly, so an `endpoint` there implies a missing repository. The schema
+#: nevertheless allows the same method shape everywhere, so a mark can be
+#: written in a section that does not resolve it.
+MARKABLE_SECTIONS = ("repositories", "useCases")
+UNMARKABLE_SECTIONS = ("viewModel",)
+
+
+def iter_misplaced_marks(spec_data):
+    """`(label, method)` for marks written where nothing expands them.
+
+    Silence here was worse than the empty list this module refuses to produce:
+    the marker string survived as the value of `params`, validation said
+    PASSED, and the author saw a spec that looked converted and was not.
+    Reported by a lane that added a probe to its own spec to find out.
+    """
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in UNMARKABLE_SECTIONS:
+        holder = data_flow.get(section)
+        if not isinstance(holder, dict):
+            continue
+        methods = holder.get("methods")
+        if not isinstance(methods, list):
+            continue
+        for j, method in enumerate(methods):
+            if not isinstance(method, dict):
+                continue
+            if (is_canonical_params(method.get("params"))
+                    or is_canonical_return(method.get("returnType"))):
+                yield f"dataFlow.{section}.methods[{j}]", method
+
+
+def miss_reason(reason: str, method: dict) -> str:
+    """Why a mark could not resolve, worded for a person fixing the spec."""
+    endpoint = method.get("endpoint")
+    if not endpoint:
+        return ("the method declares no 'endpoint', so there is no operation "
+                "to read it from")
+    if reason == "non_http":
+        return (f"'{endpoint}' is not an HTTP route, and OpenAPI documents do "
+                "not describe it — write the value directly")
+    if reason == "malformed":
+        return f"'{endpoint}' is not a '<METHOD> <path>' declaration"
+    if reason == "method_missing":
+        return (f"'{endpoint}' names a path the API canon declares, but not "
+                "for that method")
+    return (f"'{endpoint}' is not declared in any OpenAPI document under "
+            "api_directory")
+
+
+def resolve_spec_marks(spec_data, index, convention=None):
+    """Expand every mark in `spec_data`, in place. Returns `[(label, msg)]`.
+
+    Returns `(errors, warnings)`. In place and before anything else reads the
+    document, so the doc site's HTML, every other spec check, and the
+    repository stubs `jui build` writes all see one list. An unresolved mark is
+    reported, never quietly dropped: dropping would generate a method with no
+    arguments and no complaint.
+    """
+    errors, warnings = [], []
+    for label, _method in list(iter_misplaced_marks(spec_data)):
+        errors.append((label, (
+            f"'{CANONICAL_MARKER}' is not expanded here. A ViewModel method "
+            "does not declare a transport — an endpoint belongs on a "
+            "repository method, and the ViewModel calls that. Move the "
+            "declaration, or write the value out.")))
+    for label, method in list(iter_marked_methods(spec_data)):
+        operation, reason = lookup(index or {}, method.get("endpoint"))
+        if operation is None:
+            errors.append((label, f"'{CANONICAL_MARKER}' cannot be resolved: "
+                                  + miss_reason(reason, method)))
+            continue
+        if is_canonical_params(method.get("params")):
+            res = resolve_params(method.get("params"), operation, convention)
+            errors.extend((f"{label}.params", e) for e in res.errors)
+            if operation.muted_required:
+                warnings.append((f"{label}.params", (
+                    "the request body declares "
+                    f"{', '.join(operation.muted_required)} as required, but "
+                    "`requestBody.required` is not set — the caller may omit "
+                    "the body entirely, so these expand optional. Set "
+                    "`requestBody.required: true` in the API document if they "
+                    "are meant to be mandatory arguments.")))
+            if operation.shadowed:
+                warnings.append((f"{label}.params", (
+                    f"{', '.join(operation.shadowed)} is no argument: the "
+                    "operation declares another of the same name first, and a "
+                    "method takes one argument per name. Rename one in the API "
+                    "document, or write the params out.")))
+            if not res.errors:
+                method["params"] = res.params
+        if is_canonical_return(method.get("returnType")):
+            res = resolve_return_type(method.get("returnType"), operation)
+            errors.extend((f"{label}.returnType", e) for e in res.errors)
+            if not res.errors:
+                method["returnType"] = res.return_type
+    return errors, warnings
+
+
+def iter_widened_enums(spec_data, index, convention=None):
+    """`(label, arg, expanded type, enum the DTO holds)` per marked argument.
+
+    A request-body field the canon declares as an inline `enum` expands to
+    `String` (or `[String]`) — the vocabulary specs are written in — while
+    the DTO generated from the same schema holds a derived enum. Code using
+    both converts at the boundary, and the conversion consumers write is
+    `Enum(rawValue:)`, which returns nil for anything unexpected. Dropping
+    the value there is the failure this work exists to remove, so the gap is
+    named where it can be counted.
+
+    **Not a warning, deliberately.** There is no way for a project to act on
+    it: typing the argument means abandoning `@canonical` and writing the
+    enum name by hand, which is the exact trade-off being reported. A
+    permanent finding on a build that gates at zero warnings does not make
+    anyone fix it — it raises the accepted baseline, and the next real
+    warning arrives as `N+1` on a number nobody reads. Reported to whoever
+    asks for the inventory instead, so the count is available without
+    spending the gate on it.
+
+    Read-only: unlike `resolve_spec_marks` this does not rewrite `spec_data`.
+    """
+    found = []
+    for label, method in list(iter_marked_methods(spec_data)):
+        if not is_canonical_params(method.get("params")):
+            continue
+        operation, _ = lookup(index or {}, method.get("endpoint"))
+        if operation is None:
+            continue
+        res = resolve_params(method.get("params"), operation, convention)
+        for name, expanded, enum_name in res.widened_enums:
+            found.append((label, name, expanded, enum_name))
+    return found
+
+
+def resolve_return_type(declared, operation) -> Resolution:
+    res = Resolution()
+    if not is_canonical_return(declared):
+        res.return_type = declared if isinstance(declared, str) else ""
+        return res
+    if operation is None:
+        res.errors.append(
+            f"'{CANONICAL_WIRE_MARKER}' needs an endpoint that resolves to an "
+            "operation in the API canon")
+        return res
+    if not operation.wire_type:
+        res.errors.append(
+            f"'{CANONICAL_WIRE_MARKER}' needs the operation's success response "
+            "to name a schema; this one describes its body inline, so there is "
+            "no name to lift — write the type directly")
+        return res
+    res.return_type = operation.wire_type
+    return res
+
+# --------------------------------------------------------------------------- #
+# declared divergence
+# --------------------------------------------------------------------------- #
+
+DIVERGENCE_KEY = "canonicalDivergence"
+_DIVERGENCE_FIELDS = ("renamed", "omitted", "wrapped", "added", "reason")
+
+#: `renamed` alone can only say "this argument has another name here", so the
+#: only declarable divergence was a one-to-one correspondence. Measured on one
+#: face: 7 of 37 hand-written declarations were that shape, and the other 30
+#: — the longest ones, wrapping twenty to thirty body fields into a request
+#: object — could not be declared at all. The feature's stated motivation was
+#: that hand-written declarations take part in no check; most of that set was
+#: still outside it.
+#:
+#: So three more shapes, each still checked against the operation:
+#:   omitted  canonical arguments this method deliberately does not take —
+#:            environment or build constants the caller never chooses
+#:   wrapped  one written argument standing in for several canonical ones;
+#:            a method with thirty parameters is a worse contract than a DTO
+#:   added    written arguments the operation does not declare — multipart
+#:            bodies, where the JSON expansion is empty by construction
+
+
+def iter_divergence_declarations(spec_data):
+    """`(label, method)` for every method declaring a divergence."""
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in MARKABLE_SECTIONS:
+        items = data_flow.get(section)
+        if not isinstance(items, list):
+            continue
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            methods = item.get("methods")
+            if not isinstance(methods, list):
+                continue
+            for j, method in enumerate(methods):
+                if isinstance(method, dict) and method.get(DIVERGENCE_KEY):
+                    yield f"dataFlow.{section}[{i}].methods[{j}]", method
+
+
+def check_divergences(spec_data, index, convention=None):
+    """`[(label, message)]` — a declared divergence that is not the real one.
+
+    Written-out params are the way to say "this method deliberately differs
+    from the canon", so a blanket warning on any difference would delete the
+    only means of saying it: 115 declarations across the corpus would go red
+    at once and a permanently-red check stops being read. The question is not
+    whether there is a difference, it is whether the difference is the one
+    that was declared.
+
+    So the declaration is what turns checking on for a method. Without it,
+    nothing changes — a project adopts this one method at a time. With it,
+    the method is held to the declaration exactly:
+
+    - a rename that no longer corresponds to a real difference is an error.
+      This is the point of the feature: when the canon is renamed to match,
+      the divergence disappears and the note describing it goes stale, and a
+      stale note is how "we already dealt with that" survives the thing it
+      was about.
+    - a difference the declaration does not account for is an error. It
+      subtracts, it does not exempt — an accidental drift hides best inside a
+      method already known to differ.
+    """
+    errors = []
+    for label, method in iter_divergence_declarations(spec_data):
+        raw = method.get(DIVERGENCE_KEY)
+        path = f"{label}.{DIVERGENCE_KEY}"
+
+        if not isinstance(raw, dict):
+            errors.append((path, f"{DIVERGENCE_KEY} must be an object"))
+            continue
+        for key in raw:
+            if key not in _DIVERGENCE_FIELDS:
+                errors.append((path, f"unknown {DIVERGENCE_KEY} key {key!r} "
+                                     f"(expected: {', '.join(_DIVERGENCE_FIELDS)})"))
+        reason = raw.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            # The ledger records WHY, or it is a suppression dump.
+            errors.append((path, f"{DIVERGENCE_KEY} needs a non-empty 'reason'"))
+        renamed = raw.get("renamed") or {}
+        if not isinstance(renamed, dict) or not all(
+                isinstance(k, str) and isinstance(v, str)
+                for k, v in renamed.items()):
+            errors.append((path, "'renamed' must be an object of "
+                                 "canonical-name -> spec-name strings"))
+            continue
+
+        if is_canonical_params(method.get("params")):
+            errors.append((path, (
+                f"a method using '{CANONICAL_MARKER}' has no divergence to "
+                "declare — the mark follows the canon by construction. Remove "
+                f"the {DIVERGENCE_KEY}, or write the params out.")))
+            continue
+
+        operation, reason_code = lookup(index or {}, method.get("endpoint"))
+        if operation is None:
+            errors.append((path, f"{DIVERGENCE_KEY} cannot be checked: "
+                                 + miss_reason(reason_code, method)))
+            continue
+
+        lists = {}
+        for field in ("omitted", "added"):
+            value = raw.get(field) or []
+            if not isinstance(value, list) or not all(
+                    isinstance(x, str) for x in value):
+                errors.append((path, f"'{field}' must be a list of names"))
+                value = []
+            lists[field] = value
+        wrapped = raw.get("wrapped") or {}
+        if not isinstance(wrapped, dict) or not all(
+                isinstance(k, str) and isinstance(v, list)
+                and all(isinstance(x, str) for x in v)
+                for k, v in wrapped.items()):
+            errors.append((path, "'wrapped' must be an object of "
+                                 "spec-argument -> [canonical names]"))
+            wrapped = {}
+
+        canonical = [p["name"] for p in operation.spec_params(convention)]
+        declared = [p.get("name") for p in (method.get("params") or [])
+                    if isinstance(p, dict) and p.get("name")]
+        errors.extend(_divergence_errors(
+            path, renamed, canonical, declared,
+            omitted=lists["omitted"], wrapped=wrapped, added=lists["added"],
+            locations=operation.params, convention=convention))
+    return errors
+
+
+def _divergence_errors(path, renamed, canonical, declared,
+                       omitted=(), wrapped=None, added=(), locations=None,
+                       convention=None):
+    out = []
+    wrapped = wrapped or {}
+
+    # Each clause has to still describe a real difference. A note that no
+    # longer does is the case this whole feature exists for: the canon moves,
+    # the divergence disappears, and the sentence explaining it outlives the
+    # thing it was about.
+    for name in omitted:
+        if name not in canonical:
+            out.append((path, (
+                f"'omitted' names '{name}', which the operation does not "
+                "declare — there is nothing here to leave out.")))
+    # `path` only, not "not body". A filter object holding an operation's
+    # query parameters is the same shape as a request object holding its body
+    # fields — one argument standing for several — and refusing it would have
+    # meant declaring, falsely, that those values are not sent.
+    #
+    # The first version refused everything outside the body, on a measurement
+    # that reported the corpus and had in fact scanned two of its four faces:
+    # the glob for the other two matched nothing and said nothing. It broke a
+    # consumer's gate with 16 findings that were all correct declarations.
+    #
+    # A path variable is different in kind: it is interpolated into the URL,
+    # so no object carries it, and the id travels as its own argument.
+    # Keyed by the spelling this project writes, because that is what every
+    # other clause is compared against. Keying by the document's raw name left
+    # this one lookup outside the convention — the only place in the file that
+    # was — so on any project that configures `canonical_param_case` the check
+    # matched nothing and said nothing.
+    #
+    # That also invalidated the measurement behind it: "zero false positives
+    # across four faces" was taken on four faces that all configure
+    # `camelCase`, where the check never ran. A clean result from a check that
+    # did not execute is the failure this whole report is about, arrived at
+    # while adding a check for it.
+    outside = {apply_case(p.name, convention): p.location
+               for p in (locations or ()) if p.location == "path"}
+    for holder, covered in wrapped.items():
+        for name in covered:
+            if name in outside:
+                out.append((path, (
+                    f"'wrapped' says '{holder}' covers '{name}', which the "
+                    "operation declares as a path variable. A path variable "
+                    "is interpolated into the URL, so no object carries it — "
+                    "the id travels as its own argument, which makes this a "
+                    "rename or an omission rather than something the wrapper "
+                    "covers.")))
+        if holder not in declared:
+            out.append((path, (
+                f"'wrapped' says '{holder}' stands in for other arguments, "
+                "but this method has no such parameter.")))
+        for name in covered:
+            if name not in canonical:
+                out.append((path, (
+                    f"'wrapped' says '{holder}' covers '{name}', which the "
+                    "operation does not declare.")))
+    for name in added:
+        if name in canonical:
+            out.append((path, (
+                f"'added' names '{name}', which the operation does declare — "
+                "it is not an addition, so it is compared like any other "
+                "argument.")))
+        if name not in declared:
+            out.append((path, (
+                f"'added' names '{name}', which this method does not take.")))
+    if out:
+        return out
+
+    canonical = [n for n in canonical
+                 if n not in omitted
+                 and not any(n in c for c in wrapped.values())]
+    declared = [n for n in declared
+                if n not in added and n not in wrapped]
+
+    remaining = list(declared)
+    expected = []
+    for name in canonical:
+        mapped = renamed.get(name, name)
+        expected.append(mapped)
+        if name in renamed and name in declared:
+            out.append((path, (
+                f"'renamed' says the canon's '{name}' appears here as "
+                f"'{renamed[name]}', but '{name}' is what the params actually "
+                "say — the divergence this describes is gone. Update the "
+                "params, or drop the entry.")))
+
+    for name in renamed:
+        if name not in canonical:
+            out.append((path, (
+                f"'renamed' maps '{name}', which the operation does not "
+                "declare — the canon no longer has that parameter, so this "
+                "note describes a difference that cannot exist.")))
+
+    if out:
+        # The set difference below is a consequence of the entries already
+        # reported, not a second finding. Emitting both makes one defect read
+        # as two and buries the one that says what to change.
+        return out
+
+    missing = [n for n in expected if n not in remaining]
+    extra = [n for n in remaining if n not in expected]
+    if missing or extra:
+        parts = []
+        if missing:
+            parts.append("does not declare " + ", ".join(repr(n) for n in missing))
+        if extra:
+            parts.append("adds " + ", ".join(repr(n) for n in extra))
+        out.append((path, (
+            "the declared divergence does not account for the whole "
+            f"difference: after applying 'renamed', this method {' and '.join(parts)}. "
+            "A declaration subtracts from the comparison, it does not exempt "
+            "the method from it.")))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# cross-spec agreement
+# --------------------------------------------------------------------------- #
+
+def iter_declared_methods(spec_data):
+    """`(section, owner, method)` for every dataFlow method with an owner."""
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in MARKABLE_SECTIONS:
+        items = data_flow.get(section)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            for method in item.get("methods") or []:
+                if isinstance(method, dict) and method.get("name"):
+                    yield section, item["name"], method
+
+
+def _signature(method) -> tuple:
+    params = method.get("params")
+    if isinstance(params, str):
+        shape = ("raw", params)
+    elif isinstance(params, list):
+        shape = tuple(
+            p if isinstance(p, str)
+            else (p.get("name"), p.get("type"))
+            for p in params
+        )
+    else:
+        shape = ()
+    return (shape, method.get("returnType") or "", method.get("endpoint") or "")
+
+
+def cross_spec_disagreements(specs):
+    """`[(owner.method, [(source, description), ...])]` for split declarations.
+
+    `specs` is `(source_label, spec_data)` pairs.
+
+    One repository method declared by several screens is normal — a shared
+    component is used by several screens, and the rule is that every screen
+    using it declares what it calls, so the method's usage can be read off the
+    specs. What is not normal is those declarations disagreeing: the method has
+    one implementation, so at most one of them describes it.
+
+    Both consumer lanes that looked found defects of exactly this shape by
+    hand — a method declared by four specs with one of them missing its
+    arguments, and four more where one of a pair had lost a parameter. Neither
+    is visible from one spec, which is why no per-file check could ever have
+    caught them.
+
+    Compared, deliberately, before `@canonical` expands: two specs that both
+    write `"@canonical"` agree by construction, and a spec that writes the
+    expansion out by hand while its sibling references it is a difference in
+    how they are maintained, not in what they say. Reporting that would make
+    the check fire on the mixed state every project passes through while
+    converting.
+    """
+    seen: dict = {}
+    for source, spec in specs:
+        for _section, owner, method in iter_declared_methods(spec or {}):
+            platforms = method.get("platforms") or []
+            if not isinstance(platforms, list):
+                platforms = []
+            # A method scoped to one platform is not in disagreement with the
+            # same name scoped to another: `UIImage` against `Bitmap`, `Void`
+            # against `Unit`, `inout` against plain. Measured on the corpus —
+            # ignoring `platforms` produced four findings and all four were
+            # this, which would have been the whole of the check's output on
+            # the face that had no real disagreement left.
+            key = (f"{owner}.{method['name']}",
+                   tuple(sorted(str(p) for p in platforms)))
+            seen.setdefault(key, []).append((source, _signature(method)))
+
+    out = []
+    for (name, platforms), entries in sorted(seen.items()):
+        shapes = {sig for _src, sig in entries}
+        if len(shapes) < 2:
+            continue
+        label = f"{name} [{'/'.join(platforms)}]" if platforms else name
+        out.append((label, [(src, _describe(sig)) for src, sig in entries]))
+    return out
+
+
+def _describe(sig) -> str:
+    shape, return_type, endpoint = sig
+    if shape and shape[0] == "raw":
+        params = shape[1]
+    else:
+        params = ", ".join(
+            p if isinstance(p, str) else f"{p[0]}: {p[1]}" for p in shape)
+    head = f"({params}) -> {return_type or '?'}"
+    return f"{head}   [{endpoint}]" if endpoint else head

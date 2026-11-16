@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/text__alias_value.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.text (alias_value)",
+    "description": "Conformance fixture for 'text' on TextField (section: TextField, class: assertable). Value under test: \"Conformance Text\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__alias_value",
+      "description": "Conformance fixture for 'text' on TextField (section: TextField, class: assertable). Value under test: \"Conformance Text\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}

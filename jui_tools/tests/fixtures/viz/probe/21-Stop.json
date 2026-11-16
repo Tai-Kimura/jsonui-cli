@@ -1,0 +1,16 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "Stop",
+ "stop_hook_active": false,
+ "last_assistant_message": "各段の結果です。\n\n1. **成功**: sample.txt を Read で読みました。中身は `hello` の 1 行です。\n2. **失敗**: new.txt の Write が権限未許可で拒否されました。再試行や別コマンドでの回避はしていません。許可いただければ、中身 `hi` で作り直します。\n3. **成功**: ls の結果は `hooks`、`probe.py`、`sample.txt`、`t0` です。\n4. **成功**: タスクを 2 つ作成しました。「sample.txt を読む」を完了にし、「new.txt を作る」は未完了のままです。\n5. **成功**: Explore サブエージェントが一覧を返しました。ls に出ない隠しディレクトリ `.claude/` と `.git/` も含まれ、ファイルは `hooks/`、`probe.py`、`sample.txt`、`t0` の 4 つです。\n\n対象フォルダは `/work/probe-app` です。",
+ "background_tasks": [],
+ "session_crons": []
+}

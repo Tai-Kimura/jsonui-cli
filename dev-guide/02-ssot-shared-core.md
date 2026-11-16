@@ -1,0 +1,162 @@
+# 02. SSoT — shared/core と正規化・型付き属性
+
+## 1. shared/core/ の中身
+
+| ファイル | 役割 | 消費者 |
+|---|---|---|
+| `attribute_definitions.json`（約120KB / ~4,500行 / top-level 31キー: `_comment` + `common`(~148属性) + 29コンポーネント） | **属性 SSoT**。各属性: `type`（文字列 or 配列、inline `{"enum":[...]}` や `"binding"` を含み得る）、`enum`、`aliases`（宣言キーが正準）、`deprecated`/`deprecation_note`、`required`、`default`、`binding_direction`、`platform`（swift/kotlin/react）、`mode` | Ruby 3ツールの validator（symlink）、attr-codegen、conformance 生成、MCP、jsonui-helper |
+| `component_metadata.json`（~22KB / 30キー） | コンポーネントの説明・エイリアス・プラットフォーム可用性（swift_generated/swift_dynamic/kotlin_generated/kotlin_dynamic/react）・エージェント向け rules | MCP `lookup_component` 等。codegen は読まない |
+| `font_weight_mapping.json` | weight 名 → swift/kotlin/css enum 対応表 | 各ツールの font_spec_helper（3箇所探索: ツール内コピー → repo ルート → `~/.jsonui-cli`） |
+| `layout_validator.rb` / `responsive_resolver.rb`（`module JsonUIShared`） | Layout 整合性チェック / responsive 解決の共通 Ruby 実装 | s/k/rjui に**コピー**（symlink ではない）され同一警告・同一解決を保証 |
+| `spec_types.py` | **spec の `type` が画面を表すかの SSoT**（`describes_a_screen()` が True / False / **None** を返す 3 値）。下の 6 節 | `jui verify` の spec coverage、`jui build` の `_load_all_specs`。⚠️ **両方とも `shared_core.load()` で読む。リテラルを書き写さない** |
+| `spec_texts.py` | **spec の散文フィールドを YAML の texts ファイルから読む**。`TEXT_KEYS`（`description` / `notes` / `intent` / `purpose` / `processing` / `handling` / `rule` / `meaning` / `note` / `reason` / `condition`。`reason` と `condition` は `TEXT_KEY_SCOPE` でパス限定）に `{"md": "a.b.c"}`（対の `<name>.texts.yaml`）か `{"md": "file.texts.yaml#a.b"}` を書くと、読込み時に `MarkdownText`（`str` のサブクラス）へ解決する。YAML の規則（キーは文字列・`.` を含まない・重複不可、値は文字列かマッピング）と未参照キーの警告もここ | `SpecValidator.validate_file`（document_tools。HTML/MD 生成はその `spec_data` を読む）、`ParentSpecMerger`（sub-spec ごとに解決してから統合）、`extract_screen_spec`（統合済みの親は再解決しない）、`jui g converter`、test_tools の `_load_spec_result` / `discover_unit_contracts` / `find_app_contract_spec`（解決できない参照はどれも拒否）。⚠️ **読込み口で解決する。読む側に `{"md": ...}` の形を教えない** |
+| `../schema.py`, `../validation/*.py` | テスト JSON 検証の Python 共通実装 | install 時に test_tools / document_tools へコピー |
+
+### 消費形態マトリクス（ここを間違えると「直したのに反映されない」）
+
+| 消費者 | 形態 | 更新の反映条件 |
+|---|---|---|
+| sjui/kjui/rjui validator | dev checkout では **symlink**（`<tool>/lib/core/attribute_definitions.json`） | 即時。ただし**インストール済みツリー（~/.jsonui-cli）は bootstrap が実コピーに置換**するため再インストール/再同期が必要 |
+| rjui typed tables | **vendored**（`rjui_tools/lib/core/generated/attributes/*.rb`） | `jui g attr-bindings --lang ruby` で再 emit して**コミット**。CI `ssot-guards` が fresh emit と diff 照合 |
+| SwiftJsonUI typed structs | rsync 取込み（`scripts/sync_generated_attributes.sh`）→ **SwiftJsonUI リポジトリにコミット** | 手動実行。ライブラリ単体でビルド可能にするため必ずコミットする |
+| KotlinJsonUI dynamic | attr-codegen kotlin 出力を library-dynamic に取込み | プラットフォーム適用フェーズ（plans 07/08）の手順に従う |
+| jsonui-mcp-server | 4層フォールバック + **起動時1回ロードのメモリキャッシュ** | `data/` スナップショット更新 + **サーバー再起動**（07章） |
+| jsonui-helper | `vendor/` に手動 vendor（`npm run sync:specs`、VERSION に cli の short SHA を記録） | 手動 sync + 拡張リロード |
+| プロジェクトローカルツールコピー | `jui sync_tool` が `SHARED_CORE_PAYLOADS`（font_weight_mapping.json）を `<tool>/shared/core/` に配布 | sync_tool 実行。**配布漏れだと sjui は全 weight を .regular に黙って丸める既知バグ** |
+
+## 2. 正規化レベル L0 / L1 / L2（全ツール共通用語）
+
+実装: `jui_tools/jui_cli/core/normalizer/`（`alias_table.py` / `canonicalizer.py` /
+`style_merger.py` / `include_expander.py` / `platform_filter.py`、公開 API は `normalize()`）。
+元は hotloader（`jui_cli/hotloader/`）の実装を core へ昇格したもの。
+
+| レベル | 内容 | 消費者 |
+|---|---|---|
+| L0 (raw) | 作者が書いたまま | 共有 layouts_directory は**常に L0 のまま**（書き換えない） |
+| L1 (canonical) | エイリアス→正準名書き換え + deprecated 警告 + `"$jui": {"normalized":"L1","schemaVersion":1}` マーカー。style/include は解決**しない**（include はコンポーネント再利用構造として codegen に必要） | 配布された各プラットフォーム Layouts/（codegen が読む） |
+| L2 (resolved) | L1 + style merge + include 展開 + platform filter | dynamic モードランタイム / hotloader |
+
+重要な実装知識:
+
+- **`normalizeLayouts` はデフォルト TRUE**（SSoT phase 14 以降、`build_cmd.py:165-178`）。
+  レガシーとバイト一致させたい場合は `jui.config.json` の `"build":{"normalizeLayouts":false}`。
+- `AliasTable.is_empty()` ガード: 定義ファイルが見つからないのに `$jui` マーカーだけ付けると
+  canonical-only 消費者を壊すため、その場合は **L0 のまま配布**する（`build_cmd.py:205-218`）。
+- `jui verify` は両辺（spec 由来の期待と実 Layout）に同じ normalizer を適用する。
+  片側だけだとエイリアス書き換えが偽 drift として出る。
+- 各 Ruby ツールは `Core::Normalization.canonicalized?` で L1 を検出し、
+  **canonical-only 属性ルックアップ**に切り替える（L0 なら alias-tolerant）。残存エイリアスは
+  unknown-attribute 警告になる（仕様どおり）。
+- `alias_table.py` の `_TYPE_SYNONYMS`（`Text→Label`, `HStack→View` 等）は Ruby 側の
+  `map_type_to_definition` テーブルと**手動で同期**が必要。
+
+## 3. 型付き属性コード生成（attr-codegen、SSoT 柱C）
+
+実装: `jui_tools/jui_cli/generators/attr_codegen/`（`model.py` + `{swift,kotlin,ruby}_emitter.py`）。
+契約書: 同ディレクトリの `README.md`。コマンド: `jui generate attr-bindings --lang swift|kotlin|ruby|all`。
+
+- `load_model()` が定義をロードし `AttrKind`（STRING/COLOR/NUMBER/BOOLEAN/OBJECT/ARRAY/ANY/RAW/
+  ENUM/DIMENSION/BINDING）に分類。`callback` 型と `$` 接頭辞などメタ属性は
+  `skipped_attributes.json` へスキップ記録（黙って落とさない）。
+- 出力: `AttrCodegenSupport.*` + `CommonAttributes.*` +
+  `<Component>Attributes.*`（コンポーネント差分）。共通属性は 1 回だけ emit。エイリアス解決と lenient enum は生成コードに焼き込み。
+- **決定論が CI ゲート**: ソート済み・タイムスタンプなし。2回 emit してバイト一致すること。
+  golden files: `jui_tools/tests/golden/attr_codegen/`。
+- enum の case 名は `dedupe_case_names` が大文字小文字衝突（`Left`/`left` 等）に `_2` を付ける
+  （macOS APFS の case-insensitive 対策。fixture 生成の `_unique_stem` も同様）。
+
+### 消費側の読み方（Swift の例）
+
+Dynamic converters は `component.typedAttributes(ButtonAttributes.self)` で読む。
+生の辞書読み（`rawData[`）と、宣言済み属性の `component.rawAttribute("key")` は
+`SwiftJsonUI/scripts/check_converter_raw_reads.sh` が禁止する。同じゲートが
+**binding 宣言のある属性を `DynamicComponent` の手書き decode スロットから読むこと**も禁止する
+（正準の読み手は生成された `AttrValue<T>`。手前に手書きがあるとバインド形が落ちる）。
+既存の違反は `scripts/attr_read_allowlist.json` に **`owner` / `plan` / `reason` つきで凍結宣言**
+されており、この台帳は**集合として照合される** — 行に無い違反も、直したのに残っている行も落ちる。
+**宣言済み属性は必ず typed で読む**。
+
+## 4. SSoT を変更したときの派生物更新チェックリスト
+
+`shared/core/attribute_definitions.json` を触ったら以下が芋づるで動く/要更新（詳細手順は 10 章）:
+
+1. Ruby validator: symlink なので dev checkout は即反映（何もしない）
+2. `jui g attr-bindings --lang all` → ruby は vendored テーブル再コミット、swift は
+   SwiftJsonUI へ rsync + コミット、kotlin は KotlinJsonUI へ取込み
+3. `jui conformance generate` → fixtures/manifest 再生成（diff は生成差分のみのはず）
+4. 分類が要る属性は `jui_cli/conformance/rules.py` / `interactive_rules.py`（機械部分の
+   `fixture_generator.py` は触らない）
+5. `component_metadata.json`（エージェント向け説明が要るなら）
+6. **jsonui-mcp-server の `data/` スナップショット更新 + push、ライブサーバー再起動**
+7. jsonui-helper の `npm run sync:specs`（急ぎでなければ次回まとめてでよい）
+8. `jui_tools/tests/golden/` の更新、**`python -m pytest`**（`unittest discover` は
+   pytest 形式のモジュールを 1 本も収集せず、収集しなかったことも言わない —
+   実測 jui_tools 1331/1357、**test_tools 35/631**）
+
+## 5. Renderer SSoT 化の現在地
+
+マスタープラン: `docs/plans/2026-07-02-renderer-ssot-00-overview.md`（3本柱:
+A=conformance / B=normalizer / C=attr-codegen）。フェーズ 14（enablement）まで進み、
+normalizer はデフォルト有効、conformance は CI 常設（web は per-push、mobile は週次）。
+新しい修正はこの枠組みを前提にする — 例えば「エイリアス追加」は emitter の分岐追加ではなく
+`aliases` 配列 + normalizer の仕事、が正解になっている。
+
+## 6. spec の `type` 語彙 — どの型がどこに属するか
+
+`*.spec.json` の `type` は 4 種類。**画面を表すか**が全ての分かれ目で、その判定は
+`shared/core/spec_types.py` の `describes_a_screen()` **1 箇所**にある。
+
+| `type` | 画面か | 何を書く容器か | `metadata.layoutFile` |
+|---|---|---|---|
+| `screen_spec` | ✅ | 1 画面 | 持つ |
+| `screen_parent_spec` | ✅ | sub-spec を束ねた 1 画面 | 持つ（親が持つ） |
+| `screen_sub_spec` | ❌ | 親にマージされる断片 | 持たない |
+| `app_contracts_spec` | ❌ | **どの画面も単独では所有しない unit target の契約** | **持たない** |
+
+### `app_contracts_spec` を使うのはどんなときか（1.8.52 で新設）
+
+`jsonui-test generate unit-stubs --check` が次の形の指摘を出したときの**正しい移設先**:
+
+```
+'<target>' is declared in N screen spec(s) (...), but M screens own it (...) —
+filing it under any of them records an ownership that does not exist.
+Move ALL N declaration(s) to the app contracts spec, ...
+```
+
+⚠️ **この指摘に「宣言を消す」で応えないこと。**契約は消さずに**移す**。
+複数画面が所有する target を 1 画面の spec に置くと、**存在しない所有関係が記録される**。
+
+置き場所と最小の形:
+
+```jsonc
+// <spec_directory>/app_contracts.spec.json
+{
+  "type": "app_contracts_spec",
+  "version": "1.0",
+  "metadata": {
+    "name": "<アプリの表示名>",     // ⚠️ 画面名ではない。下の注意を読むこと
+    "description": "この面の app が所有し、単一の画面が所有しない unit target の契約"
+  },
+  "unitContracts": [ /* screen spec の unitContracts と同じ形 */ ]
+}
+```
+
+⚠️ **`metadata.name` はアプリの表示名で、画面名ではない。**この型は画面を表さないので、
+`name` から画面の識別子を作ってはいけない。1.8.52 ではこれを守っていない経路が 2 本あり、
+どちらも**同じ 1 つの知識の欠落**だった:
+
+| 経路 | 症状 | 直った版 |
+|---|---|---|
+| `jui verify` の spec coverage | ファイル名を layout id と読み `missing_layouts` が赤 | 1.8.53 |
+| `jui build` の protocol sync | `metadata.name` を画面名と読み、**ハイフンや空白を含む識別子**を `@generated` で 2 OS に出力。`EXIT 0` / warning 0 で素通りし、次のビルドが落ちる | 1.8.53 |
+
+⇒ **新しい `type` を足すときは `spec_types.py` の表だけを更新する。**
+各コマンドに `if type == "..."` を書き足す形にしない —— 上の 2 本は
+「除外する型を名指す」書き方だったので、**新設した型が自動的に「画面」に落ちた**。
+
+### 検出と規約は対で出荷する
+
+⚠️ 1.8.52 は**検出（「app spec へ移せ」）を出荷し、この節を出荷しなかった**。
+指摘された書き手は正しい直し方を調べる先が無く、型名はコードにしかないので
+**綴りを推測することもできなかった**。次に検出を足すときは、
+**その検出が名指す語がこのガイドから引けること**を受入条件に入れる。

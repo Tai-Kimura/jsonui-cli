@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/isOn__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.isOn (false)",
+    "description": "Conformance fixture for 'isOn' on Switch (section: Switch, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "isOn__false",
+      "description": "Conformance fixture for 'isOn' on Switch (section: Switch, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_isOn__false"
+        }
+      ]
+    }
+  ]
+}

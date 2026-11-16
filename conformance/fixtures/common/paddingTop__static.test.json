@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/paddingTop__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.paddingTop (static)",
+    "description": "Conformance fixture for 'paddingTop' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "paddingTop__static",
+      "description": "Conformance fixture for 'paddingTop' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_paddingTop__static"
+        }
+      ]
+    }
+  ]
+}

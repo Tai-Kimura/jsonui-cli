@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/text__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.text (static)",
+    "description": "Conformance fixture for 'text' on Button (section: Button, class: assertable). Value under test: \"Conformance Text\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__static",
+      "description": "Conformance fixture for 'text' on Button (section: Button, class: assertable). Value under test: \"Conformance Text\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}

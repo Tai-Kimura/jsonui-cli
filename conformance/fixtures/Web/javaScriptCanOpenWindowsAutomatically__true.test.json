@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/javaScriptCanOpenWindowsAutomatically__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.javaScriptCanOpenWindowsAutomatically (true)",
+    "description": "Conformance fixture for 'javaScriptCanOpenWindowsAutomatically' on Web (section: Web, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "javaScriptCanOpenWindowsAutomatically__true",
+      "description": "Conformance fixture for 'javaScriptCanOpenWindowsAutomatically' on Web (section: Web, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_javaScriptCanOpenWindowsAutomatically__true"
+        }
+      ]
+    }
+  ]
+}

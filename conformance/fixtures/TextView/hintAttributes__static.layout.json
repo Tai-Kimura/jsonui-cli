@@ -1,0 +1,29 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "TextView",
+      "id": "target",
+      "width": 200,
+      "height": 100,
+      "hint": "Sample",
+      "hintAttributes": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5
+      }
+    }
+  ]
+}

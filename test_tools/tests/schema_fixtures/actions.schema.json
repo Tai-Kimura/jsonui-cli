@@ -1,0 +1,2186 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/actions.schema.json",
+  "title": "JsonUI Test Actions and Assertions",
+  "description": "Definitions for test actions and assertions used in JsonUI test cases",
+  "definitions": {
+    "elementId": {
+      "type": "string",
+      "description": "The id attribute of the target element in JsonUI layout",
+      "minLength": 1
+    },
+    "within": {
+      "type": "string",
+      "minLength": 1,
+      "x-requires-driver": {
+        "android": "1.20.0",
+        "ios": "2.2.0",
+        "web": "1.18.0"
+      },
+      "x-doc": {
+        "ja": "この id の要素の中で探す（Collection のセルの入れ物 `<collectionId>_item_<n>` など）"
+      },
+      "description": "Look the step's element up among the descendants of the element with this id — normally a Collection cell's container `<collectionId>_item_<n>` (the id tapItem taps; n counted across the sections, as tapItem's index), so that `id` names one cell's child when every cell has a child with that id. Without it the first element with the id on the screen is used. The container is found as an id is (a cell is in the tree only while it is drawn: scrollUntilVisible to it first). count counts inside it; hidden / notVisible hold when the container is absent."
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "up",
+        "down",
+        "left",
+        "right"
+      ],
+      "description": "Direction for scroll/swipe actions"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable step name used in logs and reports"
+    },
+    "stepScreen": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical id of the screen this step runs on (flow tests only). Declared on every step shape because a flow's inlineStep composes this key with an action/assertion through allOf, and each branch closes itself with additionalProperties:false."
+    },
+    "optional": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, a failure of this step is recorded as a warning and execution continues"
+    },
+    "responsive": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "compact",
+            "medium",
+            "regular",
+            "landscape",
+            "compact-landscape",
+            "medium-landscape",
+            "regular-landscape"
+          ],
+          "description": "Named size-class bucket from the render-side canonical vocabulary; each driver resolves it the way its platform's renderer does"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "minWidth": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Minimum window width (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "maxWidth": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Maximum window width (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "minHeight": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Minimum window height (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "maxHeight": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Maximum window height (inclusive). Units: dp (Android) / pt (iOS) / logical px (web)"
+            },
+            "orientation": {
+              "type": "string",
+              "enum": [
+                "portrait",
+                "landscape"
+              ],
+              "description": "Current device/viewport orientation matches"
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Explicit size constraint; keys are ANDed. Uniform numeric evaluation on all platforms (does NOT track iOS size classes — use a named bucket for renderer-faithful gating there)"
+        }
+      ],
+      "description": "Current size matches: a named size-class bucket or an explicit size constraint, resolved at run time on the device"
+    },
+    "condition": {
+      "type": "object",
+      "description": "Condition object for 'when' (step pre-condition) and 'repeat.while'. Multiple keys are ANDed.",
+      "properties": {
+        "visible": {
+          "$ref": "#/definitions/elementId",
+          "description": "Instant check: element is in the viewport — the visible assertion's predicate (at least 1pt/px each way inside the screen and every scroll container above it)"
+        },
+        "notVisible": {
+          "$ref": "#/definitions/elementId",
+          "description": "Instant check: the negation of visible — absent, hidden, or outside the viewport"
+        },
+        "hidden": {
+          "$ref": "#/definitions/elementId",
+          "description": "Instant check: the element is not drawn, wherever it is — absent, gone, or invisible / hidden on itself or an ancestor. Off screen, under a modal, under another view, at opacity 0 or disabled is drawn (not hidden)"
+        },
+        "within": {
+          "$ref": "#/definitions/within",
+          "description": "Scope this condition's visible / notVisible / hidden check to the descendants of the element with this id (as a step's 'within')."
+        },
+        "platform": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "ios",
+                "android",
+                "web",
+                "all"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ios",
+                  "android",
+                  "web"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Current platform matches"
+        },
+        "responsive": {
+          "$ref": "#/definitions/responsive",
+          "description": "Current size class / window size matches (resolved at runtime from the live device/viewport size)"
+        },
+        "state": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Dot-notation path into the screen's Data, the same rule as the state assertion's path. Instant: an absent bridge or a path that does not resolve is not met; a truncated bridge fails the step"
+            },
+            "equals": {
+              "description": "Expected value (any type)"
+            }
+          },
+          "required": [
+            "path",
+            "equals"
+          ],
+          "additionalProperties": false,
+          "description": "The screen's ViewModel Data matches, read from the state bridge (no harness provider needed with SwiftJsonUI >= 10.30.0 / KotlinJsonUI >= 2.44.0); see the `state` assertion for which screen"
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "launch": {
+      "type": "object",
+      "description": "App launch configuration applied by the runner before the app under test starts, on all three platforms (web from driver 1.15.0: the runner clears / grants / writes sessionStorage and reloads once). The order and what the same launch carries are in spec §10.2.",
+      "properties": {
+        "clearState": {
+          "type": "boolean",
+          "default": false,
+          "description": "Clear app data before launch (iOS: JSONUI_TEST_CLEAR_STATE env contract; Android: in-process wipe of files, shared_prefs, databases, cache and code_cache — persisted state only, process memory survives the relaunch; Web: cookies + the origin's local and session storage, not IndexedDB)"
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Permission grants applied before launch. Android deny is an ASSERT, not a revoke: satisfied when the permission is currently denied, and a loud per-file failure when it is granted — an in-run revoke kills the instrumented process (ActivityManager: permissions revoked), so the driver never executes one. Establish a denied baseline per run with a pre-instrumentation step (pregrant); grants persist across update-installs, so the run inherits the previous run's state. Android unset leaves inherited state untouched. iOS: JSONUI_TEST_PERMISSIONS launch env. Web: when any value is deny or unset, the context's permissions are cleared first and the allows granted again, so an earlier file's allow does not survive.",
+          "propertyNames": {
+            "enum": [
+              "camera",
+              "microphone",
+              "location",
+              "notifications",
+              "photos",
+              "contacts",
+              "calendar",
+              "bluetooth"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "unset"
+            ]
+          }
+        },
+        "arguments": {
+          "type": "object",
+          "description": "Launch arguments passed to the app (iOS: launchEnvironment JSONUI_TEST_ARGS, reset before every launch so it never reaches the next file; Android: intent extras; Web: sessionStorage JSONUI_TEST_ARGS, removed at the end of the file). Delivered only: reading them is the app's own code",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/tapAction"
+        },
+        {
+          "$ref": "#/definitions/doubleTapAction"
+        },
+        {
+          "$ref": "#/definitions/longPressAction"
+        },
+        {
+          "$ref": "#/definitions/inputAction"
+        },
+        {
+          "$ref": "#/definitions/typeTextAction"
+        },
+        {
+          "$ref": "#/definitions/clearAction"
+        },
+        {
+          "$ref": "#/definitions/scrollAction"
+        },
+        {
+          "$ref": "#/definitions/scrollUntilVisibleAction"
+        },
+        {
+          "$ref": "#/definitions/swipeAction"
+        },
+        {
+          "$ref": "#/definitions/waitForAction"
+        },
+        {
+          "$ref": "#/definitions/waitForAnyAction"
+        },
+        {
+          "$ref": "#/definitions/waitAction"
+        },
+        {
+          "$ref": "#/definitions/backAction"
+        },
+        {
+          "$ref": "#/definitions/hideKeyboardAction"
+        },
+        {
+          "$ref": "#/definitions/screenshotAction"
+        },
+        {
+          "$ref": "#/definitions/alertTapAction"
+        },
+        {
+          "$ref": "#/definitions/selectOptionAction"
+        },
+        {
+          "$ref": "#/definitions/tapItemAction"
+        },
+        {
+          "$ref": "#/definitions/moveItemAction"
+        },
+        {
+          "$ref": "#/definitions/selectTabAction"
+        },
+        {
+          "$ref": "#/definitions/readTextAction"
+        },
+        {
+          "$ref": "#/definitions/setSliderValueAction"
+        },
+        {
+          "$ref": "#/definitions/repeatAction"
+        },
+        {
+          "$ref": "#/definitions/retryAction"
+        },
+        {
+          "$ref": "#/definitions/setLocationAction"
+        },
+        {
+          "$ref": "#/definitions/addMediaAction"
+        },
+        {
+          "$ref": "#/definitions/setMocksAction"
+        },
+        {
+          "$ref": "#/definitions/setViewportAction"
+        },
+        {
+          "$ref": "#/definitions/setOrientationAction"
+        },
+        {
+          "$ref": "#/definitions/emitHookAction"
+        }
+      ]
+    },
+    "tapAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素をタップ",
+        "platforms": "`retryTapIfNoChange`（ゴーストタップ緩和）は Web では受理のみ・no-op"
+      },
+      "properties": {
+        "action": {
+          "const": "tap"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "text": {
+          "type": "string",
+          "description": "Specific text portion to tap within the element (e.g., tap '利用規約' within '利用規約に同意する')"
+        },
+        "retryTapIfNoChange": {
+          "type": "boolean",
+          "default": false,
+          "description": "Re-tap once when the UI did not change after the tap (ghost-tap mitigation; no-op on web)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "doubleTapAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素をダブルタップ"
+      },
+      "properties": {
+        "action": {
+          "const": "doubleTap"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "longPressAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素を長押し"
+      },
+      "properties": {
+        "action": {
+          "const": "longPress"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 100,
+          "default": 500,
+          "description": "Duration in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "inputAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "指定要素にテキスト入力"
+      },
+      "properties": {
+        "action": {
+          "const": "input"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "value": {
+          "type": "string",
+          "description": "Text to input"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "typeTextAction": {
+      "type": "object",
+      "description": "Type text into the currently-focused field via the keyboard, without targeting an element id. For fields that hold keyboard focus but are not directly targetable (e.g. an invisible code-entry TextField behind visible slots): focus is established app-side (auto-focus or a prior tap on a visible container), then typeText sends the characters.",
+      "x-doc": {
+        "ja": "フォーカス中の欄へキーボード入力（要素 id 不要。不可視のコード入力欄など向け）"
+      },
+      "properties": {
+        "action": {
+          "const": "typeText"
+        },
+        "value": {
+          "type": "string",
+          "description": "Text to type into the focused field"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "clearAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "入力内容をクリア"
+      },
+      "properties": {
+        "action": {
+          "const": "clear"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "scrollAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "指定方向へスクロール"
+      },
+      "properties": {
+        "action": {
+          "const": "scroll"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Scroll amount in pixels (optional)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "scrollUntilVisibleAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素が見えるまでスクロール（終端到達で即失敗）"
+      },
+      "properties": {
+        "action": {
+          "const": "scrollUntilVisible"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Target element to bring into view"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "container": {
+          "$ref": "#/definitions/elementId",
+          "description": "Scrollable container to scroll. Omitted, each platform picks its own surface: web the target's nearest scrolling ancestor (else the window), iOS the first scroll view, Android a swipe across the middle of the app window. Name it for a scroll area smaller than the screen."
+        },
+        "direction": {
+          "$ref": "#/definitions/direction",
+          "default": "down",
+          "description": "Direction the content moves toward (down reveals content below)"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 20000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "swipeAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素をスワイプ"
+      },
+      "properties": {
+        "action": {
+          "const": "swipe"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "waitForAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素の出現を待機"
+      },
+      "properties": {
+        "action": {
+          "const": "waitFor"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "waitForAnyAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "いずれかの要素の出現を待機"
+      },
+      "properties": {
+        "action": {
+          "const": "waitForAny"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/elementId"
+          },
+          "minItems": 1,
+          "description": "Element ids; the step succeeds when any of them appears"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "ids"
+      ],
+      "additionalProperties": false
+    },
+    "waitAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "指定時間待機"
+      },
+      "properties": {
+        "action": {
+          "const": "wait"
+        },
+        "ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Wait duration in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "ms"
+      ],
+      "additionalProperties": false
+    },
+    "backAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "戻る操作"
+      },
+      "properties": {
+        "action": {
+          "const": "back"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "hideKeyboardAction": {
+      "type": "object",
+      "description": "Dismiss the soft keyboard if one is visible (no-op when none). Needed when the keyboard covers the tap target and the field type has no return key (e.g. number-pad).",
+      "x-doc": {
+        "ja": "ソフトキーボードを閉じる（未表示なら no-op）"
+      },
+      "properties": {
+        "action": {
+          "const": "hideKeyboard"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "screenshotAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "スクリーンショットを保存"
+      },
+      "properties": {
+        "action": {
+          "const": "screenshot"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Screenshot file name (without extension)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "alertTapAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "アラート／ダイアログのボタンをタップ"
+      },
+      "properties": {
+        "action": {
+          "const": "alertTap"
+        },
+        "button": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Button text to tap in the alert dialog (e.g., 'OK', 'Cancel', 'Delete')"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds to wait for alert to appear"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "button"
+      ],
+      "additionalProperties": false
+    },
+    "selectOptionAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "ドロップダウン／ピッカーから選択"
+      },
+      "properties": {
+        "action": {
+          "const": "selectOption"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "value": {
+          "type": "string",
+          "description": "Option value (machine key) to select. Precedence when more than one selector is given: index, then value, then label — a step carrying 'index' selects by index and ignores 'value'/'label'; a step carrying 'value' without 'index' selects by value and ignores 'label'. All three drivers (ios, android, web) resolve in this order. Write exactly one selector per step."
+        },
+        "label": {
+          "type": "string",
+          "description": "Option label (visible text) to select. NOTE: for selectOption, 'label' keeps its original meaning (option text), NOT the universal step-name attribute — a free-text note placed here is treated as the option to select. Lowest precedence: used only when neither 'index' nor 'value' is present (order: index, value, label)."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Option index to select (0-based). Highest precedence: when present, 'value' and 'label' are ignored (order: index, value, label)."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "tapItemAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "コレクション内のアイテムをタップ"
+      },
+      "properties": {
+        "action": {
+          "const": "tapItem"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Collection element id; item is resolved as {id}_item_{index}, index counted across the Collection's sections"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Item index to tap (0-based), the cell's place counted across all the drawn sections in order, cells only (headers, footers and a grid's fillers are not counted): the first section's cells are 0, 1, ..., a later section's follow on after them. The libraries number it so from jsonui-cli 2.5.39 (SwiftJsonUI / KotlinJsonUI Dynamic: their versions of that release); before, each section restarted at 0 but a pager's, and a later section's cells could not be told from the first's"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "moveItemAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "コレクションの行を長押しでつかみ、ドラッグで並べ替える（reorderable な Collection）"
+      },
+      "description": "Reorder a reorderable Collection's row as a finger does (ticket jui-collection-drag-to-reorder): long-press the row `<id>_item_<from>` — on its handle when the step gives `handle` (the Collection's reorderHandle id): the element of that id inside the row, found as `within` finds an element — hold, drag to the row `<id>_item_<to>`, hold there 0.5 s and release so that the dragged row's centre is over it, at 3/4 of its height when moving down and 1/4 when moving up — the finger lets go that point plus the press's offset from the from row's centre, so a row held by a handle off its centre lands where a row held at its centre does (never on an edge: the rule of shared/core/reorder_vectors.json passes a row when the dragged centre goes beyond its edge on the dragged row's side, the top of a row below and the bottom of a row above, as iOS 27's own reordering does; 3/4 and 1/4 of the target row are past its edge and short of the next). Both rows must be on screen and inside the visible part of the list that scrolls them, and, on a side the list can still scroll towards, the press and the release at least 100 from the screen's edge and 56 from the edge of that list's visible part (pt on iOS, dp on Android, CSS px on the web) — nearer, the list scrolls by itself under the held finger (the libraries' auto-scroll band is 48 from the list's edges) and the row lands further; a list at its top or end does not scroll that way, so its first and last rows move. A row that is not so fails the step naming it (scroll it into view, towards the middle, first; the drag does not scroll). The web and Android read whether the list can scroll exactly; iOS cannot read a list's offset and judges it from the rows, missing a cut-off header or footer. Should the list scroll during the drag anyway, the step fails saying so (a row outside the moved range is checked to be where it was, or still there), never landing the row elsewhere in silence. A lazy list may not create a row it does not show (Android's LazyColumn): such a row fails as not found rather than as off screen. from == to fails before anything moves. v1 moves within the first section (`section` is 0), whose rows' addresses are their indices. The addresses count across the sections (from jsonui-cli 2.5.39), so a Collection of several sections has one element per address and its first section's rows move; moving a later section's row, whose address follows the cells of the sections before it, is v2. Where an address repeats (a library from before 2.5.39), the step fails naming it. The step performs the gesture only: assert its result as for any step — the rows' text in their new places, or the state the view model keeps. Press 1.0 s (the libraries' own drag begins at 0.5 s), move slowly. Which point is pressed and where the release lands are specs/vectors/move-item.json, run by the three drivers.",
+      "x-requires-driver": {
+        "android": "1.23.0",
+        "ios": "2.4.0",
+        "web": "1.20.0"
+      },
+      "properties": {
+        "action": {
+          "const": "moveItem"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "The Collection's id; a row is `{id}_item_{n}`"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The row to pick up (0-based, within the section)"
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Where the row is to go, its index after the move (0-based): the index onReorder receives as `to`"
+        },
+        "section": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 0,
+          "default": 0,
+          "description": "The section (v1: 0 only — a move within one section)"
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The reorderHandle's id when the Collection declares one: the element of that id inside the from row is pressed (as `within` finds an element). Without it the row's centre is pressed, which does not pick up a row of a Collection that has a handle."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds for the two rows to be found on screen"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "selectTabAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "タブを選択"
+      },
+      "properties": {
+        "action": {
+          "const": "selectTab"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Tab view element id; tab is resolved as {id}_tab_{index}"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tab index to select (0-based)"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "readTextAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素のテキストを実行時変数に読む（`@{変数名}` で後続参照）",
+        "platforms": "Slider は今の値の字（iOS: accessibility value〈0〜1・0〜100 は「37%」〉、Android: RangeInfo の current、Web: input の value）"
+      },
+      "properties": {
+        "action": {
+          "const": "readText"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "variable": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Runtime variable name; later steps reference it as @{name}"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "variable"
+      ],
+      "additionalProperties": false
+    },
+    "setSliderValueAction": {
+      "type": "object",
+      "description": "Put a Slider at a value, given in the slider's own units (not a 0..1 position). Before anything is moved the value is checked against the slider: outside its bounds, or off its step grid (the grid starts at the minimum), the step fails and names the bound or the two nearest values on the grid; a declared range or step that differs from the slider's own fails naming the slider's. Android sets the value through the accessibility SET_PROGRESS action and web through the range input (one input event and one change event, as a user's release): both land exactly, and the read-back is checked (Android fails naming the value its steps snapped to). iOS drags the thumb as a finger does (XCUITest has no way to set a slider's value): the step passes when the value it landed on is within the tolerance — half of `step` when given, else 0.5% of the range — and the landed value is recorded in the case's warnings whether it passed or failed. On iOS the bounds are not readable from the element: give `range`, or the driver moves the thumb to both ends to read them (the app sees those values), and a slider that reports its value as a percentage needs `range`. To check what the app keeps (and sends), assert `state` on the bound data; the `value` assertion checks the slider itself.",
+      "x-doc": {
+        "ja": "Slider を値に置く（値はスライダーの単位。範囲外・刻みから外れる値は触る前に失敗）",
+        "platforms": "iOS は指でつまみを引くのでちょうどにはならず、許容（`step` があれば step/2、無ければ範囲の 0.5%）に入れば成功、置けた値を警告に残す。iOS は `range` を書く（無ければ両端まで動かして読む）"
+      },
+      "x-requires-driver": {
+        "android": "1.22.0",
+        "ios": "2.3.0",
+        "web": "1.19.0"
+      },
+      "properties": {
+        "action": {
+          "const": "setSliderValue"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "The Slider's id"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "value": {
+          "type": "number",
+          "description": "The value to put the slider at, in the slider's units (e.g. 9 on a 1...10 slider)"
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[minimum, maximum] of the slider as the layout declares it. Required on iOS for a slider whose bounds are 0...1 or 0...100 (iOS reports those as a percentage); elsewhere on iOS it spares the probe to both ends. On Android and web it is compared with the slider's own bounds and a difference fails the step."
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The slider's step. The value must lie on the grid min + k*step. On iOS it also sets the tolerance (step/2), so a value the app rounds to the step is the value written; on web it is compared with the input's own step."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "repeatAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "ステップ群を繰り返す（`times`／`while` 併用可、安全上限 100 回）"
+      },
+      "properties": {
+        "action": {
+          "const": "repeat"
+        },
+        "times": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Iteration count (with 'while': acts as the cap)"
+        },
+        "while": {
+          "$ref": "#/definitions/condition",
+          "description": "Loop while this condition holds (checked before each iteration; safety cap 100 when used alone)"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "minItems": 1
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "steps"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "times"
+          ]
+        },
+        {
+          "required": [
+            "while"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "retryAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "失敗時にブロック全体を再実行"
+      },
+      "properties": {
+        "action": {
+          "const": "retry"
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "description": "Number of retries after the first attempt (capped at 3 by design)"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "minItems": 1
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "setLocationAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "モック位置情報を設定",
+        "platforms": "iOS: SDK 依存 ／ Android: best effort ／ Web: setGeolocation"
+      },
+      "properties": {
+        "action": {
+          "const": "setLocation"
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "latitude",
+        "longitude"
+      ],
+      "additionalProperties": false
+    },
+    "addMediaAction": {
+      "type": "object",
+      "description": "Seed media fixtures into the device/library so the app can pick them. Android: inserted into the gallery (MediaStore); iOS: seeded into the photo library via PhotoKit — SIMULATOR ONLY (on a real device seeded assets would remain in the user's photo library) and the UITest runner needs a photos-add pre-grant (`xcrun simctl privacy <udid> grant photos-add <uitest-bundle-id>.xctrunner` — the jsonui-test CLI does this automatically); Web: set on a file input. Seeding accumulates across runs on the same simulator/emulator — assert on existence or app state after picking, never on counts. Supported types: png/jpg/jpeg/gif (photo) and mp4 (video)",
+      "x-doc": {
+        "ja": "メディアフィクスチャを端末に追加（png/jpg/jpeg/gif/mp4。蓄積するため件数でなく存在を検証）",
+        "platforms": "Android: ギャラリー（MediaStore）／ iOS: PhotoKit〈シミュレータ限定・photos-add 許可は CLI が自動付与〉／ Web: file input"
+      },
+      "properties": {
+        "action": {
+          "const": "addMedia"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "Media fixture paths. Android: resolved against the on-device media fixtures dir (files must be pushed there beforehand); iOS: resolved inside the UITest bundle, which is flat — use basenames (a subdirectory path that works on Android falls back to its basename on iOS); Web: resolved relative to the test file and set on a file input"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "Web: the file input to target (the input itself, or an element containing one). Omit to use the page's first input[type=file]"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Wait for the target element in ms (Web)"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "paths"
+      ],
+      "additionalProperties": false
+    },
+    "assertion": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/visibleAssertion"
+        },
+        {
+          "$ref": "#/definitions/notVisibleAssertion"
+        },
+        {
+          "$ref": "#/definitions/hiddenAssertion"
+        },
+        {
+          "$ref": "#/definitions/enabledAssertion"
+        },
+        {
+          "$ref": "#/definitions/disabledAssertion"
+        },
+        {
+          "$ref": "#/definitions/textAssertion"
+        },
+        {
+          "$ref": "#/definitions/countAssertion"
+        },
+        {
+          "$ref": "#/definitions/valueAssertion"
+        },
+        {
+          "$ref": "#/definitions/stateAssertion"
+        },
+        {
+          "$ref": "#/definitions/screenshotAssertion"
+        },
+        {
+          "$ref": "#/definitions/openedUrlAssertion"
+        },
+        {
+          "$ref": "#/definitions/screenAssertion"
+        }
+      ]
+    },
+    "assertionTimeout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Auto-wait timeout in milliseconds (default: runner defaultTimeout, 5000ms). Assertions poll every 100ms until the condition holds."
+    },
+    "visibleAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素がビューポート内に見えている（画面とすべてのスクロール容器の内側に縦横 1pt/px 以上。中心でなく一部で可。レイアウト上存在するだけでは不可）"
+      },
+      "properties": {
+        "assert": {
+          "const": "visible"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "notVisibleAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "`visible` の否定（不存在、非表示、またはビューポートの外）"
+      },
+      "properties": {
+        "assert": {
+          "const": "notVisible"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "hiddenAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素が描画されていない（不存在、gone、または自身か祖先が invisible / hidden）。位置に依らない: 画面外・スクロール外・モーダルの下・重なりの下・opacity 0・enabled:false は描画されている扱い"
+      },
+      "properties": {
+        "assert": {
+          "const": "hidden"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "enabledAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素が有効"
+      },
+      "properties": {
+        "assert": {
+          "const": "enabled"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "disabledAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素が無効"
+      },
+      "properties": {
+        "assert": {
+          "const": "disabled"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "textAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "テキストを検証（`equals`／`contains`）"
+      },
+      "properties": {
+        "assert": {
+          "const": "text"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "equals": {
+          "type": "string",
+          "description": "Exact text match"
+        },
+        "contains": {
+          "type": "string",
+          "description": "Partial text match"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "equals"
+          ]
+        },
+        {
+          "required": [
+            "contains"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "countAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "要素数を検証（`equals: 0` は不存在で成立）"
+      },
+      "properties": {
+        "assert": {
+          "const": "count"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "equals": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Expected element count"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id",
+        "equals"
+      ],
+      "additionalProperties": false
+    },
+    "valueAssertion": {
+      "type": "object",
+      "description": "Assert a Slider's current value, in the slider's units. Read from the element itself: Android's accessibility RangeInfo, the web input's value, iOS's accessibility value (a percentage reading is converted with `range`, which is then required). Passes when |read - equals| <= tolerance. The default tolerance is 1e-6 on Android and web; on iOS it is the setSliderValue tolerance (half of `step` when given, else 0.5% of the range), because an iOS slider is placed by a drag and reads back with three decimals. To check the value the app keeps or sends, assert `state` on the bound data instead: that is the app's own number, exactly.",
+      "x-doc": {
+        "ja": "Slider の今の値を検証（`equals` との差が許容以内。送られる値を厳密に見るなら bound の data を `state` で）",
+        "platforms": "iOS は既定の許容が setSliderValue と同じ（step/2 か範囲の 0.5%）。iOS で 0〜1・0〜100 のスライダーは `range` が要る"
+      },
+      "x-requires-driver": {
+        "android": "1.22.0",
+        "ios": "2.3.0",
+        "web": "1.19.0"
+      },
+      "properties": {
+        "assert": {
+          "const": "value"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "equals": {
+          "type": "number",
+          "description": "Expected value, in the slider's units"
+        },
+        "tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Largest accepted difference. Default 1e-6 on Android and web; on iOS half of `step` when given, else 0.5% of the range."
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[minimum, maximum] as for setSliderValue: needed on iOS to read a percentage and for the default tolerance"
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The slider's step: sets the iOS default tolerance (step/2)"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id",
+        "equals"
+      ],
+      "additionalProperties": false
+    },
+    "stateAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "ViewModel の data を検証（`path` はドット記法。ハーネスの provider は不要 — JsonUI ライブラリ ≥ SwiftJsonUI 10.30.0 / KotlinJsonUI 2.44.0 の state ブリッジを読む）"
+      },
+      "properties": {
+        "assert": {
+          "const": "state"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dot-notation path into the screen's Data as the state bridge publishes it (e.g., 'user.isLoggedIn'; a decimal segment indexes an array, 'tags.0'). The screen is the screen under test, or in a flow the step's `screen` (else the last one named). No harness provider is needed with SwiftJsonUI >= 10.30.0 / KotlinJsonUI >= 2.44.0 / the jsonui-cli of the same train; a provider the harness passes still wins."
+        },
+        "equals": {
+          "description": "Expected value (any type)"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "path",
+        "equals"
+      ],
+      "additionalProperties": false
+    },
+    "screenshotAssertion": {
+      "type": "object",
+      "x-doc": {
+        "ja": "ベースライン画像とのビジュアル比較（ベースライン無しは新規作成＋警告）"
+      },
+      "properties": {
+        "assert": {
+          "const": "screenshot"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Baseline name; compared against <baselineDir>/<platform>/<name>.png. Missing baseline is created and the step passes with a warning."
+        },
+        "cropId": {
+          "$ref": "#/definitions/elementId",
+          "description": "Crop the capture to this element's bounding box before comparing"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 98.0,
+          "description": "Required similarity percentage (100 = pixel-perfect)"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "step": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/action"
+        },
+        {
+          "$ref": "#/definitions/assertion"
+        }
+      ]
+    },
+    "mocksScenarioMap": {
+      "type": "object",
+      "description": "Map of OpenAPI operationId -> mock scenario name",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "setMocksAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "エンドポイント（operationId）ごとのモックシナリオを切り替え"
+      },
+      "properties": {
+        "action": {
+          "const": "setMocks"
+        },
+        "mocks": {
+          "$ref": "#/definitions/mocksScenarioMap"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "mocks"
+      ],
+      "additionalProperties": false
+    },
+    "setViewportAction": {
+      "type": "object",
+      "description": "Resize the viewport to sweep responsive breakpoints. Web only (page.setViewportSize); iOS/Android cannot freely resize a running app, so the action is a no-op with a warning there — pair dependent asserts with a matching 'when.responsive' so they skip cleanly on platforms that cannot honor the resize",
+      "x-doc": {
+        "ja": "ビューポートをリサイズ（レスポンシブ検証）",
+        "platforms": "Web のみ。iOS/Android は警告付き no-op（`when.responsive` でゲート）"
+      },
+      "properties": {
+        "action": {
+          "const": "setViewport"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Viewport width in logical pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Viewport height in logical pixels"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "setOrientationAction": {
+      "type": "object",
+      "description": "Rotate to the given orientation (iOS: XCUIDevice; Android: UiDevice; Web: swaps viewport width/height in mobile-emulation contexts, otherwise a no-op with a warning)",
+      "x-doc": {
+        "ja": "画面の向きを変更",
+        "platforms": "iOS: XCUIDevice ／ Android: UiDevice ／ Web: モバイルエミュレーション時のみ（他は警告付き no-op）"
+      },
+      "properties": {
+        "action": {
+          "const": "setOrientation"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "landscape"
+          ],
+          "description": "Target orientation"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "orientation"
+      ],
+      "additionalProperties": false
+    },
+    "emitHookAction": {
+      "type": "object",
+      "description": "Call a browser-side hook the app registered on window.__jsonuiTestHooks (e.g. an RTDB mock emitter). Web only; iOS/Android no-op with a warning — gate dependent steps with 'when.platform: web'",
+      "x-doc": {
+        "ja": "アプリが登録したテストフックを呼び出す（`window.__jsonuiTestHooks`）",
+        "platforms": "Web のみ。iOS/Android は警告付き no-op（`when.platform` でゲート）"
+      },
+      "properties": {
+        "action": {
+          "const": "emitHook"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Hook name registered on window.__jsonuiTestHooks"
+        },
+        "hookArgs": {
+          "type": "array",
+          "description": "Positional arguments passed to the hook"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "openedUrlAssertion": {
+      "type": "object",
+      "description": "Assert the most recent window.open call recorded by the runner's spy. Web only; gate with 'when.platform: web' in cross-platform tests",
+      "x-doc": {
+        "ja": "直近の `window.open` 呼び出しの URL を検証",
+        "platforms": "Web のみ（`when.platform: web` でゲート）"
+      },
+      "properties": {
+        "assert": {
+          "const": "openedUrl"
+        },
+        "equals": {
+          "type": "string",
+          "description": "Exact URL to match"
+        },
+        "contains": {
+          "type": "string",
+          "description": "URL substring to match"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "equals"
+          ]
+        },
+        {
+          "required": [
+            "contains"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "screenAssertion": {
+      "type": "object",
+      "properties": {
+        "assert": {
+          "const": "screen"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical id of the screen expected to be displayed. Distinct from the step-level 'screen' key, which says where the step runs: during a transition the two legitimately differ."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max wait in ms for the screen to appear (default: screenTransitionTimeout)"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        }
+      },
+      "required": [
+        "assert",
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "Assert the named screen is displayed. Does NOT assert exclusivity: embedded screens, split panes and tab hosts legitimately show several at once.",
+      "x-doc": {
+        "ja": "指定画面の表示を検証（排他は主張しない — 埋め込み／タブ等で複数同時あり得る）"
+      }
+    }
+  }
+}

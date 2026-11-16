@@ -1,0 +1,635 @@
+# frozen_string_literal: true
+
+require 'rexml/document'
+require 'json'
+require_relative '../../core/config_manager'
+require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/string_manager_core'
+require_relative '../../core/string_literals'
+require_relative '../../core/kotlin_identifier'
+require_relative 'binding_expression'
+
+module KjuiTools
+  module Compose
+    module Helpers
+      class ResourceResolver
+        class << self
+          # Android drawable resource names must match [a-z][a-z0-9_.]* with
+          # no dots in the generated R reference. Strip common image
+          # extensions and sanitize everything else (e.g. iOS SF-Symbol
+          # names like "star.fill" -> "star_fill") so the emitted
+          # `R.drawable.<name>` always compiles.
+          def drawable_name(raw)
+            name = raw.to_s.sub(/\.(png|jpg|jpeg|webp)\z/i, '')
+            name = name.downcase.gsub(/[^a-z0-9_]/, '_')
+            name = "img_#{name}" if name.empty? || name !~ /\A[a-z]/
+            name
+          end
+
+          # The drawable a written name draws, as an Int expression. A name
+          # with a colour mode's own picture (`ic_star.dark.svg` beside
+          # `ic_star.svg`, jui build's image_modes.json beside colors.json)
+          # asks ColorManager, which reads its current mode — so the screen
+          # recomposes with the mode, as a written colour does. Any other
+          # name is `R.drawable.<name>`, as it always was. The pictures are
+          # named here as R references, so a resource shrinker keeps them.
+          def drawable_id(raw)
+            name = drawable_name(raw)
+            by_mode = image_modes_by_drawable[name]
+            return "R.drawable.#{name}" unless by_mode
+
+            pairs = by_mode.sort.map { |mode, asset| "#{quote(mode)} to R.drawable.#{drawable_name(asset)}" }
+            "com.kotlinjsonui.generated.ColorManager.compose.drawable(R.drawable.#{name}, #{pairs.join(', ')})"
+          end
+
+          # A bound name is looked up at run time; with any mode's picture in
+          # the project, ColorManager names the current mode's first.
+          def bound_drawable_name(name_expr)
+            return name_expr if image_modes_by_drawable.empty?
+
+            "com.kotlinjsonui.generated.ColorManager.compose.drawableName(#{name_expr})"
+          end
+
+          # {drawable name => {mode => the mode's picture}} from
+          # image_modes.json; empty without the file.
+          def image_modes_by_drawable
+            images = cached_image_modes['images']
+            return {} unless images.is_a?(Hash)
+
+            images.each_with_object({}) do |(name, by_mode), acc|
+              acc[drawable_name(name)] = by_mode if by_mode.is_a?(Hash) && !by_mode.empty?
+            end
+          end
+
+          def cached_image_modes
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            file = File.join(layouts_dir, 'Resources', 'image_modes.json')
+            return {} unless File.exist?(file)
+
+            JSON.parse(File.read(file))
+          rescue JSON::ParserError
+            {}
+          end
+
+          # Drawn when a bound name is no drawable: getIdentifier answers 0,
+          # and painterResource(0) throws. Spelled in full, so no import.
+          NO_DRAWABLE = 'androidx.compose.ui.graphics.painter.ColorPainter(androidx.compose.ui.graphics.Color.Transparent)'
+
+          # A drawable the layout names, as a Painter. A written name is
+          # `painterResource(id = R.drawable.<name>)`, as it always was. A
+          # binding is the name the data holds, looked up at run time; it was
+          # frozen into a drawable name (`R.drawable.img___icon_`), which no
+          # app carries, and the build stopped. *empty* is what an unknown
+          # name draws: nothing by default, `null` where the slot is Optional.
+          def drawable_painter(raw, required_imports, empty: NO_DRAWABLE)
+            required_imports&.add(:painter_resource)
+            unless BindingExpression.whole_binding?(raw)
+              required_imports&.add(:r_class)
+              return "painterResource(id = #{drawable_id(raw)})"
+            end
+
+            required_imports&.add(:local_context)
+            name = bound_string_value(raw)
+            "LocalContext.current.let { ctx -> ctx.resources.getIdentifier(#{bound_drawable_name(name)}, \"drawable\", ctx.packageName) }" \
+              ".let { id -> if (id != 0) painterResource(id = id) else #{empty} }"
+          end
+
+          # A drawable the layout names, as an Int resource id
+          # (KjuiNetworkImage's placeholder / error / fallback slots). A written
+          # name is drawable_id's; a binding is the name the data holds, looked
+          # up at run time, and an unknown name is 0, which the slot reads as
+          # no image (as the null painter it replaces did).
+          def drawable_res_id(raw, required_imports)
+            unless BindingExpression.whole_binding?(raw)
+              required_imports&.add(:r_class)
+              return drawable_id(raw)
+            end
+
+            required_imports&.add(:local_context)
+            name = bound_string_value(raw)
+            "LocalContext.current.let { ctx -> ctx.resources.getIdentifier(#{bound_drawable_name(name)}, \"drawable\", ctx.packageName) }"
+          end
+
+          # A whole binding in a String slot, as a non-null Kotlin String
+          # (`data.x`, or `(data.x ?: "")` for a property with no default);
+          # nil for anything that is not a whole binding.
+          def bound_string_value(raw)
+            return nil unless BindingExpression.whole_binding?(raw)
+
+            inner = BindingExpression.extract_inner(raw)
+            value = BindingExpression.value_access(inner)
+            return value unless value.start_with?('data.') &&
+                                BindingExpression.property_nullable?(BindingExpression.parse(inner).path)
+
+            "(#{value} ?: \"\")"
+          end
+
+          # Thread-local storage for data definitions during build
+          def data_definitions
+            Thread.current[:kjui_data_definitions] || {}
+          end
+
+          def data_definitions=(definitions)
+            Thread.current[:kjui_data_definitions] = definitions
+          end
+
+          # A Collection cell's layout (its root node, as the layout file
+          # holds it), by the name a section's `cell` / `cellClasses` gives:
+          # the distributed copy under the layouts directory, found as
+          # find_cell_subdirectory finds it (`<name>.json` anywhere below).
+          # nil when there is none. `cell_layouts=` sets them (tests, and a
+          # caller that already holds them); what is read from disk is kept
+          # for the build (thread-local, as data_definitions).
+          def cell_layouts=(layouts)
+            Thread.current[:kjui_cell_layouts] = layouts
+          end
+
+          def cell_layout(name)
+            return nil unless name.is_a?(String) && !name.empty?
+
+            layouts = (Thread.current[:kjui_cell_layouts] ||= {})
+            return layouts[name] if layouts.key?(name)
+
+            layouts[name] = read_cell_layout(name)
+          end
+
+          def read_cell_layout(name)
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            return nil unless File.directory?(layouts_dir)
+
+            snake = name.split('/').last.gsub(/([a-z0-9])([A-Z])/, '\\1_\\2').downcase
+            direct = File.join(layouts_dir, "#{name}.json")
+            file = File.file?(direct) ? direct : Dir.glob(File.join(layouts_dir, '**', "#{snake}.json")).min
+            return nil unless file
+
+            JSON.parse(File.read(file))
+          rescue JSON::ParserError, SystemCallError
+            nil
+          end
+
+          # The strings.json sections the layout being generated owns
+          # (StringManagerCore#namespace_candidates), kjui's relative-path
+          # spelling first. Thread-local per-build state, the same channel
+          # data_definitions uses. Empty means "no layout context" and
+          # resolution falls back to strings.json order, which is what
+          # every caller got before.
+          def current_namespaces
+            Thread.current[:kjui_string_namespaces] || []
+          end
+
+          def current_namespaces=(namespaces)
+            Thread.current[:kjui_string_namespaces] = namespaces
+          end
+
+          # Announce the layout about to be generated, as a path relative
+          # to the layouts directory.
+          def begin_layout(relative_path)
+            self.current_namespaces = JsonUIShared::StringManagerCore.namespace_candidates(
+              relative_path, preferred: :relative
+            )
+          rescue StandardError
+            self.current_namespaces = []
+          end
+
+          # Check if a property has a default value (non-optional)
+          def has_default_value?(property_name)
+            return false unless data_definitions[property_name]
+            !data_definitions[property_name]['defaultValue'].nil?
+          end
+
+          def get_property_class(property_name)
+            return nil unless data_definitions[property_name]
+            data_definitions[property_name]['class']
+          end
+
+          # Does the GENERATED property have a nullable type? Mirrors
+          # DataModelUpdater's own rule (`var x: T? = null` when there is no
+          # usable default, or when the declared class already ends in `?`),
+          # because an emitter that guesses differently from the model emits
+          # calls the model's own output rejects.
+          #
+          # `has_default_value?` is not the same question and must not be
+          # substituted: it misses the `'nil'` spelling and a class declared
+          # `String?`. That gap is harmless where it is used (a missing
+          # interpolation default still compiles) and is NOT harmless here —
+          # dropping a safe call on a property the model declared nullable is
+          # a build failure, measured downstream 2026-09-03.
+          #
+          # An unknown property (a dotted or bracketed path, a name with no
+          # data section) is treated as nullable: the conservative answer
+          # keeps the safe call, which compiles either way.
+          def generated_property_nullable?(property_name)
+            definition = data_definitions[property_name]
+            return true unless definition
+
+            class_type = definition['class'].to_s
+            return true if class_type.strip.end_with?('?')
+
+            default_value = definition['defaultValue']
+            default_value.nil? || default_value == 'nil'
+          end
+
+          # Don't cache - just load each time to avoid issues
+          def cached_config
+            Core::ConfigManager.load_config
+          end
+
+          def cached_source_path
+            Core::ProjectFinder.get_full_source_path || Dir.pwd
+          end
+          
+          # Process text with data binding and resource resolution
+          def process_text(text, required_imports = nil)
+            return quote(text) unless text.is_a?(String)
+
+            # Handle data binding expressions — canonical parse + emit
+            # (nullability-aware `?:` fallback, real `??` default evaluation)
+            # is centralized in BindingExpression.
+            if (inner = BindingExpression.extract_inner(text))
+              return BindingExpression.interpolated_access(inner)
+            end
+            
+            # Skip resource resolution if we're in the extraction phase
+            # (Resources directory doesn't exist yet)
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            resources_dir = File.join(layouts_dir, 'Resources')
+            
+            # If Resources directory doesn't exist, we're in extraction phase
+            # Just return quoted text
+            return quote(text) unless File.exist?(resources_dir)
+            
+            # Try to resolve as a string resource
+            resolved = resolve_string(text, cached_config, cached_source_path)
+            if resolved.include?('stringResource')
+              required_imports&.add(:string_resource)
+              required_imports&.add(:r_class)
+            end
+            resolved
+          end
+          
+          # Process color with resource resolution
+          def process_color(color, required_imports = nil)
+            return nil unless color.is_a?(String)
+
+            # Handle data binding expressions - convert to data property access.
+            # Canonical parse via BindingExpression so a `?? 'default'` no
+            # longer corrupts the property path; a string default feeds the
+            # ColorManager name fallback for nullable String properties.
+            if color.start_with?('@{') && color.end_with?('}')
+              parsed = BindingExpression.parse(color[2..-2])
+              variable = parsed.path
+              prop_class = get_property_class(variable)
+
+              # String type: resolve color name at runtime via ColorManager
+              if prop_class == 'String'
+                required_imports&.add(:color_manager)
+                if has_default_value?(variable)
+                  return "ColorManager.compose.color(data.#{variable}) ?: Color.Unspecified"
+                else
+                  fallback = parsed.has_default && parsed.default.is_a?(String) ? parsed.default : ''
+                  return "ColorManager.compose.color(data.#{variable} ?: #{BindingExpression.quote(fallback)}) ?: Color.Unspecified"
+                end
+              end
+
+              # Color type: use directly
+              if has_default_value?(variable)
+                return "data.#{variable}"
+              else
+                return "data.#{variable} ?: Color.Unspecified"
+              end
+            end
+            
+            # Skip resource resolution if we're in the extraction phase
+            # (Resources directory doesn't exist yet)
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            resources_dir = File.join(layouts_dir, 'Resources')
+            
+            # If Resources directory doesn't exist, we're in extraction phase
+            # Just return standard color parsing
+            unless File.exist?(resources_dir)
+              return "Color(android.graphics.Color.parseColor(#{quote(color)}))"
+            end
+            
+            resolved = resolve_color(color, cached_config, cached_source_path)
+            if resolved&.include?('colorResource')
+              required_imports&.add(:color_resource)
+              required_imports&.add(:r_class)
+            end
+            resolved
+          end
+
+          # Data-default face entry (data_model_updater): the same
+          # own-section / fully-qualified / value resolution chain the view
+          # face uses, but SILENT — a defaultValue is not declared display
+          # text (sentinel vocabulary lives there), so an unresolved literal
+          # is an answer, not a warning. Returns the full resource key or
+          # nil.
+          def resolve_data_default_key(text, config, source_path)
+            find_string_key(text, config, source_path, warnings: false)
+          end
+
+          private
+
+          # Check if a string resource exists in strings.xml
+          def resolve_string(text, config, source_path)
+            return quote(text) unless text.is_a?(String)
+            
+            # Skip if it's a data binding expression
+            return quote(text) if text.start_with?('@{') || text.start_with?('${')
+            
+            # Try to find the string in strings.xml
+            string_key = find_string_key(text, config, source_path)
+            
+            if string_key
+              # Return stringResource reference
+              "stringResource(R.string.#{string_key})"
+            else
+              # Return quoted string
+              quote(text)
+            end
+          end
+          
+          # Check if a color resource exists
+          def resolve_color(color, config, source_path)
+            return nil unless color.is_a?(String)
+
+            # Skip if it's a data binding expression
+            return "Color(android.graphics.Color.parseColor(#{quote(color)}))" if color.start_with?('@{') || color.start_with?('${')
+
+            # Try to find the color in colors.json
+            color_key = find_color_key(color, config, source_path)
+
+            if color_key
+              # Through ColorManager first, so a palette colour follows the mode
+              # setMode chose and the OS mode compose.FollowSystem() hands over;
+              # colorResource alone followed values-night only and never a
+              # chosen mode (ticket rjui-color-mode-never-sets-data-theme).
+              "(com.kotlinjsonui.generated.ColorManager.compose.color(#{quote(color_key)}) ?: colorResource(R.color.#{color_key}))"
+            elsif parseable_color_literal?(color)
+              # A hex string or one of the names android.graphics.Color knows.
+              # These have always worked and keep their exact emitted form.
+              "Color(android.graphics.Color.parseColor(#{quote(color)}))"
+            else
+              # A palette name that is in no palette. `parseColor` accepts hex
+              # and its own 23 names and throws IllegalArgumentException on
+              # anything else, so emitting it here moved an authoring mistake
+              # to the moment the composable is composed — and a colour behind
+              # a `visibility` binding crashes only once the error it styles
+              # is finally shown. Say it at build time and emit a colour that
+              # composes.
+              warn_undefined_color(color)
+              'Color.Unspecified'
+            end
+          end
+
+          # The names android.graphics.Color.parseColor resolves (AOSP
+          # Color.sColorNameMap). Anything else it throws on.
+          ANDROID_COLOR_NAMES = %w[
+            black darkgray gray lightgray white red green blue yellow cyan
+            magenta aqua fuchsia darkgrey grey lightgrey lime maroon navy
+            olive purple silver teal
+          ].freeze
+
+          def parseable_color_literal?(color)
+            return true if color.start_with?('#')
+
+            ANDROID_COLOR_NAMES.include?(color.downcase)
+          end
+
+          # Once per name per build. The same undefined colour across forty
+          # layouts is one mistake, and forty copies of one finding is how a
+          # build log stops being read.
+          def warn_undefined_color(color)
+            warned = (Thread.current[:kjui_warned_colors] ||= {})
+            return if warned[color]
+
+            warned[color] = true
+            Core::Logger.warn(
+              "Color '#{color}' is not defined in colors.json — " \
+              'android.graphics.Color.parseColor would throw at runtime, so ' \
+              'Color.Unspecified is emitted instead. Add it to colors.json ' \
+              '(every mode) or use a hex value.'
+            )
+          end
+
+          private
+          
+          def cached_strings_data
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            strings_file = File.join(layouts_dir, 'Resources', 'strings.json')
+            
+            return {} unless File.exist?(strings_file)
+            
+            begin
+              JSON.parse(File.read(strings_file))
+            rescue JSON::ParserError
+              {}
+            end
+          end
+          
+          def cached_colors_data
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            colors_file = File.join(layouts_dir, 'Resources', 'colors.json')
+            
+            return {} unless File.exist?(colors_file)
+            
+            begin
+              JSON.parse(File.read(colors_file))
+            rescue JSON::ParserError
+              {}
+            end
+          end
+          
+          # The resource name of a text's string: the strings.json spelling
+          # (`<namespace>_<key>`), as strings.xml writes it — a name that
+          # would start with a digit takes `_` (Core::KotlinIdentifier;
+          # string_manager.rb writes the same name).
+          def find_string_key(text, config, source_path, warnings: true)
+            key = find_string_key_as_spelled(text, config, source_path, warnings: warnings)
+            key && Core::KotlinIdentifier.resource_name(key)
+          end
+
+          def find_string_key_as_spelled(text, config, source_path, warnings: true)
+            strings_data = cached_strings_data
+
+            # 1. Check if text matches a key in strings.json (e.g., "welcome_back"
+            # matches login.welcome_back) — but ONLY within sections this layout
+            # owns. The fully-qualified form below names its section explicitly,
+            # so a foreign hit there is a deliberate reference; a BARE key
+            # hitting a foreign section is a collision, not a reference (the
+            # ruling sjui's key lookup already carries). Scanning every section
+            # here resolved a cell's bare key through its screen's section and
+            # the two platforms answered differently — kjui showed the right
+            # text while sjui shipped the raw key (asymmetric-resolution
+            # filing, 2026-08-11).
+            current_namespaces.each do |namespace|
+              entries = strings_data[namespace]
+              next unless entries.is_a?(Hash)
+
+              return "#{namespace}_#{text}" if entries.key?(text)
+            end
+
+            # 2. Check if text is already a full resource key (e.g., "login_welcome_back")
+            strings_data.each do |file_prefix, file_strings|
+              next unless file_strings.is_a?(Hash)
+
+              file_strings.each do |key, _value|
+                full_key = "#{file_prefix}_#{key}"
+                if full_key == text
+                  return text
+                end
+              end
+            end
+
+            # 3. Search by value match (e.g., "Email address" matches the value in strings.json)
+            resolved = JsonUIShared::StringManagerCore.resolve_string_reference(
+              strings_data, text, current_namespaces
+            )
+            if resolved
+              report_string_namespace(text, resolved)
+              return "#{resolved['namespace']}_#{resolved['key']}"
+            end
+
+            # 4. Fallback: check strings.xml directly for snake_case/single-word text
+            # This handles cases where text is a resource key name not yet in strings.json
+            # e.g., "welcome_back" might exist in strings.xml as "login_welcome_back".
+            # The prefix scan is own-sections-only for the same reason step 1 is —
+            # a cross-section prefix here would re-open the bare-key side door
+            # through the XML. The exact match stays global: a full key names
+            # its section itself.
+            if text.match?(/^[a-zA-Z][a-zA-Z0-9_]*$/)
+              strings_xml_path = File.join(source_path, config['source_directory'] || 'src/main', 'res/values/strings.xml')
+              if File.exist?(strings_xml_path)
+                xml_content = File.read(strings_xml_path)
+                current_namespaces.each do |namespace|
+                  full_key = "#{namespace}_#{text}"
+                  if xml_content.include?("name='#{full_key}'") || xml_content.include?("name=\"#{full_key}\"")
+                    return full_key
+                  end
+                end
+                # Also check exact match (e.g., "no_favorites_yet" as-is)
+                if xml_content.include?("name='#{text}'") || xml_content.include?("name=\"#{text}\"")
+                  return text
+                end
+              end
+            end
+
+            report_foreign_bare_key(text, strings_data) if warnings
+            nil
+          end
+
+          # A bare key declared ONLY under sections this layout does not own
+          # is a broken reference under the own-section canon — say so at emit
+          # time instead of silently quoting the literal, which puts the raw
+          # key on screen. Warning (not error) so `jui build`'s zero-warning
+          # invariant gates it, the same channel as report_string_namespace.
+          def report_foreign_bare_key(text, strings_data)
+            return unless strings_data.is_a?(Hash)
+            # Letters, not lowercase letters: `find_string_key` above resolves
+            # a key by membership whatever its spelling, so a foreign key with
+            # a capital reached this guard, failed it, and was quoted as a raw
+            # literal with nothing said — the one case where the identifier
+            # ships is the one case that was silent. (rjui gated its whole
+            # lookup on the lowercase spelling and published two such keys as
+            # page text; this is the same hole, warning-side only.)
+            return unless text.match?(/\A[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*_?\z/)
+
+            own = current_namespaces
+            # map + compact, not filter_map — Ruby 2.6 (see section_extractor).
+            foreign = strings_data.map do |namespace, entries|
+              namespace if entries.is_a?(Hash) && entries.key?(text) && !own.include?(namespace)
+            end.compact
+            return if foreign.empty?
+
+            Core::Logger.warn(
+              "Bare key #{text.inspect} is declared only in foreign strings.json " \
+              "section(s) #{foreign.join(', ')} — a bare key resolves within the " \
+              "layout's own sections (#{own.join(' / ')}). Use the fully-qualified " \
+              "'<section>_<key>' spelling for a deliberate cross-section reference, " \
+              "or register the key under the layout's own section (jsonui-localize)."
+            )
+          end
+          
+          # Both conditions are SSoT damage rather than build errors, so
+          # they warn — `jui build`'s zero-warning invariant makes them
+          # gate, and `jui lint-strings` reports the same pair statically.
+          def report_string_namespace(text, resolved)
+            candidates = resolved['candidates'] || []
+            if candidates.length > 1
+              Core::Logger.warn(
+                "String #{text.inspect} is declared in #{candidates.length} strings.json " \
+                "sections (#{candidates.join(', ')}) — resolved to #{resolved['namespace']}. " \
+                'Two sections holding one string is a forked SSoT: delete the duplicate so ' \
+                'every platform reads the same key.'
+              )
+            end
+
+            return unless resolved['foreign'] && current_namespaces.any?
+
+            Core::Logger.warn(
+              "String #{text.inspect} resolved to section #{resolved['namespace']}, which this " \
+              "layout does not own (#{current_namespaces.join(' / ')}) — the SSoT never " \
+              "declared it here. To share one string across layouts, name the KEY instead of the value: \"text\": \"<section>_<key>\" or \"defaultValue\": \"<section>_<key>\". Writing the value makes the reverse lookup land in another section; declaring it here as well makes a second declaration, which is the duplicate warning — the two repairs regenerate each other. If the string is this layout's own, declare it here (jsonui-localize)."
+            )
+          end
+
+          def find_color_key(color, config, source_path)
+            colors_data = cached_colors_data
+            
+            # First check if the color itself is a key in colors.json. A `_`
+            # key (`_comment`) is a note, not a colour
+            # (ColorManagerCore.note_key?).
+            if colors_data.has_key?(color) && !color.start_with?('_')
+              return color
+            end
+            
+            # If it's a hex color, normalize and search by value
+            if color.match?(/^#?[A-Fa-f0-9]{6,8}$/)
+              normalized_color = normalize_color(color)
+              
+              # Search through colors by value
+              colors_data.each do |key, value|
+                if normalize_color(value) == normalized_color
+                  return key
+                end
+              end
+            end
+            
+            # Also check colors.xml for predefined Android colors
+            # These are colors that might be defined in colors.xml but not in colors.json
+            colors_xml_path = File.join(source_path, config['source_directory'] || 'src/main', 'res/values/colors.xml')
+            if File.exist?(colors_xml_path)
+              # Quick check - if the color name exists in colors.xml
+              # we'll assume it's available (proper check would parse XML)
+              xml_content = File.read(colors_xml_path)
+              if xml_content.include?("name='#{color}'") || xml_content.include?("name=\"#{color}\"")
+                return color
+              end
+            end
+            
+            nil
+          end
+          
+          def normalize_color(color)
+            return nil unless color.is_a?(String)
+            
+            # Remove # if present and convert to lowercase
+            color.sub(/^#/, '').downcase
+          end
+          
+          # A Kotlin string literal — the one escaper (`$` included).
+          def quote(text)
+            JsonUIShared::StringLiterals.kotlin(text)
+          end
+        end
+      end
+    end
+  end
+end

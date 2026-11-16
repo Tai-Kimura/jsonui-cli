@@ -1,0 +1,400 @@
+{
+  "about": "What this repository (and the tools next to it) relies on in Claude Code. One entry per reliance: what it is, the files that use it, the probe that checks it (tools/cc_watch/probes.py), what breaks when it changes. Paths are repository-relative; files outside the repository are written from the home folder (~/...). The gate (tests/test_cc_dependency_ledger.py) fails when a file in an area that faces the CLI (marks.FACING) is neither in an entry nor in not_relying with a reason (default-deny), when a file in both, when a not_relying path is gone or has no reason, a file that matches a mark (marks.py) is in no entry, when an entry names a probe that does not exist, or when a listed repository file no longer exists or no longer matches.",
+  "entries": [
+    {
+      "id": "transcript",
+      "name": "会話の記録（~/.claude/projects/<project>/<session>.jsonl）の形",
+      "relies_on": "record types user / assistant, message.content blocks (text, tool_use, tool_result, thinking, image), message.usage, timestamp, cwd, sessionId; the folder layout under the config folder",
+      "probe": "transcript_shape",
+      "impact": "viz: 応答の履歴が空になる、利用量（トークン）が数えられない、ロボットの状態がずれる",
+      "files": [
+        "jui_tools/jui_cli/viz/sources/transcripts.py",
+        "jui_tools/jui_cli/viz/sources/history.py",
+        "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/__init__.py",
+        "jui_tools/tools/viz_promo/capture.py",
+        "jui_tools/tools/viz_promo/rooms.py"
+      ]
+    },
+    {
+      "id": "model-prices",
+      "name": "モデル名と単価（お札の概算: message.model・message.usage の 4 種類のトークン・公式の価格のページ）",
+      "relies_on": "message.model as the API's model ID; message.usage input_tokens / cache_creation_input_tokens (with cache_creation.ephemeral_5m_input_tokens / ephemeral_1h_input_tokens) / cache_read_input_tokens / output_tokens, speed, inference_geo; one message written once per content block with the same usage (billed once by message.id); a subagent's responses in <session>/subagents/agent-<id>.jsonl; the prices of https://platform.claude.com/docs/en/about-claude/pricing (copied into prices.json with the day checked)",
+      "probe": "price_table_models",
+      "impact": "viz: 新しいモデルのお札に金額が出ない（? とトークン数になる。単価の表に足すまで）。usage の形が変わると金額がずれるか出ない",
+      "files": [
+        "jui_tools/jui_cli/viz/prices.py",
+        "jui_tools/jui_cli/viz/prices.json",
+        "jui_tools/jui_cli/viz/web/js/54-bills.js"
+      ]
+    },
+    {
+      "id": "hooks",
+      "name": "hooks の入力の形とイベント名",
+      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / StopFailure (its error — rate_limit is the plan's usage limit, the robot dazed — and last_assistant_message) / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",
+      "probe": "hook_input_shape",
+      "impact": "viz: ロボットが出ない・状態が動かない、許可と質問の中継が止まる。session-recovery と agents の hook が記録を取れない",
+      "files": [
+        "jui_tools/jui_cli/viz/forward.py",
+        "jui_tools/jui_cli/viz/hooks_installer.py",
+        "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/sent_copies.py",
+        "jui_tools/jui_cli/viz/recorder.py",
+        "jui_tools/jui_cli/viz/server.py",
+        "jui_tools/jui_cli/viz/permissions.py",
+        "jui_tools/jui_cli/viz/questions.py",
+        "jui_tools/jui_cli/viz/calls.py",
+        "jui_tools/jui_cli/viz/clockout.py",
+        "jui_tools/jui_cli/viz/gitbox.py",
+        "jui_tools/jui_cli/viz/sources/tasks.py",
+        "jui_tools/jui_cli/viz/web/js/20-core.js",
+        "jui_tools/jui_cli/viz/web/js/30-source-demo.js",
+        "jui_tools/jui_cli/viz/web/js/50-panel.js",
+        "jui_tools/jui_cli/viz/web/js/60-log.js",
+        "plugins/jui-viz/hooks/hooks.json",
+        "plugins/jui-viz/scripts/forward.py",
+        "plugins/jui-viz/scripts/session_env.sh",
+        "~/.claude/session-recovery/",
+        "~/.claude/agents/ (the agents' hooks)",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "tool-names",
+      "name": "ツールの名前（AskUserQuestion、Bash・Edit・Write ほか、mcp__<server>__<tool>）と AskUserQuestion の入力",
+      "relies_on": "the tool names viz keys on to pick a robot's pose, a question card, a permission card; the mcp__ prefix; AskUserQuestion's tool_input (questions, options); SendUserFile's tool_input.files (the paths it sends) and its tool_use_id, on PreToolUse / PostToolUse with the hook's cwd (viz/sent_copies.py copies the pictures then)",
+      "probe": "tool_names",
+      "impact": "viz: ロボットの姿勢がずれる、質問のカードと許可のカードが出ない",
+      "files": [
+        "jui_tools/jui_cli/viz/config.py",
+        "jui_tools/jui_cli/viz/robots.py",
+        "jui_tools/jui_cli/viz/questions.py",
+        "jui_tools/jui_cli/viz/permissions.py",
+        "jui_tools/jui_cli/viz/forward.py",
+        "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/sent_copies.py",
+        "jui_tools/jui_cli/viz/web/js/30-source-live.js",
+        "jui_tools/jui_cli/viz/web/js/50-panel.js",
+        "jui_tools/jui_cli/viz/web/js/60-log.js",
+        "plugins/jui-viz/scripts/forward.py"
+      ]
+    },
+    {
+      "id": "channels",
+      "name": "channels（--channels、--dangerously-load-development-channels、allowedChannelPlugins、通知の形）",
+      "relies_on": "the development-channels flag and the channel MCP server's notification (notifications/claude/channel), managed-settings allowedChannelPlugins / channelsEnabled; viz/callcmd.py picks --channels or the development flag (channels_flag)",
+      "probe": "channels_flags",
+      "impact": "viz: ページからのプロンプトの送信と許可の中継（channel）が止まる",
+      "files": [
+        "jui_tools/jui_cli/viz/channel.py",
+        "plugins/jui-viz/scripts/channel.py",
+        "jui_tools/jui_cli/viz/sources/launch.py",
+        "jui_tools/jui_cli/viz/sources/history.py",
+        "jui_tools/jui_cli/commands/viz_cmd.py",
+        "jui_tools/jui_cli/viz/web/js/50-panel.js",
+        "jui_tools/jui_cli/viz/web/js/55-history.js",
+        "jui_tools/jui_cli/viz/callcmd.py",
+        "jui_tools/tools/viz_promo/capture.py",
+        "jui_tools/jui_cli/viz/messaging.py",
+        "jui_tools/jui_cli/viz/slack_room.py",
+        "jui_tools/jui_cli/viz/web/js/57-slack-room.js"
+      ]
+    },
+    {
+      "id": "cli-args",
+      "name": "起動の引数（-n / --name、-p、--resume、--settings、--plugin-dir ほか）",
+      "relies_on": "the main command's options our launchers pass and our pages tell the user to type; the call bell's command line (viz/callcmd.py): `claude --channels plugin:jui-viz@jsonui --name=<name> <prompt>`, the --name=<value> form unmeasured on a real launch; the Slack intake's connector (viz/slack/fetch.py, source.mode connector): `claude -p <prompt> --output-format json --allowedTools mcp__claude_ai_Slack [--model <source.connectorModel>]`, run without a screen in <orchestrationDir>/.state, its stdout one JSON object whose \"result\" is the model's text (a JSON array cut out of it), the Slack connector's MCP server named claude_ai_Slack — the flags probed, the result's shape and the server's name unmeasured on a real launch",
+      "probe": "cli_flags",
+      "impact": "viz の呼び出し・名札（-n）、session-recovery の起こし直し（--resume）が動かない、Slack の取り込みを connector で取ると何も取れない（状態にエラー。api の取り込みは変わらない）",
+      "files": [
+        "jui_tools/jui_cli/viz/sources/launch.py",
+        "jui_tools/jui_cli/commands/viz_cmd.py",
+        "jui_tools/jui_cli/viz/channel.py",
+        "jui_tools/jui_cli/viz/permissions.py",
+        "jui_tools/jui_cli/viz/web/js/20-core.js",
+        "jui_tools/jui_cli/viz/web/js/40-scene.js",
+        "jui_tools/jui_cli/viz/web/js/50-panel.js",
+        "jui_tools/jui_cli/viz/web/js/55-history.js",
+        "plugins/jui-viz/scripts/channel.py",
+        "~/.claude/session-recovery/",
+        "jui_tools/jui_cli/viz/callcmd.py",
+        "jui_tools/tools/viz_promo/capture.py",
+        "jui_tools/jui_cli/viz/slack/fetch.py",
+        "jui_tools/jui_cli/viz/slack_room.py"
+      ]
+    },
+    {
+      "id": "plugin",
+      "name": "plugin と marketplace（plugin.json・marketplace.json、claude plugin marketplace update / claude plugin update）",
+      "relies_on": "the manifest shapes and the plugin sub-commands; ${CLAUDE_PLUGIN_ROOT} in the plugin's files",
+      "probe": "plugin_cli",
+      "impact": "jui-viz プラグインが入らない・更新されない",
+      "files": [
+        ".claude-plugin/marketplace.json",
+        "plugins/jui-viz/.claude-plugin/plugin.json",
+        "plugins/jui-viz/hooks/hooks.json"
+      ]
+    },
+    {
+      "id": "sigterm",
+      "name": "SIGTERM で終わり、SessionEnd が出ること",
+      "relies_on": "a session that gets SIGTERM ends and its SessionEnd hook runs; one SIGTERM right after SessionStart misses its SessionEnd now and then (10-31: 3 in 14 with 2.1.311, 3 in 20 with 2.1.314), so the probe takes three runs and only none of them is a change",
+      "probe": "sigterm_session_end",
+      "impact": "viz: 退勤ボタンで SIGTERM を送ってもセッションが終わらない。SessionEnd だけが来ないなら、ボタンはプロセスが消えたのを見て終わらせ、ボタン以外の終わりは end_vanished が拾う（session-recovery の台帳の行は残る）",
+      "files": [
+        "jui_tools/jui_cli/viz/clockout.py"
+      ]
+    },
+    {
+      "id": "bg-stop",
+      "name": "裏のセッションの止め方（claude stop <jobId>、~/.claude/sessions の kind: bg・jobId、claude agents の kind: background）",
+      "relies_on": "a session run by the daemon has kind bg and a jobId in its registry entry (kind background and id in claude agents --json); claude stop <jobId> ends it for good, SIGTERM only makes the daemon start it again about 10.5 s later (11-04 with 2.1.317, measured on throwaway sessions: the table is in clockout.py). The probe reads the sub-command's help and the --bg flag; the entry's shape takes a daemon, so it was measured by hand and is refused, never guessed, when it changes",
+      "probe": "bg_stop",
+      "impact": "viz: 裏のセッションの退勤が断られる（jobId の形が変わった）、または止まらないと出る。ボタンはプロセスが消えたのを見て終わらせるので、止まっていないのに消えることはない",
+      "files": [
+        "jui_tools/jui_cli/viz/clockout.py"
+      ]
+    },
+    {
+      "id": "statusline",
+      "name": "statusLine に渡る入力の形（利用量の取り方）",
+      "relies_on": "the statusLine command's stdin (session_id, transcript_path, model, workspace, cost)",
+      "probe": "statusline_input",
+      "impact": "viz: ヘッダの上限の値が出ない",
+      "files": [
+        "jui_tools/jui_cli/viz/statusline_installer.py",
+        "jui_tools/jui_cli/viz/statusline.py",
+        "jui_tools/jui_cli/viz/usage.py",
+        "jui_tools/jui_cli/viz/web/js/30-source-live.js"
+      ]
+    },
+    {
+      "id": "mcp",
+      "name": "MCP サーバーの登録（~/.claude.json、claude mcp add / get）と instructions",
+      "relies_on": "the global config file's mcpServers, the mcp sub-commands",
+      "probe": "mcp_cli",
+      "impact": "jui-tools・jui-viz の MCP サーバーが登録されない、中継の確かめ（claude mcp get）が失敗する",
+      "files": [
+        "installer/bootstrap.sh",
+        "jui_tools/jui_cli/commands/viz_cmd.py",
+        "jui_tools/jui_cli/viz/channel.py",
+        "jui_tools/jui_cli/viz/robots.py",
+        "jui_tools/jui_cli/viz/web/js/30-source-live.js"
+      ]
+    },
+    {
+      "id": "config-paths",
+      "name": "設定フォルダの場所と中身（~/.claude/settings.json、sessions、projects、plugins）",
+      "relies_on": "the layout of the config folder our tools read and write",
+      "probe": "config_paths",
+      "impact": "viz: セッションが見つからない、hooks・statusLine の設定が書けない",
+      "files": [
+        "jui_tools/jui_cli/viz/paths.py",
+        "jui_tools/jui_cli/viz/sources/processes.py",
+        "jui_tools/jui_cli/viz/sources/session_files.py",
+        "jui_tools/jui_cli/viz/sources/transcripts.py",
+        "jui_tools/jui_cli/viz/statusline_installer.py",
+        "jui_tools/jui_cli/viz/hooks_installer.py",
+        "jui_tools/jui_cli/viz/calls.py",
+        "jui_tools/jui_cli/viz/clockout.py",
+        "jui_tools/jui_cli/viz/sources/launch.py",
+        "jui_tools/jui_cli/viz/sources/tasks.py",
+        "jui_tools/jui_cli/viz/web/js/20-core.js",
+        "jui_tools/jui_cli/viz/web/js/30-source-demo.js",
+        "jui_tools/jui_cli/viz/web/js/50-panel.js",
+        "jui_tools/tools/check_pytest_collection.py",
+        "jui_tools/tools/viz_promo/rooms.py"
+      ]
+    },
+    {
+      "id": "env",
+      "name": "環境変数（CLAUDE_PROJECT_DIR、CLAUDE_PLUGIN_ROOT、CLAUDECODE ほか）",
+      "relies_on": "the variables the CLI sets for hooks and plugins, and the ones our installer honours; CLAUDECODE, which the CLI sets for the processes it starts and vitest reads to pick its agent reporter (that reporter drops what a passing test logged)",
+      "probe": "env_vars",
+      "impact": "プラグインの hook が自分のスクリプトを見つけられない、タスクの場所がずれる。CLAUDECODE が変わると、jsonui-test の branch の通知が agent の実行で見えなくなる（branch_tests.py が stderr に出す理由）",
+      "files": [
+        "jui_tools/jui_cli/viz/sources/tasks.py",
+        "plugins/jui-viz/.claude-plugin/plugin.json",
+        "plugins/jui-viz/hooks/hooks.json",
+        "plugins/jui-viz/scripts/session_env.sh",
+        "installer/bootstrap.sh",
+        "test_tools/jsonui_test_cli/branch_tests.py",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "agents-cli",
+      "name": "claude agents --json（走っているセッションの一覧）",
+      "relies_on": "the agents sub-command and its --json output (agents / sessions lists), which the page also tells the user to type",
+      "probe": "agents_cli",
+      "impact": "viz: hook より前に始まったセッションが見えない、空のときの案内が嘘になる",
+      "files": [
+        "jui_tools/jui_cli/viz/sources/agents_cli.py",
+        "jui_tools/jui_cli/viz/web/index.html"
+      ]
+    },
+    {
+      "id": "watch",
+      "name": "この見張り自身（cc_watch）",
+      "relies_on": "everything above: the CLI's help, its -p / stream-json output, the throwaway session's hooks and folders, the Keychain login, the hook for cd",
+      "probe": "session_ran",
+      "impact": "見張りが止まる、または赤を出せない（毎日の検知が無くなる）",
+      "files": [
+        "jui_tools/tools/cc_watch/__init__.py",
+        "jui_tools/tools/cc_watch/ledger.json",
+        "jui_tools/tools/cc_watch/ledger.py",
+        "jui_tools/tools/cc_watch/marks.py",
+        "jui_tools/tools/cc_watch/probes.py",
+        "jui_tools/tools/cc_watch/watch.py",
+        "jui_tools/tools/cc_watch/red_ticket_hook.sh",
+        "jui_tools/jui_cli/viz/message_client.py"
+      ]
+    },
+    {
+      "id": "talk-send-input",
+      "name": "SendMessage の tool input（to・message・summary）",
+      "relies_on": "the assistant tool_use named SendMessage and its input: to (a name, `name [ref]`, `uds:<socket>`, an agent id, or main), message (the body shown in the talk), summary (optional), recipient_kind (optional); an input without message is a pure notify_when_idle subscription and is not a message",
+      "probe": "talk_send_input",
+      "impact": "viz: トークに送った通が出ない・相手が分からない（一覧と詳細が空になる）",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "talk-msg-id",
+      "name": "SendMessage の照合の鍵 msg_id（送り手の toolUseResult.msg_id ＝ 受け手の origin.msg_id）",
+      "relies_on": "the user record's toolUseResult.msg_id on a SendMessage's tool_result (a send to a session), the same value as origin.msg_id on the receiver's record; the successful-looking text \"No agent named … is reachable\" without msg_id for a send that reached nobody; the 応答の履歴 keys one delivered message on origin.msg_id across its user record and its queued_command",
+      "probe": "talk_msg_id",
+      "impact": "viz: 送った通と読んだ記録が突き合わず、既読が付かない・同じ通が 2 行になる",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/jui_cli/viz/sources/history.py",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "talk-origin",
+      "name": "受け手の記録の origin（peer・coordinator）と queued_command",
+      "relies_on": "origin on an isMeta user record or on an attachment of type queued_command: kind peer with msg_id, from, verifiedPeerPid, name, body (from \"bridge:session_…\" — Remote Control's bridge — with no msg_id and no verifiedPeerPid: matched by the body and the bridgeSessionId of ~/.claude/sessions/<pid>.json; members when two sends were bundled; senderTaskId for a subagent's send to main; handback for a hand-back, skipped); kind coordinator for the parent's send to a subagent, the queued_command's prompt being the body; the 応答の履歴 (history.py, through talk_records.delivery) also reads a queued_command's prompt, the attachment's or record's timestamp, delivery_id and uuid, and origin.kind channel (with server), human and task-notification, so a message that came while the session worked shows as the row its waiting form makes",
+      "probe": "talk_origin",
+      "impact": "viz: 相手の通が出ない・既読が付かない（受け手の側が見えない）；応答の履歴: 作業中に届いたプロンプト・メッセージが出ない、同じ 1 通が二重に出る",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/jui_cli/viz/sources/history.py",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "talk-envelope",
+      "name": "届いた印 queue-operation enqueue の封筒（<cross-session-message …>・<agent-message …>）",
+      "relies_on": "queue-operation records with operation enqueue whose content is <cross-session-message from=… from-name=…> with the body between two newlines, or <agent-message …> (a subagent's send to main): the time a message arrived, matched by its body",
+      "probe": "talk_envelope",
+      "impact": "viz: 届いた時刻が送りの結果の時刻になる（表示の既読には影響しない）",
+      "files": [
+        "jui_tools/jui_cli/viz/talk.py",
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "auto-mode-denial",
+      "name": "自動モードの拒否（PermissionDenied のフックと、拒否の tool_result の文）",
+      "relies_on": "the PermissionDenied hook fires only when auto mode denies a call, with tool_name, tool_input, tool_use_id and reason (hooks reference; measured 10-20 13:12 on a real auto mode denial: viz's event log got the hook 0.04 s after the transcript's record, with the same tool_name and tool_input; whether tool_use_id and reason come was not seen, so denials.py matches the two sources without them too); the tool_result of the denied call is is_error and its text starts with \"Permission for this action was denied by the Claude Code auto mode classifier.\" followed by \"Reason: \" and a rule in square brackets or a sentence (11 records in this machine's transcripts, 10-19 and 10-20; not documented); the only other is_error forms that name the classifier are transient, not a denial (the call may be made again): \"The server-side auto mode classifier gave no verdict\", and \"This is not a judgement against <tool>. Repeat the identical <tool> call once now\" (an Artifact call whose owner lookup failed, seen 10-30 with 2.1.312)",
+      "probe": "auto_mode_denial",
+      "impact": "viz: 自動モードが止めた操作の札が出ない（ボタンから続けさせられない）。ほかは変わらない",
+      "files": [
+        "jui_tools/jui_cli/viz/denials.py",
+        "jui_tools/jui_cli/viz/web/js/51-denials.js",
+        "jui_tools/tools/viz_promo/capture.py"
+      ]
+    },
+    {
+      "id": "skill",
+      "name": "スキルの道具（Skill の呼び出しの入力と結果）",
+      "relies_on": "Claude's Skill tool: the call's input names the skill in \"skill\" (a string, with \"args\"), and its result is {success, commandName} when the skill is read in place (inline) or {status: \"forked\", agentId, result} when it runs in a subagent (forked), which starts within seconds of the call with no skill name of its own (measured 10-21 in this machine's transcripts: 6 calls, 2 inline and 4 forked; not documented). the hooks measured 10-22 00:01 with a real claude in a throwaway config (tests/fixtures/viz/skill_hooks.json): PreToolUse tool_input {\"skill\": <name>} (no \"args\" when none are given), PostToolUse tool_response the same two forms, and for a forked skill SubagentStart (agent_type general-purpose) 41 ms after the call",
+      "probe": "skill_tool_shape",
+      "impact": "viz: スキルを使っている間の守護霊・部品・札が出ない（ほかは変わらない）",
+      "files": [
+        "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/web/js/45-spirits.js"
+      ]
+    }
+  ],
+  "not_relying": {
+    "jui_tools/jui_cli/viz/sources/codex_clients.py": "OS open-file owners and Codex terminal process identities; no Claude Code dependency.",
+    "jui_tools/jui_cli/viz/sources/codex_history.py": "Codex rollout response_item records only; no Claude Code dependency.",
+    "jui_tools/jui_cli/viz/attachments.py": "プロンプトの添付を viz の私用の場所に保存し、消すだけ。CLI の形は読まず、受け手の設定も許可の規則も書かない。受け手の Read が許可を求めること（10-20 の測り 1）は、許可の板にそのまま出るだけで、この file の動作はそれに依らない",
+    "jui_tools/jui_cli/viz/bundle.py": "web/js を順に連結するだけ。CLI の形を読まない",
+    "jui_tools/jui_cli/viz/i18n.py": "ページの文言の表（同梱の en・ja と利用者のファイル）を config.json の language（任意の言語コード）・strings で選んで重ねるだけ。CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/plural_rules.json": "CLDR の複数形の規則（言語コードごとの one・few・many などの分類）だけ。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/spirits.py": "スキルの守護霊のモデルのフォルダ（.glb の頭と JSON の塊、spirit.json）と viz の config.json の spiritsDir を読んで検査するだけ。CLI・フック・transcript の形は読まない（スキルの始まりの見分けは、作る時に ingest.py の側で台帳に載せる）",
+    "jui_tools/jui_cli/viz/web/spirits/": "同梱のオリジナルの守護霊のモデル（.glb と spirit.json、tools/spirits で書き出した物）。データだけで、CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/i18n/en.json": "ページの英語の文言（キーと文）だけ。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/i18n/ja.json": "ページの日本語の文言（キーと文）だけ。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/05-i18n.js": "サーバーが index.html に埋めた文言の表を引くだけ（ページの描画）。CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/data_docs.py": "JsonUI の room の docs/api・docs/db の仕様（OpenAPI・Swagger）を document_tools で読むだけ。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/53-devices.js": "ヘッダの「デバイス」と、負荷・機器の面（ページの描画だけ）。サーバーの slice machine と devices を読むだけで、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/web/js/56-server-room.js": "サーバールームの 3D・ボード・ログ・扉のテンキー（ページの描画だけ）。サーバーの /api/infra-docs と /api/infra-icon を読むだけで、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/web/js/59-sr-migration.js": "サーバールームで移管計画を 1 ステップずつ再生する（ページの描画だけ）。部屋の読みが渡す migrations（document_tools の infra.migration）とコストの差の返事だけを読み、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/web/js/56-sr-models.js": "サーバールームのノードを寄った時だけ種類のモデルで描く（ページの描画だけ）。56-server-room.js が読んだモデルの category・service だけを読み、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/web/js/56-server-cost.js": "コストのシミュレーターの画面（ページの描画だけ）。サーバーの /api/infra-cost を読むだけで、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/infra_docs.py": "部屋の docs/infra（宣言されたインフラの構成）と部屋の中のアイコンを document_tools の infra.room で読むだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/53-roster.js": "部屋の中のロボットの一覧とチェック（ページの描画だけ）。ページの robots・robotState・waitKindOf と、ブラウザの localStorage を読むだけで、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/web/js/53-waits.js": "返事待ちのロボットの 3D の印（吹き出し・ランプ・ポーズ）。サーバーの slice（state・asking・inputWaitAt）とページの札だけを読み、CLI の形は読まない。idle_prompt の形はサーバー（ingest.py、hooks の項目）の側",
+    "jui_tools/jui_cli/viz/web/js/59-sr-flows.js": "サーバールームの flow の再生（辺の中を流れる光・トースト・分かれ道・速さ）。サーバーの /api/infra-docs が返すモデルの flows だけを読み、CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/infra_cost.py": "コストのシミュレーター: 部屋の負荷定義・単価のファイル・モデルを document_tools の infra.load・infra.cost で読み、計算と画面の形を作らせるだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/infra_words.py": "サーバールームとコストの画面の、document_tools が言う文言（部屋の読みの行・meter の名前）を viz の表（srv.room.*・srv.cost.*）で引くだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/57-fulltext.js": "カード・パネルの 1 行で切れた文の全文を浮き札で見せるだけ（ページの中の DOM だけ。CLI の形を読まない）",
+    "jui_tools/jui_cli/viz/web/js/58-talk.js": "トークの画面（一覧と詳細）。サーバーの talk.* の frame（talk_contract.json）だけを読み、transcript や CLI の形は読まない。msg_id などの CLI の形はサーバー（データの層）の側の項目",
+    "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",
+    "jui_tools/jui_cli/viz/rooms.py": "cwd から JsonUI プロジェクトの根を探すだけ（jui.config.json / .git）",
+    "jui_tools/jui_cli/viz/change_batch.py": "部屋の見張りが出すファイルの変化を束ねて loop に渡すことと、部屋ごとの見張りの付け直しだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/loop_watch.py": "viz サーバー自身の loop が止まった時に、スタックと要求の道（method と path だけ）を serve.log に書くだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/quiet_fs.py": "パスがファイルか・フォルダか・在るかを、stat の誤りを「無い」として答えるだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/security.py": "viz サーバー自身の Host・Origin・トークンの守り。CLI 側の形は読まない",
+    "jui_tools/jui_cli/viz/sheet.py": "JsonUI の spec からホワイトボードを作るだけ",
+    "jui_tools/jui_cli/viz/sources/__init__.py": "パッケージの印だけ",
+    "jui_tools/jui_cli/viz/sources/cloud_prices.py": "クラウドの単価の取得（document_tools の infra.cost.fetch）を日に 1 回呼び、viz home の config.json と状態のファイルを読み書きするだけ。CLI の形も Claude Code の記録も読まない",
+    "jui_tools/jui_cli/viz/sources/devices.py": "simctl と adb を読むだけ。機器を使う人の推定は、渡された ps の行（pid・ppid・引数）とセッションの pid の対応を照らすだけで、CLI の形は読まない",
+    "jui_tools/jui_cli/viz/sources/fs_watch.py": "部屋のフォルダを watchdog（macOS は FSEvents）で見る観察者を作るだけ。CLI の形も Claude Code の記録も読まない",
+    "jui_tools/jui_cli/viz/sources/jsonui_project.py": "JsonUI の spec・layout・テスト定義を読むだけ",
+    "jui_tools/jui_cli/viz/sources/machine.py": "この機械の load（os.getloadavg）とメモリの空き（macOS は sysctl の kern.memorystatus_level、Linux は /proc/meminfo）を読むだけ。コマンドを起こさず、CLI の形も Claude Code の記録も読まない",
+    "jui_tools/jui_cli/viz/sources/mock_status.py": "jsonui-test の mock serve を見るだけ",
+    "jui_tools/jui_cli/viz/sources/test_progress.py": "jsonui-test-runner の進捗の jsonl を読むだけ（CLI の transcript ではない）",
+    "jui_tools/jui_cli/viz/sources/test_results.py": "jsonui-test-runner の結果を読むだけ",
+    "jui_tools/jui_cli/viz/sources/weather.py": "天気（Open-Meteo）を読むだけ",
+    "jui_tools/jui_cli/viz/spec_diff.py": "ワークツリーのスペックと、分かれた所（merge-base）のスペックを並べるだけ。git を読むだけで走らせ（merge-base・show・ls-tree）、CLI の形も hooks の入力も読まない",
+    "jui_tools/jui_cli/viz/web/js/50-spec-diff.js": "spec_diff.py の答えを全画面に並べ、ボードの一覧に印と消したカードを出すだけ。CLI の形も hooks の入力も読まない",
+    "jui_tools/jui_cli/viz/state.py": "サーバーの slice と rev の入れ物。中身の形は他のファイルが決める",
+    "jui_tools/jui_cli/viz/web/app.css": "AskUserQuestion の名前は節のコメントにあるだけ。スタイルはツールの形に依らない（形は questions.py と 30-source-live.js が持つ）",
+    "jui_tools/jui_cli/viz/web/boot.js": "/app.js を読み込むだけ",
+    "jui_tools/jui_cli/viz/web/debug.html": "接続の確認ページ。サーバーの slice を表示するだけ",
+    "jui_tools/jui_cli/viz/web/debug.js": "同上",
+    "jui_tools/jui_cli/viz/web/fonts/": "フォントとそのライセンス",
+    "jui_tools/jui_cli/viz/web/js/10-robot-core.js": "ロボットの描画だけ。状態はサーバーの slice が決め、CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/25-net.js": "viz サーバーとの WebSocket だけ",
+    "jui_tools/jui_cli/viz/web/js/52-data-docs.js": "データサーバーのラックのシート。viz サーバーの /api/data-docs の答えを描くだけ",
+    "jui_tools/jui_cli/viz/web/js/70-main.js": "ページの描画の回し方と接続の札だけ",
+    "jui_tools/jui_cli/viz/web/js/80-dbg.js": "ブラウザのテスト用のフック（JUI_VIZ_E2E=1 のときだけ）",
+    "jui_tools/jui_cli/viz/web/vendor/": "three.js（第三者のライブラリ）",
+    "jui_tools/jui_cli/viz/TALK_CONTRACT.md": "トークの WebSocket の約束（viz のサーバーとページの間の形）の説明だけ。CLI の形を読むのは talk.py（台帳の talk_* の項目）",
+    "jui_tools/jui_cli/viz/talk_contract.json": "トークの WebSocket の約束の正（viz のサーバーとページの間の形）。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/talk_contract.py": "talk_contract.json に照らして frame を検査するだけ。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/31-talk-demo-data.js": "トークのデモの frame（talk_contract.json の形のデータだけ）。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/sources/codex_app_server.py": "Codex の app-server daemon（~/.codex の Unix ソケット）を読むだけ。Claude Code の CLI・設定・フックには依らない。SessionStart などのフックの名前は、World.apply_hook が読む形に Codex の出来事を置き換えて作るだけで、Claude Code から届くものではない",
+    "jui_tools/jui_cli/viz/local_models.py": "LM Studio と Ollama の OpenAI 互換の GET /v1/models を 127.0.0.1 で読むだけ（呼び出しダイアログの Codex タブのモデル）。Claude Code の CLI・設定・フックには依らない",
+    "jui_tools/jui_cli/viz/codex_homes.py": "ローカルのモデルのサーバーごとの Codex の設定フォルダ（~/.codex-local/<provider>）を、無いときだけ作る。~/.codex/config.toml の features と mcp_servers を写すだけで、Claude Code の CLI・設定・フックには依らない",
+    "jui_tools/jui_cli/viz/slack/__init__.py": "Slack の取り込みの説明だけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/adapters.py": "利用者のアダプタの .py を python -I の子で撃つだけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/config.py": "viz の home の slack.json を読むだけ。Claude Code の設定には触らない",
+    "jui_tools/jui_cli/viz/slack/filters.py": "伏せ字の正規表現だけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/intake.py": "inbox の見張りと定時。CLI は fetch.py を通してだけ使う",
+    "jui_tools/jui_cli/viz/slack/socket_mode.py": "Slack の Socket Mode（apps.connections.open と WebSocket）に aiohttp でつなぐだけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/routers.py": "Anthropic の Messages API と TypeSafe の API を HTTP で呼ぶだけ。Claude Code の CLI には触らない",
+    "jui_tools/jui_cli/viz/slack/store.py": "orchestrationDir のファイルの読み書きだけ"
+  }
+}

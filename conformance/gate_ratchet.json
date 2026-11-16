@@ -1,0 +1,55 @@
+{
+  "_comment": [
+    "Ratchet ceilings for `jui conformance gate` (plan 06 §3), per render environment (plan 25 Phase 0).",
+    "missing_artifact: baseline entries whose fixture produced no screenshot this run — the way a fixture silently exits visual coverage.",
+    "no_baseline: screenshots that have no baseline hash (rendered but never compared).",
+    "Ceilings nest by environment key (baselines/<env>/): a visual count is a fact about one renderer, so its ceiling is too. An env with no entry gets ceiling 0 for everything — a fresh environment starts strict.",
+    "local: 0 across the board since the 2026-08-02 clean re-bake (baselines pruned to exactly the run's referenced screenshots; the old 12/6/4 were stale entries from accumulated artifacts directories).",
+    "ci: baselines are baked FROM a CI run's own artifacts, so the baseline set equals the rendered set by construction and both ceilings start at 0.",
+    "A count above its ceiling fails the gate. LOWERING a ceiling to match improved reality is routine and encouraged (the gate prints a notice when there is slack); RAISING one is a coverage regression and needs a justification comment here.",
+    "unreviewed: adjudication-ledger rows still carrying the 'unreviewed-initial-measurement' verdict — measured findings nobody has ruled on. Keyed by ledger filename and NOT nested by env: how many findings are unjudged is a fact about the repository, not about a renderer."
+  ],
+  "unreviewed": {
+    "_comment": [
+      "Armed 2026-08-07 (plan 51-H) after measuring what the existing ratchet actually caught. A finding with NO ledger row fails the gate (unrecorded), and a row the measurement no longer supports fails it (stale) — but `--update` folds a NEW finding in as a row whose reason is the unreviewed marker, and cross_effect.check() counts that row as ACCEPTED. That is the whole path by which plan 33's 'unreviewed 0' regrew to 126 rows after the fixture expansion: no bypass, just a device with no opinion about a row that records a finding and rules on nothing.",
+      "Ceilings are today's measured reality (cross_effect 41 after 51-H ruled on the six TextView/lineBreakMode rows; inert_audit 71 pending the 51-E2 lane), NOT a target. Committing them at reality is deliberate: gating an unconsumed queue makes red the normal color, which is the lane discipline. What this buys is monotonicity — the queue can no longer grow silently.",
+      "Every lane that burns rows down LOWERS its ledger's ceiling in the same commit as the ruling. 0 across the board is the finish line for the external audit's remaining condition.",
+      "inert_audit.json lowered 71 -> 0 by 51-E2 (2026-08-07) in the same commit as the last ruling: the ledger's 71 rows are all adjudicated and the ledger is that lane's exclusive bucket, so the floor holds with no other lane underneath it. cross_effect.json is deliberately NOT clamped in the same breath even though it measures 10 < 41: its remainder belongs to the A and C/G lanes, which are mid-run, and a ceiling committed under an in-flight `--update` fires on the lane that is doing the work rather than on a silent regrowth. The orchestrator lowers it once those lanes land.",
+      "cross_effect.json lowered 41 -> 10 by 51-E2 (2026-08-07) in the commit that applied the C+G merged rows for the CG-android bucket. The remainder is the A lane's web bucket; orch takes it to 0 when those land.",
+      "cross_effect.json lowered 10 -> 3 by 51-E2 (2026-08-07) with the A lane's 7 replacement rows. The remaining rows are A's three hintColor findings, which A asks to PRUNE rather than rule — that prune is held until A's web implementation is on main, because removing a row the current measurement still supports makes the finding unrecorded and fails the gate. Orch takes the ceiling to 0 with that prune.",
+      "cross_effect.json lowered 3 -> 2 by 51-E2 (2026-08-07) with the two A-lane prunes the current measurement supports. The two SelectBox/hintColor rows stay: A measured them active in a worktree, but the artifacts in this repo still diff 0 px, so pruning them would make a finding the gate can still see unrecorded.",
+      "cross_effect.json lowered 2 -> 0 by 51-E2 (2026-08-07) with the A lane's last two prunes, measured at 904 px each in A's own worktree (HEAD 6bffb03 + A's diff, 977-fixture re-run) rather than taken on the rows file's word. Both adjudication ledgers now stand at 0 unreviewed, which is the external audit's remaining condition. NOTE for whoever runs the gate before the wave-end bake: the shared checkout's conformance/artifacts/ still holds the pre-fix web captures, so a local run will still see these two as diverging until the bake refreshes them — artifacts are untracked, and the measurement of record is the CI run."
+    ],
+    "cross_effect.json": 0,
+    "inert_audit.json": 0,
+    "value_discrimination.json": 0,
+    "codegen_effect.json": 0
+  },
+  "missing_artifact": {
+    "local": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    },
+    "ci": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    }
+  },
+  "no_baseline": {
+    "_ci_android_comment": [
+      "ci/android returned to 0 on 2026-08-07: the Wave 2 bake (c3ad3bd) baked CheckBox_isOn__true.png from the run's own artifacts after the host determinism fixes, and run 31135850340 measured no_baseline 0 (gate notice). History of the bistable-swap exclusion: see git log of this row (2026-08-02, plan 25 Phase 0)."
+    ],
+    "local": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    },
+    "ci": {
+      "android": 0,
+      "ios": 0,
+      "web": 0
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/datePickerMode__dateandtime.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.datePickerMode (dateandtime)",
+    "description": "Conformance fixture for 'datePickerMode' on SelectBox (section: SelectBox, class: visual). Value under test: \"dateAndTime\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "datePickerMode__dateandtime",
+      "description": "Conformance fixture for 'datePickerMode' on SelectBox (section: SelectBox, class: visual). Value under test: \"dateAndTime\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_datePickerMode__dateandtime"
+        }
+      ]
+    }
+  ]
+}

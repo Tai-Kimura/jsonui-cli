@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+# build/ output is generated — except the attr-codegen manifest, which is
+# committed so library repos can verify their vendored tables against it
+# (an ignored parent DIRECTORY would block the re-include, hence /build/*).
+/build/*
+!/build/attr_codegen
+/build/attr_codegen/*
+!/build/attr_codegen/manifest.json
+dist/
+.pytest_cache/
+
+# Ruby / RSpec
+coverage/
+.rspec_status
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Local-only docs — bug reports / plans / design notes often quote
+# consumer-app names and local paths; keep them off the public repo.
+docs/
+# ...except a test fixture's own docs/: a fixture room has the shape of a project root (<room>/docs/infra,
+# docs/api, docs/db), and that docs/ is the test's input, written by the repo (ticket
+# 2026-10-20-jui-infra-fixtures-under-docs-not-committed).
+!**/tests/fixtures/**/docs/
+
+# Conformance screenshot artifacts — PNGs stay local / CI artifacts; the
+# committed regression signal is baselines/<platform>.hashes.json (plan 12).
+conformance/artifacts/
+
+# JUnit report written by the compiler-backed arms so their EXECUTED count
+# can be read; the job asserts on it and then it is done with.
+
+guard-identifier.xml
+guard-branch-runtime.xml
+
+# Built by `pip wheel .` / `pip install .` inside jui_tools (not the attr_codegen output above).
+/jui_tools/build/
+
+# Xcode / SwiftPM build output (a -derivedDataPath inside the tree; never tracked)
+.build/
+DerivedData/

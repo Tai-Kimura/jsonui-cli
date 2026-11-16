@@ -1,0 +1,47 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "tbEmail",
+      "class": "String",
+      "defaultValue": "unset"
+    },
+    {
+      "name": "tbCount",
+      "class": "Int",
+      "defaultValue": 0
+    },
+    {
+      "name": "tbAgreed",
+      "class": "Bool",
+      "defaultValue": false
+    },
+    {
+      "name": "tbNickname",
+      "class": "String?",
+      "defaultValue": "nick"
+    }
+  ],
+  "child": [
+    {
+      "type": "Label",
+      "id": "label_email",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{tbEmail}",
+      "fontColor": "#000000"
+    }
+  ]
+}

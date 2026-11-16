@@ -1,0 +1,526 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/binding_expression'
+require_relative '../../core/binding_validator_core'
+require_relative '../helpers/static_seed'
+require_relative '../helpers/bound_value'
+require_relative '../helpers/font_scale'
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/resource_resolver'
+require_relative '../../core/string_literals'
+
+module KjuiTools
+  module Compose
+    module Components
+      class SelectBoxComponent
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          required_imports&.add(:selectbox_component)
+          
+          # Check if this is a date picker
+          is_date_picker = json_data['selectItemType'] == 'Date'
+          
+          # A Date SelectBox's value is selectedDate alone (the orchestrator's ruling,
+          # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
+          # it fell back to selectedItem / selectedValue / selectedIndex / bind,
+          # which sjui never read — the shared validator now
+          # names each of them on a Date box. A lone `bind` reaches here as
+          # selectedDate: the layout normalizer (on by default) folds it.
+          selected = if is_date_picker
+            date_value(json_data)
+          # A list box: selectedItem, selectedValue, selectedIndex (a lone
+          # `bind` arrives as selectedValue: JsonUIShared::BindFold at the dispatch)
+          elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
+            Helpers::BindingExpression.value_access($1)
+          elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
+            # `selectedValue` is the cross-platform spelling of the same
+            # two-way selection binding (web reads it; selectedItem wins).
+            Helpers::BindingExpression.value_access($1)
+          elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+            index_var = $1
+            items = json_data['items']
+            if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
+              items_var = $1
+              "data.#{items_var}.getOrElse(data.#{index_var}) { \"\" }"
+            elsif items.is_a?(Array)
+              items_literal = items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(", ")
+              "listOf(#{items_literal}).getOrElse(data.#{index_var}) { \"\" }"
+            else
+              "\"\""
+            end
+          elsif json_data['selectedIndex'].is_a?(Integer) && json_data['items'].is_a?(Array)
+            # Static selectedIndex: display the addressed item, as dynamic
+            # mode does. (An Integer here used to crash the converter —
+            # `.match` on 1:Integer — leaving the template scaffold in place;
+            # caught by the codegen parity host on SelectBox/selectedIndex.)
+            item = json_data['items'][json_data['selectedIndex']]
+            item.nil? ? '""' : JsonUIShared::StringLiterals.kotlin(item)
+          elsif json_data['selectedItem'] || json_data['selectedValue'] || json_data['selectedDate']
+            # STATIC selections were dropped: every branch above tests for a
+            # `@{...}`, so a plain `selectedValue: "Two"` fell through to the
+            # empty string (plan 49 lane C, handed over from D). Same priority
+            # as the bound branches. (A list box's selectedDate is left as it
+            # was: the ruling names the Date box's value only.)
+            static_selected = json_data['selectedDate'] || json_data['selectedItem'] || json_data['selectedValue']
+            Helpers::BoundValue.text(static_selected)
+          else
+            '""'
+          end
+          
+          # A static selection (a Kotlin string literal here — none is "") is the
+          # seed of the box's own state (Helpers::StaticSeed); a bound one is the
+          # view model's.
+          if selected.start_with?('"')
+            return Helpers::StaticSeed.wrap(selected, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, is_date_picker, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, nil)
+        end
+
+        # A Date SelectBox's value: its selectedDate, bound (`data.x`; the
+        # inner expression through value_access — `data.#{$1}` spliced a
+        # `?? default` in verbatim, `data.x ?? y`, not Kotlin: plan 49 lane C)
+        # or static (the seed of the box's own state), else "".
+        # `font` as the weight this component has always read (five names, Normal otherwise).
+        def self.select_font_weight(font)
+          case font.to_s.downcase
+          when 'bold' then 'FontWeight.Bold'
+          when 'semibold' then 'FontWeight.SemiBold'
+          when 'medium' then 'FontWeight.Medium'
+          when 'light' then 'FontWeight.Light'
+          when 'thin' then 'FontWeight.Thin'
+          else 'FontWeight.Normal'
+          end
+        end
+
+        def self.date_value(json_data)
+          date = json_data['selectedDate']
+          if date.is_a?(String) && date.match(/@\{([^}]+)\}/)
+            Helpers::BindingExpression.value_access($1)
+          elsif date.nil?
+            '""'
+          else
+            Helpers::BoundValue.text(date)
+          end
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, seeded)
+          # The text goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web): FontSpec carries the weight (`font`)
+          # and size (labelAttributes.fontSize / fontSize) it declares, and the component draws the provider's
+          # family / weight / size / style where it gives one (resolvedFont), fontSize / fontWeight otherwise.
+          font_var = Helpers::FontSpecHelper.next_var('selectbox')
+          label_bag = json_data['labelAttributes'].is_a?(Hash) ? json_data['labelAttributes'] : {}
+          spec_weight = json_data['font'] && select_font_weight(json_data['font'])
+          spec = Helpers::FontSpecHelper.plain_spec(spec_weight, label_bag['fontSize'] || json_data['fontSize'], required_imports,
+                                                    size_null: 'null', drawn_weight: 'FontWeight.Normal')
+          code = Helpers::FontSpecHelper.emit_resolve_block(font_var, spec, depth, required_imports) + "\n"
+          # Use DateSelectBox for date type
+          if is_date_picker
+            required_imports&.add(:date_selectbox_component)
+            code += indent("DateSelectBox(", depth)
+          else
+            code += indent("SelectBox(", depth)
+          end
+          code += "\n" + indent("resolvedFont = #{font_var},", depth + 1)
+          code += "\n" + indent("value = #{selected},", depth + 1)
+          
+          # Handle onValueChange callback
+          # A Date box: its selectedDate alone; a list box: selectedItem, selectedValue, selectedIndex
+          # (`bind` arrives folded into one of them: JsonUIShared::BindFold at the dispatch)
+          binding_variable = nil
+          is_index_binding = false
+          if is_date_picker
+            # a Date box writes back to its selectedDate alone (date_value)
+            binding_variable = $1 if json_data['selectedDate'].is_a?(String) && json_data['selectedDate'].match(/@\{([^}]+)\}/)
+          elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
+            binding_variable = $1
+          elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
+            binding_variable = $1
+          elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
+            binding_variable = $1
+            is_index_binding = true
+          end
+
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
+          # The declared onClick is called from the selection, after it —
+          # the SelectBox's own operation, not an outer `.clickable`, whose
+          # action would replace the box's own open action for TalkBack
+          # (ModifierBuilder.operation_click_call).
+          click = Helpers::ModifierBuilder.operation_click_call(json_data)
+          if json_data['onValueChange']
+            # onValueChange (camelCase) -> binding format only (@{functionName})
+            if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
+              # The handler receives the NEW VALUE OF THE SELECTION BINDING —
+              # the same thing sjui's `.onChange(of: data.<binding>)` hands its
+              # handler: the Int index for a bound `selectedIndex` (computed
+              # below for the writeback anyway), the String item otherwise.
+              # Passing the Compose item String here while sjui passed the
+              # index meant no argument-taking handler type compiled on both
+              # platforms; only `(() -> Unit)?` did
+              # (jui-selectbox-onvaluechange-argument-differs-between-sjui-and-kjui).
+              index_line, handler_call = value_change_call(json_data, view_id, is_index_binding, is_date_picker)
+              if binding_variable
+                code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
+                code += write_back_lines(json_data, binding_variable, is_index_binding, depth + 2)
+                code += "\n" + indent(index_line, depth + 2) if index_line
+                code += "\n" + indent("#{handler_call}", depth + 2)
+                code += "\n" + indent(click, depth + 2) if click
+                code += "\n" + indent("},", depth + 1)
+              else
+                body = [("#{seeded} = newValue" if seeded), index_line, handler_call].compact.join('; ')
+                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{body} }", json_data)},", depth + 1)
+              end
+            else
+              code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.error_lambda("ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}")},", depth + 1)
+            end
+          elsif binding_variable
+            code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
+            code += write_back_lines(json_data, binding_variable, is_index_binding, depth + 2)
+            code += "\n" + indent(click, depth + 2) if click
+            code += "\n" + indent("},", depth + 1)
+          else
+            code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click(seeded ? "{ #{seeded} = it }" : '{ }', json_data)},", depth + 1)
+          end
+          
+          # For date picker, add date-specific parameters
+          if is_date_picker
+            # Date picker mode (date, time, dateAndTime)
+            if json_data['datePickerMode']
+              # By its canonical spelling: DateSelectBox reads "dateAndTime", and
+              # the alias `datetime` (a Style reaches here without `jui build`'s
+              # normalizer) drew a date-only picker.
+              mode = JsonUIShared::EnumSpelling.canonical(json_data['datePickerMode'], 'SelectBox', 'datePickerMode')
+              code += "\n" + indent("datePickerMode = #{JsonUIShared::StringLiterals.kotlin(mode)},", depth + 1)
+            end
+            
+            # Date picker style
+            if json_data['datePickerStyle']
+              code += "\n" + indent("datePickerStyle = #{JsonUIShared::StringLiterals.kotlin(json_data['datePickerStyle'])},", depth + 1)
+            end
+            
+            # Date format (or dateStringFormat)
+            date_format = json_data['dateFormat'] || json_data['dateStringFormat']
+            if date_format
+              code += "\n" + indent("dateFormat = #{JsonUIShared::StringLiterals.kotlin(date_format)},", depth + 1)
+            end
+            
+            # Minute interval for time pickers
+            if json_data['minuteInterval']
+              code += "\n" + indent("minuteInterval = #{Helpers::BoundValue.int_arg(json_data['minuteInterval'], fallback: 1)},", depth + 1)
+            end
+            
+            # Minimum date
+            if json_data['minimumDate']
+              # A bound date used to be interpolated into the string literal,
+              # putting the characters `@{...}` into the picker bound (plan 49
+              # lane C, handed over from D).
+              code += "\n" + indent("minimumDate = #{Helpers::BoundValue.text(json_data['minimumDate'])},", depth + 1)
+            end
+            
+            # Maximum date
+            if json_data['maximumDate']
+              code += "\n" + indent("maximumDate = #{Helpers::BoundValue.text(json_data['maximumDate'])},", depth + 1)
+            end
+          else
+            # Options (use 'items' or 'options') - only for non-date SelectBox
+            options_data = json_data['items']
+            if options_data
+            if options_data.is_a?(String) && options_data.match(/@\{([^}]+)\}/)
+              # Dynamic options from data binding
+              options_var = $1
+              code += "\n" + indent("options = data.#{options_var},", depth + 1)
+            elsif options_data.is_a?(Array)
+              # Static options array
+              options_list = options_data.map do |option|
+                if option.is_a?(Hash)
+                  JsonUIShared::StringLiterals.kotlin(option['label'] || option['value'])
+                else
+                  JsonUIShared::StringLiterals.kotlin(option)
+                end
+              end.join(", ")
+              code += "\n" + indent("options = listOf(#{options_list}),", depth + 1)
+            else
+              code += "\n" + indent("options = emptyList(),", depth + 1)
+            end
+            else
+              code += "\n" + indent("options = emptyList(),", depth + 1)
+            end
+          end
+          
+          # Add placeholder text — spec canonical `prompt` (primary) plus the
+          # `hint` / `placeholder` aliases. Routed through process_text so a
+          # snake_case key like "select_box_prompt" resolves to
+          # stringResource(R.string.select_box_prompt) for proper localization.
+          prompt_value = json_data['prompt'] || json_data['hint'] || json_data['placeholder']
+          if prompt_value
+            resolved = Helpers::ResourceResolver.process_text(prompt_value, required_imports)
+            code += "\n" + indent("placeholder = #{resolved},", depth + 1)
+          end
+
+          # The sheet's words: the same reading as `prompt`, a strings.json key or a text. Absent: the
+          # library's word in the app's language. A list's sheet has no confirm button, so doneButtonText is a date's.
+          sheet_words = { 'sheetTitle' => json_data['sheetTitle'], 'cancelButtonText' => json_data['cancelButtonText'] }
+          sheet_words['doneButtonText'] = json_data['doneButtonText'] if is_date_picker
+          sheet_words.compact.each do |attribute, text|
+            resolved = Helpers::ResourceResolver.process_text(text, required_imports)
+            code += "\n" + indent("#{attribute} = #{resolved},", depth + 1)
+          end
+          
+          # Add enabled state if specified. The declared `enabled` only:
+          # SelectBox declares no `disabled`, and no other platform draws it
+          # (sjui / rjui read `enabled`; the Dynamic SelectBox names it as
+          # an unread key in a debuggable build).
+          if json_data['enabled'] == false
+            code += "\n" + indent("enabled = false,", depth + 1)
+          end
+          
+          # Add style parameters
+          if json_data['background']
+            bg_color = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
+            code += "\n" + indent("backgroundColor = #{bg_color},", depth + 1)
+          end
+          
+          if json_data['borderColor']
+            border_color = Helpers::ResourceResolver.process_color(json_data['borderColor'], required_imports)
+            code += "\n" + indent("borderColor = #{border_color},", depth + 1)
+          end
+          
+          # `labelAttributes` styles the closed-state label; on this
+          # component the collapsed text IS the label, so its keys win over
+          # the component-level ones (same precedence the web converter uses).
+          # The library surface today carries colour and size; `font` /
+          # `textAlign` have no SelectBox parameter yet.
+          label_attrs = json_data['labelAttributes'].is_a?(Hash) ? json_data['labelAttributes'] : {}
+          label_font_color = label_attrs['fontColor'] || json_data['fontColor']
+          if label_font_color
+            text_color = Helpers::ResourceResolver.process_color(label_font_color, required_imports)
+            code += "\n" + indent("textColor = #{text_color},", depth + 1)
+          end
+          
+          if json_data['hintColor']
+            hint_color = Helpers::ResourceResolver.process_color(json_data['hintColor'], required_imports)
+            code += "\n" + indent("hintColor = #{hint_color},", depth + 1)
+          end
+          
+          if json_data['cornerRadius']
+            # SelectBox takes its radius as an Int; a bound one is an
+            # expression (BoundValue.int) — `@{r}` was written into the
+            # Kotlin as `cornerRadius = @{r}` (B8).
+            code += "\n" + indent("cornerRadius = #{Helpers::BoundValue.int(json_data['cornerRadius'])},", depth + 1)
+          end
+
+          # Font styling
+          label_font_size = label_attrs['fontSize'] || json_data['fontSize']
+          if label_font_size
+            code += "\n" + indent("fontSize = #{Helpers::BoundValue.int_arg(label_font_size, fallback: 16)},", depth + 1)
+          end
+          # fontScaling / maxFontScale: SelectBox / DateSelectBox draw their text by the text size rule with them
+          # (KotlinJsonUI's FontScaling); undeclared, the app's defaults.
+          Helpers::FontScale.declaration_args(json_data).sub(/\A, /, '').split(', ').each do |arg|
+            code += "\n" + indent("#{arg},", depth + 1)
+          end
+
+          if json_data['font']
+            code += "\n" + indent("fontWeight = #{select_font_weight(json_data['font'])},", depth + 1)
+          end
+          
+          # Add cancel button background color if specified
+          if json_data['cancelButtonBackgroundColor']
+            cancel_bg = Helpers::ResourceResolver.process_color(json_data['cancelButtonBackgroundColor'], required_imports)
+            code += "\n" + indent("cancelButtonBackgroundColor = #{cancel_bg},", depth + 1)
+          end
+          
+          # Add cancel button text color if specified
+          if json_data['cancelButtonTextColor']
+            cancel_text = Helpers::ResourceResolver.process_color(json_data['cancelButtonTextColor'], required_imports)
+            code += "\n" + indent("cancelButtonTextColor = #{cancel_text},", depth + 1)
+          end
+
+          # `caretAttributes` (SSoT SelectBox.caretAttributes, cross-platform
+          # since 1.8.101): present → the library draws the caret itself from
+          # a SelectBoxCaret; absent → nothing is emitted, the native arrow
+          # stays and the picture does not move. A Date box takes it too:
+          # DateSelectBox draws the same closed-state caret (SelectBoxArrow)
+          # since 2.5.36, as SwiftJsonUI's date SelectBoxView and the web date
+          # input do (ticket kjui-date-selectbox-caret-attributes-not-emitted).
+          caret_arg = caret_expression(json_data['caretAttributes'], required_imports)
+          code += "\n" + indent("caret = #{caret_arg},", depth + 1) if caret_arg
+          
+          # Build modifiers
+          modifiers = []
+
+          # Ensure fillMaxWidth if width is not specified for date pickers
+          if is_date_picker && !json_data['width']
+            modifiers << ".fillMaxWidth()"
+          end
+
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # Cast in the outline the SelectBox draws: its cornerRadius, which the
+          # library defaults to 8 (`cornerRadius: Int = 8`, KotlinJsonUI
+          # SelectBox.kt) — not a RectangleShape behind the rounded box.
+          shadow_outline = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(8.dp)'
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline))
+          # The node's gestures and blocker; the click is in onValueChange
+          # above. The library applies `clickable(enabled = enabled)` to this
+          # same node, so `enabled` is on it.
+          modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
+          # padding is passed as contentPadding parameter, not modifier
+          modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+
+          if modifiers.any? && !modifiers.include?('SKIP_RENDER')
+            code += Helpers::ModifierBuilder.format(modifiers, depth)
+          end
+
+          # contentPadding as component parameter (not modifier), side by side (the three faces' rule, ticket
+          # kjui-selectbox-fixed-56dp-ignores-wrap-content-height): KotlinJsonUI's SelectBoxDefaults (12 / 0 / 12 / 0),
+          # then `padding`, then `paddings`, then each side's own key; a side nothing writes keeps the default.
+          sides = select_content_padding(json_data)
+          if sides
+            code += ",\n" + indent("contentPadding = PaddingValues(start = #{sides[:start]}, top = #{sides[:top]}, end = #{sides[:end]}, bottom = #{sides[:bottom]})", depth + 1)
+          end
+
+          code += "\n" + indent(")", depth)
+          code
+        end
+        
+        # A select's content padding side by side, or nil when the layout writes none (SelectBoxDefaults stands):
+        # the default 12 / 0 / 12 / 0 (start / top / end / bottom), then `padding` (one value for the four sides),
+        # then `paddings` (1, 2 or 4 values; 4 is [top, right, bottom, left]), then paddingTop / Bottom / Left /
+        # Right / Start / End. Left / Right are start / end, as the 4-value order reads them.
+        def self.select_content_padding(json_data)
+          keys = %w[padding paddings paddingTop paddingBottom paddingLeft paddingRight paddingStart paddingEnd]
+          return nil unless keys.any? { |k| json_data.key?(k) }
+
+          sides = { start: '12.dp', top: '0.dp', end: '12.dp', bottom: '0.dp' }
+          [json_data['padding'], json_data['paddings']].compact.each do |value|
+            all = value.is_a?(Array) ? value : [value]
+            case all.length
+            when 1 then sides.each_key { |k| sides[k] = Helpers::BoundValue.dp(all[0]) }
+            when 2
+              sides[:top] = sides[:bottom] = Helpers::BoundValue.dp(all[0])
+              sides[:start] = sides[:end] = Helpers::BoundValue.dp(all[1])
+            when 4
+              sides[:top] = Helpers::BoundValue.dp(all[0]); sides[:end] = Helpers::BoundValue.dp(all[1])
+              sides[:bottom] = Helpers::BoundValue.dp(all[2]); sides[:start] = Helpers::BoundValue.dp(all[3])
+            end
+          end
+          { 'paddingTop' => :top, 'paddingBottom' => :bottom, 'paddingLeft' => :start, 'paddingRight' => :end,
+            'paddingStart' => :start, 'paddingEnd' => :end }.each do |key, side|
+            sides[side] = Helpers::BoundValue.dp(json_data[key]) if json_data.key?(key)
+          end
+          sides
+        end
+
+        # The `SelectBoxCaret(...)` expression for a caretAttributes object, or
+        # nil when the object is absent. An empty object is present: the face
+        # then draws its own caret with every default (where the default arrow
+        # sits: an absent rightMargin is the select's trailing padding).
+        # `src` resolves as a drawable name exactly as Image's `src` does.
+        # Numbers land as dp Ints on the library surface (cornerRadius is the
+        # precedent); a key of the wrong type is left out, not emitted as 0.
+        # The pick written back to the bound variable: the item for a bound
+        # selectedItem / selectedValue / selectedDate, its INDEX for a bound
+        # selectedIndex. Only the handler path converted; without a handler the
+        # item String went into the Int, the generated updateData read it back
+        # `as? Number` and dropped it, and the box stayed where it was (ticket
+        # selectbox-selected-item-binding-is-read-once, measured on an emulator).
+        # onValueChange's call, by the handler's declared type (ruling ③):
+        # a lone `(String)` receives the selected ITEM, whatever the binding —
+        # it was handed the viewId and the index, two arguments to a
+        # one-argument function, which did not compile; `(String, Int)` is the
+        # viewId and the index; `(String, String)` the viewId and the item;
+        # `(Int)` the index. The index without an index binding is the item's
+        # first index (`indexOf`: a repeated item gives its first, the prompt
+        # -1). A date has no index: a date SelectBox declared `(String, Int)` or
+        # `(Int)` is not called — a comment names it, as the shared validator
+        # does. Any other type keeps the shared reading
+        # (get_event_handler_invocation: the new value of the selection
+        # binding). Returns [index_line, call], index_line the `val index` a
+        # call needs where no index binding computed it.
+        def self.value_change_call(json_data, view_id, is_index_binding, is_date_picker = false)
+          handler = json_data['onValueChange']
+          method = Helpers::ModifierBuilder.extract_binding_property(handler)
+          klass = Helpers::ResourceResolver.data_definitions.dig(method, 'class').to_s
+          # The shared reading of a closure type and the shared date check
+          # (JsonUIShared::BindingValidatorCore, the validator's own).
+          params = JsonUIShared::BindingValidatorCore.closure_parameters(klass)&.map { |t| t.delete_suffix('?') }
+          id = JsonUIShared::StringLiterals.kotlin(view_id)
+          if is_date_picker && (problem = JsonUIShared::BindingValidatorCore.date_pick_handler_problem(klass))
+            # Not called; the same sentence sjui writes, in a block comment
+            # (parse-safe in any position of the lambda).
+            return [nil, "/* #{Helpers::ModifierBuilder.comment_text(
+              "ERROR: SelectBox.onValueChange #{method} is not called: #{problem}"
+            )} */"]
+          end
+          case params
+          when ['String'] then [nil, "data.#{method}?.invoke(newValue)"]
+          when ['Int'] then [(index_expression_line(json_data) unless is_index_binding), "data.#{method}?.invoke(index)"]
+          when %w[String Int] then [(index_expression_line(json_data) unless is_index_binding), "data.#{method}?.invoke(#{id}, index)"]
+          when %w[String String] then [nil, "data.#{method}?.invoke(#{id}, newValue)"]
+          else [nil, Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, is_index_binding ? 'index' : 'newValue')]
+          end
+        end
+
+        # `val index = <the items>.indexOf(newValue)`.
+        def self.index_expression_line(json_data)
+          items = json_data['items']
+          if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
+            "val index = data.#{$1}.indexOf(newValue)"
+          elsif items.is_a?(Array)
+            "val index = listOf(#{items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(', ')}).indexOf(newValue)"
+          else
+            'val index = 0'
+          end
+        end
+
+        def self.write_back_lines(json_data, binding_variable, is_index_binding, depth)
+          key = Helpers::BindingExpression.path_only(binding_variable)
+          return "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to newValue))", depth) unless is_index_binding
+
+          "\n" + indent(index_expression_line(json_data), depth) + "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to index))", depth)
+        end
+
+        def self.caret_expression(caret, required_imports)
+          return nil unless caret.is_a?(Hash)
+
+          required_imports&.add(:selectbox_caret)
+          args = []
+          if caret['src'].is_a?(String) && !caret['src'].strip.empty?
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
+            args << "painter = painterResource(id = #{Helpers::ResourceResolver.drawable_id(caret['src'])})"
+          end
+          args << "width = #{caret['width'].to_i}" if caret['width'].is_a?(Numeric)
+          args << "height = #{caret['height'].to_i}" if caret['height'].is_a?(Numeric)
+          if caret['tintColor'].is_a?(String)
+            args << "tintColor = #{Helpers::ResourceResolver.process_color(caret['tintColor'], required_imports)}"
+          end
+          if caret['background'].is_a?(String)
+            args << "background = #{Helpers::ResourceResolver.process_color(caret['background'], required_imports)}"
+          end
+          args << "rightMargin = #{caret['rightMargin'].to_i}" if caret['rightMargin'].is_a?(Numeric)
+          "SelectBoxCaret(#{args.join(', ')})"
+        end
+
+        private
+        
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line| 
+            line.empty? ? line : spaces + line 
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

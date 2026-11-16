@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/GradientView/gradientDirection__horizontal.layout.json"
+  },
+  "metadata": {
+    "name": "conformance GradientView.gradientDirection (horizontal)",
+    "description": "Conformance fixture for 'gradientDirection' on GradientView (section: GradientView, class: visual). Value under test: \"Horizontal\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "GradientView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "gradientDirection__horizontal",
+      "description": "Conformance fixture for 'gradientDirection' on GradientView (section: GradientView, class: visual). Value under test: \"Horizontal\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "GradientView_gradientDirection__horizontal"
+        }
+      ]
+    }
+  ]
+}

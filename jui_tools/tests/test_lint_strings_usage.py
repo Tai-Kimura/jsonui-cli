@@ -1,0 +1,1159 @@
+"""Tests for `jui lint-strings --usage` — set agreement between
+strings.json and its referencing faces.
+
+The check's whole justification is a zero false-positive rate (a naive
+scan measured 98% false positives on a real consumer), so most of these
+tests are about what must NOT be reported: keys referenced from list
+items, from another face than the one being read, through the web
+proxy's camel spelling, or through a declared ``*_STRING_KEYS`` map.
+"""
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from jui_cli.commands.lint_strings_cmd import collect_findings
+from jui_cli.commands.lint_strings_usage import (
+    DeclaredKeys,
+    camelize_flat,
+    collect_usage,
+    snake_to_camel,
+    snake_to_pascal,
+)
+
+try:
+    from .test_lint_strings import ProjectFixture
+except ImportError:  # unittest discover runs tests as top-level modules
+    from test_lint_strings import ProjectFixture
+
+
+class SpellingRoundTripTests(unittest.TestCase):
+    def test_ios_generator_spellings(self):
+        self.assertEqual(snake_to_pascal("member_list"), "MemberList")
+        self.assertEqual(snake_to_camel("leave_button"), "leaveButton")
+        self.assertEqual(snake_to_camel("title"), "title")
+
+    def test_web_proxy_spelling(self):
+        self.assertEqual(camelize_flat("login_forgot_password"),
+                         "loginForgotPassword")
+        self.assertEqual(camelize_flat("value_1"), "value1")
+
+
+class DeclaredKeysTests(unittest.TestCase):
+    GROUPS = {
+        "login": {"title": "Sign in", "greeting": {"en": "Welcome"}},
+        "member_list": {"leave_button": "Leave"},
+    }
+
+    def test_every_reference_spelling_is_precomputed(self):
+        d = DeclaredKeys(self.GROUPS)
+        self.assertIn(("login", "title"), d.by_flat["login_title"])
+        self.assertIn(("member_list", "leave_button"),
+                      d.by_camel["memberListLeaveButton"])
+        self.assertIn(("member_list", "leave_button"),
+                      d.by_accessor[("MemberList", "leaveButton")])
+        self.assertIn(("login", "greeting"), d.by_value["Welcome"])
+
+    def test_layout_targets_scopes_bare_keys_to_own_sections(self):
+        d = DeclaredKeys(self.GROUPS)
+        self.assertEqual(d.layout_targets("title", ("login",)),
+                         {("login", "title")})
+        # foreign bare key: not a reference (the raw-literal lint already
+        # flags it) — must not count as usage either
+        self.assertEqual(d.layout_targets("title", ("member_list",)), set())
+        # the fully-qualified spelling reaches across sections
+        self.assertEqual(d.layout_targets("login_title", ("member_list",)),
+                         {("login", "title")})
+
+
+def _usage(groups, trees=None, own=None, roots=None, spec_dir=None, test_paths=None):
+    return collect_usage(
+        strings_groups=groups,
+        trees=trees or {},
+        own_sections_by_layout=own or {},
+        platform_roots=roots or {},
+        spec_dir=spec_dir,
+        test_paths=test_paths,
+    )
+
+
+class LayoutUsedCollectionTests(unittest.TestCase):
+    GROUPS = {"screen": {"title": "The Title", "row_label": "Row"}}
+
+    def test_key_referenced_from_a_list_item_is_used(self):
+        # items arrays resolve through the builders' label paths but sit
+        # outside the raw-literal scanner's attr walk — the used side must
+        # be broader or every such key reads as dead.
+        trees = {"screen.json": {
+            "type": "SelectBox",
+            "items": [{"label": "row_label"}],
+            "child": [{"type": "Label", "text": "screen_title"}],
+        }}
+        report = _usage(self.GROUPS, trees, {"screen.json": ("screen",)})
+        self.assertEqual(report.unused, [])
+
+    def test_value_match_counts_as_usage(self):
+        trees = {"screen.json": {"type": "Label", "text": "The Title"}}
+        report = _usage(
+            {"screen": {"title": "The Title"}}, trees, {"screen.json": ("screen",)}
+        )
+        self.assertEqual(report.unused, [])
+
+    def test_binding_expressions_never_count(self):
+        trees = {"screen.json": {"type": "Label", "text": "@{title}"}}
+        report = _usage(
+            {"screen": {"title": "The Title"}}, trees, {"screen.json": ("screen",)}
+        )
+        self.assertEqual([f.site for f in report.unused], ["screen.title"])
+
+    def test_unwired_key_is_reported(self):
+        # The consumer incident: help text prepared, never referenced.
+        trees = {"screen.json": {"type": "Label", "text": "screen_title"}}
+        groups = {"screen": {"title": "T", "search_help": "Exact match only"}}
+        report = _usage(groups, trees, {"screen.json": ("screen",)})
+        self.assertEqual([f.site for f in report.unused],
+                         ["screen.search_help"])
+
+
+class VmFixture:
+    """A platform source tree on disk."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        root.mkdir(parents=True, exist_ok=True)
+
+    def write(self, rel: str, content: str) -> None:
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+class WebScanTests(unittest.TestCase):
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.fx = VmFixture(Path(self._tmp.name) / "web")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run(self, groups=None):
+        return _usage(groups or self.GROUPS, roots={"web": self.fx.root})
+
+    def test_camel_property_access_is_usage(self):
+        self.fx.write("src/vm.ts",
+                      "const t = StringManager.currentLanguage.screenTitle;\n"
+                      "const h = StringManager.currentLanguage.screen_help;\n")
+        report = self._run()
+        self.assertEqual(report.unused, [])
+        self.assertEqual(report.missing, [])
+
+    def test_unknown_property_access_is_a_missing_key(self):
+        self.fx.write("src/vm.ts",
+                      "const x = StringManager.currentLanguage.screenTypo;\n")
+        report = self._run()
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("screenTypo", report.missing[0].detail)
+        self.assertTrue(report.missing[0].site.endswith("vm.ts:1"))
+
+    def test_getstring_literal_is_usage_and_typo_is_missing(self):
+        self.fx.write("src/vm.ts",
+                      'a(StringManager.getString("screen_title"));\n'
+                      'b(StringManager.getString("screen_helo"));\n')
+        report = self._run()
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("screen_helo", report.missing[0].detail)
+
+    def test_dynamic_reference_without_declared_map_is_a_finding(self):
+        self.fx.write("src/vm.ts",
+                      "const t = StringManager.getString(kind);\n"
+                      "const u = StringManager.currentLanguage[kind];\n")
+        report = self._run()
+        self.assertEqual(len(report.dynamic), 2)
+
+    def test_declared_map_exempts_the_dynamic_site_and_feeds_used(self):
+        self.fx.write(
+            "src/vm.ts",
+            'const KIND_STRING_KEYS = {\n'
+            '  a: "screen_title",\n'
+            '  b: "screen_help",\n'
+            '};\n'
+            "const t = StringManager.getString(KIND_STRING_KEYS[kind]);\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.unused, [])
+
+    def test_formatter_wrapped_call_keeps_the_exemption(self):
+        # Prettier wraps at printWidth and pushes the map name onto its
+        # own line inside the call's arguments. The warning text always
+        # said "statement", but the window was the physical line, so a
+        # convention-compliant call went dynamic depending on where the
+        # formatter broke it (reported from a real consumer, 2026-08-31).
+        self.fx.write(
+            "src/vm.ts",
+            'const KIND_STRING_KEYS = {\n'
+            '  a: "screen_title",\n'
+            '};\n'
+            "this.showError(\n"
+            "  StringManager.getString(\n"
+            '    KIND_STRING_KEYS[kind] ?? "screen_help"\n'
+            "  )\n"
+            ");\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.unused, [])
+
+    def test_the_widened_window_stops_at_the_statement(self):
+        # The over-widening direction: a *_STRING_KEYS mention in the NEXT
+        # statement must not exempt this call — the window is bounded by
+        # the call's own parentheses, not "somewhere below in the file".
+        self.fx.write(
+            "src/vm.ts",
+            "const t = StringManager.getString(\n"
+            "  kind\n"
+            ");\n"
+            'const K_STRING_KEYS = { a: "screen_title" };\n')
+        report = self._run()
+        self.assertEqual(len(report.dynamic), 1)
+        self.assertTrue(report.dynamic[0].site.endswith(":1"))
+
+    def test_a_mention_does_not_read_a_later_object_as_its_map(self):
+        # The false-positive direction: the '=' search had no bound, so
+        # the first initializer after a MENTION (a use, an import) was
+        # read as the map — an unrelated config object's strings became
+        # missing keys (reported from a real consumer, 2026-10-16).
+        self.fx.write(
+            "src/vm.ts",
+            'import { OTHER_STRING_KEYS } from "./other";\n'
+            'const PROBE_STRING_KEYS: Record<string, string> = { a: "screen_title" };\n'
+            "export function label(k: string): string {\n"
+            "  return StringManager.getString(PROBE_STRING_KEYS[k]);\n"
+            "}\n"
+            'const chartConfig = { mode: "stacked", unit: "per_day" };\n'
+            'const OTHER = OTHER_STRING_KEYS;\n'
+            'const rows = ["screen_gone"];\n')
+        report = self._run()
+        self.assertEqual(report.missing, [])
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+
+    def test_a_mention_does_not_mark_a_later_literal_used(self):
+        # The false-negative direction: a later `= { name: "..." }` read
+        # as the map put a dead key into the used set and hid it.
+        self.fx.write(
+            "src/vm.ts",
+            'const PROBE_STRING_KEYS = { a: "screen_title" };\n'
+            "const t = StringManager.getString(PROBE_STRING_KEYS[k]);\n"
+            'const analyticsEvent = { name: "screen_help" };\n'
+            'const tags = ["screen_help"];\n')
+        report = self._run()
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(report.missing, [])
+
+    def test_a_declaration_with_a_type_annotation_is_still_read(self):
+        # The bound must not cost the declarations it is for: a typed
+        # TS map (generic in the annotation) and an `as const` map.
+        self.fx.write(
+            "src/vm.ts",
+            'export const A_STRING_KEYS: Record<string, string> = { a: "screen_title" };\n'
+            'export const B_STRING_KEYS = { b: "screen_help" } as const;\n')
+        report = self._run()
+        self.assertEqual(report.unused, [])
+        self.assertEqual(report.missing, [])
+
+    def test_map_literal_not_in_strings_json_is_a_missing_key(self):
+        self.fx.write("src/vm.ts",
+                      'const K_STRING_KEYS = { a: "screen_gone" };\n')
+        report = self._run()
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("screen_gone", report.missing[0].detail)
+
+    def test_plural_first_argument_is_usage(self):
+        # Keys referenced only through the CLDR plural face were all
+        # reported unused (11 of 11 on the reporting consumer).
+        self.fx.write("src/vm.ts",
+                      'const a = StringManager.plural("screen_title", n);\n'
+                      'const b = StringManager.plural("screen_help", m);\n')
+        report = self._run()
+        self.assertEqual(report.unused, [])
+        self.assertEqual(report.missing, [])
+        self.assertEqual(report.dynamic, [])
+
+    def test_plural_undeclared_literal_is_a_missing_key(self):
+        self.fx.write("src/vm.ts",
+                      'StringManager.plural("screen_gone", n);\n')
+        report = self._run()
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("screen_gone", report.missing[0].detail)
+
+    def test_plural_dynamic_key_is_a_finding_unless_declared(self):
+        self.fx.write("src/vm.ts",
+                      "StringManager.plural(kind, n);\n"
+                      'const K_STRING_KEYS = { a: "screen_title" };\n'
+                      "StringManager.plural(K_STRING_KEYS[kind], n);\n")
+        report = self._run()
+        self.assertEqual(len(report.dynamic), 1)
+        self.assertTrue(report.dynamic[0].site.endswith(":1"))
+
+    def test_tpl_literal_choice_with_params_is_not_dynamic(self):
+        # tpl(expr, {params}) judged the WHOLE argument span, so a
+        # literal-choice key with trailing params read as dynamic while
+        # the same expression in str() passed. Only the first argument
+        # selects the key.
+        self.fx.write(
+            "src/vm.ts",
+            'const t = tpl(late ? "screen_title" : "screen_help", '
+            "{ n: count });\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.unused, [])
+
+    def test_tuple_array_string_keys_first_elements_are_not_missing(self):
+        # [[prop, key], ...] interleaves non-key strings with keys and
+        # nothing structural tells them apart: every literal may feed
+        # used, none may be judged missing.
+        self.fx.write(
+            "src/vm.ts",
+            'const ROW_STRING_KEYS = [\n'
+            '  ["title", "screen_title"],\n'
+            '  ["help", "screen_help"],\n'
+            '];\n')
+        report = self._run()
+        self.assertEqual(report.missing, [])
+        self.assertEqual(report.unused, [])
+
+    def test_comment_text_is_not_code(self):
+        # The shipped incident: a swagger description mentioning Python's
+        # `str(int)` rode a generated DTO's doc comment into a dynamic
+        # finding. The prose never selects a key.
+        self.fx.write(
+            "src/dto.ts",
+            "/** backend returns the id in `str(int)` form (_shape). */\n"
+            "export interface SeriesDto { id: string }\n"
+            "// also prose: getString(anything) here is not a call\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.missing, [])
+
+    def test_commented_out_reference_is_not_usage(self):
+        # The quiet direction: a getString("key") in a comment must not
+        # mark the key used, or a real dead key hides forever.
+        self.fx.write(
+            "src/vm.ts",
+            '// getString("screen_title") — old call, kept for reference\n'
+            '/* StringManager.currentLanguage.screenHelp */\n')
+        report = self._run()
+        self.assertEqual({f.site for f in report.unused},
+                         {"screen.title", "screen.help"})
+
+    def test_a_url_string_does_not_open_a_comment(self):
+        # "http://x" must not swallow the rest of the line as a comment —
+        # the reference after it is real code.
+        self.fx.write(
+            "src/vm.ts",
+            'const u = "http://example.test"; '
+            "const t = StringManager.currentLanguage.screenTitle;\n"
+            'a(StringManager.getString("screen_help"));\n')
+        report = self._run()
+        self.assertEqual(report.unused, [])
+
+    def test_an_in_file_prefix_wrapper_makes_literals_strict(self):
+        """A per-ViewModel wrapper whose definition is in the same file
+        composes a knowable key, so its literals stop being broad. Without
+        this, str/tpl calls could never produce a missing finding at all:
+        a typo was silently ignored, and a literal equal to ANOTHER
+        section's bare key read as usage — both reached the screen as raw
+        keys through getString's `|| key` fallback with the gate green."""
+        groups = {"admin_user": {"title": "T"},
+                  "pager": {"prev": "Prev", "next": "Next"}}
+        self.fx.write(
+            "src/vm.ts",
+            "function str(key: string): string {\n"
+            "  return StringManager.getString(`admin_user_${key}`);\n"
+            "}\n"
+            'a(str("title"));\n'          # admin_user_title — declared
+            'b(str("prev"));\n'           # composes admin_user_prev — NOT
+            'c(str("no_such_zzz"));\n')   # typo
+        report = self._run(groups)
+        sites = sorted(f.site.split(":")[-1] for f in report.missing)
+        self.assertEqual(sites, ["5", "6"], report.missing)
+        self.assertIn("admin_user_prev", report.missing[0].detail)
+        # The composed hit counts as usage of the right pair.
+        self.assertNotIn("admin_user.title", [f.site for f in report.unused])
+
+    def test_an_imported_wrapper_stays_broad(self):
+        """No definition in the file, no evidence — the identifier-collision
+        trade-off that justifies the broad match is unchanged there."""
+        groups = {"screen": {"title": "T"}, "pager": {"prev": "Prev"}}
+        self.fx.write(
+            "src/vm.ts",
+            'import { str } from "@/lib/i18n";\n'
+            'a(str("prev"));\n'          # bare key of another section: used
+            'b(str("no_such_zzz"));\n')  # unmatched: NOT a finding
+        report = self._run(groups)
+        self.assertEqual(report.missing, [])
+        self.assertNotIn("pager.prev", [f.site for f in report.unused])
+
+    def test_an_unreadable_wrapper_body_stays_broad(self):
+        """Unreadable degrades to the old behaviour, never to a guess."""
+        groups = {"screen": {"title": "T"}, "pager": {"prev": "Prev"}}
+        self.fx.write(
+            "src/vm.ts",
+            "function str(key: string): string {\n"
+            "  return StringManager.getString(`${SECTION}_${key}`);\n"
+            "}\n"
+            'a(str("prev"));\n'
+            'b(str("no_such_zzz"));\n')
+        report = self._run(groups)
+        self.assertEqual(report.missing, [])
+
+    def test_a_flat_delegation_wrapper_is_strict_with_empty_prefix(self):
+        """`getString(key)` pass-through: the runtime looks up the FLAT
+        key, so a bare literal would not resolve there either."""
+        self.fx.write(
+            "src/vm.ts",
+            "function str(key: string): string {\n"
+            "  return StringManager.getString(key);\n"
+            "}\n"
+            'a(str("screen_title"));\n'
+            'b(str("title"));\n')  # bare: resolves to nothing at runtime
+        report = self._run()
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("title", report.missing[0].detail)
+        self.assertNotIn("screen.title", [f.site for f in report.unused])
+
+    def test_generated_string_manager_stub_is_not_scanned(self):
+        # The real stub defines getString(key) — a dynamic-looking call
+        # with no *_STRING_KEYS anywhere near it — and embeds the whole
+        # table. Scanning it yields a false dynamic finding, and worse.
+        self.fx.write("src/StringManager.ts",
+                      "class StringManagerClass {\n"
+                      "  getString(key) {\n"
+                      "    return this.currentLanguage[key] || key;\n"
+                      "  }\n"
+                      "}\n"
+                      'const strings = {"en": {"screen_title": "T", '
+                      '"screen_help": "H"}};\n')
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual({f.site for f in report.unused},
+                         {"screen.title", "screen.help"})
+
+    def test_node_modules_is_not_scanned(self):
+        self.fx.write("node_modules/lib/index.js",
+                      "StringManager.currentLanguage.screenTitle;\n")
+        report = self._run()
+        self.assertEqual({f.site for f in report.unused},
+                         {"screen.title", "screen.help"})
+
+
+class IosAndroidScanTests(unittest.TestCase):
+    GROUPS = {"member_list": {"leave_button": "Leave", "title": "Members"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.ios = VmFixture(Path(self._tmp.name) / "ios")
+        self.android = VmFixture(Path(self._tmp.name) / "android")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_ios_accessor_and_localized_are_usage(self):
+        self.ios.write("App/VM.swift",
+                       "let a = StringManager.MemberList.leaveButton()\n"
+                       'let b = "member_list_title".localized()\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(report.unused, [])
+
+    def test_ios_unknown_accessor_is_not_reported(self):
+        # A wrong accessor fails the Swift compile; reporting it here
+        # would double up on the platform's own gate.
+        self.ios.write("App/VM.swift",
+                       "let a = StringManager.MemberList.leaveButton()\n"
+                       "let x = StringManager.MemberList.typo()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(report.missing, [])
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.title"])
+
+    def test_android_r_string_is_usage_and_foreign_symbols_are_ignored(self):
+        self.android.write(
+            "app/src/main/kotlin/VM.kt",
+            "val a = stringResource(R.string.member_list_leave_button)\n"
+            "val b = getString(R.string.app_name)\n")  # plain Android res
+        report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual(report.missing, [])
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.title"])
+
+    def test_ios_generated_string_manager_is_not_scanned(self):
+        # The generated accessor file spells every key as
+        # `"flat_key".localized()` — scanning it marks the whole table
+        # used and the unused direction goes permanently blind.
+        self.ios.write("App/StringManager.swift",
+                       "public struct StringManager {\n"
+                       "  public struct MemberList {\n"
+                       '    public static func leaveButton() -> String { "member_list_leave_button".localized() }\n'
+                       '    public static func title() -> String { "member_list_title".localized() }\n'
+                       "  }\n"
+                       "}\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual({f.site for f in report.unused},
+                         {"member_list.leave_button", "member_list.title"})
+
+    def test_spec_branch_contract_string_refs_are_usage_and_checked(self):
+        # validate can only check the SHAPE of `@key` — it does not know
+        # where the strings table lives. Here it does, so a branch asserting
+        # a key nothing declares is caught before the generated test runs.
+        spec_dir = Path(self._tmp.name) / "specs"
+        (spec_dir).mkdir()
+        (spec_dir / "screen.spec.json").write_text(json.dumps({
+            "branchContracts": {
+                "methods": {
+                    "onTap": {
+                        "branches": [
+                            {"when": {"data.x": True},
+                             "then": {"data.msg": "@member_list_title"}},
+                            {"when": {"data.x": False},
+                             "then": {"data.msg": "@member_list_ghost"}},
+                            {"when": {"data.y": True},
+                             "then": {"data.msg": "@data.other"}},
+                        ],
+                    },
+                },
+            },
+        }), encoding="utf-8")
+        report = _usage(self.GROUPS, roots={}, spec_dir=spec_dir)
+        self.assertEqual(1, len(report.missing))
+        self.assertIn("member_list_ghost", report.missing[0].detail)
+        # The declared key counts as usage; `@data.<field>` is not a key ref.
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+    def test_spec_pseudo_key_declared_by_a_harness_map_is_accepted(self):
+        # The documented pattern for a formatted string: the branch asserts
+        # a pseudo key and the harness formats the real table entry. It is
+        # legal precisely because the harness declares it in a closed map.
+        spec_dir = Path(self._tmp.name) / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "screen.spec.json").write_text(json.dumps({
+            "branchContracts": {
+                "methods": {
+                    "onTap": {
+                        "branches": [
+                            {"when": {"data.x": True},
+                             "then": {"data.msg": "@member_list_step_1_of_3"}},
+                        ],
+                    },
+                },
+            },
+        }), encoding="utf-8")
+        self.ios.write(
+            "Tests/ScreenBranchHarness.swift",
+            "let SCREEN_BRANCH_STRING_KEYS: [String: String] = [\n"
+            '    "member_list_step_1_of_3": "member_list_step_x_of_y",\n'
+            "]\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root},
+                        spec_dir=spec_dir)
+        self.assertEqual(
+            [], [f for f in report.missing if "branchContracts" in f.detail]
+        )
+
+    def test_spec_without_branch_contracts_contributes_nothing(self):
+        spec_dir = Path(self._tmp.name) / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "screen.spec.json").write_text(
+            json.dumps({"type": "screen_spec", "structure": {}}), encoding="utf-8")
+        report = _usage(self.GROUPS, roots={}, spec_dir=spec_dir)
+        self.assertEqual([], report.missing)
+
+    def test_ios_raw_foundation_lookup_of_an_absent_key_is_reported(self):
+        # NSLocalizedString compiles whatever it is handed and returns the
+        # key when nothing resolves, so an absent key ships as a raw key on
+        # screen. Reported from a consumer project where an error toast read
+        # `subscription_usage_load_error` to real users.
+        self.ios.write("App/VM.swift",
+                       'showToast(NSLocalizedString("member_list_title", comment: ""))\n'
+                       'showToast(NSLocalizedString("member_list_load_error", comment: ""))\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(1, len(report.missing))
+        self.assertIn("member_list_load_error", report.missing[0].detail)
+        self.assertIn("VM.swift:2", report.missing[0].site)
+        # The declared key it did resolve counts as usage.
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+    def test_ios_key_carried_by_a_platform_catalog_is_not_missing(self):
+        # A key may legitimately live in Localizable.strings rather than in
+        # the JsonUI table; that possibility is why these references used to
+        # be passed over entirely.
+        self.ios.write("App/VM.swift",
+                       'let a = NSLocalizedString("Disconnect", comment: "")\n')
+        self.ios.write("App/ja.lproj/Localizable.strings",
+                       '"Disconnect" = "切断";\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([], report.missing)
+
+    def test_ios_string_localized_initializer_is_covered(self):
+        self.ios.write("App/VM.swift",
+                       'let a = String(localized: "member_list_ghost")\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(1, len(report.missing))
+        self.assertIn("String(localized:)", report.missing[0].detail)
+
+    def test_ios_localized_suffix_stays_usage_only(self):
+        # The SwiftUI generator emits `"gone".localized()` for a
+        # visibility sentinel — reporting unresolved ones here would flag
+        # generated code that is not naming a key at all.
+        self.ios.write("App/Data.swift",
+                       'var visibility: String = "gone".localized()\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([], report.missing)
+
+    def test_ios_xcstrings_catalog_is_read(self):
+        self.ios.write("App/VM.swift",
+                       'let a = NSLocalizedString("catalog_only", comment: "")\n')
+        self.ios.write(
+            "App/Localizable.xcstrings",
+            '{"sourceLanguage":"en","strings":{"catalog_only":{}}}\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([], report.missing)
+
+    def test_kotlin_string_keys_map_feeds_used(self):
+        self.android.write(
+            "app/src/main/kotlin/VM.kt",
+            'val FIELD_STRING_KEYS = mapOf(\n'
+            '  "a" to "member_list_title",\n'
+            ')\n')
+        report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+
+    def test_swift_and_kotlin_mentions_do_not_read_a_later_initializer(self):
+        # The declaration forms each face writes (a type annotation with
+        # brackets / generics between the name and '=') are still read; a
+        # use of the name is not a declaration, so the next statement's
+        # initializer is not the map.
+        self.ios.write(
+            "App/VM.swift",
+            "static let ROW_STRING_KEYS: [String: String] = [\n"
+            '    "a": "member_list_title",\n'
+            "]\n"
+            "let t = StringManager.getString(ROW_STRING_KEYS[k] ?? \"\")\n"
+            'let config = ["mode": "stacked"]\n')
+        self.android.write(
+            "app/src/main/kotlin/VM.kt",
+            "val FIELD_STRING_KEYS: Map<String, String> = mapOf(\n"
+            '  "a" to "member_list_title",\n'
+            ")\n"
+            "val t = getString(FIELD_STRING_KEYS[k])\n"
+            'val event = mapOf("name" to "member_list_leave_button")\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root,
+                                             "android": self.android.root})
+        self.assertEqual(report.missing, [])
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+
+class AggregationTests(unittest.TestCase):
+    """Memo ③: judge only after the union over every declared face."""
+
+    GROUPS = {"screen": {"ios_only": "A", "web_only": "B"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.ios = VmFixture(Path(self._tmp.name) / "ios")
+        self.web = VmFixture(Path(self._tmp.name) / "web")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_key_used_by_any_face_is_not_unused(self):
+        self.ios.write("A.swift",
+                       "let a = StringManager.Screen.iosOnly()\n")
+        self.web.write("b.ts",
+                       "StringManager.currentLanguage.screenWebOnly;\n")
+        report = _usage(
+            self.GROUPS,
+            roots={"ios": self.ios.root, "web": self.web.root},
+        )
+        self.assertEqual(report.unused, [])
+        self.assertEqual(report.faces, ["layout", "ios", "web"])
+
+    def test_judging_one_face_alone_would_have_killed_the_other_key(self):
+        # The false positive the aggregation rule exists to prevent.
+        self.ios.write("A.swift",
+                       "let a = StringManager.Screen.iosOnly()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([f.site for f in report.unused],
+                         ["screen.web_only"])
+
+
+# A unit-test and a UI-test target, each fed by a synchronized folder, plus
+# the app target — the three shapes a project.pbxproj has to be read for.
+_PBXPROJ = """// !$*UTF8*$!
+{
+	objects = {
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AAAAAAAAAAAAAAAAAAAAAA01 /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = App;
+			sourceTree = "<group>";
+		};
+		AAAAAAAAAAAAAAAAAAAAAA02 /* AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppTests;
+			sourceTree = "<group>";
+		};
+		AAAAAAAAAAAAAAAAAAAAAA03 /* AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXNativeTarget section */
+		BBBBBBBBBBBBBBBBBBBBBB01 /* App */ = {
+			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				AAAAAAAAAAAAAAAAAAAAAA01 /* App */,
+			);
+			name = App;
+			productType = "com.apple.product-type.application";
+		};
+		BBBBBBBBBBBBBBBBBBBBBB02 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				AAAAAAAAAAAAAAAAAAAAAA02 /* AppTests */,
+			);
+			name = AppTests;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BBBBBBBBBBBBBBBBBBBBBB03 /* AppUITests */ = {
+			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				AAAAAAAAAAAAAAAAAAAAAA03 /* AppUITests */,
+			);
+			name = AppUITests;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+	};
+}
+"""
+
+
+class TestCodeIsNotUsageTests(unittest.TestCase):
+    """jui-lint-strings-usage-counts-test-code-as-usage.
+
+    A test that reads a key keeps passing after the app stops using it (an
+    assert that a text is NOT the fixed string, for one), so a reference
+    from test code must not make the key used. Where test code is comes
+    from the face's build declaration where it can be read.
+    """
+
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        self.web = VmFixture(base / "web")
+        self.ios = VmFixture(base / "ios")
+        self.android = VmFixture(base / "android")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _unused(self, report):
+        return sorted(f.site for f in report.unused)
+
+    # --- web: the runners' default test file names -----------------------
+
+    def test_web_a_key_only_a_test_reads_is_unused(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/unit/notice.test.ts",
+                       'expect(x).not.toBe(str("screen_help"));\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertEqual((report.scanned_files, report.test_files), (2, 1))
+
+    def test_web_a_key_the_app_and_a_test_both_read_stays_used(self):
+        self.web.write("src/page.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("src/page.spec.tsx", 'str("screen_help");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), [])
+
+    def test_web_an_app_path_that_merely_contains_test_is_not_excluded(self):
+        self.web.write("src/testimonials/Card.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("src/latest.tsx", "export {};\n")
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    def test_web_anything_under_dunder_tests_is_test_code(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("src/__tests__/helpers.ts", 'str("screen_help");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+
+    def test_web_a_typo_in_a_test_is_still_a_missing_key(self):
+        self.web.write("src/page.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("tests/a.test.ts", 'StringManager.getString("screen_hlep");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual([f.site.split("/")[-1] for f in report.missing], ["a.test.ts:1"])
+
+    def test_web_a_dynamic_reference_in_a_test_is_not_a_finding(self):
+        self.web.write("src/page.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("tests/a.test.ts", "StringManager.currentLanguage[key];\n")
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(report.dynamic, [])
+
+    def test_web_a_configured_directory_is_test_code_too(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/helpers/fixture.ts", 'str("screen_help");\n')
+        self.assertEqual(self._unused(_usage(self.GROUPS, roots={"web": self.web.root})), [])
+        report = _usage(self.GROUPS, roots={"web": self.web.root},
+                        test_paths={"web": ["tests"]})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertIn("lint.stringsUsageTestPaths: tests", report.test_code["web"])
+
+    # --- iOS: the Xcode project's test targets ---------------------------
+
+    def test_ios_files_of_the_projects_test_targets_are_test_code(self):
+        self.ios.write("Proj.xcodeproj/project.pbxproj", _PBXPROJ)
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/ScreenTests.swift",
+                       "let b = StringManager.Screen.help()\n")
+        self.ios.write("AppUITests/ScreenUITests.swift",
+                       "let c = StringManager.Screen.help()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertEqual(report.test_files, 2)
+        self.assertEqual(report.test_code["ios"],
+                         "test targets in Proj.xcodeproj: AppTests, AppUITests")
+
+    def test_ios_a_folder_that_no_test_target_takes_is_app_code(self):
+        # The same folder name, but the project declares no test target.
+        self.ios.write("Proj.xcodeproj/project.pbxproj",
+                       _PBXPROJ.replace("bundle.unit-test", "framework")
+                               .replace("bundle.ui-testing", "framework"))
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/Helpers.swift",
+                       "let b = StringManager.Screen.help()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_code["ios"], "none found")
+
+    def test_ios_a_target_without_a_synchronized_folder_uses_its_own_folder(self):
+        classic = _PBXPROJ.replace(
+            "\t\t\tfileSystemSynchronizedGroups = (\n\t\t\t\tAAAAAAAAAAAAAAAAAAAAAA02 /* AppTests */,\n\t\t\t);\n", "")
+        self.assertNotEqual(classic, _PBXPROJ)
+        self.ios.write("Proj.xcodeproj/project.pbxproj", classic)
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/ScreenTests.swift",
+                       "let b = StringManager.Screen.help()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+
+    def test_a_generated_branch_harness_keeps_counting(self):
+        # The branchContracts closure: a generated test checks these keys
+        # against the VM, so they stay used even inside a test target.
+        self.ios.write("Proj.xcodeproj/project.pbxproj", _PBXPROJ)
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/ScreenBranchHarness.swift",
+                       'let SCREEN_BRANCH_STRING_KEYS = ["screen_help"]\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    def test_a_web_branch_harness_keeps_counting_under_a_configured_test_dir(self):
+        # On the web the generator names the directory, not the file:
+        # tests/unit/branch-harness/<screen>.ts.
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/unit/branch-harness/screen.ts",
+                       'const SCREEN_BRANCH_STRING_KEYS = ["screen_help"];\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root},
+                        test_paths={"web": ["tests"]})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    # --- Android: the Gradle plugin's test source sets --------------------
+
+    def test_android_test_source_sets_are_test_code(self):
+        self.android.write("app/src/main/java/a/ScreenViewModel.kt",
+                           "val a = R.string.screen_title\n")
+        self.android.write("app/src/test/java/a/ScreenTest.kt",
+                           "val b = R.string.screen_help\n")
+        self.android.write("app/src/androidTest/java/a/ScreenUiTest.kt",
+                           "val c = R.string.screen_help\n")
+        self.android.write("app/src/testDebug/java/a/DebugTest.kt",
+                           "val d = R.string.screen_help\n")
+        report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertEqual(report.test_files, 3)
+        self.assertEqual(report.test_code["android"],
+                         "test source sets: androidTest, test, testDebug")
+
+    def test_android_a_source_set_that_only_starts_with_test_is_app_code(self):
+        self.android.write("app/src/main/java/a/ScreenViewModel.kt",
+                           "val a = R.string.screen_title\n")
+        self.android.write("app/src/testimonials/java/a/Quote.kt",
+                           "val b = R.string.screen_help\n")
+        report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    # --- the printed count -------------------------------------------------
+
+    def test_the_summary_says_how_many_were_excluded_and_why(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/a.test.ts", 'str("screen_help");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(report.summary_lines(), [
+            "lint-strings: usage scanned 2 source file(s), excluded 1 as test code",
+            "  test code (web): test runner defaults: *.test.*, *.spec.*, __tests__/",
+        ])
+
+
+class CollectFindingsIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.fx = ProjectFixture(Path(self._tmp.name))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _enable_web(self):
+        config = json.loads((self.fx.root / "jui.config.json").read_text())
+        config["platforms"] = {"web": {"root": "web"}}
+        (self.fx.root / "jui.config.json").write_text(json.dumps(config))
+        (self.fx.root / "web").mkdir()
+
+    def test_usage_is_off_by_default(self):
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        report = self.fx.collect()
+        self.assertIsNone(report.usage)
+
+    def test_usage_flag_reports_unwired_keys(self):
+        # STRINGS declares login.title/greeting/items_count; the layout
+        # references only title.
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        report = self.fx.collect(usage=True)
+        self.assertIsNotNone(report.usage)
+        self.assertEqual(
+            {f.site for f in report.usage.unused},
+            {"login.greeting", "login.items_count"},
+        )
+        self.assertFalse(report.clean)
+
+    def test_config_key_opts_in_without_the_flag(self):
+        config = json.loads((self.fx.root / "jui.config.json").read_text())
+        config["lint"] = {"stringsUsage": True}
+        (self.fx.root / "jui.config.json").write_text(json.dumps(config))
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        report = self.fx.collect()
+        self.assertIsNotNone(report.usage)
+
+    def test_clean_when_every_key_is_wired(self):
+        self.fx.write_layout("login.json", {
+            "type": "View",
+            "child": [
+                {"type": "Label", "text": "title"},
+                {"type": "Label", "text": "greeting"},
+                {"type": "Label", "text": "items_count"},
+            ],
+        })
+        report = self.fx.collect(usage=True)
+        self.assertEqual(report.usage.unused, [])
+        self.assertTrue(report.clean)
+
+    def test_declared_face_with_missing_root_is_a_setup_error(self):
+        # A face that silently cannot be scanned shrinks the used set and
+        # invents unused keys — refuse to run instead.
+        config = json.loads((self.fx.root / "jui.config.json").read_text())
+        config["platforms"] = {"web": {"root": "does-not-exist"}}
+        (self.fx.root / "jui.config.json").write_text(json.dumps(config))
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        from jui_cli.commands.lint_strings_cmd import LintStringsSetupError
+        with self.assertRaises(LintStringsSetupError):
+            self.fx.collect(usage=True)
+
+    def test_configured_test_paths_reach_the_usage_check(self):
+        self._enable_web()
+        config = json.loads((self.fx.root / "jui.config.json").read_text())
+        config["lint"] = {"stringsUsageTestPaths": {"web": ["e2e"]}}
+        (self.fx.root / "jui.config.json").write_text(json.dumps(config))
+        (self.fx.root / "web" / "e2e").mkdir()
+        (self.fx.root / "web" / "e2e" / "flow.ts").write_text(
+            'StringManager.getString("login_greeting");\n', encoding="utf-8")
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        report = self.fx.collect(usage=True)
+        self.assertIn("login.greeting", {f.site for f in report.usage.unused})
+        self.assertEqual(report.usage.test_files, 1)
+
+    def test_web_vm_usage_joins_the_union(self):
+        self._enable_web()
+        (self.fx.root / "web" / "vm.ts").write_text(
+            "StringManager.currentLanguage.loginGreeting;\n"
+            'StringManager.getString("login_items_count");\n',
+            encoding="utf-8",
+        )
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        report = self.fx.collect(usage=True)
+        self.assertEqual(report.usage.unused, [])
+        self.assertTrue(report.clean)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class ToolCopiesAreNotScannedTests(unittest.TestCase):
+    """The platform tools `jui sync_tool` copies under a face's root are the library's code, not the app's.
+
+    2.5.34 added rjui_tools/lib/react/templates/reorder.tsx and a consumer's admin face read
+    `usage scanned 2234 source file(s)` where 2.5.33 read 2233: the template was counted as the app's web source.
+    Measured on the eight consumer faces before the fix: 11 to 13 files per web face, all rjui_tools' templates;
+    none on the iOS and Android faces. A reference inside one would also count as a use (or a missing key).
+    """
+
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_tool_copy_is_neither_counted_nor_read(self):
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        web.write("rjui_tools/lib/react/templates/reorder.tsx",
+                  "const h = StringManager.currentLanguage.screenHelp;\n"
+                  "const x = StringManager.currentLanguage.screenTypo;\n")
+        ios = VmFixture(self.root / "ios")
+        ios.write("App/Vm.swift", "let t = 1\n")
+        ios.write("sjui_tools/lib/templates/Probe.swift", "let h = StringManager.currentLanguage.screenHelp\n")
+        android = VmFixture(self.root / "android")
+        android.write("app/Vm.kt", "val t = 1\n")
+        android.write("kjui_tools/lib/templates/Probe.kt", "val h = StringManager.currentLanguage.screenHelp\n")
+        report = _usage(self.GROUPS, roots={"web": web.root, "ios": ios.root, "android": android.root})
+        self.assertEqual(report.scanned_files, 3)
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(report.missing, [])
+
+    def test_a_folder_the_app_names_otherwise_is_still_read(self):
+        web = VmFixture(self.root / "web")
+        web.write("src/rjui/vm.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        web.write("src/tools/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+
+class LibraryKeysAreUsedTests(unittest.TestCase):
+    """The keys a library reads by name at run time (rule.a11yNames in shared/core/reorder_vectors.json) are used
+    when an app declares them, though no layout or app code names them; any other key in the same section is not."""
+
+    def test_the_reorder_names_are_used_and_a_neighbour_is_not(self):
+        groups = {"jsonui": {"reorder_move_up": "Nach oben", "reorder_move_down": "Nach unten",
+                             "reorder_moved_to": "Auf Position %d verschoben", "reorder_typo": "x"}}
+        report = _usage(groups)
+        self.assertEqual([f.site for f in report.unused], ["jsonui.reorder_typo"])
+
+    def test_the_names_match_the_vectors_rule(self):
+        import json
+        from jui_cli.commands.lint_strings_usage import LIBRARY_KEYS
+        rule = json.loads((Path(__file__).resolve().parents[2] / "shared/core/reorder_vectors.json")
+                          .read_text(encoding="utf-8"))["rule"]["a11yNames"]
+        for section, key in LIBRARY_KEYS:
+            self.assertIn(f"{section}.{key}", rule)
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not on PATH")
+class GitIgnoredFilesAreNotScannedTests(unittest.TestCase):
+    """A file git ignores is not the app's source, unless a generator wrote it.
+
+    A consumer's admin face read `usage scanned 2230 source file(s)` after `next dev` had written
+    next-env.d.ts (listed in the face's .gitignore) and 2229 without it. Measured on the eight consumer
+    faces before the fix: one ignored file on each of the six Next.js web faces, next-env.d.ts every time;
+    none on the iOS and Android faces.
+    """
+
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+    def _web_repo(self) -> VmFixture:
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        self._git(web.root, "init", "-q")
+        return web
+
+    def test_an_ignored_file_is_neither_counted_nor_read(self):
+        web = self._web_repo()
+        web.write(".gitignore", "next-env.d.ts\n")
+        web.write("next-env.d.ts", "const h = StringManager.currentLanguage.screenHelp;\n"
+                                   "const x = StringManager.currentLanguage.screenTypo;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 1)
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(report.missing, [])
+
+    def test_a_tracked_file_an_ignore_pattern_matches_is_still_read(self):
+        web = self._web_repo()
+        web.write(".gitignore", "*.d.ts\n")
+        web.write("src/env.d.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        self._git(web.root, "add", "-f", "src/env.d.ts")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+    def test_an_ignored_file_a_generator_wrote_is_still_read(self):
+        web = self._web_repo()
+        web.write(".gitignore", "src/generated/\n")
+        web.write("src/generated/components/Screen.tsx",
+                  "// @generated AUTO-GENERATED FILE — DO NOT EDIT\n"
+                  "const h = StringManager.currentLanguage.screenHelp;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+    def test_a_face_its_repository_ignores_whole_is_still_read(self):
+        self._git(self.root, "init", "-q")
+        (self.root / ".gitignore").write_text("web/\n", encoding="utf-8")
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        web.write("src/help.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+    def test_a_face_outside_any_repository_is_read_whole(self):
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        web.write("next-env.d.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])

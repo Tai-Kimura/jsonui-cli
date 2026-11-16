@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Slider/accessibilityLabel__alias_contentDescription.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Slider.accessibilityLabel (alias_contentDescription)",
+    "description": "Conformance fixture for 'accessibilityLabel' on Slider (section: Slider, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Slider"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "accessibilityLabel__alias_contentDescription",
+      "description": "Conformance fixture for 'accessibilityLabel' on Slider (section: Slider, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Slider_accessibilityLabel__alias_contentDescription"
+        }
+      ]
+    }
+  ]
+}

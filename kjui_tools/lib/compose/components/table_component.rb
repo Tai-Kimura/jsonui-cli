@@ -1,0 +1,188 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/binding_expression'
+require_relative '../helpers/modifier_builder'
+require_relative '../../core/string_literals'
+
+module KjuiTools
+  module Compose
+    module Components
+      class TableComponent
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          required_imports&.add(:lazy_column)
+          
+          # Table uses data binding for items
+          items = if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+            # `data.#{$1}` spliced the inner expression in verbatim, so a
+            # `?? default` reached the emit as `data.x ?? y`, which is not
+            # Kotlin. No validator rule covers this attribute (only
+            # `binding_direction: "two-way"` ones are checked for a complex
+            # expression) — plan 49 lane C.
+            Helpers::BindingExpression.value_access($1)
+          elsif json_data['items'] && json_data['items'].match(/@\{([^}]+)\}/)
+            Helpers::BindingExpression.value_access($1)
+          else
+            'emptyList()'
+          end
+          
+          code = indent("LazyColumn(", depth)
+          
+          # Content padding
+          if json_data['contentPadding']
+            padding = json_data['contentPadding']
+            if padding.is_a?(Array) && padding.length == 4
+              code += "\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(padding[0])}, end = #{Helpers::BoundValue.dp(padding[1])}, bottom = #{Helpers::BoundValue.dp(padding[2])}, start = #{Helpers::BoundValue.dp(padding[3])}),", depth + 1)
+            elsif padding.is_a?(Numeric)
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(padding)}),", depth + 1)
+            end
+          end
+          
+          # Vertical arrangement (spacing between rows)
+          if json_data['rowSpacing'] || json_data['spacing']
+            required_imports&.add(:arrangement)
+            spacing = json_data['rowSpacing'] || json_data['spacing'] || 0
+            code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)}),", depth + 1)
+          end
+          
+          # Build modifiers
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          # testTag after margins and offset, before alpha: the tagged box (resource-id
+          # bounds, TalkBack focus) is the drawn box. Ticket
+          # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+
+          code += Helpers::ModifierBuilder.format(modifiers, depth)
+          
+          code += "\n" + indent(") {", depth)
+          
+          # Table header if specified
+          if json_data['header']
+            code += "\n" + indent("item {", depth + 1)
+            code += generate_header_row(json_data['header'], depth + 2, required_imports)
+            code += "\n" + indent("}", depth + 1)
+            
+            # Divider after header
+            if json_data['separatorStyle'] != 'none'
+              code += "\n" + indent("item {", depth + 1)
+              code += "\n" + indent("HorizontalDivider(", depth + 2)
+              code += "\n" + indent("color = Color.LightGray,", depth + 3)
+              code += "\n" + indent("thickness = 1.dp", depth + 3)
+              code += "\n" + indent(")", depth + 2)
+              code += "\n" + indent("}", depth + 1)
+            end
+          end
+          
+          # Table rows
+          code += "\n" + indent("items(#{items}) { item ->", depth + 1)
+          
+          # Row content
+          if json_data['cell']
+            # Custom cell template
+            cell_content = generate_table_cell(json_data['cell'], depth + 2, required_imports)
+            code += "\n" + cell_content
+          else
+            # Default row
+            code += generate_default_row(json_data, depth + 2, required_imports)
+          end
+          
+          # Separator between rows
+          if json_data['separatorStyle'] != 'none'
+            code += "\n" + indent("HorizontalDivider(", depth + 2)
+            
+            # Separator inset
+            if json_data['separatorInset']
+              inset = json_data['separatorInset']
+              if inset.is_a?(Hash)
+                start_padding = inset['left'] || inset['start'] || 0
+                code += "\n" + indent("modifier = Modifier.padding(start = #{Helpers::BoundValue.dp(start_padding)}),", depth + 3)
+              end
+            end
+            
+            code += "\n" + indent("color = Color.LightGray,", depth + 3)
+            code += "\n" + indent("thickness = 0.5.dp", depth + 3)
+            code += "\n" + indent(")", depth + 2)
+          end
+          
+          code += "\n" + indent("}", depth + 1)
+          
+          code += "\n" + indent("}", depth)
+          code
+        end
+        
+        private
+        
+        def self.generate_header_row(header_data, depth, required_imports)
+          code = indent("Row(", depth)
+          code += "\n" + indent("modifier = Modifier", depth + 1)
+          code += "\n" + indent("    .fillMaxWidth()", depth + 1)
+          code += "\n" + indent("    .padding(horizontal = 16.dp, vertical = 12.dp),", depth + 1)
+          code += "\n" + indent("horizontalArrangement = Arrangement.SpaceBetween", depth + 1)
+          code += "\n" + indent(") {", depth)
+          
+          if header_data.is_a?(Array)
+            header_data.each do |column|
+              code += "\n" + indent("Text(", depth + 1)
+              code += "\n" + indent("text = #{JsonUIShared::StringLiterals.kotlin(column)},", depth + 2)
+              code += "\n" + indent("fontWeight = FontWeight.Bold,", depth + 2)
+              code += "\n" + indent("modifier = Modifier.weight(1f)", depth + 2)
+              code += "\n" + indent(")", depth + 1)
+            end
+          else
+            code += "\n" + indent("Text(text = \"Header\", fontWeight = FontWeight.Bold)", depth + 1)
+          end
+          
+          code += "\n" + indent("}", depth)
+          code
+        end
+        
+        def self.generate_table_cell(cell_data, depth, required_imports)
+          code = indent("Row(", depth)
+          code += "\n" + indent("modifier = Modifier", depth + 1)
+          code += "\n" + indent("    .fillMaxWidth()", depth + 1)
+          code += "\n" + indent("    .clickable { /* Handle row click */ }", depth + 1)
+          code += "\n" + indent("    .padding(horizontal = 16.dp, vertical = 12.dp)", depth + 1)
+          code += "\n" + indent(") {", depth)
+          
+          # Cell content based on template
+          code += "\n" + indent("// Custom cell rendering", depth + 1)
+          code += "\n" + indent("Text(text = item.toString())", depth + 1)
+          
+          code += "\n" + indent("}", depth)
+          code
+        end
+        
+        def self.generate_default_row(json_data, depth, required_imports)
+          row_height = json_data['rowHeight'] || 60
+          
+          code = "\n" + indent("Row(", depth)
+          code += "\n" + indent("modifier = Modifier", depth + 1)
+          code += "\n" + indent("    .fillMaxWidth()", depth + 1)
+          code += "\n" + indent("    .height(#{Helpers::BoundValue.dp(row_height)})", depth + 1)
+          code += "\n" + indent("    .clickable { /* Handle row click */ }", depth + 1)
+          code += "\n" + indent("    .padding(horizontal = 16.dp),", depth + 1)
+          code += "\n" + indent("verticalAlignment = Alignment.CenterVertically", depth + 1)
+          code += "\n" + indent(") {", depth)
+          code += "\n" + indent("Text(text = item.toString())", depth + 1)
+          code += "\n" + indent("}", depth)
+          code
+        end
+        
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line| 
+            line.empty? ? line : spaces + line 
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

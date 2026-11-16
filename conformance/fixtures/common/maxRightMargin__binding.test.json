@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/maxRightMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.maxRightMargin (binding)",
+    "description": "Conformance fixture for 'maxRightMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMaxRightMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "maxRightMargin__binding",
+      "description": "Conformance fixture for 'maxRightMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMaxRightMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

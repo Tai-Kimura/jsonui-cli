@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/draggable__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.draggable (false)",
+    "description": "Conformance fixture for 'draggable' on View (section: View, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "draggable__false",
+      "description": "Conformance fixture for 'draggable' on View (section: View, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_draggable__false"
+        }
+      ]
+    }
+  ]
+}

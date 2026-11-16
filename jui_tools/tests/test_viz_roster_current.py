@@ -1,0 +1,121 @@
+"""The room's robot list highlights the robot selected now (requester 10-23: 「今選択されてるロボットがチェックの方でも
+ハイライトされるようにしてほしい」): its card open (rbState.id), a subagent's being its main session's row, none when none
+is selected; the row brought into the list's view once per robot selected. rosterCurrentKey, rosterRowHTML and
+rosterShowCurrent are cut out of 53-roster.js and run in node with the page's state stood in; the page itself is
+tools/viz_e2e/room_roster.py's (select, move, a subagent, none)."""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+
+from tests.test_viz_bundle import web_text
+
+STAND_IN = r"""
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+const tl = (k, p = {}) => `${k}:${p.name || ''}`;
+const pill = (id) => `<b>${id}</b>`;
+const LAMP = { idle: '#999' }, LAMP_TEXT = { idle: 'idle' }, WAIT = { name: {} };
+const DEF = { a1: { id: 'a1', kind: 'main', sessionId: 'S-A' }, b2: { id: 'b2', kind: 'main', sessionId: 'S-B' },
+              s9: { id: 's9', kind: 'sub', mainLabel: 'b2', realId: 'agent-s9' } };
+const rbState = { id: null };
+const ROSTER = { shownFor: null };
+const rowsOf = () => [{ key: 'S-A', id: 'a1', role: 'main', name: 'A', lamp: 'idle', wait: null, on: true },
+                      { key: 'S-B', id: 'b2', role: 'main', name: 'B', lamp: 'idle', wait: null, on: true }];
+const marked = () => rowsOf().filter((r) => rosterRowHTML(r, rosterCurrentKey()).includes('aria-current="true"')).map((r) => r.id);
+const pick = (id) => { rbState.id = id; return marked(); };
+"""
+
+
+def _cut(src: str, name: str) -> str:
+    start = re.search(rf"\nfunction {name}\(", src).start() + 1
+    return src[start:src.index("\n}", start) + 2]
+
+
+def _node(code: str):
+    node = shutil.which("node")
+    assert node, "node is needed (the jui_tools job has it; a skip would hide the arm)"
+    out = subprocess.run([node, "-"], input=code, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+def _src() -> str:
+    src = web_text("js", "53-roster.js")
+    consts = "\n".join(re.search(rf"\nconst {n} = [^\n]*", src).group(0) for n in ("rosterMainDef", "rosterKeyOf"))
+    return consts + "\n" + "\n".join(_cut(src, n) for n in ("rosterCurrentKey", "rosterRowHTML", "rosterShowCurrent"))
+
+
+def test_the_selected_robots_row_and_only_it_is_highlighted_and_moves_with_the_selection():
+    got = _node(STAND_IN + _src() + """
+process.stdout.write(JSON.stringify({ none: pick(null), picked: pick('a1'), moved: pick('b2'), sub: pick('s9'), unknown: pick('zz'), off: pick(null) }));""")
+    assert got == {"none": [], "picked": ["a1"], "moved": ["b2"], "sub": ["b2"], "unknown": [], "off": []}
+
+
+def test_the_highlighted_row_is_brought_into_view_once_per_robot_selected():
+    got = _node(STAND_IN + _src() + r"""
+let rowTop = 900;
+const row = { offsetParent: {}, getBoundingClientRect: () => ({ top: rowTop, bottom: rowTop + 30 }) };
+const list = { scrollTop: 0, querySelector: () => row, getBoundingClientRect: () => ({ top: 100, bottom: 500 }) };
+const document = { getElementById: () => list };
+rosterShowCurrent('S-A'); const below = list.scrollTop;
+rowTop = 20; rosterShowCurrent('S-A'); const same = list.scrollTop;     // the same robot: the reader's scroll stays
+rosterShowCurrent('S-B'); const above = list.scrollTop;
+rosterShowCurrent(null); const none = [list.scrollTop, ROSTER.shownFor];
+process.stdout.write(JSON.stringify({ below, same, above, none }));""".replace("const ROSTER = { shownFor: null };", ""))
+    assert got == {"below": 434, "same": 434, "above": 350, "none": [350, None]}
+
+
+def test_the_list_is_drawn_again_when_the_selection_changes():
+    """The list is written again only when its signature changes: the selected row is part of it."""
+    sync = _cut(web_text("js", "53-roster.js"), "rosterSync")
+    assert "current = rosterCurrentKey()" in sync and "${solo}|${current}|" in sync
+    assert "rows.map((r) => rosterRowHTML(r, current))" in sync
+    assert sync.count("rosterShowCurrent(current)") == 2   # drawn again, or the same rows with a selection to show
+
+
+def test_the_list_resized_shows_the_selected_row_again():
+    """The page shorter (or a floor's buttons up): the list is placed shorter, so the selected row is brought into view
+    again; placed the same, the reader's own scroll stays (10-23: at 520 px high the row selected lay under the log)."""
+    src = web_text("js", "53-roster.js")
+    code = "\n".join(re.search(rf"\nconst {n} = [^\n]*", src).group(0) for n in ("ROSTER", "ROSTER_AROUND")) + "\n" + _cut(src, "rosterPlace") + r"""
+let bottom = 1080;
+const props = {};
+const box = { style: { setProperty: (k, v) => { props[k] = v; }, getPropertyValue: (k) => props[k] || '' }, getBoundingClientRect: () => ({ left: 0, right: 248, top: 60, bottom: 600 }) };
+const document = { getElementById: (id) => (id === 'scene' ? { getBoundingClientRect: () => ({ top: 48, bottom, height: bottom - 48 }) } : null), querySelector: () => null };
+const rosterNarrow = () => false;
+const out = [];
+rosterPlace(box); ROSTER.shownFor = 'S-A'; rosterPlace(box); out.push([props['--roster-max'], ROSTER.shownFor]);   // the same: kept
+bottom = 400; rosterPlace(box); out.push([props['--roster-max'], ROSTER.shownFor]);                               // shorter: shown again
+process.stdout.write(JSON.stringify(out));"""
+    assert _node(code) == [["1008px", "S-A"], ["328px", None]]
+
+
+def test_the_waits_beside_a_card_move_the_list_left_or_else_below_them():
+    """The other robots' waits beside an open card (#rb-waits) stay at the card's corner; the list moves (the gate,
+    2.3.21: it lay on them at 1920). Room on the left: the list goes left of them (--roster-shift) and keeps its height;
+    no room: below them, as the fixed parts; the waits hidden: no shift. An open card the list lies on (under 1300 px)
+    moves it left of the card, then of the card's waits."""
+    src = web_text("js", "53-roster.js")
+    code = "\n".join(re.search(rf"\nconst {n} = [^\n]*", src).group(0) for n in ("ROSTER", "ROSTER_AROUND", "ROSTER_GAP")) + "\n" + _cut(src, "rosterPlace") + r"""
+const props = {};
+let sceneLeft = 0, hidden = false;
+const box = { style: { setProperty: (k, v) => { props[k] = v; }, getPropertyValue: (k) => props[k] || '' },
+  getBoundingClientRect: () => { const s = parseFloat(props['--roster-shift']) || 0; return { left: 1000 - s, right: 1248 - s, top: 60, bottom: 600 }; } };
+const waits = { get hidden() { return hidden; }, getBoundingClientRect: () => ({ left: 1000, right: 1240, top: 60, bottom: 300, width: 240, height: 240 }) };
+let card = null;
+const document = { getElementById: (id) => (id === 'scene' ? { getBoundingClientRect: () => ({ left: sceneLeft, top: 48, bottom: 1080, height: 1032 }) } : id === 'rb-waits' ? waits : null),
+  querySelector: (q) => (q === '#rb.show' ? card : null) };
+const rosterNarrow = () => false;
+const out = [];
+rosterPlace(box); rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top'], props['--roster-max']]);   // twice: no drift
+sceneLeft = 900; rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top'], props['--roster-max']]);   // no room: below
+sceneLeft = 0; hidden = true; rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top']]);             // hidden: none
+// a card the list lies on (under 1300 px app.css leaves the list at the right): left of the card, then of the waits
+card = { getBoundingClientRect: () => ({ left: 1100, right: 1520, top: 60, bottom: 900, width: 420, height: 840 }) };
+rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top']]);                                           // the card, no waits
+waits.getBoundingClientRect = () => ({ left: 850, right: 1090, top: 60, bottom: 300, width: 240, height: 240 }); hidden = false;
+rosterPlace(box); rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top']]);                        // the card and its waits
+process.stdout.write(JSON.stringify(out));"""
+    assert _node(code) == [["256px", "12px", "1008px"], ["0px", "258px", "762px"], ["0px", "12px"], ["156px", "12px"], ["406px", "12px"]]

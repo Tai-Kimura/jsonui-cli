@@ -1,0 +1,44 @@
+"use client";
+
+/* eslint-disable */
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  @generated AUTO-GENERATED FILE — DO NOT EDIT
+// ║  Source:    useColorMode hook (rjui_tools template)
+// ║  Generator: rjui build
+// ║  Any manual edits will be OVERWRITTEN on next generation.
+// ║  LLM/Agent: you MUST NOT modify this file.
+// ╚══════════════════════════════════════════════════════════════════╝
+
+import { useSyncExternalStore } from 'react';
+import { ColorManager, ColorMode } from '@/generated/ColorManager';
+
+/**
+ * React hook that subscribes to ColorManager's current mode. Returns the
+ * current mode string and re-renders the calling component whenever
+ * `ColorManager.setMode(...)` is called OR when the OS switches
+ * prefers-color-scheme (when `ColorManager.followSystemMode` is true).
+ *
+ * Usage:
+ *   const mode = useColorMode();
+ *   return <div style={{ background: ColorManager.accent }}>hello</div>;
+ *
+ * The `mode` return value is mostly for conditional logic in the JSX
+ * (`mode === 'dark' ? X : Y`). For plain color values, reference
+ * `ColorManager.<key>` directly — the subscription returned by this
+ * hook forces a re-render, which re-evaluates the dynamic accessor.
+ */
+
+const subscribe = (onStoreChange: () => void) => ColorManager.subscribe(onStoreChange);
+const getSnapshot = (): ColorMode => ColorManager.currentMode;
+
+export function useColorMode(): ColorMode {
+  // useSyncExternalStore instead of useState+useEffect: no synchronous
+  // setState inside an effect (react-hooks/set-state-in-effect), and the
+  // mount-time re-sync race during hydration disappears — React reads the
+  // store snapshot directly. Server snapshot = currentMode (fallback mode).
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+export default useColorMode;
+
+// ══ END AUTO-GENERATED — DO NOT APPEND BELOW THIS LINE ══

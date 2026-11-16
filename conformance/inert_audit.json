@@ -1,0 +1,1637 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted UNATTRIBUTED inert verdicts — fixtures whose attribute changed no pixels on the listed platforms and which no other ledger has an opinion about. This is the completeness ratchet behind `jui conformance gate --inert-complete`: an unattributed inert verdict that is NOT here fails the gate (an attribute can otherwise stop rendering and nothing says so), and an entry the measurement no longer supports fails too (a fixed attribute must not keep an excuse on file). Reason 'unreviewed-initial-measurement' marks the backlog — consume it by replacing the reason with the adjudication, or by fixing the platform and letting the entry go stale. An entry whose platform set changes returns to the backlog, because the adjudication was written about a different fact. Two optional keys carry the ruling in machine-readable form: 'adjudicatedFamily' is the family slug the reason prose also names, and 'controlDiffExclusion' — present only where the ruling removes the fixture from the control comparison — names the family justifying that removal. Consumers key off those, never off a sentinel inside the prose. Both are dropped when the platform set changes, for the same reason the verdict is.",
+  "platforms": [
+    "ios",
+    "android",
+    "web"
+  ],
+  "counts": {
+    "entries": 116,
+    "unreviewed": 0
+  },
+  "entries": [
+    {
+      "fixture": "Button/href__static",
+      "component": "Button",
+      "attribute": "href",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui wraps the button in the host's <Link href> (an anchor with no style of its own), which changes where a tap goes, not one pixel of the still. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "CheckBox/checked__false",
+      "component": "CheckBox",
+      "attribute": "checked",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "CheckBox/isOn__false",
+      "component": "CheckBox",
+      "attribute": "isOn",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Collection/hideSeparator__false",
+      "component": "Collection",
+      "attribute": "hideSeparator",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "Declared default: false shows separators, exactly what the attribute-less control draws (its listStyle companion gives both a List with rows) — identical by construction; the TRUE face carries the discrimination.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/horizontalScroll__false",
+      "component": "Collection",
+      "attribute": "horizontalScroll",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Collection/reverseLayout__false",
+      "component": "Collection",
+      "attribute": "reverseLayout",
+      "inertOn": [
+        "android"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. false is JSON definition order, which is the control's order. The SSoT declaration says iOS does not support reverseLayout at all, so the attribute is compose-scoped by design and the sibling reverseLayout__true is the measured face. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Collection/showsHorizontalScrollIndicator__false",
+      "component": "Collection",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated scroll-chrome-at-rest: the attribute IS read on both faces that declare it (sjui_tools collection_converter.rb:1873, rjui_tools collection_converter.rb:289), and the false spelling is the one they act on. What the fixture cannot do is put the effect into a STILL: a scroll indicator is transient chrome that is not painted while the view is at rest, so suppressing it removes nothing from the capture. kotlin is out of scope by declaration (platform_reasons records that Compose has no scrollbar primitive for Lazy content). Family: scroll-chrome-at-rest.",
+      "note": "",
+      "adjudicatedFamily": "scroll-chrome-at-rest"
+    },
+    {
+      "fixture": "Collection/showsHorizontalScrollIndicator__true",
+      "component": "Collection",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated value-is-default: both faces that declare this attribute branch only on the FALSE spelling — sjui_tools emits `shows_indicators = @component['showsHorizontalScrollIndicator'] != false` and rjui_tools tests `attributes['showsHorizontalScrollIndicator'] == false`. `true` therefore takes the same path as an absent attribute, which is the control. Read from the emitters, not inferred from the picture. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "GradientView/gradientType__linear",
+      "component": "GradientView",
+      "attribute": "gradientType",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: linear is rjui's default gradient (gradient_view_converter: radial-gradient only for 'radial'), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (radial) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "GradientView/gradient__alias_colors",
+      "component": "GradientView",
+      "attribute": "gradient",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "Fixture shape: the alias probe's colour list equals the control's companion gradient, so the two renders are identical by construction (verified: alias and control both draw the red→purple ramp; the static sibling's green ramp discriminates). The alias IS read — a probe-value collision, not an alias gap.",
+      "note": ""
+    },
+    {
+      "fixture": "GradientView/orientation__vertical",
+      "component": "GradientView",
+      "attribute": "orientation",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: vertical is the default stacking (a flex column, the same class the control's children get), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (horizontal) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "IconLabel/selected__false",
+      "component": "IconLabel",
+      "attribute": "selected",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "IconLabel/strikethrough__false",
+      "component": "IconLabel",
+      "attribute": "strikethrough",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state, so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "IconLabel/underline__false",
+      "component": "IconLabel",
+      "attribute": "underline",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state, so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "Image/highlightSrc__binding",
+      "component": "Image",
+      "attribute": "highlightSrc",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Same site and reason as the __static sibling; the binding form resolves to the same pressed-state image.",
+      "note": ""
+    },
+    {
+      "fixture": "Image/highlightSrc__static",
+      "component": "Image",
+      "attribute": "highlightSrc",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied through HighlightableImage.swift, which swaps the image WHILE THE VIEW IS PRESSED. The conformance host captures an untouched screen, so the highlight image is never the one on screen. Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Image/systemIcon__false",
+      "component": "Image",
+      "attribute": "systemIcon",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. false means 'do not interpret src as an SF Symbol', i.e. the plain-asset path the control already takes; the sibling systemIcon__true is the face that changes the render. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Indicator/halfSpinner__false",
+      "component": "Indicator",
+      "attribute": "halfSpinner",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no border-r colour), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "Indicator/hidesWhenStopped__false",
+      "component": "Indicator",
+      "attribute": "hidesWhenStopped",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated reflow-only-observable — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. IndicatorConverter returns EmptyView() when `animating == false`, so a stopped indicator occupies no space regardless of this flag. What the attribute changes is whether the SURROUNDING layout reflows — and this fixture has no neighbour to reflow. The observable is a sibling's position, not this view's pixels. Family: reflow-only-observable.",
+      "note": "",
+      "adjudicatedFamily": "reflow-only-observable"
+    },
+    {
+      "fixture": "Indicator/hidesWhenStopped__true",
+      "component": "Indicator",
+      "attribute": "hidesWhenStopped",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Same mechanism as the __false sibling: with no neighbour in the fixture, both values render the same empty region.",
+      "note": ""
+    },
+    {
+      "fixture": "Label/autoShrink__false",
+      "component": "Label",
+      "attribute": "autoShrink",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Label/linkable__false",
+      "component": "Label",
+      "attribute": "linkable",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Label/selected__false",
+      "component": "Label",
+      "attribute": "selected",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Label/strikethrough__false",
+      "component": "Label",
+      "attribute": "strikethrough",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. The C2/presence-only finding this attribute carries in codegen_effect.json is about the STYLED OBJECT face; the ledger's own text records that the boolean face works on all three and draws the line, which is exactly why the true face is active and this false face is not. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Label/textTransform__lowercase",
+      "component": "Label",
+      "attribute": "textTransform",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated fixture-sample-cannot-discriminate: the shared control text is \"sample conformance text\", already entirely lower-case, so `text-transform: lowercase` has nothing to change. Measured on the same web render: __lowercase 0 px, __capitalize 1670 px, __uppercase 2006 px, __none 0 px. THE ATTRIBUTE WORKS — this VALUE has no sample to act on. It is a fixture gap: closing it needs a mixed-case sample string in rules.py and a re-measure, not an implementation change. Family: fixture-sample-cannot-discriminate.",
+      "note": "",
+      "adjudicatedFamily": "fixture-sample-cannot-discriminate"
+    },
+    {
+      "fixture": "Label/textTransform__none",
+      "component": "Label",
+      "attribute": "textTransform",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. 'none' is the CSS initial value of text-transform. Measured on the web artifacts at HEAD: textTransform__lowercase moves 523 px against the same control while none moves 0. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Label/underline__false",
+      "component": "Label",
+      "attribute": "underline",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. The C2/presence-only finding this attribute carries in codegen_effect.json is about the STYLED OBJECT face; the ledger's own text records that the boolean face works on all three and draws the line, which is exactly why the true face is active and this false face is not. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "NetworkImage/circle__false",
+      "component": "NetworkImage",
+      "attribute": "circle",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no rounded-full), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "NetworkImage/contentMode__binding",
+      "component": "NetworkImage",
+      "attribute": "contentMode",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated value-is-default via the binding's own default: the fixture's data section declares boundContentMode with defaultValue \"fit\", so this row measures the value 'fit'. Measured on the web artifacts at HEAD 2026-08-07, the static siblings separate exactly along that line — contentMode__fit 0 px and contentMode__aspectfit 0 px against the control, while contentMode__fill 8960 px, __aspectfill 8480 px and __center 3640 px all move; and this ledger's own machine triage records family=sibling-value-active, i.e. a sibling value is active on every platform where this row is inert. The binding mechanism is therefore innocent: it faithfully delivers a value whose rendering equals the platforms' default content mode. codegen-effect --paired at HEAD reports no defect for this attribute. Closure: point the binding default at a discriminating value (owner D). Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "Progress/hidesWhenStopped__false",
+      "component": "Progress",
+      "attribute": "hidesWhenStopped",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face on BOTH ios paths: the dynamic renderer the fixture goes through (ProgressConverter.swift:92) and the codegen converter (progress_converter.rb:80) each act only on `hidesWhenStopped == true`, emitting .opacity(progress > 0 ? 1 : 0); the false face therefore produces exactly the control's output by construction, which is the correct reading of 'do not hide' for a bar that is visible by default. The discriminating face is true. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Progress/indicatorStyle__large",
+      "component": "Progress",
+      "attribute": "indicatorStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at ProgressConverter.swift:47 as `.controlSize(.large)`. The declared vocabulary is the ActivityIndicator SIZE (`medium`/`large`), and `controlSize` is advisory: SwiftUI's circular ProgressView renders at the same glyph size for both on this OS, so the two declared values produce the same pixels even though the modifier differs.",
+      "note": ""
+    },
+    {
+      "fixture": "Progress/indicatorStyle__medium",
+      "component": "Progress",
+      "attribute": "indicatorStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at ProgressConverter.swift:48 as `.controlSize(.regular)`. Same reason as the __large sibling.",
+      "note": ""
+    },
+    {
+      "fixture": "Radio/checked__false",
+      "component": "Radio",
+      "attribute": "checked",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "Declared default: false is the unchecked default the control already renders; the true/binding/alias siblings discriminate.",
+      "note": ""
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "alias-of-queued-canonical",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__leading",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__static",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__trailing",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "SafeAreaView/safeAreaInsetPositions__vertical",
+      "component": "SafeAreaView",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "ScrollView/horizontalScroll__false",
+      "component": "ScrollView",
+      "attribute": "horizontalScroll",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "Declared default: false means the vertical default the control renders; the TRUE face discriminates.",
+      "note": ""
+    },
+    {
+      "fixture": "ScrollView/scrollBehavior__auto",
+      "component": "ScrollView",
+      "attribute": "scrollBehavior",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. 'auto' is the CSS initial value of scroll-behavior, so the emitted class restates what the control already has. (The sibling 'smooth' is inert too, for the different reason recorded on its own row: an animation is not photographable at rest.) codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control"
+    },
+    {
+      "fixture": "ScrollView/scrollBehavior__smooth",
+      "component": "ScrollView",
+      "attribute": "scrollBehavior",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated not-photographable-at-rest: scroll-behavior selects the ANIMATION used when a scroll is programmatically triggered; an unscrolled container at rest renders identically however it is set. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure is an interactive fixture that scrolls and captures mid-flight. Family: scroll-chrome-at-rest.",
+      "note": "",
+      "adjudicatedFamily": "scroll-chrome-at-rest"
+    },
+    {
+      "fixture": "ScrollView/scrollMode__inner",
+      "component": "ScrollView",
+      "attribute": "scrollMode",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The SSoT declaration names 'inner' as the default in so many words, and the measurement agrees: on the web artifacts at HEAD scrollMode__window moves 84000 px against the same control while inner moves 0. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "ScrollView/showsHorizontalScrollIndicator__false",
+      "component": "ScrollView",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated scroll-chrome-at-rest: the attribute IS read on both faces that declare it (sjui_tools scrollview_converter.rb:59, rjui_tools scroll_view_converter.rb:75), and the false spelling is the one they act on. What the fixture cannot do is put the effect into a STILL: a scroll indicator is transient chrome that is not painted while the view is at rest, so suppressing it removes nothing from the capture. kotlin is out of scope by declaration (platform_reasons records that Compose has no scrollbar primitive for Lazy content). Family: scroll-chrome-at-rest.",
+      "note": "",
+      "adjudicatedFamily": "scroll-chrome-at-rest"
+    },
+    {
+      "fixture": "ScrollView/showsHorizontalScrollIndicator__true",
+      "component": "ScrollView",
+      "attribute": "showsHorizontalScrollIndicator",
+      "inertOn": [
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated value-is-default: both faces that declare this attribute branch only on the FALSE spelling — sjui_tools emits `shows_indicators = @component['showsHorizontalScrollIndicator'] != false` and rjui_tools tests `attributes['showsHorizontalScrollIndicator'] == false`. `true` therefore takes the same path as an absent attribute, which is the control. Read from the emitters, not inferred from the picture. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "SelectBox/colorScheme__light",
+      "component": "SelectBox",
+      "attribute": "colorScheme",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: SelectBox/colorScheme__dark moves 108 px against the same control while light moves 0 — the declaration exists to let a dark background flip the native date-picker icon, so light is the state the control is already in. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "SelectBox/maximumDate__binding",
+      "component": "SelectBox",
+      "attribute": "maximumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.maximumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
+      "note": "",
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
+    },
+    {
+      "fixture": "SelectBox/maximumDate__static",
+      "component": "SelectBox",
+      "attribute": "maximumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.maximumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
+      "note": "",
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
+    },
+    {
+      "fixture": "SelectBox/minimumDate__binding",
+      "component": "SelectBox",
+      "attribute": "minimumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.minimumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
+      "note": "",
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
+    },
+    {
+      "fixture": "SelectBox/minimumDate__static",
+      "component": "SelectBox",
+      "attribute": "minimumDate",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.minimumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
+      "note": "",
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
+    },
+    {
+      "fixture": "SelectBox/multiple__false",
+      "component": "SelectBox",
+      "attribute": "multiple",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: SelectBox/multiple__true moves 1048 px against the same control while this false face moves 0 — single selection is the control's own state. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Switch/checked__false",
+      "component": "Switch",
+      "attribute": "checked",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Switch/isOn__false",
+      "component": "Switch",
+      "attribute": "isOn",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Switch/labelPosition__leading",
+      "component": "Switch",
+      "attribute": "labelPosition",
+      "inertOn": [
+        "android"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and 'leading' is the default BOTH renderers fall back to — the android conformance lane runs the dynamic renderer (DynamicSwitchComponent.kt:214-215, `?: \"leading\"`) and the codegen converter agrees (kjui_tools switch_component.rb:171, `json_data['labelPosition'] || 'leading'`). Writing the default restates what the control already composes; the discriminating face is 'trailing'. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Switch/toggleStyle__checkbox",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "Value-level, not a gap (sibling button active): SwiftUI has no checkbox toggle style, so the value falls back to the switch appearance — the default picture.",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/toggleStyle__default",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "Declared default: 'default' IS the switch appearance the control already wears.",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/toggleStyle__switch",
+      "component": "Switch",
+      "attribute": "toggleStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "Declared default appearance: 'switch' names the default picture, so it equals the control by construction.",
+      "note": ""
+    },
+    {
+      "fixture": "Switch/value__false",
+      "component": "Switch",
+      "attribute": "value",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TabView/showLabels__true",
+      "component": "TabView",
+      "attribute": "showLabels",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "value-is-default",
+      "reason": "adjudicated value-is-default: TabView.showLabels is declared boolean with default true and SwiftJsonUI reads it as `component.typedAttributes(TabViewAttributes.self).showLabels ?? true`, so `true` IS the control. Measured on iPhone 16 Pro / iOS 26.5: __true 0 px vs its control, __false 7389 px — the attribute works and only this value cannot discriminate. The row asserting it differs was removed from control_diff.json in the same change. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "TextField/autoFocus__false",
+      "component": "TextField",
+      "attribute": "autoFocus",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no autoFocus prop), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "TextField/editable__false",
+      "component": "TextField",
+      "attribute": "editable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes readOnly, which stops typing and leaves the input's look unchanged in Chromium (no :read-only style in the host). The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "TextField/editable__true",
+      "component": "TextField",
+      "attribute": "editable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated value-is-default: true is the default (an editable input), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (false) renders no differently either; see its row. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "TextField/name__static",
+      "component": "TextField",
+      "attribute": "name",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui writes the input's form `name`, a submission key with no rendering. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "TextField/secure__false",
+      "component": "TextField",
+      "attribute": "secure",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. false is plain (non-obscured) text entry — what the control with the same text already shows. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TextView/autoFocus__false",
+      "component": "TextView",
+      "attribute": "autoFocus",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no autoFocus prop), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "TextView/editable__true",
+      "component": "TextView",
+      "attribute": "editable",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. true is the default state of a text area on all three platforms (the control renders an editable field), which is why the DISCRIMINATING face is editable__false — measured active on android and adjudicated in cross_effect.json this round. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TextView/flexible__false",
+      "component": "TextView",
+      "attribute": "flexible",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: TextView/flexible__true moves 10 px against the same control while this false face moves 0. With an explicit height:100 on the target, non-flexible is what the control already renders. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TextView/name__static",
+      "component": "TextView",
+      "attribute": "name",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui writes the textarea's form `name`, a submission key with no rendering. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "TextView/resize__none",
+      "component": "TextView",
+      "attribute": "resize",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated value-is-default: rjui_tools text_view_converter.rb maps the declared enum onto Tailwind and its own comment records \"Absent or false still means resize-none\", so `none` is the path an absent attribute already takes. Measured on the same web render: __none 0 px, __both / __horizontal / __vertical 10 px each. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "TextView/selectable__false",
+      "component": "TextView",
+      "attribute": "selectable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated not-photographable-at-rest: text selection is an interaction state; a still capture of an untouched text area is identical whether selection is allowed or blocked (measured on the web artifacts at HEAD: both selectable faces move 0 px against the same control). codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure is an interactive fixture that drags a selection. Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "TextView/selectable__true",
+      "component": "TextView",
+      "attribute": "selectable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Text in a web text area is selectable by default, so true restates the control's state — and selection is an interaction that a still capture cannot photograph either way (see the selectable__false row). codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control"
+    },
+    {
+      "fixture": "View/flexWrap__nowrap",
+      "component": "View",
+      "attribute": "flexWrap",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. Measured on the web artifacts at HEAD: View/flexWrap__wrap moves 3200 px against the same control while nowrap moves 0 — nowrap is the CSS initial value the control already lays out. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "View/gradientDirection__vertical",
+      "component": "View",
+      "attribute": "gradientDirection",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "value-is-default",
+      "reason": "adjudicated value-is-default, and it stays inert on both ios paths for two independent reasons. (1) The SSoT declares View.gradientDirection default \"Vertical\" and this fixture's control already carries the gradient, so the fixture restates the default; the codegen converter confirms it (sjui_tools modifier_helper.rb:16-23 has arms only for 'Horizontal'/'Oblique' and everything else, Vertical included, falls to the same top-to-bottom emit). (2) The path the fixture actually renders through is DYNAMIC, where a plain View's gradient is not applied at all — DynamicViewContainer.swift:105-108 casts rawData[\"gradient\"] to [String: Any] while the SSoT types it as an array, and gradientDirection has no read site there. Reason (2) is the gap the sibling rows hand to F; this row would remain inert after F's fix, because Vertical is the default either way. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "View/highlighted__false",
+      "component": "View",
+      "attribute": "highlighted",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The control for this fixture is __control/View__highlightBackground--FF0000: the companion the attribute_semantics highlight topic requires is already written on BOTH sides, so the only difference is highlighted:false — the not-highlighted state the control is already in. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__leading",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__static",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__trailing",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "View/safeAreaInsetPositions__vertical",
+      "component": "View",
+      "attribute": "safeAreaInsetPositions",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "Web/allowCamera__false",
+      "component": "Web",
+      "attribute": "allowCamera",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowCamera__true",
+      "component": "Web",
+      "attribute": "allowCamera",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowDownloads__false",
+      "component": "Web",
+      "attribute": "allowDownloads",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowDownloads__true",
+      "component": "Web",
+      "attribute": "allowDownloads",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowGeolocation__false",
+      "component": "Web",
+      "attribute": "allowGeolocation",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowGeolocation__true",
+      "component": "Web",
+      "attribute": "allowGeolocation",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowMicrophone__false",
+      "component": "Web",
+      "attribute": "allowMicrophone",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowMicrophone__true",
+      "component": "Web",
+      "attribute": "allowMicrophone",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowModals__false",
+      "component": "Web",
+      "attribute": "allowModals",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowModals__true",
+      "component": "Web",
+      "attribute": "allowModals",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowPopupsToEscapeSandbox__false",
+      "component": "Web",
+      "attribute": "allowPopupsToEscapeSandbox",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowPopupsToEscapeSandbox__true",
+      "component": "Web",
+      "attribute": "allowPopupsToEscapeSandbox",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsFullScreen__false",
+      "component": "Web",
+      "attribute": "allowsFullScreen",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsFullScreen__true",
+      "component": "Web",
+      "attribute": "allowsFullScreen",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsInlineMediaPlayback__false",
+      "component": "Web",
+      "attribute": "allowsInlineMediaPlayback",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsInlineMediaPlayback__true",
+      "component": "Web",
+      "attribute": "allowsInlineMediaPlayback",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptCanOpenWindowsAutomatically__false",
+      "component": "Web",
+      "attribute": "javaScriptCanOpenWindowsAutomatically",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptCanOpenWindowsAutomatically__true",
+      "component": "Web",
+      "attribute": "javaScriptCanOpenWindowsAutomatically",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptEnabled__false",
+      "component": "Web",
+      "attribute": "javaScriptEnabled",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptEnabled__true",
+      "component": "Web",
+      "attribute": "javaScriptEnabled",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/lazyLoad__false",
+      "component": "Web",
+      "attribute": "lazyLoad",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes the iframe's loading attribute; an iframe already in the viewport loads the same either way. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/lazyLoad__true",
+      "component": "Web",
+      "attribute": "lazyLoad",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes the iframe's loading attribute; an iframe already in the viewport loads the same either way. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/title__static",
+      "component": "Web",
+      "attribute": "title",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui writes the iframe's `title`, an accessible name with no rendering. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "common/alignBottom__false",
+      "component": "common",
+      "attribute": "alignBottom",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/alignLeft__false",
+      "component": "common",
+      "attribute": "alignLeft",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/alignRight__false",
+      "component": "common",
+      "attribute": "alignRight",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/alignTop__false",
+      "component": "common",
+      "attribute": "alignTop",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/centerHorizontal__false",
+      "component": "common",
+      "attribute": "centerHorizontal",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/centerInParent__false",
+      "component": "common",
+      "attribute": "centerInParent",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The binding sibling common/centerInParent__binding is measured ACTIVE on android and web in cross_effect.json, so the attribute is honoured; false is the un-centered default that the control already renders. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/centerVertical__false",
+      "component": "common",
+      "attribute": "centerVertical",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-face-equals-control: the control omits the attribute entirely, and the absent state IS the value this fixture writes, so the pair is structurally incapable of differing however correctly the platform implements it. The ledger's own machine triage records family=sibling-value-active for this row: another declared value of the same attribute IS active on every platform where this one is inert, measured in the same run. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The discriminating face is the sibling fixture, which is measured and not in this queue. Family: off-face-equals-control.",
+      "note": "",
+      "adjudicatedFamily": "off-face-equals-control",
+      "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "common/clipToBounds__false",
+      "component": "common",
+      "attribute": "clipToBounds",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "value-is-default",
+      "reason": "adjudicated value-is-default: shared/core/attribute_definitions.json declares common.clipToBounds with \"Defaults to FALSE: content is not clipped unless the layout asks\". The fixture writes the declared default, so it renders the control on every face by definition, not by any platform's choice. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "common/clipToBounds__false_overflow",
+      "component": "common",
+      "attribute": "clipToBounds",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "value-is-default",
+      "reason": "Declared default (triaged): a still cannot show 'not clipped' against a control that also does not clip; the interactive hit_overflow pair discriminates.",
+      "note": ""
+    },
+    {
+      "fixture": "common/glass__false",
+      "component": "common",
+      "attribute": "glass",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-value-makes-no-call: DynamicModifierHelper.glassCall() returns GlassCall.none for `false` and the string \"false\", and applyGlass then does `guard call.applies else { return view }` — so no modifier is applied and the result is the control, which declares no glass. The pair is structurally incapable of differing. The sibling common/glass__true IS active on this face (it went from hashing identical to its control to differing when the glass stage landed in SwiftJsonUI v10.22.0), so the attribute is read. Family: off-value-makes-no-call.",
+      "note": "",
+      "adjudicatedFamily": "off-value-makes-no-call"
+    },
+    {
+      "fixture": "common/idealHeight__static",
+      "component": "common",
+      "attribute": "idealHeight",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at DynamicModifierHelper.swift:223 as `.frame(idealHeight:)`. Same reason as idealWidth: no layout pressure in this fixture shape. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "common/idealWidth__static",
+      "component": "common",
+      "attribute": "idealWidth",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated no-slack-at-this-shape — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at DynamicModifierHelper.swift:220 as `.frame(idealWidth:)`. SwiftUI consults an ideal size only when the parent offers a RANGE and asks the child what it would like — a fixture whose target sits at a fixed size in a fixed parent never reaches that negotiation, so the ideal is never the size chosen. Family: no-slack-at-this-shape.",
+      "note": "",
+      "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "common/maxEndMargin__static",
+      "component": "common",
+      "attribute": "maxEndMargin",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated type-fallback-value: common.maxEndMargin is declared only as `\"type\": \"number\"` with no enum, no default and no example, so the fixture generator fell back to its type-level 8 — a number from the generator, not from the attribute's domain. 8pt of end margin on this host's shape moves no pixels. THIS IS A FIXTURE GAP, NOT A PLATFORM GAP: the row says nothing about whether SwiftUI honours the constraint. Closing it needs a representative value in rules.py and a re-measure, not an implementation change. Family: type-fallback-value.",
+      "note": "",
+      "adjudicatedFamily": "type-fallback-value"
+    },
+    {
+      "fixture": "common/minEndMargin__static",
+      "component": "common",
+      "attribute": "minEndMargin",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated type-fallback-value: common.minEndMargin is declared only as `\"type\": \"number\"` with no enum, no default and no example, so the fixture generator fell back to its type-level 8 — a number from the generator, not from the attribute's domain. 8pt of end margin on this host's shape moves no pixels. THIS IS A FIXTURE GAP, NOT A PLATFORM GAP: the row says nothing about whether SwiftUI honours the constraint. Closing it needs a representative value in rules.py and a re-measure, not an implementation change. Family: type-fallback-value.",
+      "note": "",
+      "adjudicatedFamily": "type-fallback-value"
+    },
+    {
+      "fixture": "common/tintColor__binding",
+      "component": "common",
+      "attribute": "tintColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-tintable-content-at-this-host: common.tintColor tints TEMPLATE content — a symbol, a control's accent, a template image — and the fixture's host is a plain View whose children are opaque colour boxes, so there is nothing on screen for a tint to reach. Measured on the web artifacts at HEAD: 0 px for both the static and the bound face, and the bound face's data section supplies a real colour (#FF0000), so this is not a binding hole. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure: host the fixture on a component that actually has template content (owner D). Family: no-tintable-content.",
+      "note": "",
+      "adjudicatedFamily": "no-tintable-content"
+    },
+    {
+      "fixture": "common/tintColor__static",
+      "component": "common",
+      "attribute": "tintColor",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "untriaged",
+      "reason": "adjudicated no-tintable-content-at-this-host: common.tintColor tints TEMPLATE content — a symbol, a control's accent, a template image — and the fixture's host is a plain View whose children are opaque colour boxes, so there is nothing on screen for a tint to reach. Measured on the web artifacts at HEAD: 0 px for both the static and the bound face, and the bound face's data section supplies a real colour (#FF0000), so this is not a binding hole. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure: host the fixture on a component that actually has template content (owner D). Family: no-tintable-content.",
+      "note": "",
+      "adjudicatedFamily": "no-tintable-content"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/orientation__horizontal.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.orientation (horizontal)",
+    "description": "Conformance fixture for 'orientation' on Collection (section: Collection, class: visual). Value under test: \"horizontal\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "orientation__horizontal",
+      "description": "Conformance fixture for 'orientation' on Collection (section: Collection, class: visual). Value under test: \"horizontal\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_orientation__horizontal"
+        }
+      ]
+    }
+  ]
+}

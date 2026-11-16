@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/borderStyle__dashed_with_border.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.borderStyle (dashed_with_border)",
+    "description": "Conformance fixture for 'borderStyle' on View (section: common, class: visual). Value under test: \"dashed\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "borderStyle__dashed_with_border",
+      "description": "Conformance fixture for 'borderStyle' on View (section: common, class: visual). Value under test: \"dashed\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_borderStyle__dashed_with_border"
+        }
+      ]
+    }
+  ]
+}

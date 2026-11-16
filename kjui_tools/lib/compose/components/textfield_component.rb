@@ -1,0 +1,979 @@
+# frozen_string_literal: true
+
+require_relative '../helpers/modifier_builder'
+require_relative '../helpers/binding_expression'
+require_relative '../helpers/resource_resolver'
+require_relative '../helpers/font_spec_helper'
+require_relative '../../core/config_manager'
+require_relative '../../core/enum_spelling'
+require_relative '../helpers/text_input_write_back'
+
+module KjuiTools
+  module Compose
+    module Components
+      class TextFieldComponent
+        # The declared `contentType` vocabulary as Compose keyboard types.
+        # `url` is present on both tables: `input: "url"` used to fall through
+        # to KeyboardType.Text, which made every non-email/password/number
+        # input emit the SAME keyboard and measure as presence-only (plan 49
+        # lane C: TextField.input / TextView.input C2).
+        CONTENT_TYPE_KEYBOARD = {
+          'emailaddress' => 'KeyboardType.Email',
+          'email' => 'KeyboardType.Email',
+          'password' => 'KeyboardType.Password',
+          'newpassword' => 'KeyboardType.Password',
+          'telephonenumber' => 'KeyboardType.Phone',
+          'phone' => 'KeyboardType.Phone',
+          'tel' => 'KeyboardType.Phone',
+          'url' => 'KeyboardType.Uri',
+          'creditcardnumber' => 'KeyboardType.Number',
+          'postalcode' => 'KeyboardType.Number'
+        }.freeze
+
+        # The declared `contentType` vocabulary as Compose's autofill hint
+        # (androidx.compose.ui.autofill.ContentType). Until 2.5.11 the Android
+        # faces wrote the keyboard only, so the Autofill framework never knew a
+        # field was a username or a password and filled nothing from it, while
+        # iOS (.textContentType) and the web (autoComplete) said so.
+        # `usernameWebauthn` is a username to the framework: a Compose field
+        # takes no Credential Manager request, the app offers passkeys through
+        # CredentialManager.getCredential. `URL` has no autofill type.
+        CONTENT_TYPE_AUTOFILL = {
+          'username' => 'ContentType.Username',
+          'usernamewebauthn' => 'ContentType.Username',
+          'password' => 'ContentType.Password',
+          'newpassword' => 'ContentType.NewPassword',
+          'onetimecode' => 'ContentType.SmsOtpCode',
+          'email' => 'ContentType.EmailAddress',
+          'emailaddress' => 'ContentType.EmailAddress',
+          'name' => 'ContentType.PersonFullName',
+          'givenname' => 'ContentType.PersonFirstName',
+          'familyname' => 'ContentType.PersonLastName',
+          'telephonenumber' => 'ContentType.PhoneNumber',
+          'tel' => 'ContentType.PhoneNumber',
+          'phone' => 'ContentType.PhoneNumber',
+          'streetaddress' => 'ContentType.AddressStreet',
+          'postalcode' => 'ContentType.PostalCode',
+          'country' => 'ContentType.AddressCountry',
+          'creditcardnumber' => 'ContentType.CreditCardNumber'
+        }.freeze
+
+        # The `.semantics { contentType = … }` modifier for a declared
+        # contentType, or [] when it names nothing the framework fills. A bound
+        # one is looked up at run time; a value with no autofill type sets none.
+        def self.autofill_modifiers(json_data, required_imports)
+          value = json_data['contentType']
+          return [] if value.nil? || value == ''
+
+          hint = Helpers::BoundValue.enum(value, CONTENT_TYPE_AUTOFILL,
+                                          bound_default: 'null', declared: %w[TextField contentType])
+          return [] if hint.nil?
+
+          required_imports&.add(:autofill_content_type)
+          if Helpers::BindingExpression.whole_binding?(value)
+            [".semantics { (#{hint})?.let { contentType = it } }"]
+          else
+            [".semantics { contentType = #{hint} }"]
+          end
+        end
+
+        # `default` is deliberately absent from both tables. It means "the
+        # platform's own keyboard", i.e. no opinion — and emitting
+        # `KeyboardType.Text` for it made `input: "default"` and
+        # `input: "alphabet"` produce identical output, which is what
+        # measured as presence-only (plan 49 lane C: TextField.input /
+        # TextView.input / TextView.keyboardType C2).
+        #
+        # `alphabet` maps to Text on purpose: sjui reaches for
+        # `.asciiCapable`, and Compose's peer `KeyboardType.Ascii` was
+        # deprecated in favour of `Text` — so Text IS the honest answer here,
+        # and the discrimination comes from `default` emitting nothing.
+        INPUT_KEYBOARD = {
+          'alphabet' => 'KeyboardType.Text',
+          'allphabet' => 'KeyboardType.Text',
+          'asciicapable' => 'KeyboardType.Text',
+          'text' => 'KeyboardType.Text',
+          'email' => 'KeyboardType.Email',
+          'password' => 'KeyboardType.Password',
+          'number' => 'KeyboardType.Number',
+          'decimal' => 'KeyboardType.Decimal',
+          'phone' => 'KeyboardType.Phone',
+          'url' => 'KeyboardType.Uri',
+          # Compose 1.12 members. The declared value is `signedDecimal`; the
+          # Compose member is `DecimalSigned`. The two orders are NOT a typo on
+          # either side -- the plan called the member `SignedDecimal`, which does
+          # not exist (`javap` on ui-text 1.12.1 lists DecimalSigned alongside
+          # NumberSigned, DecimalPassword, NumberPasswordSigned and
+          # DecimalPasswordSigned). Emitting the planned spelling would not
+          # compile.
+          'signeddecimal' => 'KeyboardType.DecimalSigned',
+          'date' => 'KeyboardType.Date',
+          'time' => 'KeyboardType.Time',
+          'datetime' => 'KeyboardType.DateTime'
+        }.freeze
+
+        # The last four entries name Compose members that only exist from
+        # ui-text 1.12.0. The generated Kotlin NAMES the member, so an older
+        # Compose is a COMPILE error rather than a degraded keyboard -- which
+        # is why this floor belongs to codegen alone. The dynamic renderer
+        # needs nothing: it never names them, it falls to KeyboardType.Text,
+        # and 1.11 already has Text.
+        #
+        # The floor is DECLARED, not detected. A project that says nothing
+        # keeps the real members, because that is what both known consumer
+        # faces are on and because this generator never sees the consumer's
+        # dependency graph. A project on an older Compose says so once, in
+        # kjui.config.json, and these four degrade.
+        COMPOSE_KEYBOARD_TYPE_FLOOR = '1.12.0'
+
+        # Which INPUT_KEYBOARD keys the floor moves. Derived from the table
+        # above by key, so a key that stops existing there stops being floored
+        # loudly (the spec asserts this list is a subset of INPUT_KEYBOARD)
+        # rather than silently flooring nothing.
+        FLOORED_INPUT_VALUES = %w[signeddecimal date time datetime].freeze
+
+        # The `input` table as this project may use it.
+        #
+        # The comparison is Gem::Version and never String. As strings,
+        # '1.9.0' > '1.12.0' is TRUE, so a String compare would emit 1.12
+        # members onto a 1.9 project: a build failure, and the exact thing
+        # this floor exists to stop. The other direction is killed by '1.12',
+        # which sorts BELOW the floor as a string, so a project that declares
+        # only major.minor would lose four keyboards it actually has.
+        #
+        # '1.12.10' does NOT kill it, and this comment claimed it did until
+        # 1.8.80. Measured 2026-09-14 on ruby 3.2.2: '1.12.10' < '1.12.0' is
+        # false, because at index 5 '1' > '0'. Against a FIXED floor the
+        # multi-digit patch never discriminates -- it would take a moving
+        # floor, or a comparison like 1.12.9 against 1.12.10. The specimen
+        # came from an independent check, the emitter's arms were corrected to '1.12' when
+        # this lane measured it, and the correction reached the arms and the
+        # commit message before it reached this comment. Comments ship; commit
+        # messages do not.
+        def self.input_keyboard_table
+          return INPUT_KEYBOARD unless below_compose_keyboard_floor?(
+            Core::ConfigManager.get('compose_version')
+          )
+
+          INPUT_KEYBOARD.merge(
+            Hash[FLOORED_INPUT_VALUES.map { |key| [key, 'KeyboardType.Text'] }]
+          ).freeze
+        end
+
+        def self.below_compose_keyboard_floor?(declared)
+          text = declared.to_s.strip
+          return false if text.empty?
+
+          Gem::Version.new(text) < Gem::Version.new(COMPOSE_KEYBOARD_TYPE_FLOOR)
+        rescue ArgumentError
+          # Not a version at all. Treat it as undeclared rather than degrading:
+          # a project on a new Compose that mistyped the key should not lose
+          # four keyboards over a typo, and the value is visible in its own
+          # config file either way.
+          false
+        end
+
+        @counter ||= 0
+
+        # Per-file determinism: compose_builder calls this before each layout
+        # so resolved_* local names don't drift with process build history.
+        def self.reset_counter!
+          @counter = 0
+        end
+
+        def self.next_resolved_var
+          @counter += 1
+          "resolved_textfield#{@counter}"
+        end
+
+        # The outline CustomTextField draws: the declared cornerRadius (the
+        # builder's own reading), else the library's default —
+        # `shape ?: RoundedCornerShape(0.dp)` (KotlinJsonUI CustomTextField.kt;
+        # square since the requester's ruling 2026-11-15, ticket
+        # jui-button-default-corner-radius-differs — it was 8).
+        def self.shadow_outline(json_data, required_imports)
+          return nil if json_data['cornerRadius']
+
+          'RoundedCornerShape(0.dp)'
+        end
+
+        def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # TextField uses 'text' for value and supports both 'hint' and 'placeholder'
+          # For TextField value, we need direct data binding (not string interpolation)
+          raw_text = json_data['text'] || ''
+          value = if (inner = Helpers::BindingExpression.extract_inner(raw_text))
+            # Two-way context: flat path only (a `??` default here is a
+            # validator error — binding-two-way-complex); shared parse via
+            # BindingExpression.
+            "data.#{Helpers::BindingExpression.two_way_path(inner)}"
+          else
+            Helpers::ResourceResolver.process_text(raw_text, required_imports)
+          end
+          placeholder_text = json_data['hint'] || json_data['placeholder'] || ''
+          placeholder = placeholder_text.empty? ? '""' : Helpers::ResourceResolver.process_text(placeholder_text, required_imports)
+          is_secure = json_data['secure'] == true ||
+                      JsonUIShared::EnumSpelling.lowered(json_data['input'], 'TextField', 'input') == 'password' ||
+                      JsonUIShared::EnumSpelling.lowered(json_data['contentType'], 'TextField', 'contentType') == 'password' ||
+                      JsonUIShared::EnumSpelling.lowered(json_data['contentType'], 'TextField', 'contentType') == 'newpassword'
+
+          # Detect hidden TextField (fontColor: "transparent" means invisible field, e.g. 2FA auto-fill)
+          is_hidden = json_data['fontColor']&.downcase == 'transparent'
+          
+          # Check if we need to wrap in Box for margins
+          has_margins = json_data['margins'] || json_data['topMargin'] || json_data['bottomMargin'] || 
+                       json_data['leftMargin'] || json_data['rightMargin']
+          
+          # Always use CustomTextField
+          required_imports&.add(:custom_textfield)
+          required_imports&.add(:secure_text_field) if is_secure
+          
+          # For data-bound TextFields, use a local remember state to avoid
+          # BasicTextField resetting on async StateFlow recomposition.
+          # The local state provides synchronous updates for typing,
+          # while viewModel.updateData propagates changes to the rest of the UI.
+          code = ""
+          has_data_binding = json_data['text'] && json_data['text'].match(/@\{([^}]+)\}/)
+          local_state_var = nil
+
+          # TextFieldState-based API (Compose BOM 2026.03.00+)
+          required_imports&.add(:text_field_state)
+          required_imports&.add(:launched_effect)
+          # id-less TextFields get a counter suffix — a bare shared "field"
+          # name produced conflicting `val` declarations when one scope held
+          # more than one id-less TextField.
+          state_var = if json_data['id']
+            "textFieldState_#{json_data['id']}"
+          else
+            "textFieldState_#{next_resolved_var.sub('resolved_textfield', 'field')}"
+          end
+          code += indent("val #{state_var} = rememberTextFieldState(initialText = #{value})", depth) + "\n"
+
+          # `maxLength` was read by nobody on Compose — only
+          # `lib/xml/helpers/mappers/input_mapper.rb`, and XML mode is frozen
+          # (plan 49 lane C: TextField.maxLength; sjui and rjui both honour
+          # it). `CustomTextField` belongs to the KotlinJsonUI repo, which this
+          # lane must not touch, so the clamp is expressed entirely in
+          # generated code against the public TextFieldState API — which is
+          # also where the binding write-back below already lives, so the
+          # truncation lands BEFORE the value propagates outward.
+          if json_data['maxLength']
+            max_len = Helpers::BoundValue.int(json_data['maxLength'])
+            code += indent("LaunchedEffect(#{state_var}.text) { val limit = #{max_len}; " \
+                           "if (limit > 0 && #{state_var}.text.length > limit) " \
+                           "#{state_var}.edit { replace(limit, length, \"\") } }", depth) + "\n"
+          end
+
+          if has_data_binding
+            variable = extract_variable_name(json_data['text'])
+            # Sync state → external
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
+            write = "viewModel.updateData(mapOf(\"#{variable}\" to newValue))"
+            handler_calls = if json_data['onTextChange']
+              handler = Helpers::ModifierBuilder.is_binding?(json_data['onTextChange']) ? json_data['onTextChange'] : "@{#{json_data['onTextChange']}}"
+              [Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue')]
+            else
+              []
+            end
+            Helpers::TextInputWriteBack.lines(state_var, value, [write] + handler_calls, required_imports).each do |line|
+              code += indent(line, depth) + "\n"
+            end
+          elsif json_data['onTextChange']
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
+            # The text's changes, not its first value: a LaunchedEffect keyed
+            # on the text runs on its first composition too, and with no bound
+            # value to compare against this branch called onTextChange once
+            # when the screen was drawn (kjui-text-change-is-called-on-display-
+            # without-a-text-binding; the bound branch above compares, and
+            # KotlinJsonUI Dynamic calls it for an edit only).
+            required_imports&.add(:snapshot_flow)
+            required_imports&.add(:flow_drop)
+            if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
+              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
+              code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { newValue -> #{handler_call} } }", depth) + "\n"
+            else
+              code += indent("LaunchedEffect(#{state_var}) { snapshotFlow { #{state_var}.text.toString() }.drop(1).collect { newValue -> #{Helpers::ModifierBuilder.get_event_handler_invocation("@{#{json_data['onTextChange']}}", view_id, 'newValue')} } }", depth) + "\n"
+            end
+          end
+
+          # Build FontSpec resolve block before CustomTextField(...) so the
+          # textStyle parameter can reference the resolved local. Always, a font
+          # attribute or not: every text goes through the app's fontProvider (the
+          # requester's P1, ticket jui-font-provider-not-reached-without-font-
+          # attributes-android-web); a slot it leaves null falls to what the field
+          # drew before.
+          tf_font_args = Helpers::FontSpecHelper.with_drawn_weight(
+            Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports), required_imports
+          )
+          tf_resolved_var = next_resolved_var
+          code += Helpers::FontSpecHelper.emit_resolve_block(tf_resolved_var, tf_font_args, depth, required_imports) + "\n"
+
+          # Focus chain (id / nextFocus).
+          #
+          # Compose's standard `FocusRequester` is per-component. To support
+          # spec-driven `nextFocus` lookups we emit `val focusRequester_<id>
+          # = remember { FocusRequester() }` for every field with an `id`,
+          # then reference `focusRequester_<nextFocus>` from the source
+          # field's KeyboardActions.
+          #
+          # Contract:
+          #   - Target field MUST set `id: "<id>"` to be referenceable
+          #   - Source field references it via `nextFocus: "<id>"`
+          #   - Both fields MUST share the same composable scope (siblings
+          #     under the same parent layout); cross-screen focus chain is
+          #     out of scope (matches the previous broken intent).
+          #
+          # Regression: kjui-keyboardactions-import-missing — the original
+          # emit referenced a non-existent `FocusManager.requestFocus(...)`
+          # helper. Refactored to use Compose stdlib `FocusRequester` only.
+          # (`fieldId` / `nextFocusId`, the undeclared spellings this was
+          # written against, are retired in 2.3.22: retired_attribute_spellings.json
+          # names `id` and `nextFocus`.)
+
+          # ViewModel-driven focus binding — sjui parity
+          # (kjui-textfield-isfocused-focus-binding-not-generated): every
+          # TextField with an `id` gets a FocusRequester plus data.<id>IsFocused
+          # wiring, so `data.xIsFocused = true` from a ViewModel focuses the
+          # field and opens the keyboard (the invisible code-entry pattern —
+          # e.g. a 2FA hidden input — has no tappable surface and relies on
+          # this). The Data property is auto-added by DataModelUpdater.
+          # The requester is shared with the id/nextFocus focus chain.
+          #
+          # `autoFocus` (2.3.22, ticket rjui-textfield-autofocus-read-but-not-defined):
+          # the field takes the focus when the screen appears — the requester
+          # asked once the field is composed. A field with no id is named by
+          # its position (view_id), so it needs none.
+          auto_focus = json_data['autoFocus'] == true
+          focus_requester_name = json_data['id'] ||
+                                 (auto_focus ? Helpers::ModifierBuilder.view_id(json_data).to_s.gsub(/[^A-Za-z0-9_]/, '_') : nil)
+          focus_prop = json_data['id'] ? "#{snake_to_camel(json_data['id'])}IsFocused" : nil
+          if focus_requester_name
+            required_imports&.add(:focus_requester)
+            required_imports&.add(:remember)
+            code += indent("val focusRequester_#{focus_requester_name} = remember { FocusRequester() }", depth) + "\n"
+          end
+          if auto_focus
+            # requestFocus alone moves the focus and leaves the soft keyboard
+            # down (measured on an API 35 emulator, 2.3.22); the keyboard is
+            # asked for as the data.<id>IsFocused path does
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:software_keyboard_controller)
+            code += indent("val autoFocusKeyboard_#{focus_requester_name} = LocalSoftwareKeyboardController.current", depth) + "\n"
+            code += indent("LaunchedEffect(Unit) { focusRequester_#{focus_requester_name}.requestFocus(); autoFocusKeyboard_#{focus_requester_name}?.show() }", depth) + "\n"
+          end
+          if focus_prop
+            required_imports&.add(:launched_effect)
+            required_imports&.add(:software_keyboard_controller)
+            code += indent("val keyboardController_#{json_data['id']} = LocalSoftwareKeyboardController.current", depth) + "\n"
+            code += indent("LaunchedEffect(data.#{focus_prop}) { if (data.#{focus_prop}) { focusRequester_#{focus_requester_name}.requestFocus(); keyboardController_#{json_data['id']}?.show() } }", depth) + "\n"
+          end
+
+          if has_margins
+            required_imports&.add(:box)
+            code += indent("CustomTextFieldWithMargins(", depth)
+          else
+            code += indent("CustomTextField(", depth)
+          end
+
+          code += "\n" + indent("state = #{state_var},", depth + 1)
+          
+          # For CustomTextFieldWithMargins, we need to specify modifiers differently
+          if has_margins
+            # Box modifier with margins
+            box_modifiers = []
+            box_modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            if is_hidden
+              required_imports&.add(:alpha)
+              box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+              box_modifiers << ".alpha(0f)"
+            else
+              box_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+              # testTag after margins and offset, before alpha: the tagged box (resource-id
+              # bounds, TalkBack focus) is the drawn box. Ticket
+              # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+              box_modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+              box_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+            end
+            # Shadow after alpha, the View slot; declared on `common` and
+            # dropped (kjui-dynamic-components-that-skip-the-common-modifiers).
+            # Cast in the outline the field draws (shadow_outline).
+            box_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))
+            box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+            # A text field is a control whose own tap focuses it: an outer
+            # `.clickable` replaced that action for TalkBack (Compose applies a
+            # node's semantics innermost first; a later action wins), so a
+            # screen-reader user could not reach the field. iOS codegen
+            # attaches no tap to a text field and calls no onClick; the tap
+            # rule's shape for it is `none`. So the declared onClick is not
+            # called here (kjui-dynamic-components-that-skip-the-common-
+            # modifiers, item A); the gestures and the blocker stay.
+            # The Box carries the tag, the field inside it `enabled`: the Box
+            # takes `disabled()` for a UI test to read.
+            box_modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: false))
+            if box_modifiers.any?
+              code += "\n" + indent("boxModifier = Modifier", depth + 1)
+              box_modifiers.each do |mod|
+                code += "\n" + indent("    #{mod}", depth + 1)
+              end
+              code += ","
+            end
+
+            # TextField modifier (size, padding goes to contentPadding)
+            textfield_modifiers = []
+            textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+            # When the outer Box uses `Modifier.weight(N)` to claim a Row /
+            # Column slot, the slot's measured size is bounded only on the
+            # *outer* (Box) modifier. The inner BasicTextField inside the
+            # Box defaults to wrap-content and does NOT inherit the Box's
+            # bounded width/height, so the field renders narrow and leaves
+            # blank space inside the weighted slot. Mirror Compose's
+            # standard pattern: when weight is requested, the inner
+            # textFieldModifier must explicitly `.fillMaxWidth()` (Row
+            # parent) or `.fillMaxHeight()` (Column parent) to occupy the
+            # outer slot. Skip when build_size already emitted the same
+            # modifier via `width: matchParent` / `height: matchParent`.
+            # Regression: kjui-textfield-weight-not-fillmaxwidth-inner.
+            if json_data['weight'] && json_data['weight'].to_f > 0
+              fill_modifier = case parent_type
+                              when 'Row' then '.fillMaxWidth()'
+                              when 'Column' then '.fillMaxHeight()'
+                              end
+              if fill_modifier && !textfield_modifiers.include?(fill_modifier)
+                textfield_modifiers << fill_modifier
+              end
+            end
+            if focus_prop
+              required_imports&.add(:focus_changed)
+              textfield_modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
+            end
+            textfield_modifiers << ".focusRequester(focusRequester_#{focus_requester_name})" if focus_requester_name
+            textfield_modifiers.concat(autofill_modifiers(json_data, required_imports))
+            if textfield_modifiers.any?
+              code += "\n" + indent("textFieldModifier = Modifier", depth + 1)
+              textfield_modifiers.each do |mod|
+                code += "\n" + indent("    #{mod}", depth + 1)
+              end
+              code += ","
+            end
+          else
+            # Regular modifiers for CustomTextField (size, margins, and weight, padding goes to contentPadding)
+            modifiers = []
+            modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
+            if is_hidden
+              required_imports&.add(:alpha)
+              modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+              modifiers << ".alpha(0f)"
+            else
+              modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+              # testTag after margins and offset, before alpha: the tagged box (resource-id
+              # bounds, TalkBack focus) is the drawn box. Ticket
+              # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
+              modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+              modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+            end
+            modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))
+            # A text field is a control whose own tap focuses it: an outer
+            # `.clickable` replaced that action for TalkBack (Compose applies a
+            # node's semantics innermost first; a later action wins), so a
+            # screen-reader user could not reach the field. iOS codegen
+            # attaches no tap to a text field and calls no onClick; the tap
+            # rule's shape for it is `none`. So the declared onClick is not
+            # called here (kjui-dynamic-components-that-skip-the-common-
+            # modifiers, item A); the gestures and the blocker stay.
+            # The modifier is the field's own node, which carries `enabled`.
+            modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
+            if focus_prop
+              required_imports&.add(:focus_changed)
+              modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
+            end
+            modifiers << ".focusRequester(focusRequester_#{focus_requester_name})" if focus_requester_name
+            modifiers.concat(autofill_modifiers(json_data, required_imports))
+
+            if modifiers.any?
+              code += "\n" + indent("modifier = Modifier", depth + 1)
+              modifiers.each do |mod|
+                code += "\n" + indent("    #{mod}", depth + 1)
+              end
+              code += ","
+            end
+          end
+          
+          # Add placeholder/hint with styling
+          # Always use Configuration.TextField.defaultPlaceholderColor if hintColor is not specified
+          if placeholder && placeholder != '""'
+            required_imports&.add(:configuration)
+            placeholder_code = "placeholder = { Text("
+            placeholder_code += "\n" + indent("text = #{placeholder}", depth + 2)
+
+            # Use hintColor if specified, otherwise use Configuration default.
+            # `placeholderColor` is the alias spelling of hintColor (SSoT:
+            # "Placeholder color"); reading it here is what took it off the
+            # coverage gap ledger.
+            hint_color_value = json_data['hintColor'] || json_data['placeholderColor']
+            if hint_color_value
+              hint_color = Helpers::ResourceResolver.process_color(hint_color_value, required_imports)
+              placeholder_code += ",\n" + indent("color = #{hint_color}", depth + 2)
+            else
+              placeholder_code += ",\n" + indent("color = Configuration.TextField.defaultPlaceholderColor", depth + 2)
+            end
+
+            hint_drawn = nil
+            if json_data['hintFontSize']
+              hint_drawn = Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)
+              placeholder_code += ",\n" + indent("fontSize = #{hint_drawn}", depth + 2)
+              placeholder_code += ",\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}", depth + 2)
+            end
+
+            if json_data['hintFont'] == 'bold'
+              placeholder_code += ",\n" + indent("fontWeight = FontWeight.Bold", depth + 2)
+            end
+
+            # hintLineHeightMultiple — Compose has no multiplier, so it
+            # resolves against the hint's own size (falling back to the
+            # field's, then M3 bodyLarge's 16), derived from LocalTextStyle so
+            # the M3 placeholder typography survives. Same emit as TextView's
+            # build_placeholder; the row was unread on this component
+            # (codegen_effect TextField.hintLineHeightMultiple android).
+            if (hint_multiple = json_data['hintLineHeightMultiple'])
+              required_imports&.add(:local_text_style)
+              hint_base = json_data['hintFontSize'] || json_data['fontSize'] || 16
+              line_height_sp = if Helpers::BoundValue.bound?(hint_base) || Helpers::BoundValue.bound?(hint_multiple)
+                                 # `"@{v}".to_f` is 0.0: a bound size or multiple froze the
+                                 # line height at 0.sp. Lifted into the emit instead.
+                                 "(#{Helpers::BoundValue.float(hint_base, fallback: 16)} * " \
+                                   "#{Helpers::BoundValue.float(hint_multiple, fallback: 1)}).sp"
+                               else
+                                 line_height = (hint_base.to_f * hint_multiple.to_f)
+                                 "#{line_height == line_height.to_i ? line_height.to_i : line_height}.sp"
+                               end
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})", depth + 2)
+            elsif hint_drawn
+              # The theme's line by the text size rule as the size is (ticket
+              # kjui-theme-line-height-scales-under-font-scaling-false); an undeclared hint size follows the system,
+              # and so does its line.
+              required_imports&.add(:local_text_style)
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})", depth + 2)
+            end
+
+            placeholder_code += "\n" + indent(") }", depth + 1)
+            code += "\n" + indent(placeholder_code, depth + 1) + ","
+          end
+          
+          # Secure fields use SecureTextField (handled at component level, not via visualTransformation)
+          
+          # Add custom TextField parameters
+          
+          # Shape with corner radius
+          if json_data['cornerRadius']
+            required_imports&.add(:shape)
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            code += "\n" + indent("shape = RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}),", depth + 1)
+          end
+
+          # Content padding - internal padding within the text field (not for SecureTextField)
+          # Supports: paddings (array or single value), fieldPadding (legacy single value)
+          if !is_secure && json_data['paddings']
+            required_imports&.add(:padding_values)
+            paddings = json_data['paddings']
+            if paddings.is_a?(Array)
+              case paddings.length
+              when 1
+                code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings[0])}),", depth + 1)
+              when 2
+                # [vertical, horizontal]
+                code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(paddings[1])}, vertical = #{Helpers::BoundValue.dp(paddings[0])}),", depth + 1)
+              when 4
+                # [top, right, bottom, left]
+                code += "\n" + indent("contentPadding = PaddingValues(start = #{Helpers::BoundValue.dp(paddings[3])}, top = #{Helpers::BoundValue.dp(paddings[0])}, end = #{Helpers::BoundValue.dp(paddings[1])}, bottom = #{Helpers::BoundValue.dp(paddings[2])}),", depth + 1)
+              end
+            else
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings)}),", depth + 1)
+            end
+          elsif !is_secure && json_data['fieldPadding']
+            required_imports&.add(:padding_values)
+            code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(json_data['fieldPadding'])}),", depth + 1)
+          end
+
+          # Text padding left - start padding for text content.
+          # CustomTextField's parameter is contentPadding (PaddingValues) —
+          # `textPaddingStart` was never a parameter and did not compile
+          # (codegen parity host, TextField/textPaddingLeft, 2026-08-02).
+          # fieldPadding above wins when both are declared (one
+          # contentPadding argument only).
+          if !is_secure && json_data['textPaddingLeft'] && !json_data['fieldPadding']
+            required_imports&.add(:padding_values)
+            code += "\n" + indent("contentPadding = PaddingValues(start = #{Helpers::BoundValue.dp(json_data['textPaddingLeft'])}),", depth + 1)
+          end
+          
+          # `tintColor` — the caret accent (UIKit vocabulary), forwarded to
+          # CustomTextField's cursorColor (KotlinJsonUI >= 2.17.1).
+          # `caretAttributes.fontColor` is the object form of the same fact and
+          # reads behind it, matching sjui's `tintColor || caretAttributes`.
+          caret_attrs = json_data['caretAttributes']
+          caret_color_value = json_data['tintColor'] ||
+                              (caret_attrs.is_a?(Hash) ? caret_attrs['fontColor'] : nil)
+          if caret_color_value
+            cursor_color = Helpers::ResourceResolver.process_color(caret_color_value, required_imports)
+            code += "\n" + indent("cursorColor = #{cursor_color},", depth + 1)
+          end
+
+          # Background colors
+          if json_data['background']
+            bg_color = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
+            code += "\n" + indent("backgroundColor = #{bg_color},", depth + 1)
+          end
+
+          # highlightBackground is not the focused background (jsonui-cli
+          # 1.9.0): it is the colour while `highlighted` holds, which only a
+          # View declares. Read as the focus colour it had a meaning no other
+          # platform gave it (no layout on the consumer faces wrote it).
+
+          # Border color for outlined text fields
+          if json_data['borderColor']
+            border_color = Helpers::ResourceResolver.process_color(json_data['borderColor'], required_imports)
+            code += "\n" + indent("borderColor = #{border_color},", depth + 1)
+          end
+
+          # Border style handling
+          if json_data['borderStyle']
+            case JsonUIShared::EnumSpelling.lowered(json_data['borderStyle'], 'TextField', 'borderStyle')
+            when 'none'
+              code += "\n" + indent("isOutlined = false,", depth + 1)
+            when 'line', 'bezel', 'roundedrect'
+              code += "\n" + indent("isOutlined = true,", depth + 1)
+            end
+          elsif json_data['borderWidth'] == 0 || json_data['borderWidth'] == '0'
+            code += "\n" + indent("isOutlined = false,", depth + 1)
+          elsif json_data['outlined'] == true || json_data['borderColor'] || json_data['borderWidth']
+            code += "\n" + indent("isOutlined = true,", depth + 1)
+          end
+
+          # The outline's width. 0 is the no-outline above; a bound one with no value yet is Material's 1.
+          border_width = json_data['borderWidth']
+          unless border_width.nil? || border_width == 0 || border_width == '0' ||
+                 JsonUIShared::EnumSpelling.lowered(json_data['borderStyle'], 'TextField', 'borderStyle') == 'none'
+            code += "\n" + indent("borderWidth = #{Helpers::BoundValue.dp(border_width, fallback: 1)},", depth + 1)
+          end
+
+          if is_secure
+            code += "\n" + indent("isSecure = true,", depth + 1)
+          elsif Helpers::BoundValue.bound?(json_data['secure'])
+            # A bound secure follows the data. It was left out, so the text showed.
+            required_imports&.add(:secure_text_field)
+            code += "\n" + indent("isSecure = #{Helpers::BoundValue.bool(json_data['secure'])},", depth + 1)
+          end
+          
+          
+          # Text styling - always add this last before closing.
+          # Always include textStyle with at least a default color.
+          # Font attrs (fontFamily / font weight / fontSize) flow through
+          # Configuration.Font.resolve(FontSpec(...)) so the app's fontProvider sees
+          # the full context. fontColor stays inline.
+          required_imports&.add(:text_style)
+          style_parts = []
+          # No font attribute: the size the field drew before, the Configuration default the dynamic component
+          # applies (LocalTextStyle's 16sp is not it). A field with a font attribute and no fontSize keeps the text
+          # style's size, as before.
+          tf_default_size = unless tf_font_args[:has_any]
+                              required_imports&.add(:configuration)
+                              'Configuration.TextField.defaultFontSize.sp'
+                            end
+          # A field with no font attribute built a fresh TextStyle (no family, weight or style of its own): a slot
+          # the provider leaves null stays unset there, as before (unset).
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tf_resolved_var, required_imports, json_data,
+                                                                         default_size: tf_default_size,
+                                                                         unset: !tf_font_args[:has_any]))
+
+          # Use fontColor if specified; the undeclared default routes through
+          # Configuration.TextField (the theming surface the dynamic component
+          # already uses) — the old hardcoded #000000 made codegen fields
+          # render darker than dynamic ones (parity family F5).
+          if json_data['fontColor']
+            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            style_parts << "color = #{color_value}" if color_value
+          else
+            # The import goes WITH the emission. The placeholder branch above
+            # registers it too, which is why this was invisible: every
+            # TextField fixture that declared a hint got the import from
+            # there, and only a field with no hint AND no fontColor reached
+            # this line alone — `Unresolved reference 'Configuration'`, and
+            # the whole codegen host stopped compiling.
+            required_imports&.add(:configuration)
+            style_parts << "color = Configuration.TextField.defaultTextColor"
+          end
+
+
+          if json_data['textAlign']
+            required_imports&.add(:text_align)
+            case JsonUIShared::EnumSpelling.lowered(json_data['textAlign'], 'TextField', 'textAlign')
+            when 'center'
+              style_parts << "textAlign = TextAlign.Center"
+            when 'right'
+              style_parts << "textAlign = TextAlign.End"
+            when 'left'
+              style_parts << "textAlign = TextAlign.Start"
+            end
+          end
+          
+          if style_parts.any?
+            # Remove trailing comma before adding textStyle
+            if code.end_with?(',')
+              code = code[0..-2]
+            end
+            code += ",\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')})", depth + 1)
+          end
+          
+          # Add focus/blur event handlers. Each value names a handler, in the
+          # binding form (`@{h}`) or bare (`h`), and is called as the data
+          # declares it (ModifierBuilder.get_event_handler_invocation — no
+          # value; the viewId when the handler takes one). Until jsonui-cli
+          # 1.9.6 the value was written as it stood, so the binding form put
+          # `data.@{h}?.invoke()` in the file — a syntax error (ticket
+          # kjui-textfield-focus-events-write-the-binding-braces).
+          # Each read is spelled out: `jui conformance coverage` counts an
+          # attribute as read only by a literal `json_data['x']`, and a
+          # computed key (`json_data[event]`) made the four read as unwired
+          # Android gaps.
+          {
+            'onFocus' => json_data['onFocus'], 'onBlur' => json_data['onBlur'],
+            'onBeginEditing' => json_data['onBeginEditing'], 'onEndEditing' => json_data['onEndEditing']
+          }.each do |event, handler|
+            # A blank one ("", "   ", "@{}") names no method: no call
+            # (shared/core/tap_accessibility.rb, the one predicate).
+            next unless JsonUIShared::TapAccessibility.names_a_method?(handler)
+
+            invocation = Helpers::ModifierBuilder.get_event_handler_invocation(
+              handler, Helpers::ModifierBuilder.view_id(json_data), nil
+            )
+            code += ",\n" + indent("#{event} = { #{invocation} }", depth + 1)
+          end
+
+          # Focus management — the field's requester is already wired above
+          # (the `val focusRequester_<id> = remember { FocusRequester() }`
+          # declaration + `.focusRequester(...)` modifier). Here we
+          # only need to wire KeyboardActions for the `nextFocus` lookup
+          # and `onSubmit`.
+          # `nextFocus` is the declared attribute (and what the iOS converter
+          # reads); the legacy `nextFocusId` is retired (2.3.22).
+          # It names a field's id at generation time; a binding has no value yet,
+          # and pasted into `focusRequester_` it does not compile.
+          next_focus_id = json_data['nextFocus']
+          if Helpers::BoundValue.bound?(next_focus_id)
+            Core::Logger.warn("TextField #{json_data['id'].inspect}: 'nextFocus' names a field and does not take a binding (#{next_focus_id}); ignored.")
+            next_focus_id = nil
+          end
+          on_submit = json_data['onSubmit']
+
+          # KeyboardActions for focus chain / submit
+          if next_focus_id || on_submit
+            required_imports&.add(:keyboard_actions)
+            actions = []
+            if next_focus_id
+              # Target field MUST have `id: "<next_focus_id>"` set so
+              # `focusRequester_<next_focus_id>` exists in the same
+              # composable scope. Spec-side contract; codegen does not
+              # validate cross-field reachability.
+              actions << "onNext = { focusRequester_#{next_focus_id}.requestFocus() }"
+              actions << "onDone = { focusRequester_#{next_focus_id}.requestFocus() }"
+            end
+            if on_submit
+              # `get_event_handler_invocation` is a 3-arity helper
+              # (handler, view_id, value_expr). `onSubmit` carries no value
+              # to pass to the handler, so `value_expr` is `nil` — which
+              # also matches every other no-value call site in this codegen.
+              # Regression: kjui-textfield-onsubmit-helper-arity-mismatch.
+              submit_call = Helpers::ModifierBuilder.is_binding?(on_submit) ?
+                Helpers::ModifierBuilder.get_event_handler_invocation(on_submit, Helpers::ModifierBuilder.view_id(json_data), nil) :
+                "data.#{on_submit}?.invoke()"
+              actions << "onDone = { #{submit_call} }" unless next_focus_id
+              actions << "onGo = { #{submit_call} }"
+              actions << "onSearch = { #{submit_call} }"
+              actions << "onSend = { #{submit_call} }"
+            end
+            code += ",\n" + indent("keyboardActions = KeyboardActions(", depth + 1)
+            actions.each_with_index do |action, i|
+              separator = i < actions.size - 1 ? ',' : ''
+              code += "\n" + indent("#{action}#{separator}", depth + 2)
+            end
+            code += "\n" + indent(")", depth + 1)
+          end
+
+          # Keyboard options (input, returnKeyType, contentType, autocapitalizationType, autocorrectionType)
+          keyboard_options = []
+
+
+          # The keyboard: `input` first, then `contentType`, then the migration
+          # spelling `inputType`. iOS and the web take the keyboard from
+          # `input` alone (contentType is .textContentType / autoComplete
+          # there), so a field declaring both got input's keyboard on those
+          # faces and contentType's here. Until 2.5.12 contentType came first,
+          # and a value with no keyboard (username, usernameWebauthn, name, ...)
+          # dropped `input`'s: `input: email` + `contentType: usernameWebauthn`
+          # lost the e-mail keyboard on Android only. contentType alone still
+          # picks a keyboard (declared: "Android to the keyboard type").
+          keyboard_type = nil
+          if json_data['input']
+            keyboard_type = Helpers::BoundValue.enum(
+              json_data['input'], input_keyboard_table,
+              bound_default: 'KeyboardType.Text', declared: %w[TextField input]
+            )
+          end
+          if keyboard_type.nil? && json_data['contentType']
+            # `contentType` is `["string", "binding"]` and a `case` could never
+            # match a `"@{...}"`, so a bound contentType froze to
+            # KeyboardType.Text (plan 49 lane C: TextField.contentType).
+            keyboard_type = Helpers::BoundValue.enum(
+              json_data['contentType'], CONTENT_TYPE_KEYBOARD,
+              bound_default: 'KeyboardType.Text', declared: %w[TextField contentType]
+            )
+          end
+          if keyboard_type.nil? && !json_data['input'] && !json_data['contentType'] && json_data['inputType']
+            # inputType is the Android-XML spelling, and XML mode is the only
+            # place it was ever read (xml/helpers/mappers/input_mapper.rb) — so a
+            # layout migrated to Compose lost its keyboard silently. `input` is
+            # the canonical attribute and wins; this is the migration fallback,
+            # covering the XML mapper's own vocabulary plus the raw
+            # `android:inputType` names it passes through untouched.
+            keyboard_type = case JsonUIShared::EnumSpelling.lowered(json_data['inputType'], 'TextField', 'inputType')
+            when 'email', 'textemailaddress'
+              'KeyboardType.Email'
+            when 'password', 'textpassword'
+              'KeyboardType.Password'
+            when 'number'
+              'KeyboardType.Number'
+            when 'numberdecimal'
+              'KeyboardType.Decimal'
+            when 'phone'
+              'KeyboardType.Phone'
+            else
+              'KeyboardType.Text'
+            end
+          end
+          if keyboard_type
+            required_imports&.add(:keyboard_type)
+            keyboard_options << "keyboardType = #{keyboard_type}"
+          end
+
+          if json_data['returnKeyType']
+            required_imports&.add(:ime_action)
+            ime_action = case json_data['returnKeyType']
+            when 'Done'
+              'ImeAction.Done'
+            when 'Next'
+              'ImeAction.Next'
+            when 'Search'
+              'ImeAction.Search'
+            when 'Send'
+              'ImeAction.Send'
+            when 'Go'
+              'ImeAction.Go'
+            else
+              'ImeAction.Default'
+            end
+            keyboard_options << "imeAction = #{ime_action}"
+          elsif next_focus_id && !json_data['returnKeyType']
+            # Auto-set ImeAction.Next when nextFocus is specified
+            required_imports&.add(:ime_action)
+            keyboard_options << "imeAction = ImeAction.Next"
+          end
+
+          # Auto-capitalization type
+          if json_data['autocapitalizationType']
+            required_imports&.add(:keyboard_capitalization)
+            capitalization = case JsonUIShared::EnumSpelling.lowered(json_data['autocapitalizationType'], 'TextField', 'autocapitalizationType')
+            when 'none'
+              'KeyboardCapitalization.None'
+            when 'words'
+              'KeyboardCapitalization.Words'
+            when 'sentences'
+              'KeyboardCapitalization.Sentences'
+            when 'allcharacters', 'characters'
+              'KeyboardCapitalization.Characters'
+            else
+              'KeyboardCapitalization.None'
+            end
+            keyboard_options << "capitalization = #{capitalization}"
+          end
+
+          # Auto-correction type
+          if json_data['autocorrectionType']
+            # `default` means "leave it to the platform", so it emits nothing.
+            # Folding it in with `yes` made those two spellings produce
+            # identical output — measured as presence-only (plan 49 lane C:
+            # TextField.autocorrectionType C2).
+            auto_correct = case JsonUIShared::EnumSpelling.lowered(json_data['autocorrectionType'], 'TextField', 'autocorrectionType')
+            when 'no', 'false', 'off'
+              'false'
+            when 'yes', 'true', 'on'
+              'true'
+            end
+            keyboard_options << "autoCorrectEnabled = #{auto_correct}" if auto_correct
+          end
+
+          if keyboard_options.any?
+            required_imports&.add(:keyboard_type)
+            code += ",\n" + indent("keyboardOptions = KeyboardOptions(#{keyboard_options.join(', ')})", depth + 1)
+          end
+
+          # Enabled state (boolean value context: supports `??` default and
+          # `@{!flag}` negation via the canonical binding parser).
+          # CustomTextField forwards it to the inner TextField, so input is
+          # functionally gated — matching the a11y `disabled()` the common
+          # modifier path already emits. TextView had this; TextField didn't.
+          if json_data.key?('enabled')
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code += ",\n" + indent("enabled = #{enabled}", depth + 1)
+          end
+
+          # Remove trailing comma and close
+          if code.end_with?(',')
+            code = code[0..-2]
+          end
+
+          code += "\n" + indent(")", depth)
+
+          code
+        end
+        
+        private
+        
+        def self.extract_variable_name(text)
+          if text && text.match(/@\{([^}]+)\}/)
+            $1.split('.').last
+          else
+            'value'
+          end
+        end
+
+        # snake_case id -> lowerCamel property stem. MUST stay in sync with
+        # DataModelUpdater#snake_to_camel — both derive the <id>IsFocused name.
+        def self.snake_to_camel(str)
+          parts = str.split('_')
+          parts[0] + parts[1..].map(&:capitalize).join
+        end
+
+        # Strip @{} binding syntax from a value and return the property name
+        def self.extract_binding_name(value)
+          if value && value.match(/@\{([^}]+)\}/)
+            $1
+          else
+            value
+          end
+        end
+        
+        def self.indent(text, level)
+          return text if level == 0
+          spaces = '    ' * level
+          text.split("\n").map { |line| 
+            line.empty? ? line : spaces + line 
+          }.join("\n")
+        end
+      end
+    end
+  end
+end

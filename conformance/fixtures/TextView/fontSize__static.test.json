@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/fontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.fontSize (static)",
+    "description": "Conformance fixture for 'fontSize' on TextView (section: TextView, class: visual). Value under test: 20.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__static",
+      "description": "Conformance fixture for 'fontSize' on TextView (section: TextView, class: visual). Value under test: 20.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_fontSize__static"
+        }
+      ]
+    }
+  ]
+}

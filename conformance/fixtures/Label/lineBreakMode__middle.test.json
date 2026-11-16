@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lineBreakMode__middle.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lineBreakMode (middle)",
+    "description": "Conformance fixture for 'lineBreakMode' on Label (section: Label, class: visual). Value under test: \"Middle\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "lineBreakMode__middle",
+      "description": "Conformance fixture for 'lineBreakMode' on Label (section: Label, class: visual). Value under test: \"Middle\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lineBreakMode__middle"
+        }
+      ]
+    }
+  ]
+}

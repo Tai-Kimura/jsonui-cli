@@ -1,0 +1,56 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-model/v0.json",
+ "version": 0,
+ "description": "What the API talks to outside AWS",
+ "nodes": [
+  {
+   "id": "stripe",
+   "category": "external.saas",
+   "provider": "stripe",
+   "label": "Stripe",
+   "managed_by": "external",
+   "evidence": [
+    {
+     "file": "backend/app/config.py",
+     "pattern": "stripe_"
+    }
+   ]
+  },
+  {
+   "id": "mailer",
+   "category": "mail",
+   "provider": "sendgrid",
+   "label": "メール配信",
+   "managed_by": "external"
+  }
+ ],
+ "edges": [
+  {
+   "from": "api-prod",
+   "to": "stripe",
+   "protocol": "https",
+   "direction": "out",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "from": "api-prod",
+   "to": "mailer",
+   "protocol": "https",
+   "direction": "out",
+   "environments": [
+    "production"
+   ]
+  },
+  {
+   "from": "api-stg",
+   "to": "stripe",
+   "protocol": "https",
+   "label": "テストモード",
+   "environments": [
+    "staging"
+   ]
+  }
+ ]
+}

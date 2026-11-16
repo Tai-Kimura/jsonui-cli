@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/font__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.font (binding)",
+    "description": "Conformance fixture for 'font' on Radio (section: Radio, class: visual). Value under test: \"@{boundFont}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "font__binding",
+      "description": "Conformance fixture for 'font' on Radio (section: Radio, class: visual). Value under test: \"@{boundFont}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_font__binding"
+        }
+      ]
+    }
+  ]
+}

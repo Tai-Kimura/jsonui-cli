@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/items__ja_fit_156.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.items (ja_fit_156)",
+    "description": "Conformance fixture for 'items' on Segment (section: Segment, class: visual). Value under test: [\"あいうえ\", \"かきく\"].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "items__ja_fit_156",
+      "description": "Conformance fixture for 'items' on Segment (section: Segment, class: visual). Value under test: [\"あいうえ\", \"かきく\"].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_items__ja_fit_156"
+        }
+      ]
+    }
+  ]
+}

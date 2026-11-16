@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/leftMargin__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.leftMargin (static)",
+    "description": "Conformance fixture for 'leftMargin' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "leftMargin__static",
+      "description": "Conformance fixture for 'leftMargin' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_leftMargin__static"
+        }
+      ]
+    }
+  ]
+}

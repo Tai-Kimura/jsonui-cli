@@ -1,0 +1,201 @@
+"""A skill in use, as the server sees it (ticket 2026-10-21-jui-viz-skill-spirit): the robot that runs it carries
+``skill`` {name, since[, useId, forked]} from Claude's Skill call until it ends.
+
+- inline: the turn's Stop (or StopFailure), the next prompt, or the next skill;
+- forked: the skill moves to the subagent that starts within SKILL_FORK_MS of the call, and ends with the call's result
+  (status "forked") or the subagent's stop;
+- never longer than SKILL_MAX_MS (no hook says a skill is over).
+The shapes are the transcripts' of 10-21 (the call's input {skill, args}; a forked result {status: "forked", …}).
+"""
+from __future__ import annotations
+
+import pytest
+
+from jui_cli.viz import ingest as I
+from jui_cli.viz.ingest import World
+from jui_cli.viz.state import VizState
+
+SID = "s-aaaa"
+
+
+def _world() -> tuple[World, VizState]:
+    state = VizState()
+    return World(state, tool_input_max=50), state
+
+
+def _hook(kind, at, sid=SID, **fields):
+    return {"hook_event_name": kind, "session_id": sid, "cwd": "/work/shop-app", **fields}
+
+
+def _skill_call(world, at, name="code-review", use="t1"):
+    world.apply_hook(_hook("PreToolUse", at, tool_name="Skill", tool_input={"skill": name, "args": ""},
+                           tool_use_id=use), at)
+
+
+def _skills(world, state, at=None) -> dict:
+    if at is not None:
+        world.tick(at)
+    world.publish()
+    return {a["id"]: a["skill"] for a in state.slices["agents"] if a.get("skill")}
+
+
+def test_an_inline_skill_is_held_by_the_main_robot_until_its_turn_stops():
+    world, state = _world()
+    world.apply_hook(_hook("UserPromptSubmit", 0, prompt="review this"), 0)
+    _skill_call(world, 1000)
+    got = _skills(world, state)
+    assert got == {SID: {"name": "code-review", "since": 1000, "useId": "t1"}}
+    # the inline result comes at once ("Launching skill: …"): the skill goes on
+    world.apply_hook(_hook("PostToolUse", 1100, tool_name="Skill", tool_input={"skill": "code-review"}, tool_use_id="t1",
+                           tool_response={"success": True, "commandName": "code-review"}), 1100)
+    world.apply_hook(_hook("PreToolUse", 2000, tool_name="Read", tool_input={"file_path": "/work/shop-app/a.py"},
+                           tool_use_id="t2"), 2000)
+    assert _skills(world, state) == {SID: {"name": "code-review", "since": 1000, "useId": "t1"}}
+    world.apply_hook(_hook("Stop", 9000), 9000)
+    assert _skills(world, state) == {}
+
+
+@pytest.mark.parametrize("end", ["UserPromptSubmit", "StopFailure", "next skill"])
+def test_an_inline_skill_ends_with_the_next_prompt_a_failed_stop_or_the_next_skill(end):
+    world, state = _world()
+    _skill_call(world, 1000)
+    if end == "next skill":
+        _skill_call(world, 5000, name="claude-api", use="t9")
+        assert _skills(world, state) == {SID: {"name": "claude-api", "since": 5000, "useId": "t9"}}
+        return
+    world.apply_hook(_hook(end, 5000, prompt="next"), 5000)
+    assert _skills(world, state) == {}
+
+
+def test_a_forked_skill_moves_to_its_subagent_and_ends_with_the_forked_result():
+    world, state = _world()
+    _skill_call(world, 1000)
+    world.apply_hook(_hook("SubagentStart", 3000, agent_id="ag1", agent_type="general-purpose"), 3000)
+    got = _skills(world, state)
+    assert got == {"ag1": {"name": "code-review", "since": 1000, "useId": "t1", "forked": True}}
+    world.apply_hook(_hook("PostToolUse", 150_000, tool_name="Skill", tool_input={"skill": "code-review"}, tool_use_id="t1",
+                           tool_response={"status": "forked", "agentId": "ag1", "result": "…"}), 150_000)
+    assert _skills(world, state) == {}
+
+
+@pytest.mark.parametrize("order", ["call, start, call, start", "call, call, start, start"])
+def test_two_forked_skills_of_one_session_each_end_with_their_own_result(order):
+    """Two forked skills at once (each its own useId and subagent, the subagents taking the calls oldest first): the
+    first one's result ends the first subagent's skill only; the second goes on until its own."""
+    world, state = _world()
+    steps = {"call": [lambda: _skill_call(world, 1000, use="t1"), lambda: _skill_call(world, 1500, name="claude-api", use="t2")],
+             "start": [lambda: world.apply_hook(_hook("SubagentStart", 1200, agent_id="ag1", agent_type="general-purpose"), 1200),
+                       lambda: world.apply_hook(_hook("SubagentStart", 1700, agent_id="ag2", agent_type="general-purpose"), 1700)]}
+    for step in order.split(", "):
+        steps[step].pop(0)()
+    assert _skills(world, state) == {"ag1": {"name": "code-review", "since": 1000, "useId": "t1", "forked": True},
+                                     "ag2": {"name": "claude-api", "since": 1500, "useId": "t2", "forked": True}}
+    world.apply_hook(_hook("PostToolUse", 60_000, tool_name="Skill", tool_input={"skill": "code-review"}, tool_use_id="t1",
+                           tool_response={"status": "forked", "agentId": "ag1", "result": "…"}), 60_000)
+    assert _skills(world, state) == {"ag2": {"name": "claude-api", "since": 1500, "useId": "t2", "forked": True}}
+    world.apply_hook(_hook("PostToolUse", 90_000, tool_name="Skill", tool_input={"skill": "claude-api"}, tool_use_id="t2",
+                           tool_response={"status": "forked", "agentId": "ag2", "result": "…"}), 90_000)
+    assert _skills(world, state) == {}
+
+
+def test_a_subagent_started_later_or_by_another_session_does_not_take_the_skill():
+    world, state = _world()
+    _skill_call(world, 1000)
+    world.apply_hook(_hook("SubagentStart", 1000 + I.SKILL_FORK_MS + 1, agent_id="late", agent_type="Explore"), 7000)
+    world.apply_hook(_hook("SubagentStart", 2000, sid="s-bbbb", agent_id="other", agent_type="Explore"), 2000)
+    assert set(_skills(world, state)) == {SID}
+
+
+def test_a_forked_skill_s_subagent_stopping_ends_it():
+    world, state = _world()
+    _skill_call(world, 1000)
+    world.apply_hook(_hook("SubagentStart", 2000, agent_id="ag1", agent_type="general-purpose"), 2000)
+    world.apply_hook(_hook("SubagentStop", 90_000, agent_id="ag1", agent_type="general-purpose"), 90_000)
+    assert _skills(world, state) == {}
+
+
+def test_a_skill_whose_end_never_came_is_over_after_thirty_minutes():
+    world, state = _world()
+    _skill_call(world, 1000)
+    assert _skills(world, state, at=1000 + I.SKILL_MAX_MS - 1)
+    assert _skills(world, state, at=1000 + I.SKILL_MAX_MS) == {}
+
+
+@pytest.mark.parametrize("tool_input", [{}, {"skill": ""}, {"skill": 3}, {"skill": "a b"}, {"skill": "x" * 129},
+                                        {"name": "code-review"}])
+def test_a_skill_call_without_a_skill_name_is_no_skill(tool_input):
+    world, state = _world()
+    world.apply_hook(_hook("PreToolUse", 1000, tool_name="Skill", tool_input=tool_input, tool_use_id="t1"), 1000)
+    assert _skills(world, state) == {}
+
+
+@pytest.mark.parametrize("response, forked", [({"status": "forked"}, True), ({"success": True}, False),
+                                              ('Skill "code-review" completed (forked execution).', True),
+                                              ("Launching skill: code-review", False), (None, False)])
+def test_what_says_a_skill_ran_in_a_subagent(response, forked):
+    assert I._skill_forked(response) is forked
+
+
+def test_the_ledger_s_probe_sees_the_two_result_forms_and_flags_another(tmp_path):
+    """cc_watch's skill_tool_shape (the ledger's "skill"): a Skill call's input names the skill; its result is inline
+    {success, commandName} or forked {status: "forked", agentId}. Any other form makes result_known some."""
+    import json
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from cc_watch import probes as P
+    proj = tmp_path / "projects" / "-w"
+    proj.mkdir(parents=True)
+
+    def use(i):
+        return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"u{i}", "name": "Skill",
+                                                               "input": {"skill": "code-review", "args": ""}}]}}
+
+    def result(i, r):
+        return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"u{i}", "content": "ok"}]},
+                "toolUseResult": r}
+    recs = [use(1), result(1, {"success": True, "commandName": "code-review"}),
+            use(2), result(2, {"status": "forked", "agentId": "a1", "result": "…"})]
+    (proj / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+    assert P.skill_tool_shape(P.Context(run=lambda a: (0, ""), transcripts=tmp_path / "projects")) == {
+        "input_skill": "all", "result_known": "all", "forked": "seen"}
+    (proj / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs + [use(3), result(3, {"done": 1})]))
+    assert P.skill_tool_shape(P.Context(run=lambda a: (0, ""), transcripts=tmp_path / "projects"))["result_known"] == "some"
+    assert P.skill_tool_shape(P.Context(run=lambda a: (0, "")))["skipped"]
+
+
+def _replay(run: str):
+    """The hooks a real claude sent while using a skill (fixtures/viz/skill_hooks.json, measured 10-22): each applied
+    at its own time; the skills held after each step."""
+    import json
+    from pathlib import Path
+    doc = json.loads((Path(__file__).parent / "fixtures" / "viz" / "skill_hooks.json").read_text(encoding="utf-8"))
+    world, state = _world()
+    steps = []
+    for h in doc[run]:
+        at = 1_000 + h["atMs"]
+        world.apply_hook({k: v for k, v in h.items() if k != "atMs"}, at)
+        steps.append((h["hook_event_name"], _skills(world, state)))
+    return steps
+
+
+def test_a_real_inline_skill_is_held_from_its_call_to_the_turn_s_stop():
+    """inline (measured): PreToolUse tool_input {"skill": "jvz-inline"} (no "args" when none are given), PostToolUse
+    {success, commandName} 40 ms later, then the turn's Stop."""
+    steps = _replay("inline")
+    assert [e for e, _ in steps] == ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
+    held = {e: {aid: s["name"] for aid, s in got.items()} for e, got in steps}
+    sid = "1e2330cb-ffa0-4819-809f-66476f312072"
+    assert held == {"UserPromptSubmit": {}, "PreToolUse": {sid: "jvz-inline"}, "PostToolUse": {sid: "jvz-inline"}, "Stop": {}}
+
+
+def test_a_real_forked_skill_moves_to_its_subagent_and_ends_with_the_forked_result():
+    """forked (measured): SubagentStart (agent_type general-purpose) 41 ms after the call, then SubagentStop and the
+    call's PostToolUse {success, commandName, status: "forked", agentId, result}."""
+    steps = _replay("forked")
+    assert [e for e, _ in steps] == ["UserPromptSubmit", "PreToolUse", "SubagentStart", "SubagentStop", "PostToolUse", "Stop"]
+    sid, sub = "94f4f40c-97d2-42af-adb9-f3132f39ecfb", "a72a52a7f6db30534"
+    got = dict(steps)
+    assert {a: s["name"] for a, s in got["PreToolUse"].items()} == {sid: "jvz-forked"}
+    assert {a: (s["name"], s.get("forked")) for a, s in got["SubagentStart"].items()} == {sub: ("jvz-forked", True)}
+    assert got["SubagentStop"] == {} and got["PostToolUse"] == {} and got["Stop"] == {}

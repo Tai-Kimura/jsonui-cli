@@ -1,0 +1,5 @@
+# Installed by `npm ci --prefix rjui_tools/spec/support`, never committed.
+#
+# The manifest and lock ARE committed: they pin the compiler version so the
+# spec suite and CI type-check with the same tsc, and `npm ci` needs the lock.
+node_modules/

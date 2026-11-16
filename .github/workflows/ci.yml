@@ -1,0 +1,1154 @@
+name: ci
+
+# Per-push / PR quality gate for the renderer-SSoT verification assets:
+#   1. unit suites   — jui_tools (pytest) + rspec x3 (sjui/kjui/rjui)
+#   2. SSoT guards   — fixture freshness + attr-bindings determinism + vendored
+#                      ruby attr tables freshness
+#   3. web conformance — full fixture suite through rjui codegen + React +
+#                      headless Chromium (gate: 0 fail / 0 error)
+#
+# The former protocol-sync workflow is folded into the python-suite job here
+# (see .github/workflows/README.md). Mobile (iOS/Android) conformance is too
+# slow for per-push: see conformance-mobile.yml (weekly + manual dispatch).
+
+on:
+  push:
+    # `release-check` is where a release commit is verified BEFORE main sees
+    # it. Two constraints have to hold at once and neither survives alone:
+    #
+    #   - tag only a commit CI has verified. Tagging first burned v1.7.34
+    #     and v1.7.35 (both red, neither distributed).
+    #   - main must never reference a tag that does not exist yet.
+    #     `document_tools/pyproject.toml` pins the sibling by tag, so a
+    #     release commit sitting on main without its tag fails every
+    #     install from main HEAD — closed in 2026-08 with an atomic push,
+    #     and reopened when "CI before tag" split that push apart.
+    #
+    # Verifying on a branch satisfies both: CI reports a real headSha for
+    # this exact commit, and main + tag then land together in one atomic
+    # push. A `pull_request` run would not do — its headSha is a merge
+    # commit, so "CI verified this SHA" could not be checked by equality.
+    branches: [main, release-check]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # Publication hygiene. Structural rules, stated without naming any
+  # downstream identifier — spelling the vocabulary out here would be the
+  # leak it is meant to prevent. The vocabulary check itself runs in the
+  # pre-commit hook, whose pattern list lives outside every repository.
+  #
+  #   1. docs/ is gitignored because bug reports quote downstream app names
+  #      and local paths; a force-add slips past the ignore rule silently,
+  #      so the tracked set is asserted here instead.
+  #   2. dev-guide/ is the PUBLISHED maintainer guide (moved out of docs/
+  #      2026-08-01): it must stay tracked — an ignore-rule mistake would
+  #      silently unpublish it — and docs/dev-guide must not come back,
+  #      or the two copies drift.
+  #   3. No absolute home paths: they carry a username and a machine layout.
+  #      (This repo-wide grep is also what audits dev-guide content.)
+  # ------------------------------------------------------------------ #
+  publication-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: docs/ stays untracked
+        run: |
+          tracked=$(git ls-files docs/ || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::docs/ is ignored but these files are tracked:"
+            echo "$tracked"
+            exit 1
+          fi
+      - name: dev-guide/ stays tracked, with no shadow copy under docs/
+        run: |
+          tracked=$(git ls-files dev-guide/ || true)
+          if [ -z "$tracked" ]; then
+            echo "::error::dev-guide/ has no tracked files — the maintainer guide got unpublished"
+            exit 1
+          fi
+          if [ -e docs/dev-guide ]; then
+            echo "::error::docs/dev-guide reappeared — dev-guide/ is the only master (see docs/README.md)"
+            exit 1
+          fi
+      - name: No unowned-process kills in tool sources
+        # The rule is a PROPERTY — do not signal a process this repo's tools
+        # did not start — and the script holds both the spellings that have
+        # meant it and the note that the list is an approximation expected to
+        # grow. It lives in a file rather than inline here because it is
+        # tested (jui_tools/tests/test_unowned_kill_guard.py plants every
+        # spelling and asserts each one fires): the first version of this
+        # check, written inline with `\b`, could not fire at all.
+        run: dev-guide/ci/check-unowned-kills.py .
+
+      - name: No absolute home paths in tracked files
+        run: |
+          # Anchored so a directory that merely ends in /home/ (a layout
+          # folder, say) is not mistaken for an absolute home path.
+          hits=$(git grep -I -n -E '(^|[^A-Za-z0-9_./-])/(Users|home)/[a-z0-9._-]+/' -- . \
+                 ':(exclude).github/workflows/*' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::absolute home paths are machine-specific:"
+            echo "$hits"
+            exit 1
+          fi
+
+  # ------------------------------------------------------------------ #
+  # jui_tools unit suite + protocol-sync idempotency (folded from the
+  # old protocol-sync.yml). The suite runs under pytest; the one
+  # idempotency case below is named through unittest because it is a
+  # single selector, not a discovery mode.
+  # ------------------------------------------------------------------ #
+  python-suite:
+    runs-on: ubuntu-latest
+    # 25, not 15: the four suites take about 12 minutes on a good day (2.3.19: 12m10s), and setup alone
+    # took 7m13s on 2026-10-22 — Playwright's --with-deps pulled 25.9 MB of apt packages at 79.9 kB/s
+    # (5m25s; 17s the run before), and the SVG converters' apt-get was slow the same way — so the job was
+    # cancelled inside its unit tests. A slow mirror is not a failing suite.
+    # 35, not 25: on 2026-10-23 the same mirror (48.5 kB/s) held the two apt steps for about 11 minutes and
+    # the suites took 13m13s under load, so the job finished every step and was cancelled 12s later, at 25.
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      # 🔻 THE FOUR CROSS-REPO ARMS RAN NOWHERE BUT ONE DEVELOPER TREE.
+      # `test_component_metadata_platform_truth.py` compares this repo's
+      # component metadata against what the two libraries actually implement.
+      # Each arm skips unless the library checkout is found, and the skip is
+      # silent in a passing run: 1897 passed / 5 skipped reads the same as
+      # 1901 passed / 1 skipped to anyone counting failures.
+      #
+      # Three paths could run them. The shared dev checkout does (the siblings
+      # sit beside it). The release gate did not until 2026-09-11 (a detached
+      # worktree has no siblings beside it). THIS JOB never did — and a repo-
+      # wide search for the checkouts says they are present, because two OTHER
+      # jobs have them. The denominator is the job, not the repository.
+      #
+      # ⚠️ SPARSE, BECAUSE THE ARMS READ THREE FILES. Measured 2026-09-11:
+      # DynamicComponentBuilder.swift 17,004 B + DynamicView.kt 24,852 B =
+      # 41,856 B, against ~11.5 MB of .git for two full clones. Cone mode
+      # takes directories, so each pattern is the file's parent; widen it only
+      # with the same measurement in hand.
+      #
+      # WIDENED 2026-09-14, with the measurement the line above demands. A
+      # third arm pins the glass shape vocabulary against `SJUIGlass.swift`,
+      # which sits DIRECTLY in `Classes/SwiftUI/` — one level above
+      # `Dynamic/`. The old pattern did not reach it, so the arm skipped in
+      # CI while passing locally.
+      #
+      # Cone mode takes a directory RECURSIVELY, so the cost is everything
+      # under `SwiftUI/`, not the files directly in it:
+      #
+      #   Classes/SwiftUI/Dynamic    89 files    996,069 B   (what it took)
+      #   Classes/SwiftUI           142 files  1,337,994 B   (what it takes now)
+      #   delta                      53 files    341,925 B   (+34%)
+      #   of which the arm reads   SJUIGlass.swift  10,096 B
+      #
+      # ⚠️ Two earlier versions of this comment had different numbers, and
+      # BOTH were wrong — one counted only the files directly in `SwiftUI/`
+      # (+170 KB), the other something else again (+448 KB). `ls-tree -r` on
+      # the branch is what settles it; a non-recursive listing is not what
+      # cone mode does.
+      - name: SwiftJsonUI (the platform-truth arms read one file, the glass vocabulary arm another)
+        uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          path: SwiftJsonUI
+          filter: blob:none
+          # One pattern: cone mode subsumes nested directories, so naming
+          # `Classes/SwiftUI` already brings `Dynamic/` with it. Measured in
+          # a throwaway repo with a control proving sparse was in effect at
+          # all (a sibling directory stayed absent).
+          # 🔻 TWO PATHS. The second is for
+          # test_the_declared_web_marker_hosts_still_implement_it.py, which
+          # FAILS (never skips) when this checkout exists but the file is
+          # absent — a cross-repo arm that skips on a too-narrow sparse
+          # pattern reports agreement between one list and nothing. Measured
+          # cost: +78,143 B over the 1,341,858 B already fetched here.
+          sparse-checkout: |
+            Sources/SwiftJsonUI/Classes/SwiftUI
+            ConformanceHost/UITests
+      - name: KotlinJsonUI (the platform-truth arm and the BOM-floor arm)
+        uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          path: KotlinJsonUI
+          filter: blob:none
+          # 🔻 TWO PATHS, AND THE SECOND IS EASY TO FORGET. A cross-repo arm
+          # leaves CI for three independent reasons — the job does not check
+          # the sibling out, the env spelling is wrong, or THE SPARSE PATTERN
+          # DOES NOT INCLUDE THE FILE THE ARM READS — and only the third one
+          # looks like a passing suite. `conformance-host` is here for
+          # test_the_conformance_host_bom_carries_the_keyboardtype_floor.py,
+          # which fails (never skips) when the env names a checkout and the
+          # file is absent, precisely so widening this list is not optional.
+          sparse-checkout: |
+            library-dynamic/src/main/kotlin/com/kotlinjsonui/dynamic
+            conformance-host
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        # 🔴 `[conformance]` PULLS IN PILLOW, AND WITHOUT IT 86 ARMS SKIP HERE.
+        # This was the only one of the three jui_tools installs on the bare
+        # package — web-conformance below and the mobile lane both take the
+        # extra and say why. The skips were DECLARED, so the collection census
+        # was green and the number sat in plain sight; what nobody had counted
+        # was WHICH arms. Measured 2026-09-15 on run 34958111160 (v1.8.86):
+        # 86 of the 88 skips, and BOTH files testing that release's two new
+        # gates were among them — test_the_gate_can_see_a_blank_page.py (13
+        # arms) and test_fail_on_moved_refuses_before_writing.py (5). They had
+        # never executed in CI at all.
+        #
+        # ⚠️ A DECLARED SKIP IS STILL A SKIP. The declaration exists so that a
+        # NEW skip fails the run, not so an old one becomes acceptable. The
+        # census prints a count per reason; the count has to be read, and the
+        # population behind it named.
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[conformance]'
+      # Both install BEFORE the jui_tools suite runs. `jui g project`
+      # validates specs only when document_tools imports, so with the
+      # installs after the suite, that validation never ran here — and a
+      # test whose fixture specs were invalid passed for a month because the
+      # check was absent rather than satisfied.
+      # test_tools installs BEFORE document_tools: jsonui_doc_cli imports the
+      # validator + schema constants from jsonui_test_cli (single in-repo copy).
+      - name: Install test_tools (dev)
+        working-directory: test_tools
+        run: python -m pip install -e ".[dev]"
+      # --no-deps because the only dependency is that sibling, already
+      # installed editable above (its dev extras are the same pytest pair).
+      # Without it pip re-fetches the pinned release from GitHub and REPLACES
+      # the editable install, so the suite would exercise the released
+      # sibling instead of this working tree — measured 2026-08-20, and the
+      # reason the ordering above did not do what it says on its own.
+      - name: Install document_tools (dev)
+        working-directory: document_tools
+        run: python -m pip install -e ".[dev]" --no-deps
+      # --no-deps above skips document_tools' own third-party dependencies
+      # too. PyYAML arrives with jui_tools; markdown-it-py renders texts-file
+      # prose (`{"md": ...}`) and has no other way in, so without this every
+      # rendering arm of test_prose_fields_read_from_a_texts_file fails here.
+      - name: Install document_tools' third-party dependencies
+        run: python -m pip install "markdown-it-py>=3.0" "PyYAML>=6.0"
+      # The live-reflection adapter behind `jsonui-doc check db` is only
+      # exercised when sqlalchemy is importable. Without this the one test
+      # covering it skipped here AND on every developer machine, so the
+      # adapter shipped untested — and when first run it was red on two
+      # counts (see the 1.6.45 report). An optional runtime extra, a
+      # mandatory test dependency.
+      - name: Install sqlalchemy (exercises the db-schema live adapter)
+        run: python -m pip install "sqlalchemy>=2.0"
+      # The iOS image converter's arms need a real SVG→PDF converter. Without
+      # these they skip, and the three that show a PDF comes out
+      # byte-identical run on no machine but a developer's Mac — 1.8.112's
+      # first candidate went red on exactly those three undeclared skips.
+      # librsvg2-bin brings rsvg-convert AND libcairo, which cairosvg needs.
+      # Measured on ubuntu:24.04 (2026-09-24): rsvg-convert 2.58.0 honours
+      # SOURCE_DATE_EPOCH, cairosvg 2.9.1 runs on cairo 1.18.0, and all nine
+      # arms of test_ios_pdf_assets_are_deterministic.py pass with no skip.
+      #
+      # 🔻 THE APT PACKAGES COME FROM A CACHE, KEYED ON THE RUNNER IMAGE. The
+      # converters' apt-get and Playwright's --with-deps were the two steps a
+      # slow mirror held for minutes (2026-10-22: 7m13s; 2026-10-23: about 11
+      # minutes — the 25 → 35 above). apt_install_cached.sh downloads what this
+      # image lacks once per image version and installs from the cache after
+      # that, with no apt-get update. The list is Playwright's own: --dry-run
+      # prints the packages this image is missing for Chromium.
+      - name: Install Playwright (the package; Chromium and its libraries below)
+        run: python -m pip install "playwright==1.64.0"
+      - name: List the apt packages this image lacks (SVG converters, Chromium's libraries)
+        id: aptlist
+        run: |
+          pkgs="librsvg2-bin $(python -m playwright install-deps --dry-run chromium | sed -n 's/^  //p' | tr '\n' ' ')"
+          echo "$pkgs"
+          echo "packages=$pkgs" >> "$GITHUB_OUTPUT"
+          echo "key=$ImageOS-$ImageVersion-$(printf '%s' "$pkgs" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Cache the apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ steps.aptlist.outputs.key }}
+      - name: Install the apt packages and the SVG to PDF converters (exercises the iOS image arms)
+        run: |
+          bash .github/scripts/apt_install_cached.sh "$HOME/apt-debs" ${{ steps.aptlist.outputs.packages }}
+          python -m pip install cairosvg
+      # test_api_model_enum_case_names.py compiles the generated Kotlin enum
+      # with java + the compiler jars from a Gradle cache (the layout
+      # kjui_tools/spec/support/kotlin_compiler.rb reads). This image has
+      # neither, so the arm skipped here and the collection gate below stopped
+      # v1.9.6's main run (37092350326) on the undeclared skip — it ran only
+      # where a developer's Gradle cache had the jars. The same JDK and the
+      # same pinned, sha256-checked jars as the kjui rspec leg.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Cache the Kotlin compiler jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches/modules-2/files-2.1
+          key: kotlinc-jars-${{ hashFiles('.github/scripts/fetch_kotlin_compiler_jars.sh') }}
+      - name: Fetch the Kotlin compiler jars (pinned, sha256-checked)
+        run: bash .github/scripts/fetch_kotlin_compiler_jars.sh
+      # tests/test_viz_spirits_export.py draws an exported model in a real
+      # Chromium and compares it with the source (two arms). Without Playwright
+      # and its Chromium they skip, and the collection gate below stops the run
+      # on the undeclared skip; they are not declared there, so they run here.
+      # 1.64.0: the version the viz e2e's venv runs (no other pin in the repo).
+      # The package and Chromium's system libraries went on above.
+      - name: Cache Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.64.0-chromium-${{ runner.os }}-${{ runner.arch }}
+      - name: Install Chromium (exercises the model export arms)
+        run: python -m playwright install chromium
+      # pytest, not `unittest discover`: the two runners disagree by 26 tests
+      # here. Some modules are written pytest-style (bare asserts, `tmp_path`
+      # fixtures) and `unittest discover` collects nothing from them — it walks
+      # for TestCase subclasses and finds none, silently, so the tally looked
+      # complete. Measured on the same checkout: discover 1325, pytest 1351,
+      # both green. This is the same shape as the 1.6.44 finding, where the
+      # spec-validation gate skipped under this runner and had never executed
+      # anywhere. pytest runs the TestCase modules too, so nothing is lost.
+      - name: Run unit tests
+        working-directory: jui_tools
+        # 🔻 THE ENV VARS, NOT THE LAYOUT. `_sibling_repo` falls back to
+        # `REPO_ROOT.parent / <name>`, and on a runner this repo IS the
+        # workspace root — so a checkout at `path: SwiftJsonUI` lands INSIDE
+        # it, not beside it, and the fallback would still miss. Naming the
+        # paths is also what the skip message tells a reader to do.
+        env:
+          JSONUI_SWIFTJSONUI_PATH: ${{ github.workspace }}/SwiftJsonUI
+          JSONUI_KOTLINJSONUI_PATH: ${{ github.workspace }}/KotlinJsonUI
+        run: python -m pytest --junitxml=pytest-report.xml
+      # 🔻 A GREEN SUITE DOES NOT PROVE THE ARMS RAN. An arm that is never
+      # COLLECTED raises no assertion, so the run is green and nothing says a
+      # gate disappeared — and that is precisely how cross-repo arms have left
+      # this CI before. The arm itself can refuse when its sibling is named
+      # but absent, or when it is under CI and found no checkout at all; it
+      # cannot refuse on behalf of a run that never loaded it. So the run is
+      # measured from outside: zero skips, and every tests/test_*.py on disk
+      # contributed at least one testcase. The population is derived from the
+      # directory, so new arms are covered without editing anything.
+      - name: Every arm was collected, and none skipped
+        working-directory: jui_tools
+        run: python tools/check_pytest_collection.py pytest-report.xml
+      - name: Protocol sync idempotency (e2e)
+        # Runs the protocol sync twice against the fixture project and ensures
+        # no files change the second time — the structural guard against
+        # non-deterministic generation.
+        working-directory: jui_tools
+        run: python -m unittest tests.test_build_sync_e2e.SyncProtocolE2ETests.test_idempotency
+      # The test_tools suite hands its emitted TypeScript to a compiler, and
+      # the compiler has to be here for that to mean anything. node ships on
+      # the ubuntu runner image; only the pinned tsc is installed, and it is
+      # the same one the rjui specs use — it lives under `spec/`, which `jui
+      # sync_tool` deletes and the distribution does not ship, so pinning it
+      # cannot reach a consumer.
+      #
+      # Without this step the type-check SKIPS. That is deliberate for a
+      # developer machine and useless here: a skipped gate gates nothing, and
+      # it disappears into a green summary. The arm fails outright when `CI`
+      # is set and tsc is missing, so a broken install is reported as a
+      # failure rather than as four quiet skips.
+      #
+      # The install normally takes a second, but on 2026-10-22 a degraded npm
+      # registry held it silent for 6 minutes, twice, until the job's 15 ran
+      # out and cancelled the whole suite. So each attempt has its own limit
+      # (80s), there is one retry, and the step's timeout-minutes is the
+      # backstop: a stalled registry fails here in under 3 minutes and names
+      # this step, instead of eating the job's budget.
+      - name: Install TypeScript (test_tools emitted-TS type-check)
+        timeout-minutes: 3
+        run: |
+          for attempt in 1 2; do
+            if timeout 80 npm ci --prefix rjui_tools/spec/support; then
+              exit 0
+            fi
+            echo "::warning::npm ci attempt ${attempt} failed or stalled (80s limit)"
+            sleep 5
+          done
+          echo "::error::npm ci did not finish in 2 attempts: the npm registry is likely degraded (status.npmjs.org)"
+          exit 1
+      # `--ignore` because these files ask swiftc and kotlinc directly and
+      # refuse to skip when `CI` is set; this image has neither, so they would
+      # fail here for the absence of a toolchain rather than for anything
+      # about what they measure. The `compiler-backed-arms` job below owns
+      # them and runs them on macos-15 — the arms are NOT dropped, they are
+      # moved, and dropping a line here would turn this suite red rather than
+      # quiet.
+      #
+      # ⚠️ ELEVEN FILES, AND SOME OF THEM ALSO HAVE WEB ARMS. Ignoring a whole
+      # file moves its node probe to macos-15 too. That is deliberate: the
+      # faces in one file assert the SAME ROWS, and splitting them across two
+      # jobs is how one face's row silently stops being compared with the
+      # others'.
+      #
+      # 🔻 THE EIGHTH ARRIVED RED. `test_harness_conditions.py` (P2d) type-
+      # checks its Swift test against XCTest through `xcrun`, which this image
+      # does not have, and refuses to skip under `CI`: the v1.8.118 candidate's
+      # run 36045878198 was `1811 passed, 2 failed` here for exactly that.
+      # The whole file moves — its web face is RUN and its Kotlin factory is
+      # compiled, and all three assert the same arrangement order.
+      #
+      # The ninth (P2e) is web-only but RUNS the generated test the way
+      # `test_branch_act_window_and_bound.py` does — node with native type
+      # stripping, which this image's node predates — and reuses that file's
+      # stand-ins, so it sits in the same step. The tenth (P2e(b), condition
+      # controls) runs the web face, compiles and runs a Kotlin control and
+      # type-checks the Swift one against XCTest — the same three as P2d's.
+      # The eleventh (P2e(a), v4.19, which host an unmatched request belongs
+      # to) runs the web runtime in node and compiles the iOS runtime to send
+      # real URLSession requests through it.
+      #
+      # 🔻 THE LIST GREW BY THREE BECAUSE THEY WERE ALREADY BROKEN HERE.
+      # Measured on a green run of this job: `1636 passed, 9 skipped`, and
+      # the nine were every iOS and Android arm in `branch_swizzle_ordering`
+      # (all five), `branch_then_data_addresses_nested_paths` and
+      # `readback_folds_unordered_collections`. Three files' worth of
+      # compile-and-run arms gated nothing here and nobody could see it in
+      # the summary. They now sit with the compilers, and their Kotlin
+      # probes shim `StateFlow`/`JsonElement` so they need `kotlinc` and not
+      # a populated Gradle cache — which no CI image has.
+      - name: Run test_tools tests
+        working-directory: test_tools
+        run: |
+          python -m pytest \
+            --ignore=tests/test_stub_name_tables_reach_a_compiler.py \
+            --ignore=tests/test_recorder_refuses_an_undeclared_op.py \
+            --ignore=tests/test_branch_swizzle_ordering.py \
+            --ignore=tests/test_branch_then_data_addresses_nested_paths.py \
+            --ignore=tests/test_readback_folds_unordered_collections.py \
+            --ignore=tests/test_recorder_keeps_every_concurrent_call.py \
+            --ignore=tests/test_branch_act_window_and_bound.py \
+            --ignore=tests/test_harness_conditions.py \
+            --ignore=tests/test_branch_unmatched_and_side_routes.py \
+            --ignore=tests/test_branch_condition_controls.py \
+            --ignore=tests/test_branch_unmatched_origin.py \
+            --ignore=tests/test_unit_stubs_ios_typecheck.py \
+            --ignore=tests/test_new_screen_stubs_compile.py \
+            --ignore=tests/test_new_screen_stubs_compile_mainactor.py \
+            --ignore=tests/test_branch_scenario_delay.py \
+            --ignore=tests/test_branch_scenario_delay_android.py \
+            --ignore=tests/test_branch_scenario_headers.py \
+            --ignore=tests/test_branch_scenario_headers_android.py \
+            --ignore=tests/test_branch_scenario_body_file.py \
+            --ignore=tests/test_branch_scenario_body_file_android.py \
+            --ignore=tests/test_branch_seed_state_android.py \
+            --ignore=tests/test_branch_seed_readback_wire_form.py \
+            --ignore=tests/test_branch_seed_readback_wire_android.py \
+            --ignore=tests/test_branch_settle_quiescence.py \
+            --ignore=tests/test_branch_settle_quiescence_android.py \
+            --ignore=tests/test_branch_harness_release_ios.py \
+            --ignore=tests/test_branch_earlier_row_calls.py \
+            --ignore=tests/test_branch_earlier_row_calls_android.py \
+            --ignore=tests/test_branch_notices_reach_agent_runs.py
+      # ⚠️ test_unit_stubs_ios_typecheck.py is in no job here: it needs swiftc
+      # 6.2+ for `-default-isolation`, and the compiler job's image answers
+      # 6.1.2 (run 36051178116). run-suites.sh's test_tools leg owns it, as it
+      # owns the executed branch runtime. test_branch_scenario_delay_android.py,
+      # test_branch_seed_state_android.py, test_branch_seed_readback_wire_android.py (kotlinx's
+      # serialization plugin too) and test_branch_settle_quiescence_android.py
+      # likewise: they run the Kotlin runtime compiled whole, whose jars only a
+      # Gradle cache has (test_branch_scenario_headers_android.py and _body_file_android.py too).
+      # test_branch_scenario_delay.py, test_branch_scenario_headers.py, test_branch_scenario_body_file.py and
+      # test_branch_settle_quiescence.py, test_branch_earlier_row_calls.py and
+      # test_branch_seed_readback_wire_form.py
+      # (node + swiftc + the pinned vitest) run with the compilers below;
+      # test_branch_earlier_row_calls_android.py with the Android leg. test_branch_harness_release_ios.py runs the
+      # iOS runtime under XCTest on two simulator runtimes (from 26 and below)
+      # that no job here provisions; run-suites.sh's iOS leg owns it.
+      - name: Run document_tools tests
+        working-directory: document_tools
+        run: python -m pytest
+
+  # ------------------------------------------------------------------ #
+  # The identifier tables in test_tools record what swiftc and kotlinc
+  # accept. `test_stub_name_tables_reach_a_compiler.py` asks the compilers
+  # instead of a second transcript of them, and it REFUSES TO SKIP when `CI`
+  # is set — a skipped gate gates nothing and disappears into a green
+  # summary, the same decision the emitted-TypeScript arm already made.
+  #
+  # ⚠️ So those arms need a job that has both compilers, and python-suite is
+  # not it: ubuntu-latest ships neither reliably. The arms were verified on a
+  # developer machine where swiftc exists and kotlinc does not, so
+  # "5 passed, 1 skipped" there and a red suite here would have been the same
+  # commit. A gate's denominator is the CI job list, not the local one.
+  #
+  # macos-15 rather than ubuntu: swiftc comes with Xcode, so only kotlinc has
+  # to be installed, and the SwiftUI-compiling ruby leg already proves this
+  # image answers for Swift. Separate from python-suite so that a compiler
+  # download never sits on the critical path of the whole Python suite.
+  #
+  # 🔻 THIS JOB NOW OWNS TWO FAMILIES, and the name says so. The second is
+  # `test_recorder_refuses_an_undeclared_op.py`: the branch runtime's read
+  # side refuses an op no route declares, and whether a guard REFUSES is a
+  # fact about execution — three emitted runtimes, three real compilers.
+  # It ran on a developer machine (Gradle-cache jars, swiftc, node) and
+  # would have skipped in CI for want of a toolchain, which is the outcome
+  # `_tool` exists to refuse. Renaming rather than adding a job: a second
+  # macos-15 runner pays for `brew install kotlin` twice.
+  # ------------------------------------------------------------------ #
+  stub-identifier-tables:
+    name: arms that ask the real compilers
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # ⚠️ NOT "Install test_tools (dev)". `test_spec_validation_wiring.py`
+      # identifies the python-suite install ORDER by matching that exact step
+      # name and asserting it finds two lines; a second job reusing the name
+      # made it three and the assertion read `3 != 2`. The step name is load-
+      # bearing, so this one says which job it belongs to.
+      - name: Install test_tools (dev, for the compiler arms)
+        working-directory: test_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Install kotlinc
+        run: brew install kotlin
+      # Fails HERE rather than inside a test, so a toolchain problem reads as
+      # a toolchain problem instead of as the tables being wrong.
+      - name: Confirm both compilers answer
+        run: |
+          set -euo pipefail
+          swiftc --version
+          kotlinc -version
+      # Each step reads its own EXECUTED count. `success` is what both
+      # "6 passed" and "6 collected, 6 skipped" produce, so a reader going
+      # job by job — or step by step — is reading a value the two share.
+      #
+      # ⚠️ AND ITS OWN REPORT FILE. Both steps wrote `guard-report.xml`
+      # until 2026-09-11. `set -e` keeps that honest today, but the day one
+      # of them gains `continue-on-error`, the second checker reads the
+      # first step's numbers and passes — a check whose subject is rewritten
+      # by the run it is checking.
+      - name: Identifier tables
+        working-directory: test_tools
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_stub_name_tables_reach_a_compiler.py \
+            -v -rs --junitxml=guard-identifier.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-identifier.xml
+      # Node as well as the two compilers: the web face asserts the same rows
+      # as the other two, and a row compared in a different job is a row
+      # nobody compares.
+      #
+      # 🔻 AND THE RESULT IS READ FROM THE COUNTS, NOT FROM THE JOB. `success`
+      # is what BOTH "9 passed" and "9 collected, 9 skipped" produce, so a
+      # reader going job by job is reading a value the two share. The arms
+      # refuse to skip when `CI` is set — but that refusal only fires if the
+      # arm RUNS, and a step whose file was never collected is invisible to
+      # it. `executed-or-skipped.py` puts the discriminator in the output.
+      #
+      # ⚠️ THIS PARAGRAPH USED TO SAY THE OPPOSITE OF THE STEP ABOVE IT. It
+      # read "deliberately NOT added to the identifier-tables step", which
+      # was true when it was written and false three lines later, once that
+      # step got the checker too. Nothing failed: a comment that misstates
+      # why a gate exists is the only argument anyone needs for deleting the
+      # gate. The reason it changed is that the missing measurement arrived
+      # — run 34560362076 reported `collected=20 skipped=0 executed=20` for
+      # that step, so the skip set it was waiting on is known and is zero.
+      # The agent-reporter arms (test_branch_notices_reach_agent_runs.py) run
+      # the pinned vitest: a stand-in cannot reproduce which console lines a
+      # reporter drops. No `if:` — without the install the arms FAIL under CI
+      # (they skip only on a developer machine, and say so).
+      - name: Install the pinned vitest (the agent-reporter arms)
+        run: npm ci --prefix test_tools/tests/fixtures/vitest-pin --no-audit --no-fund
+      - name: Branch-runtime arms (three faces, real compilers)
+        working-directory: test_tools
+        run: |
+          set -euo pipefail
+          python -m pytest \
+            tests/test_recorder_refuses_an_undeclared_op.py \
+            tests/test_branch_swizzle_ordering.py \
+            tests/test_branch_then_data_addresses_nested_paths.py \
+            tests/test_readback_folds_unordered_collections.py \
+            tests/test_recorder_keeps_every_concurrent_call.py \
+            tests/test_branch_act_window_and_bound.py \
+            tests/test_harness_conditions.py \
+            tests/test_branch_unmatched_and_side_routes.py \
+            tests/test_branch_condition_controls.py \
+            tests/test_branch_unmatched_origin.py \
+            tests/test_branch_scenario_delay.py \
+            tests/test_branch_scenario_headers.py \
+            tests/test_branch_scenario_body_file.py \
+            tests/test_branch_settle_quiescence.py \
+            tests/test_branch_earlier_row_calls.py \
+            tests/test_branch_seed_readback_wire_form.py \
+            tests/test_branch_notices_reach_agent_runs.py \
+            -v -rs --junitxml=guard-branch-runtime.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-branch-runtime.xml
+      # A new screen's ViewModel / UseCase / Repository scaffolds, as `jui g
+      # project` and one `jui build` leave them, to swiftc (iOS Simulator SDK,
+      # Swift 5 and 6) and kotlinc (ticket jui-g-project-new-screen-stubs-do-
+      # not-compile: a consumer's three new screens were rc=65 and 394 errors). The arm
+      # runs `jui` itself, so jui_tools' own requirements come first. Swift 6
+      # with MainActor isolation needs a swiftc this runner does not have:
+      # test_new_screen_stubs_compile_mainactor.py, run by run-suites.sh.
+      - name: Install jui_tools (the new-screen scaffold arms run jui)
+        working-directory: jui_tools
+        run: python -m pip install -e .
+      # `jui init` runs this checkout's sjui / kjui / rjui (the arm puts their bin first on PATH), and every one of
+      # them refuses a ruby under 3.2 — this runner's own is 2.6. The floor, as ruby-suites runs it; the bundled
+      # gems it ships with (rexml for kjui) are all `init` loads, so no bundle install.
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+      - name: New-screen scaffold arms (two faces, real compilers)
+        working-directory: test_tools
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_new_screen_stubs_compile.py \
+            -v -rs --junitxml=guard-new-screen-stubs.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-new-screen-stubs.xml
+
+  # ------------------------------------------------------------------ #
+  # Ruby codegen unit suites. sjui_tools has no Gemfile (plain rspec);
+  # kjui/rjui use their committed Gemfile.lock via bundler-cache. They run on
+  # the FLOOR, Ruby 3.2 — the oldest ruby the tools accept from jsonui-cli
+  # 1.9.0, which each bin/<tool> enforces on its first line. A suite on a
+  # newer ruby than the floor passes an API the floor does not have, and
+  # nothing else here would catch it; ruby-generation-parity below compares
+  # the floor's generated bytes with 3.3's. The Ruby 2.6 legs that stood here
+  # went with the 2.6 support (ruling 2026-09-26).
+  # ------------------------------------------------------------------ #
+  ruby-suites:
+    name: rspec (${{ matrix.tool }})
+    runs-on: ${{ matrix.os }}
+    # 40, not 20: the kjui leg compiles and runs emitted Kotlin now (below).
+    # Measured 2026-09-28 on Linux with OpenJDK 21: the kjui suite went
+    # 1m06 -> 8m52 with the compiler present, and 17m43 on a loaded machine.
+    # The ubuntu runner's own time is not measured yet; a cancelled kjui leg
+    # means suspect this number first.
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `platform` is the codegen-differential name for the same tree —
+          # the differential rides this matrix because these legs already
+          # carry each tool's ruby dependencies, and standing up a fourth job
+          # would mean maintaining a second copy of that setup.
+          - tool: sjui_tools
+            platform: ios
+            bundler: false
+            os: macos-15 # specs compile emitted Swift against the SwiftUI SDK
+          - tool: kjui_tools
+            platform: android
+            bundler: true
+            os: ubuntu-latest
+          - tool: rjui_tools
+            platform: web
+            bundler: true
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: ${{ matrix.bundler }}
+          working-directory: ${{ matrix.bundler && matrix.tool || '' }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # The kjui specs compile (and some run) emitted Kotlin through
+      # kjui_tools/spec/support/kotlin_compiler.rb. Without a JDK and the
+      # compiler jars every such arm is pending (~104 of them), so a Kotlin
+      # emit that does not compile would pass here (ticket
+      # kjui-rspec-ci-job-has-no-kotlin-compiler). KOTLINC_JAVA names the JDK
+      # to the helper; KJUI_REQUIRE_KOTLINC=1 turns "no compiler" into an
+      # error instead of a skip, so this leg cannot go quietly back to pending.
+      - uses: actions/setup-java@v4
+        if: ${{ matrix.tool == 'kjui_tools' }}
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Cache the Kotlin compiler jars
+        if: ${{ matrix.tool == 'kjui_tools' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches/modules-2/files-2.1
+          key: kotlinc-jars-${{ hashFiles('.github/scripts/fetch_kotlin_compiler_jars.sh') }}
+      - name: Fetch the Kotlin compiler jars (pinned, sha256-checked)
+        if: ${{ matrix.tool == 'kjui_tools' }}
+        run: |
+          bash .github/scripts/fetch_kotlin_compiler_jars.sh
+          echo "KOTLINC_JAVA=$JAVA_HOME/bin/java" >> "$GITHUB_ENV"
+          echo "KJUI_REQUIRE_KOTLINC=1" >> "$GITHUB_ENV"
+      - name: Install gems (no Gemfile)
+        # sjui_tools has no Gemfile; its specs need rspec + simplecov and the
+        # non-default gems its lib requires (xcodeproj, listen).
+        if: ${{ !matrix.bundler }}
+        run: gem install rspec simplecov xcodeproj listen --no-document
+      - name: Install the rjui spec toolchain (tsc, esbuild, @babel/parser)
+        # The rjui specs type-check emitted TSX with a tsc pinned in
+        # rjui_tools/spec/support/package.json, run the generated
+        # screenMarker helper through esbuild's define (same package.json)
+        # to measure that a production build folds the marker away, and hand
+        # emitted JSX to @babel/parser. It lives under spec/ so it
+        # never reaches a consumer — `jui sync_tool` deletes spec/ by default
+        # and the distribution does not ship it.
+        #
+        # Without this the `compile_as_typescript` matcher SKIPS rather than
+        # passing (mark_skipped!, visible in the count) — but a skipped gate
+        # gates nothing, so CI installs it.
+        #
+        # ⚠️ This step used to carry `&& !matrix.ruby`, so the ruby-pinned leg
+        # (Ruby 2.6, gone from jsonui-cli 1.9.0) ran without the toolchain
+        # and reported ten pendings beside its `0 failures`. Eight of those
+        # were defensible — that leg's question was whether the vendored tools
+        # emit the same bytes under the consumer's older ruby, which a
+        # TypeScript type-check does not answer — but the ninth, the
+        # @babel/parser arm, was pending in every environment that ran it:
+        # that leg, the default leg, the release gate and triage's worktree,
+        # four for four on 2026-09-10.
+        # A gate that has never once observed its subject is not a gate. The
+        # arm raises instead of skipping when CI is set now, so the
+        # toolchain has to be here on every rjui leg. It is node, not ruby:
+        # nothing about it depends on which ruby runs the suite.
+        if: ${{ matrix.tool == 'rjui_tools' }}
+        run: npm ci --prefix rjui_tools/spec/support
+      # The layout arms draw emitted React in headless Chromium and measure it
+      # (Collection scroll-to-cell, flow sections, horizontal lanes, RTL
+      # safe-area insets — 13 arms). From jsonui-cli 1.9.0 to 1.9.8 they were
+      # pending on every run here: no browser was installed, and the specs
+      # looked only in macOS's cache path, so installing one on this Linux
+      # leg would not have been enough either (ticket
+      # rjui-chromium-arms-never-run-in-ci; the lookup is
+      # spec/support/headless_chromium.rb now). The playwright that installs
+      # it is pinned in the same package.json. RJUI_SPEC_REQUIRE_CHROMIUM=1
+      # makes a missing browser fail those arms instead of skipping them.
+      # The Chrome apt source is dropped first for the reason the
+      # web-conformance job gives.
+      - name: Install the rjui layout arms' headless Chromium
+        if: ${{ matrix.tool == 'rjui_tools' }}
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
+          rjui_tools/spec/support/node_modules/.bin/playwright install --with-deps --only-shell chromium
+          echo "RJUI_SPEC_REQUIRE_CHROMIUM=1" >> "$GITHUB_ENV"
+      - name: rspec (bundle)
+        if: ${{ matrix.bundler }}
+        working-directory: ${{ matrix.tool }}
+        run: bundle exec rspec
+      - name: rspec
+        if: ${{ !matrix.bundler }}
+        working-directory: ${{ matrix.tool }}
+        run: rspec
+      # Codegen differential (plan 41 measured it, plan 49-H gates it). Drives
+      # this tool's production converter over layout hashes and judges the
+      # emitted TEXT — no device, no fixture, no renders — so it is seconds
+      # on top of a job that already has the converter's dependencies.
+      # Defects must be recorded in conformance/codegen_effect.json with an
+      # owner and a reason; entries the measurement no longer supports fail
+      # too, so a fix takes its row with it.
+      - name: Install jui_tools (codegen differential)
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: Codegen differential (${{ matrix.platform }})
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main([
+            'conformance','codegen-effect','--paired','--platform','${{ matrix.platform }}']))"
+
+  # ------------------------------------------------------------------ #
+  # Drift guards between shared/core/attribute_definitions.json and the
+  # committed generated assets.
+  # ------------------------------------------------------------------ #
+  ssot-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        working-directory: jui_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: Fixture freshness (jui conformance generate produces zero diff)
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','generate']))"
+          git diff --exit-code -- conformance/
+          if [ -n "$(git status --porcelain -- conformance/)" ]; then
+            echo "::error::jui conformance generate left new/untracked files under conformance/"
+            git status --porcelain -- conformance/
+            exit 1
+          fi
+      - name: attr-bindings determinism (two runs emit identical output)
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['generate','attr-bindings','--lang','all']))"
+          mv build/attr_codegen build/attr_codegen.run1
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['generate','attr-bindings','--lang','all']))"
+          diff -r build/attr_codegen.run1 build/attr_codegen
+      - name: Vendored ruby attr tables match fresh emit
+        # rjui_tools vendors the generated ruby extraction tables; README.md
+        # is the (hand-written) provenance note and is excluded.
+        run: diff -r -x README.md build/attr_codegen/ruby rjui_tools/lib/core/generated/attributes
+      - name: attr-codegen manifest freshness (committed manifest matches fresh emit)
+        # The determinism step above just re-emitted build/attr_codegen,
+        # including manifest.json (the only committed file under build/).
+        # SwiftJsonUI / KotlinJsonUI CI verify their vendored swift/kotlin
+        # tables against this manifest at a pinned ref, so a stale or
+        # missing committed copy would silently disarm that cross-repo
+        # guard — fail here instead. Re-vendor and manifest belong in the
+        # same commit.
+        run: |
+          git ls-files --error-unmatch build/attr_codegen/manifest.json
+          git diff --exit-code -- build/attr_codegen/manifest.json
+      - name: Attribute coverage ratchet (declared attributes each platform reads)
+        # The conformance suite compares each platform against its own previous
+        # screenshot, so an attribute no converter reads renders blank, matches
+        # its blank baseline and passes. This is the static backstop: a newly
+        # declared attribute nobody wired up, or a closed gap left in the
+        # ledger, fails here. See conformance/coverage.json.
+        run: |
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','coverage']))"
+      # The two links to the canonical repo that no gate here can see.
+      #
+      # `test_schema_drift.py` compares the SHIPPED mock schema against this
+      # repo's constants; nothing compared it against the copy it is copied
+      # FROM, so a fix applied to one side survived until the next re-vendor
+      # and was then silently reverted. And the condition-key set exists in
+      # five places — the canonical schema, this repo, and one hard-coded
+      # set per driver — of which only the first two were pinned to each
+      # other. A driver that does not know a condition key treats it as
+      # fail-safe UNMET, so the gated step is SKIPPED, which reads on a
+      # report exactly like a pass.
+      #
+      # NOT PINNED to a ref, deliberately, unlike the vendored-manifest
+      # guards above: a pin defers detection until somebody moves the pin,
+      # which is the manual re-vendor step this replaces. The cost is that a
+      # change in the sibling repo can turn this job red with no change
+      # here — which is the guard reporting real drift, and is the point.
+      # submodules: the three drivers are SUBMODULES of jsonui-test-runner, so a
+      # plain checkout leaves drivers/{ios,android,web} empty and the guard
+      # exits 2 (CANNOT ATTEMPT) rather than passing on nothing — which is how
+      # this was found, on the release that added it.
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/jsonui-test-runner
+          path: .canonical
+          submodules: recursive
+      - name: Canonical sync (mock schema bytes, condition keys per driver)
+        run: dev-guide/ci/check-canonical-sync.py .canonical
+
+  # ------------------------------------------------------------------ #
+  # Web conformance: the full generated fixture suite through the real
+  # production path (rjui codegen -> React -> Playwright, headless).
+  # Gate: zero fail / zero error in web.results.json.
+  # ------------------------------------------------------------------ #
+  web-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # scripts/run.ts relies on native TS type stripping (Node >= 23)
+          check-latest: true # pick up security releases before the runner image's toolcache does
+          cache: npm
+          cache-dependency-path: conformance/hosts/web/package-lock.json
+      - uses: ruby/setup-ruby@v1 # rjui_tools codegen inside generate.sh
+        with:
+          ruby-version: "3.3"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jui_tools
+        working-directory: jui_tools
+        # [conformance] pulls in Pillow — the per-push web lane compares
+        # screenshots against baselines/ci/web.hashes.json (see the gate
+        # step); without it the comparison silently never runs.
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[conformance]'
+      - name: npm ci
+        working-directory: conformance/hosts/web
+        run: npm ci
+      # 🔻 `--with-deps` runs `apt-get update`, and apt fails the update
+      # WHOLESALE when any single configured source has an inconsistent index.
+      # The runner image ships Google's chrome repo, and this job does not use
+      # one package from it.
+      #
+      # Measured 2026-09-10 from outside CI, reproducing the failure by hand:
+      #   Release (Date 2026-09-09 17:16:59 UTC) declares
+      #     main/binary-amd64/Packages.gz  sha256 233e56de…  1405 B
+      #   the file actually served was
+      #     sha256 bc1428ab…  1405 B
+      #   and gunzipping it gave an index whose google-chrome-beta is
+      #   154.0.8037.0-1 while the plain (matching) Packages says
+      #   154.0.8037.17-1 — the .gz on the CDN is one release behind its own
+      #   Release file. Three consecutive runs died here before a single test
+      #   executed.
+      #
+      # That repository carries exactly five packages, all `google-chrome-*`
+      # (read off the index itself), and Playwright downloads Chromium from
+      # its own CDN. So nothing this job needs can come from it.
+      #
+      # 🚫 THIS DOES NOT SOFTEN THE GATE. The browser install must still
+      # succeed and every remaining source must still be consistent; `apt-get
+      # update` is not made non-fatal, and no `|| true` is added. What changes
+      # is that an unrelated third party can no longer decide whether this job
+      # runs. Removing the source is narrower than ignoring update failures,
+      # which would also hide a broken Ubuntu mirror.
+      - name: Drop the unused Chrome apt source
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
+      - name: Install Playwright Chromium
+        working-directory: conformance/hosts/web
+        run: npx playwright install --with-deps chromium
+      - name: Generate fixtures into the host (rjui codegen)
+        working-directory: conformance/hosts/web
+        run: ./generate.sh
+      - name: Typecheck — generated code must have zero type errors
+        # The host is the production rjui codegen output, so a type error here
+        # is one in every consumer's @generated tree, which nobody downstream
+        # can patch.
+        #
+        # This was a RATCHET while the count was being worked down: the errors
+        # had three independent owners, so gating on zero would have left the
+        # hole open (plan 37). The count reached zero (plan 44 Phase 2), and a
+        # ratchet pinned at zero is just a plain typecheck with a second file
+        # to keep in sync — so the baseline and the ratchet script are gone
+        # and this is the gate they were building toward (plan 44 Phase 4).
+        working-directory: conformance/hosts/web
+        run: npm run typecheck
+      - name: Run web conformance suite
+        working-directory: conformance/hosts/web
+        run: npm run conformance
+      - name: Gate — fail/error + visual vs baselines/ci/web (jui conformance gate)
+        # Renders REPORT.md (fresh web results merged with the committed
+        # iOS/Android results) and judges --platform web only: the committed
+        # mobile screenshots are not on this runner. Visual checks are ON
+        # with --env ci (plan 25 Phase C): this runner and the mobile lane's
+        # web job are the same renderer class (ubuntu + pinned Chromium), so
+        # both compare against baselines/ci/web.hashes.json. When a push
+        # changes the fixture set, this lane goes red on no_baseline — bake
+        # from THIS lane's uploaded artifacts (never a local render):
+        #   jui conformance baseline update --platform web --env ci \
+        #     --fail-on-moved --artifacts <downloaded>/artifacts/web
+        # (--fail-on-moved stops the bake and names how many existing pictures
+        # changed; read every MOVED line, then re-run without it. Absent, a
+        # regression is absorbed by a bake that exits 0.)
+        # and commit baselines/ci/web.hashes.json with the change.
+        # For ios/android add --rendered-by swiftjsonui=<sha> (resp.
+        # kotlinjsonui=<sha>) with the commit that run checked out: the
+        # mobile lanes float on master/main, and without it the bake cannot
+        # later answer whether a regression came from the library moving.
+        # Web needs none — its conformance host renders through rjui codegen
+        # in this repo, so there is no separate library to record.
+        # Same command runs locally; logic lives in
+        # jui_tools/jui_cli/conformance/gate.py (tests: test_conformance_gate).
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','web','--env','ci']))"
+      - name: Upload results + report + screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-conformance
+          if-no-files-found: error
+          path: |
+            conformance/REPORT.md
+            conformance/results/web.results.json
+            conformance/artifacts/web/
+
+  # ------------------------------------------------------------------ #
+  # Ruby generation parity.
+  #
+  # The tools run under the CONSUMER's ruby, anything from the floor up: Ruby
+  # 3.2 from jsonui-cli 1.9.0 (each bin/<tool> stops below it with one line).
+  # The suites above run on the floor, so this generates the kjui conformance
+  # host on both the floor and 3.3 and compares the bytes. Until 1.9.0 the floor was
+  # the macOS system Ruby, 2.6, and this job compared 2.6 with 3.3; the 2.6
+  # support ended by ruling (2026-09-26), and the floor moved to 3.2 — the
+  # ruby the release gate measures on (3.2.11; 3.2.2 until 2.3.37, a patch
+  # ubuntu-26.04's setup-ruby has no build of — it builds only the newest 3.2).
+  #
+  # It covers what a unit test does not: the SAME source behaving
+  # differently between interpreters — Hash ordering, String and keyword
+  # changes. Those produce no syntax error and no failing unit test; they
+  # produce a different file. It is worth wiring even while the diff is
+  # empty: the newer ruby moves, the floor does not.
+  #
+  # ubuntu-24.04 is PINNED, not ubuntu-latest. ruby/ruby-builder publishes no
+  # ubuntu-26.04 assets at all (measured: 94 for 24.04, 94 for 22.04, 0 for
+  # 26.04), so the day the `latest` label moves this job could stop being able
+  # to fetch the floor's ruby — and would leave behind a green record claiming
+  # parity is checked.
+  # ------------------------------------------------------------------ #
+  ruby-generation-parity:
+    name: kjui generates the same bytes on Ruby 3.2 and 3.3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          ref: main
+          path: KotlinJsonUI
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+      - name: Generate with Ruby 3.2
+        env:
+          CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+          KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
+        run: |
+          ruby -v
+          ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+          mv KotlinJsonUI/conformance-host/src/codegen/kotlin "$RUNNER_TEMP/out32"
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Generate with Ruby 3.3
+        env:
+          CONFORMANCE_DIR: ${{ github.workspace }}/conformance
+          KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
+        run: |
+          ruby -v
+          ruby KotlinJsonUI/conformance-host/scripts/generate_codegen_host.rb
+          mv KotlinJsonUI/conformance-host/src/codegen/kotlin "$RUNNER_TEMP/out33"
+
+      - name: Compare
+        # The count check comes FIRST and is the point: `diff -r` returns 0
+        # for two empty trees, so a run where generation failed on both sides
+        # — or produced a stub on one — would report parity it never measured.
+        # Same shape as the fixture lane's `assert len(names) > 400`.
+        run: |
+          MIN_KT=2000   # 2557 at the time of writing; a floor fixture growth cannot trip
+          for t in out32 out33; do
+            n=$(find "$RUNNER_TEMP/$t" -name '*.kt' | wc -l)
+            echo "$t: $n .kt files"
+            if [ "$n" -lt "$MIN_KT" ]; then
+              echo "::error::$t holds $n .kt files (< $MIN_KT) — generation did not run, so there is nothing to compare"
+              exit 1
+            fi
+          done
+          diff -r "$RUNNER_TEMP/out32" "$RUNNER_TEMP/out33"
+          echo "identical on both interpreters"
+
+  # ------------------------------------------------------------------ #
+  # Xcode 27 (PREVIEW). Three questions the 26.x legs cannot answer, on
+  # the only machine that has the SDK.
+  #
+  # 🔻 THIS JOB'S RESULT IS NOT A PREMISE FOR ANY OTHER CLAIM.
+  # `continue-on-error` makes a red job look green in the checks list, so
+  # nothing may depend on it: not a gate, not an acceptance row, not
+  # another job's `needs`. What it produces is EVIDENCE IN THE LOG, which
+  # is why every step prints its findings rather than only exiting.
+  #
+  # The image is announced as preview ("some software can be unstable on
+  # the new platform" — actions/runner-images#14404). Two sources disagree
+  # on the OS it runs: the announcement says macOS 26, the generated
+  # image Readme says macOS 27.0 (26A5406e) with Xcode 27.0 beta
+  # (27A5252f) as default. The Readme is the generated one, so it is the
+  # better source, but the label is what we pin — not an OS version.
+  # ------------------------------------------------------------------ #
+  xcode-27-preview:
+    name: xcode 27 preview — evidence only, never a premise
+    runs-on: xcode-27
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: master
+          path: SwiftJsonUI
+
+      # Say what we are standing on before measuring anything with it. A
+      # preview image can change under the same label.
+      - name: What this runner actually is
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          xcrun simctl list runtimes | sed 's/^/  /'
+
+      # P1-4 step 0: do the fold/hinge/posture symbols exist in the 27 SDK?
+      #
+      # 🔻 THE ANSWER IS ASYMMETRIC, and the asymmetry is the point:
+      #   found     -> the real names are established; P1-4 can start
+      #   not found -> establishes NOTHING. A GM SDK may still add them.
+      # So a clean run here does not close P1-4. Written in the step
+      # rather than in a note, because a note beside a green result is
+      # read as "fine".
+      #
+      # Measured on 26.5 before writing this: zero true matches, and two
+      # FALSE positives — `isPrefetchingEnabled` contains "hinge" under
+      # `-i`. Every matching line is printed so the next reader classifies
+      # them by eye instead of trusting a count.
+      - name: Fold symbols in the 27 SDK (evidence, not a gate)
+        run: |
+          set -u
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          echo "SDK: $SDK"
+          for fw in SwiftUICore SwiftUI UIKit; do
+            IF=$(find "$SDK/System/Library/Frameworks/$fw.framework" \
+                 -name '*.swiftinterface' 2>/dev/null | head -1)
+            [ -z "$IF" ] && { echo "$fw: no swiftinterface"; continue; }
+            echo "=== $fw ($IF)"
+            # Positive controls FIRST and in the same output: if these are
+            # zero the window is wrong and the zeros below mean nothing.
+            printf '    control func background : %s\n' "$(grep -c 'func background' "$IF" || true)"
+            printf '    control UIWindowScene   : %s\n' "$(grep -c 'UIWindowScene' "$IF" || true)"
+            for sym in fold hinge posture; do
+              n=$(grep -ic "$sym" "$IF" || true)
+              printf '    %-8s : %s\n' "$sym" "$n"
+              [ "$n" != "0" ] && grep -in "$sym" "$IF" | sed 's/^/        /'
+            done
+          done
+          echo "--- ObjC headers ---"
+          for sym in fold hinge posture; do
+            echo "  $sym:"
+            grep -ril "$sym" "$SDK/System/Library/Frameworks/UIKit.framework/Headers/" \
+              2>/dev/null | sed 's/^/    /' || echo "    (none)"
+          done
+          echo "  control UIWindowScene:"
+          grep -rl "UIWindowScene" "$SDK/System/Library/Frameworks/UIKit.framework/Headers/" \
+            2>/dev/null | wc -l | sed 's/^/    files: /'
+
+      # P1-6: does the library build against the 27 SDK at all?
+      #
+      # Deployment target is iOS 17 (Package.swift), and that is what
+      # decides which deprecation warnings the compiler emits — measured
+      # earlier in this train: `UIScreen.main` warns ZERO times at 17 and
+      # 52 times at 26.0. So this step names the deployment target it is
+      # asking about instead of taking the package default, or the warning
+      # count means nothing.
+      - name: Build SwiftJsonUI against the 27 SDK (evidence, not a gate)
+        working-directory: SwiftJsonUI
+        run: |
+          set -o pipefail
+          xcodebuild -scheme SwiftJsonUI \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd27" \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            build 2>&1 | tee "$RUNNER_TEMP/build27.log" | tail -40 || true
+          echo "=== warnings, grouped ==="
+          grep -oE 'warning: .*' "$RUNNER_TEMP/build27.log" \
+            | sed 's/ in [^ ]*$//' | sort | uniq -c | sort -rn | head -30 || true
+          echo "=== totals ==="
+          printf '  warning lines : %s\n' "$(grep -c 'warning:' "$RUNNER_TEMP/build27.log" || true)"
+          printf '  error lines   : %s\n' "$(grep -c 'error:'   "$RUNNER_TEMP/build27.log" || true)"
+
+      # `continue-on-error` turns this job green whatever happened, so the
+      # log is the only record. Keep it.
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-27-preview-evidence
+          path: ${{ runner.temp }}/build27.log
+          if-no-files-found: warn
+          retention-days: 14

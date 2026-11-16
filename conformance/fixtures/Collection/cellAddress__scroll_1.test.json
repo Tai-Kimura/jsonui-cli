@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellAddress__scroll_1.layout.json"
+  },
+  "metadata": {
+    "name": "conformance cellAddress__scroll_1",
+    "description": "Every cell of a flow Collection (default container, 1 cell) is addressable as target_item_N.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellAddress__scroll_1",
+      "description": "Every cell of a flow Collection (default container, 1 cell) is addressable as target_item_N.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_0"
+        }
+      ]
+    }
+  ]
+}

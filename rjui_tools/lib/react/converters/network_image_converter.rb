@@ -1,0 +1,247 @@
+# frozen_string_literal: true
+
+require_relative 'base_converter'
+
+module RjuiTools
+  module React
+    module Converters
+      class NetworkImageConverter < BaseConverter
+        # A replaced element (<img>) has no ::after: a declared border falls
+        # back to an outline (BaseConverter#pseudo_border_supported?).
+        def pseudo_border_supported?
+          false
+        end
+
+        def convert(indent = 2)
+          class_name = build_class_name
+          if (position = bound_content_mode_position_class)
+            class_name = "#{class_name} #{position}".strip
+          end
+          style_attr = build_style_attr
+          id_attr = build_id_attr
+          testid_attr = build_testid_attr
+          tag_attr = build_tag_attr
+
+          src = build_src_attr
+          content_mode = build_content_mode_attr
+          placeholder_attr = build_placeholder_attr
+          error_image = attributes['errorImage'] ? jsx_attr_text('errorImage', attributes['errorImage']) : ''
+
+          # Build event handlers
+          on_load = build_event_handler('onLoad')
+          on_error = build_event_handler('onError')
+          onclick_attr = build_onclick_attr
+
+          # Corner radius
+          corner_radius_style = build_corner_radius_style
+
+          load_listener = "#{transition_duration_attr}#{on_load_state_change_attr}"
+
+          jsx = <<~JSX.chomp
+            #{indent_str(indent)}<NetworkImage#{id_attr}#{class_name_attr(class_name)}#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{loading_attr}#{on_load}#{on_error}#{load_listener}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
+          JSX
+
+          wrap_with_visibility(jsx, indent)
+        end
+
+        protected
+
+        # The NetworkImage template declares `onClick?: () => void`: a gated
+        # click is `() => { if (gate) … }`, not `(e) => …`, which that prop
+        # does not accept (BaseConverter#can_tap_gated_click).
+        def click_takes_event?
+          false
+        end
+
+        def build_class_name
+          classes = [super]
+
+          # Content mode to object-fit. Keys cover the canonical
+          # attribute_definitions enum (fit/fill/center/top/... /AspectFit)
+          # plus the iOS/Android long forms. Canonical semantics:
+          # shared/core/attribute_semantics.json — fill = stretch
+          # (scaleToFill synonym), AspectFill is the crop.
+          content_mode = attributes['contentMode']
+          if has_binding?(content_mode)
+            # A bound value matched no key and fell to the `||` fallback,
+            # which built the dead class `object-@{v}`.
+            #
+            # Unlike Image, this does NOT route to an inline style: the
+            # NetworkImage component takes `contentMode` as a PROP and derives
+            # its own object-fit class from it, and NetworkImageProps has no
+            # `style` at all — writing one is TS2322 on the element. The prop
+            # emitted by build_content_mode_attr already carries the binding.
+          elsif content_mode
+            classes << content_mode_classes(content_mode)
+          end
+
+          # Circle image
+          classes << 'rounded-full' if attributes['circle']
+
+          # Corner radius class (if using Tailwind standard values). A bound
+          # radius is already an inline `borderRadius` from the base pass;
+          # this arbitrary-value class would only restate it as dead text.
+          corner_radius = attributes['cornerRadius']
+          if corner_radius && !has_binding?(corner_radius) && !attributes['circle']
+            classes << "rounded-[#{corner_radius}px]"
+          end
+
+          # Clickable
+          classes << 'cursor-pointer' if attributes['canTap'] || tap_handler?(attributes['onClick'], attributes['onclick'])
+
+          finalize_classes(classes)
+        end
+
+        # A bound contentMode's position, the second half of what a declared
+        # one gives (content_mode_classes: `object-none object-top`). The
+        # component derives only the fit from its `contentMode` prop, and
+        # NetworkImageProps has no `style`, so the position rides the class:
+        # a run-time lookup of the declared spellings, its class names
+        # written whole so Tailwind finds them in the file. Until jsonui-cli
+        # 2.3.28 a bound top / bottom / left / right drew the image in the
+        # middle (measured in Chromium: object-position 50% 50%).
+        def bound_content_mode_position_class
+          expr = bound_value_expr(attributes['contentMode'])
+          return nil unless expr
+
+          classes = CONTENT_MODE_OBJECT_POSITION.transform_values { |position| "object-#{position}" }
+          "${(#{js_object_literal(declared_table(classes, 'contentMode'))})[String(#{expr})] ?? ''}"
+        end
+
+        def build_src_attr
+          src = attributes['src'] || attributes['url']
+          return '' unless src
+
+          if has_binding?(src)
+            " src={#{attribute_expression(src)}}"
+          else
+            jsx_attr_text('src', src)
+          end
+        end
+
+        def build_content_mode_attr
+          content_mode = attributes['contentMode']
+          return '' unless content_mode
+
+          # The NetworkImageProps union ('cover' | 'contain' | 'fill' | 'none'
+          # | 'scaleDown' | 'fit') is the same vocabulary object-fit takes, so
+          # this reads BaseConverter's one table rather than keeping a third
+          # copy. The copy it replaced was case-sensitive and had a
+          # pass-the-value-through fallback, so a lowercase `aspectfill` — a
+          # spelling ImageConverter accepted — reached the component as
+          # `aspectfill`, outside the union.
+          #
+          # A bound value cannot be normalised at codegen time, and quoting it
+          # handed the component the four characters `@{v}`. The normalisation
+          # moves into the emitted expression, asserted through the component's
+          # own prop type rather than by restating the union.
+          if (expr = bound_value_expr(content_mode))
+            lookup = js_object_literal(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentMode'))
+            cast = typescript? ? " as React.ComponentProps<typeof NetworkImage>['contentMode']" : ''
+            return " contentMode={((#{lookup})[String(#{expr})] ?? " \
+                   "'#{CONTENT_MODE_DEFAULT_FIT}')#{cast}}"
+          end
+
+          " contentMode=\"#{content_mode_prop(content_mode)}\""
+        end
+
+        # Native lazy/eager fetch hint, forwarded to the underlying <img>.
+        def loading_attr
+          loading = JsonUIShared::EnumSpelling.lowered(attributes['loading'], 'NetworkImage', 'loading').to_s
+          return '' unless %w[lazy eager].include?(loading)
+
+          " loading=\"#{loading}\""
+        end
+
+        def build_placeholder_attr
+          # `hint` is the canonical spelling; `placeholder` and `loadingImage`
+          # are the loading-state chain. defaultImage is NOT part of it —
+          # it is the no-src display and travels as its own prop (canonical
+          # networkImage.noSrc = defaultImage, shared/core/
+          # attribute_semantics.json); collapsing it into placeholder let a
+          # declared placeholder hijack the no-src state.
+          placeholder = attributes['hint'] || attributes['placeholder'] || attributes['loadingImage']
+          attr = ''
+          if placeholder
+            attr +=
+              if has_binding?(placeholder)
+                " placeholder={#{attribute_expression(placeholder)}}"
+              else
+                jsx_attr_text('placeholder', placeholder)
+              end
+          end
+          default_image = attributes['defaultImage']
+          # A bound one is the data's name (jsx_attr_text); it was dropped.
+          if default_image
+            attr += jsx_attr_text('defaultImage', default_image)
+          end
+          attr
+        end
+
+        # transitionDuration (ticket jui-networkimage-load-listener): T ms of
+        # the CSS opacity fade into the loaded or the error image. 0-1000; a
+        # value outside is WARNed and clamped, one that is not a number is
+        # WARNed and left out. loadingRenderer / loadingDelay are not declared
+        # for react (no native renderer on the web): placeholder is drawn.
+        def transition_duration_attr
+          value = attributes['transitionDuration']
+          return '' if value.nil?
+
+          number = value.is_a?(Numeric) ? value : (Float(value.to_s) rescue nil)
+          if number.nil?
+            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{JsonUIShared::LayoutPath.view_id(json).inspect}: 'transitionDuration' is #{value.inspect}, not a number of milliseconds; left out"
+            return ''
+          end
+          millis = number.round
+          unless (0..1000).cover?(millis)
+            clamped = millis.clamp(0, 1000)
+            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{JsonUIShared::LayoutPath.view_id(json).inspect}: 'transitionDuration' #{value} is outside 0-1000 ms; #{clamped} is used"
+            millis = clamped
+          end
+          " transitionDuration={#{millis}}"
+        end
+
+        # onLoadStateChange: the handler as the layout's data declares it,
+        # the same shapes as on iOS and Android - `()` with nothing,
+        # `(String)` with the state, `(String, String)` with the viewId and
+        # the state. Binding only: a bare string names no handler.
+        def on_load_state_change_attr
+          handler = attributes['onLoadStateChange']
+          return '' unless handler.is_a?(String) && has_binding?(handler)
+
+          callee = extract_binding_property(handler)
+          return '' if callee.nil? || callee.empty?
+
+          name = handler[/\A@\{\s*([^}]+?)\s*\}\z/, 1]
+          classes = config['_data_classes'] || {}
+          params = name ? self.class.declared_parameters(name, classes).map { |t| t.delete_suffix('?') } : []
+          call = case params.size
+                 when 0 then "#{callee}?.()"
+                 when 1 then "#{callee}?.(state)"
+                 else "#{callee}?.(#{view_id_expr}, state)"
+                 end
+          params.empty? ? " onLoadStateChange={() => #{call}}" : " onLoadStateChange={(state) => #{call}}"
+        end
+
+        def build_event_handler(event_name)
+          handler = json[event_name]
+          return '' unless handler
+
+          if has_binding?(handler)
+            " #{event_name}={#{extract_binding_property(handler)}}"
+          else
+            " #{event_name}={#{handler}}"
+          end
+        end
+
+        def build_corner_radius_style
+          corner_radius = attributes['cornerRadius']
+          return '' unless corner_radius && !attributes['circle']
+
+          # Already handled in className
+          ''
+        end
+      end
+    end
+  end
+end

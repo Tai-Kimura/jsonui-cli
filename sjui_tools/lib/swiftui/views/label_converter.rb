@@ -1,0 +1,655 @@
+# frozen_string_literal: true
+
+require_relative 'base_view_converter'
+require_relative 'text_style_helper'
+require_relative '../helpers/font_helper'
+require_relative '../helpers/string_manager_helper'
+require_relative 'frame_helper'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      # Generated code label/text converter
+      # Dynamic mode equivalent: Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic/Converters/TextConverter.swift
+      class LabelConverter < BaseViewConverter
+        include SjuiTools::SwiftUI::Helpers::FontHelper
+        include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include SjuiTools::SwiftUI::Views::FrameHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
+        def convert
+          # Get text handler for this component
+          label_handler = @binding_handler.is_a?(SjuiTools::SwiftUI::Binding::LabelBindingHandler) ?
+                          @binding_handler :
+                          SjuiTools::SwiftUI::Binding::LabelBindingHandler.new
+
+          # Get text content with binding support. A text with a binding in it
+          # is Swift already; only a plain text resolves through strings.json,
+          # which takes it unescaped and escapes what it writes back.
+          text_content = if @component['text'].to_s.include?('@{')
+                           label_handler.get_text_content(@component)
+                         else
+                           get_text_with_string_manager("\"#{@component['text']}\"")
+                         end
+
+          # hint / hintAttributes — the Label placeholder (canonical: UIKit
+          # SJUILabel swaps in the styled hint when the text is empty, and
+          # requires BOTH keys; `placeholder` is the declared alias of hint,
+          # hintAttributes.fontColor wins over hintColor). kjui has carried
+          # the same branch since 2026-07; this closes the ios side.
+          hint = label_hint_config
+          raw_text = @component['text'] || ''
+          hint_static = hint && raw_text.to_s.strip.empty?
+          hint_dynamic = hint && !hint_static &&
+                         raw_text.is_a?(String) && raw_text.strip.match?(/\A@\{[^}]+\}\z/)
+          hint_condition = nil
+          if hint_static
+            text_content = get_text_with_string_manager("\"#{hint[:text]}\"")
+          elsif hint_dynamic
+            hint_literal = get_text_with_string_manager("\"#{hint[:text]}\"")
+            # The emptiness test must run on the ORIGINAL expression — the
+            # wrapped ternary is never empty (its fallback is the hint).
+            hint_condition = "(#{text_content}).isEmpty"
+            text_content = "(#{hint_condition} ? #{hint_literal} : #{text_content})"
+          end
+
+          has_partials = @component['partialAttributes'].is_a?(Array) &&
+                         !@component['partialAttributes'].empty?
+
+          # Use PartialAttributedText for all text rendering
+          add_line "PartialAttributedText("
+          indent do
+            add_line "#{text_content},"
+
+            # Add partialAttributes if present
+            if has_partials
+              add_line "partialAttributes: ["
+              indent do
+                @component['partialAttributes'].each_with_index do |partial, index|
+                  add_line "PartialAttribute("
+                  indent do
+                    # Handle range - either array, binding, or string
+                    if partial['range']
+                      if partial['range'].is_a?(Array) && partial['range'].length == 2
+                        add_line "range: #{partial['range'][0]}..<#{partial['range'][1]},"
+                      elsif partial['range'].is_a?(String) && is_binding?(partial['range'])
+                        prop = extract_binding_property(partial['range'])
+                        add_line "textPattern: data.#{prop},"
+                      elsif partial['range'].is_a?(String)
+                        # Use StringManager for snake_case range text
+                        range_text = get_text_with_string_manager("\"#{partial['range']}\"")
+                        add_line "textPattern: #{range_text},"
+                      end
+                    end
+
+                    # Add fontColor
+                    if partial['fontColor']
+                      color = get_swiftui_color(partial['fontColor'])
+                      add_line "fontColor: #{color},"
+                    end
+
+                    # Add fontSize
+                    if partial['fontSize']
+                      add_line "fontSize: #{partial['fontSize']},"
+                    end
+
+                    # Add fontWeight
+                    if partial['fontWeight']
+                      weight = swift_weight_expr(partial['fontWeight']) || font_weight_to_swiftui(partial['fontWeight'])
+                      add_line "fontWeight: #{weight},"
+                    end
+
+                    # Add underline
+                    if line_decoration?(partial['underline'])
+                      add_line "underline: true,"
+                    end
+
+                    # Add strikethrough
+                    if line_decoration?(partial['strikethrough'])
+                      add_line "strikethrough: true,"
+                    end
+
+                    # Add backgroundColor
+                    if partial['background']
+                      bg_color = get_swiftui_color(partial['background'])
+                      add_line "backgroundColor: #{bg_color},"
+                    end
+
+                    # The range's handler (TapAccessibility.range_handler): onClick,
+                    # the canonical binding, first, then onclick, its selector
+                    # alias — which this dropped.
+                    if (call = range_handler_call(partial))
+                      add_line "onClick: { #{call} },"
+                    end
+
+                    # Remove trailing comma from last item
+                    @generated_code[-1] = @generated_code[-1].chomp(',')
+                  end
+                  add_line ")#{ index < @component['partialAttributes'].length - 1 ? ',' : '' }"
+                end
+              end
+              add_line "],"
+            end
+
+            # Add fontSize (the hint's size wins while the hint is showing;
+            # statically-empty text always shows it)
+            if hint_static && hint[:size]
+              add_line "fontSize: #{hint[:size]},"
+            elsif @component['fontSize']
+              add_line "fontSize: #{bound_number(@component['fontSize']) || @component['fontSize']},"
+            end
+
+            # Add fontWeight (handle both fontWeight and font:"bold")
+            #
+            # The type depends on which initializer the call resolves to. With
+            # partialAttributes present that is the PartialAttribute-taking one,
+            # whose fontWeight is a Font.Weight; the String convenience
+            # initializer does not accept partialAttributes, so emitting the
+            # string form alongside them yields Swift that does not compile
+            # ("cannot convert value of type 'String' to expected argument type
+            # 'Font.Weight'"). StateAwareButtonView has a combined overload,
+            # which is why Button never hit this.
+            # ⚠️ `Label.font` IS a weight. The declaration says "Font weight
+            # name (regular/medium/semibold/bold/...) or font name" and then
+            # "Passed as the `weight` field of `FontSpec`", and the Android
+            # generator does exactly that. This branch matched the literal
+            # 'bold' only, so `medium` and `semibold` produced no line at all
+            # and iOS rendered regular while Android rendered the weight —
+            # from the same node, with no warning from `jui build` and no
+            # assertion in any UI test. Measured across five consumer faces:
+            # bold 421 (already right), medium 167, semibold 22, regular 3.
+            #
+            # Matched against the shared vocabulary rather than widened to
+            # "any string", because the declaration's "or font name" half is
+            # real for other components — `TextField.font`, `TextView.font`
+            # and `Button.font` are FAMILIES with 'bold' special-cased. A name
+            # that is not a weight is left alone here rather than forced into
+            # one. (Across those same five faces there are zero such values,
+            # so nothing today depends on that half — but the reading is not
+            # this converter's to delete.)
+            #
+            # A binding (`@{...}`) is not a weight name and still produces no
+            # line: whether it resolves to one cannot be known at generation
+            # time. Two such nodes exist on one face and this does NOT reach
+            # them.
+            #
+            # The hint's own `font` wins while the hint is showing, as its size
+            # does above: `hintAttributes: {font: bold}` drew a regular-weight
+            # hint (frame-parity Label/hintAttributes__static, 2026-10-05).
+            # SwiftJsonUI Dynamic: LabelConverter.labelHintFont.
+            weight_name = if hint_static && weight_vocabulary.include?(hint[:font].to_s.downcase)
+                            hint[:font]
+                          elsif @component['fontWeight']
+                            @component['fontWeight']
+                          elsif weight_vocabulary.include?(@component['font'].to_s.downcase)
+                            @component['font']
+                          end
+            # A bound weight is resolved at run time from the same vocabulary
+            # (Button and CheckBox already did): pasted into the String
+            # initializer it was a weight literally named "@{weight}".
+            if weight_name && (bound_weight = swift_weight_expr(weight_name))
+              add_line "fontWeight: #{bound_weight},"
+            elsif weight_name
+              # `fontWeight` is declared `["string", "number"]`, and `600` is
+              # an example the declaration itself gives. The String
+              # initializer resolves through `Font.Weight.from(string:)`,
+              # which knows names only, so a numeric weight arrived as
+              # .regular — the same defect Button had. Resolving it here also
+              # picks the Font.Weight initializer, which is the one the
+              # partialAttributes overload needs anyway.
+              numeric_weight = weight_name.to_s.match?(/\A\d+\z/) &&
+                               numeric_weight_table[weight_name.to_i]
+              if has_partials || numeric_weight
+                add_line "fontWeight: #{numeric_weight || font_weight_to_swiftui(weight_name)},"
+              else
+                add_line "fontWeight: \"#{weight_name}\","
+              end
+            end
+
+            # Add fontFamily (with binding support)
+            if @component['fontFamily']
+              if is_binding?(@component['fontFamily'])
+                property_name = extract_binding_property(@component['fontFamily'])
+                add_line "fontFamily: data.#{property_name},"
+              else
+                add_line "fontFamily: \"#{@component['fontFamily']}\","
+              end
+            end
+
+            # Add fontColor (with binding support). When a hint is showing
+            # (statically empty text, or a bound text that is empty at
+            # runtime) the hint colour replaces the base one.
+            base_color = if @component['enabled'] == false && @component['disabledFontColor']
+                           get_font_color_with_binding(@component['disabledFontColor'])
+                         elsif @component['disabledFontColor'] && is_binding?(@component['enabled'])
+                           # a bound `enabled` (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces):
+                           # the disabled colour while it is false, the base while true — only a
+                           # literal false showed it before
+                           "(#{tap_gate_expr(@component['enabled'])} ? #{get_font_color_with_binding(@component['fontColor']) || 'nil'} : " \
+                             "#{get_font_color_with_binding(@component['disabledFontColor'])})"
+                         elsif @component['fontColor']
+                           get_font_color_with_binding(@component['fontColor'])
+                         end
+            if hint_static && hint[:color]
+              add_line "fontColor: #{hint[:color]},"
+            elsif hint_dynamic && hint[:color]
+              add_line "fontColor: (#{hint_condition} ? #{hint[:color]} : #{base_color || 'nil'}),"
+            elsif base_color
+              add_line "fontColor: #{base_color},"
+            end
+
+
+            # Add underline
+            if line_decoration?(@component['underline'])
+              add_line "underline: true,"
+            end
+
+            # Add strikethrough
+            if line_decoration?(@component['strikethrough'])
+              add_line "strikethrough: true,"
+            end
+
+            # The object face's CONTENTS. Emitted after both booleans because
+            # Swift takes arguments in declaration order, and the library
+            # declares underline / strikethrough before their decorations.
+            if (decoration = text_decoration_expression(@component['underline']))
+              add_line "underlineDecoration: #{decoration},"
+            end
+
+            if (decoration = text_decoration_expression(@component['strikethrough'], line_offset: false))
+              add_line "strikethroughDecoration: #{decoration},"
+            end
+
+            # Add lineSpacing. `.to_f` on a binding is 0.0, which is how a
+            # bound lineSpacing froze to no spacing at all and a bound
+            # lineHeightMultiple froze to (0 - 1) * fontSize — a NEGATIVE
+            # constant that pulled the lines together.
+            # lineHeightMultiple goes to the library as it is: the spacing
+            # is (m - 1) x the font's own line, which PartialAttributedText
+            # measures from the font in force (ruling B; the first line stays
+            # one line, an iOS limit). Converted here it was (m - 1) x
+            # fontSize — the size, not the line. It wins over lineSpacing.
+            #
+            # The hint's own lineHeightMultiple wins while the hint is
+            # showing, as its size and font do: `hintAttributes:
+            # {lineHeightMultiple: 1.5}` was read by nothing on this face
+            # (SwiftJsonUI Dynamic: LabelConverter, the same cascade).
+            hint_multiple = hint_static ? hint[:line_height_multiple] : nil
+            if hint_multiple || @component['lineHeightMultiple']
+              multiple = hint_multiple || @component['lineHeightMultiple']
+              add_line "lineHeightMultiple: #{bound_number(multiple) || multiple.to_f},"
+            elsif @component['lineSpacing']
+              add_line "lineSpacing: #{bound_number(@component['lineSpacing']) || @component['lineSpacing'].to_f},"
+            end
+
+            # Add lineLimit. 0 means "unlimited" and has to stay a `nil` —
+            # `.to_i` made every bound declaration exactly that, so a bound
+            # `lines` silently unlimited the label. The bound form carries the
+            # same 0-means-nil rule into the Swift.
+            if @component['lines']
+              if (bound_lines = bound_number(@component['lines'], cast: 'Int'))
+                add_line "lineLimit: (#{bound_lines} == 0 ? nil : #{bound_lines}),"
+              elsif @component['lines'].to_i == 0
+                add_line "lineLimit: nil,"
+              else
+                add_line "lineLimit: #{@component['lines'].to_i},"
+              end
+            elsif @component['autoShrink']
+              add_line "lineLimit: 1,"
+            end
+
+            # Add textAlignment (default to .leading). A binding is not one of
+            # the spellings `text_alignment_to_swiftui` switches on, so it hit
+            # the else branch and froze every bound alignment to .leading.
+            # Without textAlign, the lines follow the horizontal part of
+            # gravity (label_horizontal, the SSoT's Label.textAlign); until
+            # jsonui-cli 1.9.0 they were always at the start then.
+            alignment = if @component['textAlign']
+                          bound_text_alignment(@component['textAlign']) ||
+                            text_alignment_to_swiftui(@component['textAlign'])
+                        else
+                          { 'center' => '.center', 'trailing' => '.trailing' }[label_horizontal] || '.leading'
+                        end
+            add_line "textAlignment: #{alignment},"
+
+            # Add linkable if true. Ruby truthiness never entered here for a
+            # binding (`"@{x}" == true` is false), so the declaration was
+            # dropped; the bound form passes the condition to Swift instead.
+            if (bound_linkable = bound_bool(@component['linkable']))
+              add_line "linkable: #{bound_linkable},"
+            elsif @component['linkable'] == true || @component['linkable'] == 'true'
+              add_line "linkable: true,"
+            end
+
+            # userInteractionEnabled stops the Label's links too — a range's
+            # onClick and a link `linkable` detects: `false` on it or on a node
+            # around it, and each binding gates them (links_enabled_condition).
+            if (links = links_enabled_condition)
+              add_line "linksEnabled: #{links},"
+            end
+
+            # highlightAttributes / highlightColor / selected. Emitted last
+            # because Swift requires argument labels in declaration order and
+            # these are the trailing parameters of PartialAttributedText.
+            emit_highlight_attributes
+
+            # Remove trailing comma from last parameter
+            @generated_code[-1] = @generated_code[-1].chomp(',')
+          end
+          add_line ")"
+
+          apply_text_shadow
+
+          # lineBreakMode (SwiftJsonUI uses short forms: Char, Clip, Word, Head, Middle, Tail)
+          if @component['lineBreakMode']
+            mode = case @component['lineBreakMode']
+                   when 'Head'
+                     '.head'
+                   when 'Middle'
+                     '.middle'
+                   when 'Tail'
+                     '.tail'
+                   when 'Clip'
+                     '.tail'
+                   else
+                     nil
+                   end
+            @modifier_bag.append(:component_specific, ".truncationMode(#{mode})") if mode
+          end
+
+          # autoShrink & minimumScaleFactor
+          if @component['autoShrink']
+            scale_factor = bound_number(@component['minimumScaleFactor']) ||
+                           @component['minimumScaleFactor'] || 0.5
+            @modifier_bag.append(:component_specific, ".minimumScaleFactor(#{scale_factor})")
+          elsif @component['minimumScaleFactor']
+            factor = bound_number(@component['minimumScaleFactor']) || @component['minimumScaleFactor']
+            @modifier_bag.append(:component_specific, ".minimumScaleFactor(#{factor})")
+          end
+
+          # edgeInset (Label内部パディング - UIKitに合わせて配列形式対応)
+          if @component['edgeInset']
+            edge_inset = @component['edgeInset']
+            if edge_inset.is_a?(Array)
+              case edge_inset.length
+              when 1
+                @modifier_bag.append(:padding, ".padding(#{padding_value(edge_inset[0])})")
+              when 2
+                @modifier_bag.append(:padding, ".padding(.vertical, #{padding_value(edge_inset[0])})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(edge_inset[1])})")
+              when 3
+                @modifier_bag.append(:padding, ".padding(.top, #{padding_value(edge_inset[0])})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(edge_inset[1])})")
+                @modifier_bag.append(:padding, ".padding(.bottom, #{padding_value(edge_inset[2])})")
+              when 4
+                @modifier_bag.append(:padding, ".padding(EdgeInsets(top: #{padding_value(edge_inset[0])}, leading: #{padding_value(edge_inset[1])}, bottom: #{padding_value(edge_inset[2])}, trailing: #{padding_value(edge_inset[3])}))")
+              end
+            elsif edge_inset.is_a?(String) && edge_inset.include?('|')
+              # パイプ区切り形式もサポート (UIKit互換)
+              parts = edge_inset.split('|').map(&:to_i)
+              case parts.length
+              when 1
+                @modifier_bag.append(:padding, ".padding(#{parts[0]})")
+              when 2
+                @modifier_bag.append(:padding, ".padding(.vertical, #{parts[0]})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{parts[1]})")
+              when 3
+                @modifier_bag.append(:padding, ".padding(.top, #{parts[0]})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{parts[1]})")
+                @modifier_bag.append(:padding, ".padding(.bottom, #{parts[2]})")
+              when 4
+                @modifier_bag.append(:padding, ".padding(EdgeInsets(top: #{parts[0]}, leading: #{parts[1]}, bottom: #{parts[2]}, trailing: #{parts[3]}))")
+              end
+            else
+              @modifier_bag.append(:padding, ".padding(#{padding_value(edge_inset)})")
+            end
+          end
+
+          # Apply frame modifiers for weighted views FIRST
+          # If this label has a weight in a horizontal/vertical container, make it fill the appropriate dimension
+          @skip_frame_width = false
+          if @component['weight'] && @component['weight'].to_f > 0
+            parent_orientation = @component['parent_orientation']
+
+            if parent_orientation == 'horizontal'
+              # In horizontal stack with weight - fill width
+              # Add alignment by the Label rule (label_horizontal: textAlign,
+              # else gravity's horizontal part, else the start)
+              frame_alignment = { 'center' => '.center', 'trailing' => '.trailing' }[label_horizontal] || '.leading'
+              @modifier_bag.append(:frame_size, ".frame(maxWidth: .infinity, alignment: #{frame_alignment})")
+              @skip_frame_width = true  # Prevent frame_helper from adding duplicate maxWidth
+            elsif parent_orientation == 'vertical'
+              # In vertical stack with weight - fill height; the text at the
+              # vertical its gravity names, else centre (label_vertical).
+              lv = label_vertical_alignment
+              @modifier_bag.append(:frame_size, ".frame(maxHeight: .infinity#{lv ? ", alignment: #{lv}" : ''})")
+            end
+          end
+
+          # Apply padding (internal spacing) first
+          apply_padding
+
+          # Apply frame size (width/height) after padding -- skip width if already set by weight
+          apply_frame_size
+
+          # Apply frame constraints (minWidth, maxWidth, minHeight, maxHeight)
+          apply_frame_constraints
+          apply_label_wrap_height
+
+          # Apply background and corner radius AFTER padding
+          # This ensures the background includes the padding area
+          # A pressed colour (a Label with a tap and a tapBackground) replaces
+          # it while the Label is pressed (background_line).
+          line = background_line(@component['background'] ? get_swiftui_color(@component['background']) : nil)
+          @modifier_bag.register(:background, line) if line
+
+          if @component['cornerRadius']
+            @modifier_bag.register(:corner_radius, ".cornerRadius(#{@component['cornerRadius'].to_i})")
+          end
+
+          # ボーダー（cornerRadiusの直後、marginsの前に適用）
+          if (border_code = border_overlay)
+            @modifier_bag.register(:border, border_code)
+          end
+
+          # enabled / canTap / userInteractionEnabled: base's gates, before
+          # the bindings (which then leave those keys to them).
+          register_interaction_gates
+
+          # Apply binding-specific modifiers (borderColor, fontColor, etc.)
+          # Must be BEFORE margins so borders don't include margin area
+          apply_binding_modifiers
+
+          # Apply margins (external spacing)
+          apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
+
+          # Opacity (alpha/opacity)
+          alpha_value = attr_with_alias('opacity', 'alpha')
+          if alpha_value
+            @modifier_bag.register(:opacity, opacity_modifier(alpha_value))
+          end
+
+          # Hidden — visibility:"invisible" shorthand: keep layout space,
+          # hide drawing + accessibility (never collapse)
+          hidden_value = @component['hidden']
+          if hidden_value == true
+            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
+          elsif is_binding?(hidden_value)
+            hidden_expr = binding_data_expr(hidden_value)
+            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
+          end
+
+          # The tap: base's rule (onClick, else the onclick selector), not a
+          # second copy of it — the copy here read only a binding onClick.
+          register_click_lines
+
+          generated_code
+        end
+
+        # {text:, color:, size:} when the Label hint contract is satisfied
+        # (hint/placeholder + hintAttributes both present).
+        # Whether the Label's links are operable, as a Swift Bool for
+        # PartialAttributedText's `linksEnabled`: nil (always; left out),
+        # 'false', or the bound userInteractionEnabled values of the nodes
+        # around it and its own, joined. The tap rule stops a node and
+        # everything in it, links included, and a binding gates them as it
+        # gates a tap (the orchestrator's ruling, jsonui-cli 1.9.0). `.allowsHitTesting`
+        # stops a touch; a link is also an accessibility element of its own.
+        # canTap and enabled are the Label's own tap and state, not read here.
+        # Only a Label with links gets it (TapAccessibility.linked_text?).
+        def links_enabled_condition
+          tap = JsonUIShared::TapAccessibility
+          return nil unless tap.linked_text?(@component)
+          return 'false' if tap.stopped?(@component)
+
+          gates = tap.interaction_gates(@component)
+          return nil if gates.empty?
+
+          gates.uniq.map { |gate| tap_gate_expr(gate) }.join(' && ')
+        end
+
+        # A `hint` shows on its own (2026-10-05 user ruling 3): it needed
+        # `hintAttributes` beside it, so a Label with only a hint drew
+        # nothing. Without a declared colour it is drawn in the configuration's
+        # placeholder colour, the ruling's light default — it drew in the text
+        # colour. SwiftJsonUI's Dynamic LabelConverter.labelHint reads the same.
+        def label_hint_config
+          attrs = @component['hintAttributes']
+          attrs = {} unless attrs.is_a?(Hash)
+          hint = @component['hint'] || @component['placeholder']
+          return nil unless hint.is_a?(String) && !hint.empty?
+
+          color_value = attrs['fontColor'] || @component['hintColor']
+          {
+            text: hint,
+            color: color_value ? get_swiftui_color(color_value) : 'Color(SwiftJsonUIConfiguration.shared.colors.placeholder)',
+            size: attrs['fontSize'],
+            font: attrs['font'],
+            line_height_multiple: attrs['lineHeightMultiple']
+          }
+        end
+
+        private
+
+        # Get fontColor with binding support
+        # Supports both direct color values and @{propertyName} binding expressions
+        def get_font_color_with_binding(font_color)
+          return nil unless font_color
+
+          if is_binding?(font_color)
+            # Binding expression - get color from data
+            property_name = extract_binding_property(font_color)
+            data_def = ColorHelper.data_definitions[property_name]
+            if data_def && data_def['class'].to_s == 'String'
+              # String type: resolve via configuration (no cast needed)
+              "SwiftJsonUIConfiguration.shared.getColor(for: data.#{property_name})"
+            else
+              # Color type: use directly
+              "data.#{property_name}"
+            end
+          else
+            # Direct color value
+            get_swiftui_color(font_color)
+          end
+        end
+        # textShadow — `{ color:, blur:, offset: [x, y] }`, the same shape UIKit
+        # turns into an NSShadow (SJUILabel: `attributes[.shadow] = s`).
+        #
+        # SwiftUI's `.shadow(color:radius:x:y:)` is the direct equivalent. The
+        # attribute was read by nobody on the SwiftUI path, so a label with a
+        # shadow rendered flat. A bare string form is accepted as a colour with
+        # UIKit's default 1pt blur, since the attribute is declared
+        # `["string", "object"]`.
+        def apply_text_shadow
+          shadow = @component['textShadow']
+          return if shadow.nil?
+
+          if shadow.is_a?(String)
+            @modifier_bag.append(
+              :component_specific,
+              ".shadow(color: #{get_swiftui_color(shadow)}, radius: 1, x: 0, y: 1)"
+            )
+            return
+          end
+          return unless shadow.is_a?(Hash)
+
+          color = shadow['color'] ? get_swiftui_color(shadow['color']) : 'Color.black.opacity(0.3)'
+          blur = number_slot(shadow['blur'] || 1)
+          offset = shadow['offset']
+          x, y = offset.is_a?(Array) && offset.length >= 2 ? [number_slot(offset[0]), number_slot(offset[1])] : [0, 1]
+          @modifier_bag.append(
+            :component_specific,
+            ".shadow(color: #{color}, radius: #{blur}, x: #{x}, y: #{y})"
+          )
+        end
+        # highlightAttributes / highlightColor — the styling a label switches to
+        # while it is selected.
+        #
+        # UIKit keeps two attribute dictionaries and swaps between them when
+        # `selected` flips (SJUILabel#applyAttributedText:
+        # `let attr = selected ? highlightAttributes : attributes`), so the
+        # driver here is `selected` as well. A press gesture would be the wrong
+        # trigger: selection is state the screen owns, and it outlives the touch.
+        #
+        # `highlightAttributes` wins over `highlightColor` when both are given,
+        # and an empty attribute object falls through to `highlightColor` —
+        # both matching the precedence in SJUILabel's creator
+        # (`if !attr["highlightAttributes"].isEmpty ... else if highlightColor`).
+        def emit_highlight_attributes
+          attrs = @component['highlightAttributes']
+          highlight_color = @component['highlightColor']
+
+          fields = attrs.is_a?(Hash) ? highlight_attribute_fields(attrs) : []
+          if fields.empty? && highlight_color
+            fields = ["fontColor: #{get_font_color_with_binding(highlight_color)}"]
+          end
+          return if fields.empty?
+
+          add_line "highlightAttributes: TextHighlightAttributes(#{fields.join(', ')}),"
+          add_line "isHighlighted: #{highlight_condition},"
+        end
+
+        # Fields for the TextHighlightAttributes initializer.
+        #
+        # Emitted in the struct's declaration order (fontFamily, fontSize,
+        # fontWeight, fontColor, lineHeightMultiple, textAlignment) because
+        # Swift requires argument labels in that order.
+        def highlight_attribute_fields(attrs)
+          fields = []
+          font = attrs['font']
+
+          # UIKit resolves the literal name "bold" to the bold system font
+          # rather than to a family, so it maps to a weight and not a family:
+          # `UIFont(name: highlightName, size:) ?? (highlightName == "bold" ? ...)`
+          fields << "fontFamily: \"#{font}\"" if font && font != 'bold'
+          fields << "fontSize: #{attrs['fontSize'].to_f}" if attrs['fontSize']
+          fields << 'fontWeight: .bold' if font == 'bold'
+          if attrs['fontColor']
+            fields << "fontColor: #{get_font_color_with_binding(attrs['fontColor'])}"
+          end
+          if attrs['lineHeightMultiple']
+            fields << "lineHeightMultiple: #{attrs['lineHeightMultiple'].to_f}"
+          end
+          if attrs['textAlign']
+            alignment = text_alignment_to_swiftui(attrs['textAlign'], %w[highlightAttributes textAlign])
+            fields << "textAlignment: #{alignment}" if alignment
+          end
+          fields
+        end
+
+        # The `selected` state that decides which attribute set is in force.
+        # Absent means never highlighted, which is what UIKit does with a label
+        # whose `selected` is never set.
+        def highlight_condition
+          value = @component['selected']
+          return 'true' if value == true || value == 'true'
+          return "data.#{extract_binding_property(value)}" if value.is_a?(String) && is_binding?(value)
+
+          'false'
+        end
+      end
+    end
+  end
+end

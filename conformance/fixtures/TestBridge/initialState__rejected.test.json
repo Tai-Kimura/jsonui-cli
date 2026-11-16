@@ -1,0 +1,39 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TestBridge/initialState__rejected.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TestBridge.initialState__rejected",
+    "description": "An undeclared key and 1.5 for an Int are rejected with the spec's reasons; the string that fits is applied, the Int keeps its default.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "TestBridge"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "initialState__rejected",
+      "description": "An undeclared key and 1.5 for an Int are rejected with the spec's reasons; the string that fits is applied, the Int keeps its default.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "label_email",
+          "equals": "x"
+        },
+        {
+          "assert": "state",
+          "path": "tbCount",
+          "equals": 0
+        }
+      ]
+    }
+  ]
+}

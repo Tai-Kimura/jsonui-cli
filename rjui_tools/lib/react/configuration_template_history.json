@@ -1,0 +1,20 @@
+{
+  "_comment": "sha256 of every Configuration template rjui has written into an app (lib/react/templates/Configuration.ts and js/Configuration.js, every version in the history). An app copy that is byte for byte one of them is the tool's, and rjui build replaces it with the current template; any other copy is the app's and stays (build_command#ensure_configuration_template). When the template changes, add the new file's sha256 here: spec/cli/configuration_template_refresh_spec.rb fails until the current one is listed.",
+  "Configuration.ts": [
+    "27d48ac71e2b5b22a6e950f5dcae4e1b2bc6294782e20e19ca861b6972c4daa2",
+    "30e834b866d2e976da5e1f9d26e35ac11637af109b472d1d765a81f783c3efe3",
+    "58287b312031a943044da9456464c3dc39e7a45092fcd65029fba6e0c32e4e6d",
+    "cd4efca678081a287e896fb3acf2a7ad3f1d99635104c1afdd041ca3e0cc7fa4",
+    "e0ef954d719fc73f3f6c958b7dfb8e7d936228860fc2a398f8957ad49bbaef98",
+    "e8c67209cfb029be7f9d66facbf6c4a83ff20b659d97b22dfee131e2f4cf477c"
+  ],
+  "Configuration.js": [
+    "109783084e25253a1fcd8698b919aca4362e480d07a971b554e00e129cfedf14",
+    "18b4fed6a58e688c014d0ba6ae3f2801278faf39b70a0f8ef450cdc110022cea",
+    "2bfab53a53f07584f43e2a1b240e6532f8056730ca1153f36a15e44ac18d82b1",
+    "314254e534981604b82c24cab1fd39c36cb613da4c2b9b6061c710ceba40d51a",
+    "492d1f9d7fac88d8438226a8c8ff4ec6859aec2309adf049ad1a5dd8daf502f6",
+    "6150f43a4d6055012b83b503eb595ad4a5ac1ec7605d057376894a5c0aff94b2",
+    "81bed954db1448ae5c47c283cadc1ac8ac50ab553baf923d72c5a4f90026b44e"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/tintColor__alias_selectedSegmentTintColor.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.tintColor (alias_selectedSegmentTintColor)",
+    "description": "Conformance fixture for 'tintColor' on Segment (section: Segment, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tintColor__alias_selectedSegmentTintColor",
+      "description": "Conformance fixture for 'tintColor' on Segment (section: Segment, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_tintColor__alias_selectedSegmentTintColor"
+        }
+      ]
+    }
+  ]
+}

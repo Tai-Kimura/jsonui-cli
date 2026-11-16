@@ -1,0 +1,183 @@
+# frozen_string_literal: true
+
+require 'set'
+require_relative '../../../lib/compose/components/collection_component'
+require_relative '../../support/kotlin_compiler'
+require_relative '../../support/compose_bounded_scroll_stubs'
+
+# Collection.items is a CollectionDataSource or an array (the orchestrator's ruling,
+# 2026-09-26). A class-list Collection (cellClasses, no `sections`) whose items
+# property the layout DECLARES a list — `Array`, `[T]` — is one section: every
+# element with cellClasses[0], on the routes a one-section data source draws
+# (paging too — a page per element since the orchestrator's round-6 ruling, 2026-09-26). Any other declaration, or none, is the
+# canonical CollectionDataSource, emitted as before. Until jsonui-cli 1.9.0
+# every class-list route read `.sections`, which a List does not have.
+#
+# The cells' ViewModels read a map (updateData(Map<String, Any>)): a list of
+# the cell's own Data (List<RowCellData>) becomes its maps (toMap()), an
+# untyped list (List<Any?>) is read element by element as maps, and a list of
+# any other type is named.
+RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared list' do
+  CLASS_LIST_ITEMS_ROUTES = {
+    'lazy vertical' => {}, 'lazy grid' => { 'columns' => 2 }, 'lazy horizontal' => { 'layout' => 'horizontal' },
+    'flow' => { 'layout' => 'flow' }, 'lazy:none' => { 'lazy' => 'none' }, 'lazy:none grid' => { 'lazy' => 'none', 'columns' => 2 },
+    'lazy:none horizontal' => { 'lazy' => 'none', 'layout' => 'horizontal' }, 'wrapContent' => { 'height' => 'wrapContent' },
+    'flow lazy:none wrapContent' => { 'layout' => 'flow', 'lazy' => 'none', 'height' => 'wrapContent' },
+    'paging' => { 'layout' => 'horizontal', 'paging' => true }
+  }.freeze
+
+  # declared => [data definition, the list expression, the Kotlin property]
+  CLASS_LIST_ITEMS_DECLARATIONS = {
+    '[RowCellData] = []' => [{ 'name' => 'rows', 'class' => '[RowCellData]', 'defaultValue' => '[]' },
+                             'data.rows.map { it.toMap() }', 'val rows: List<RowCellData> = emptyList()'],
+    'Array (no default)' => [{ 'name' => 'rows', 'class' => 'Array' },
+                             'data.rows.orEmpty().mapNotNull { (@Suppress("UNCHECKED_CAST") (it as? Map<String, Any>)) }', 'val rows: List<Any?>? = null']
+  }.freeze
+
+  def emit(extra, definition)
+    %i[info debug].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = definition ? { definition['name'] => definition } : {}
+    ComposeBoundedScrollStubs.unqualify(KjuiTools::Compose::Components::CollectionComponent.generate(
+      { 'type' => 'Collection', 'id' => 'list', 'cellClasses' => ['row_cell'], 'items' => '@{rows}' }.merge(extra), 1, Set.new, nil
+    ))
+  ensure
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  CLASS_LIST_ITEMS_DECLARATIONS.each do |declared, (definition, list, _kotlin)|
+    CLASS_LIST_ITEMS_ROUTES.each do |route, extra|
+      it "items #{declared}, #{route}: the declared list, one section, no `.sections`" do
+        allow(KjuiTools::Core::Logger).to receive(:warn)
+        code = emit(extra, definition)
+        if route == 'paging'
+          expect(code.scan('RowCellView(').size).to eq(1), code
+          expect(code).to include("val pageSection0 = #{list}")
+        else
+          expect(code.scan('RowCellView(').size).to eq(1), code
+          expect(code).to include(list)
+          expect(code).to include('val sectionIndex = 0').or include('Triple(0, cellIndex, cellData)')
+        end
+        expect(code).not_to include('.sections')
+      end
+    end
+  end
+
+  it 'a CollectionDataSource, or no declaration, reads the data sections as before' do
+    allow(KjuiTools::Core::Logger).to receive(:warn)
+    [{ 'name' => 'rows', 'class' => 'CollectionDataSource' }, nil].each do |definition|
+      expect(emit({}, definition)).to include('.forEachIndexed { sectionIndex, section ->'), definition.inspect
+    end
+  end
+
+  it 'names a list of another type: its elements are no map, so its cells draw with no data' do
+    said = []
+    allow(KjuiTools::Core::Logger).to receive(:warn) { |m| said << m }
+    code = emit({}, { 'name' => 'rows', 'class' => '[Booking]', 'defaultValue' => '[]' })
+    expect(said.join).to include("items 'rows' is a list of Booking; a cell reads its own RowCellData or a map")
+    expect(code).to include('data.rows.mapNotNull { (@Suppress("UNCHECKED_CAST") (it as? Map<String, Any>)) }')
+  end
+
+  # A lazy "none" flow that declares `height: "wrapContent"` gets two
+  # wrapContentHeight modifiers: build_size's own `.wrapContentHeight()` and the
+  # flow overflow rule's unbounded one. The conformance pair
+  # flowOverflow__noneWrapInBox / InScroll measured that stack as inert
+  # (byte-identical to the one-modifier control on the dynamic and codegen
+  # hosts). It was removed in jsonui-cli 1.9.18 because its control omitted the
+  # required `height` (ticket conformance-generators-emit-layouts-missing-
+  # required-attributes), so this holds the shape that was measured. The order
+  # is the finding: a Compose modifier written first is outer, so the declared
+  # wrap is outside and the unbounded one inside measures the flow at its
+  # content height. Swapped, the outer bounded wrap would size the flow to the
+  # constraints again and clip the overflow.
+  it 'a lazy none flow with an explicit wrapContent height: the declared wrap outside the unbounded one' do
+    allow(KjuiTools::Core::Logger).to receive(:warn)
+    definition = CLASS_LIST_ITEMS_DECLARATIONS.values.first.first
+    lines = emit(CLASS_LIST_ITEMS_ROUTES['flow lazy:none wrapContent'], definition).lines.map(&:strip).grep(/wrapContentHeight/)
+    expect(lines).to eq(['.wrapContentHeight()', '.wrapContentHeight(Alignment.Top, unbounded = true),'])
+  end
+
+  CLASS_LIST_ITEMS_STUBS = <<~KOTLIN
+    annotation class Composable
+    interface Modifier { companion object : Modifier }
+    fun Modifier.testTag(tag: String): Modifier = this
+    fun Modifier.fillMaxWidth(): Modifier = this
+    fun Modifier.fillMaxSize(): Modifier = this
+    fun Modifier.verticalScroll(state: ScrollState): Modifier = this
+    fun Modifier.wrapContentHeight(align: Alignment.Vertical = Alignment.Top, unbounded: Boolean = false): Modifier = this
+    fun Modifier.height(value: Dp): Modifier = this
+    fun Modifier.requiredHeight(value: Dp): Modifier = this
+    fun Modifier.fillMaxHeight(): Modifier = this
+    class ScrollState
+    fun rememberScrollState(): ScrollState = ScrollState()
+    class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
+    fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
+    class Dp
+    val Int.dp: Dp get() = Dp()
+    interface Alignment { interface Vertical; companion object { val TopStart = object : Alignment {}; val Top = object : Vertical {} } }
+    class Arrangement { companion object { fun spacedBy(space: Dp): Arrangement = Arrangement() } }
+    object GridCells { class Fixed(val count: Int) }
+    class GridItemSpan(val span: Int)
+    class LazyGridItemSpanScope { val maxLineSpan: Int = 1; val maxCurrentLineSpan: Int = 1 }
+    class LazyGridScope {
+        fun item(span: (LazyGridItemSpanScope.() -> GridItemSpan)? = null, content: () -> Unit) {}
+        fun items(count: Int, key: ((index: Int) -> Any)? = null, itemContent: (Int) -> Unit) {}   // Compose LazyGridScope.items
+    }
+    fun LazyVerticalGrid(columns: GridCells.Fixed, modifier: Modifier = Modifier, content: LazyGridScope.() -> Unit) {}
+    fun LazyHorizontalGrid(rows: GridCells.Fixed, modifier: Modifier = Modifier, content: LazyGridScope.() -> Unit) {}
+    fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) {}
+    class ColumnScope
+    class RowScope { fun Modifier.weight(weight: Float): Modifier = this }
+    fun Column(modifier: Modifier = Modifier, verticalArrangement: Arrangement? = null, content: ColumnScope.() -> Unit) {}
+    fun Row(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, content: RowScope.() -> Unit) {}
+    fun Spacer(modifier: Modifier) {}
+    fun FlowRow(modifier: Modifier = Modifier, horizontalArrangement: Arrangement, verticalArrangement: Arrangement, content: () -> Unit) {}
+    class PagerState
+    fun rememberPagerState(pageCount: () -> Int): PagerState = PagerState()
+    fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, pageContent: (Int) -> Unit) {}
+    fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
+    inline fun <reified T> viewModel(key: String? = null): T = throw IllegalStateException()
+    inline fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
+    class RowCellViewModel { fun updateData(updates: Map<String, Any>) {} }
+    @Composable fun RowCellView(viewModel: RowCellViewModel, modifier: Modifier = Modifier) {}
+    data class RowCellData(val title: String = "") { fun toMap(): MutableMap<String, Any> = mutableMapOf("title" to title) }
+    #{ComposeBoundedScrollStubs::KOTLIN}
+  KOTLIN
+
+  it 'every route compiles against List<RowCellData> and List<Any?>?' do
+    allow(KjuiTools::Core::Logger).to receive(:warn)
+    functions = CLASS_LIST_ITEMS_DECLARATIONS.each_with_index.flat_map do |(declared, (definition, _list, kotlin)), d|
+      ["class Data#{d}(#{kotlin})"] + CLASS_LIST_ITEMS_ROUTES.each_with_index.map do |(route, extra), r|
+        "// #{declared}, #{route}\n@Composable fun route#{d}_#{r}(data: Data#{d}, viewModel: Any) {\n#{emit(extra, definition)}\n}"
+      end
+    end
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin.with_warnings_as_errors
+  end
+  # A cell's key: the row's own cellIdProperty value, as the sections path keys
+  # its cells (ticket 2026-10-23-rjui-collection-array-items-key-ignores-cell-
+  # id-property): with no key a row inserted above moved every cell's state.
+  # No cellIdProperty: no key, as before.
+  %w[lazy\ vertical lazy\ grid lazy\ horizontal].each do |route|
+    it "items a declared list, #{route}: keyed by cellIdProperty, with none unkeyed" do
+      allow(KjuiTools::Core::Logger).to receive(:warn)
+      definition = CLASS_LIST_ITEMS_DECLARATIONS['[RowCellData] = []'][0]
+      keyed = emit(CLASS_LIST_ITEMS_ROUTES[route].merge('cellIdProperty' => 'id'), definition)
+      expect(keyed).to include('val lazyKeys = HashSet<String>().let { seen -> cellItems.mapIndexed')
+      expect(keyed).to include('(cell["id"] as? String)')
+      expect(keyed).to include('items(cellItems.size, key = { lazyKeys[it] }) { cellIndex ->')
+      plain = emit(CLASS_LIST_ITEMS_ROUTES[route], definition)
+      expect(plain).to include('items(cellItems.size) { cellIndex ->')
+      expect(plain).not_to include('lazyKeys')
+    end
+  end
+
+  it 'every route with cellIdProperty compiles' do
+    allow(KjuiTools::Core::Logger).to receive(:warn)
+    functions = CLASS_LIST_ITEMS_DECLARATIONS.each_with_index.flat_map do |(declared, (definition, _list, kotlin)), d|
+      ["class KeyedData#{d}(#{kotlin})"] + CLASS_LIST_ITEMS_ROUTES.each_with_index.map do |(route, extra), r|
+        "// #{declared}, #{route}, cellIdProperty\n@Composable fun keyed#{d}_#{r}(data: KeyedData#{d}, viewModel: Any) {\n" \
+          "#{emit(extra.merge('cellIdProperty' => 'id'), definition)}\n}"
+      end
+    end
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin.with_warnings_as_errors
+  end
+end

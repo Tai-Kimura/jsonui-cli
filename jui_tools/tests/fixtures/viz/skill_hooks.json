@@ -1,0 +1,102 @@
+{
+ "_about": "Hook payloads of a real claude (2.x) using a skill, 2026-10-22 00:01, isolated as cc_watch --live is (a temporary CLAUDE_CONFIG_DIR, --setting-sources project in a throwaway folder holding two skills of the test's own, jvz-inline and jvz-forked with context: fork). Only the fields viz reads are kept; atMs is each hook's time from the prompt. The paths of the throwaway folder are replaced by /work/skill-probe.",
+ "inline": [
+  {
+   "atMs": 0,
+   "hook_event_name": "UserPromptSubmit",
+   "session_id": "1e2330cb-ffa0-4819-809f-66476f312072",
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 2594,
+   "hook_event_name": "PreToolUse",
+   "session_id": "1e2330cb-ffa0-4819-809f-66476f312072",
+   "tool_name": "Skill",
+   "tool_input": {
+    "skill": "jvz-inline"
+   },
+   "tool_use_id": "toolu_01E748iMCi3X2FBapV43v7Ap",
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 2634,
+   "hook_event_name": "PostToolUse",
+   "session_id": "1e2330cb-ffa0-4819-809f-66476f312072",
+   "tool_name": "Skill",
+   "tool_input": {
+    "skill": "jvz-inline"
+   },
+   "tool_use_id": "toolu_01E748iMCi3X2FBapV43v7Ap",
+   "tool_response": {
+    "success": true,
+    "commandName": "jvz-inline"
+   },
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 6285,
+   "hook_event_name": "Stop",
+   "session_id": "1e2330cb-ffa0-4819-809f-66476f312072",
+   "cwd": "/work/skill-probe"
+  }
+ ],
+ "forked": [
+  {
+   "atMs": 0,
+   "hook_event_name": "UserPromptSubmit",
+   "session_id": "94f4f40c-97d2-42af-adb9-f3132f39ecfb",
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 1629,
+   "hook_event_name": "PreToolUse",
+   "session_id": "94f4f40c-97d2-42af-adb9-f3132f39ecfb",
+   "tool_name": "Skill",
+   "tool_input": {
+    "skill": "jvz-forked"
+   },
+   "tool_use_id": "toolu_0144BkqBNPjuozJ3jUjQVsnE",
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 1670,
+   "hook_event_name": "SubagentStart",
+   "session_id": "94f4f40c-97d2-42af-adb9-f3132f39ecfb",
+   "agent_id": "a72a52a7f6db30534",
+   "agent_type": "general-purpose",
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 2649,
+   "hook_event_name": "SubagentStop",
+   "session_id": "94f4f40c-97d2-42af-adb9-f3132f39ecfb",
+   "agent_id": "a72a52a7f6db30534",
+   "agent_type": "general-purpose",
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 2681,
+   "hook_event_name": "PostToolUse",
+   "session_id": "94f4f40c-97d2-42af-adb9-f3132f39ecfb",
+   "tool_name": "Skill",
+   "tool_input": {
+    "skill": "jvz-forked"
+   },
+   "tool_use_id": "toolu_0144BkqBNPjuozJ3jUjQVsnE",
+   "tool_response": {
+    "success": true,
+    "commandName": "jvz-forked",
+    "status": "forked",
+    "agentId": "a72a52a7f6db30534",
+    "result": "forked-done"
+   },
+   "cwd": "/work/skill-probe"
+  },
+  {
+   "atMs": 3317,
+   "hook_event_name": "Stop",
+   "session_id": "94f4f40c-97d2-42af-adb9-f3132f39ecfb",
+   "cwd": "/work/skill-probe"
+  }
+ ]
+}

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/size__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.size (static)",
+    "description": "Conformance fixture for 'size' on NetworkImage (section: NetworkImage, class: visual). Value under test: 3.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "size__static",
+      "description": "Conformance fixture for 'size' on NetworkImage (section: NetworkImage, class: visual). Value under test: 3.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_size__static"
+        }
+      ]
+    }
+  ]
+}

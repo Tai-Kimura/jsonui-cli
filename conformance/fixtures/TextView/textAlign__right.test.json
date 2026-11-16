@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/textAlign__right.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.textAlign (right)",
+    "description": "Conformance fixture for 'textAlign' on TextView (section: TextView, class: visual). Value under test: \"Right\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__right",
+      "description": "Conformance fixture for 'textAlign' on TextView (section: TextView, class: visual). Value under test: \"Right\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_textAlign__right"
+        }
+      ]
+    }
+  ]
+}

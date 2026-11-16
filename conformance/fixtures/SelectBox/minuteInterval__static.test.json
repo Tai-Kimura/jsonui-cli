@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/minuteInterval__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.minuteInterval (static)",
+    "description": "Conformance fixture for 'minuteInterval' on SelectBox (section: SelectBox, class: visual). Value under test: 15.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minuteInterval__static",
+      "description": "Conformance fixture for 'minuteInterval' on SelectBox (section: SelectBox, class: visual). Value under test: 15.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_minuteInterval__static"
+        }
+      ]
+    }
+  ]
+}

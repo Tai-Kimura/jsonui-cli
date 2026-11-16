@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/margins__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.margins (static)",
+    "description": "Conformance fixture for 'margins' on View (section: common, class: visual). Value under test: [8, 8, 8, 8].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "margins__static",
+      "description": "Conformance fixture for 'margins' on View (section: common, class: visual). Value under test: [8, 8, 8, 8].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_margins__static"
+        }
+      ]
+    }
+  ]
+}

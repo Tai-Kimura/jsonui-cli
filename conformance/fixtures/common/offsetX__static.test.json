@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/offsetX__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.offsetX (static)",
+    "description": "Conformance fixture for 'offsetX' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "offsetX__static",
+      "description": "Conformance fixture for 'offsetX' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_offsetX__static"
+        }
+      ]
+    }
+  ]
+}

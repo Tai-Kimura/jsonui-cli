@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/textShadow__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.textShadow (static)",
+    "description": "Conformance fixture for 'textShadow' on IconLabel (section: IconLabel, class: visual). Value under test: {\"color\": \"#000000\", \"blur\": 4, \"offset\": [2, 2]}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textShadow__static",
+      "description": "Conformance fixture for 'textShadow' on IconLabel (section: IconLabel, class: visual). Value under test: {\"color\": \"#000000\", \"blur\": 4, \"offset\": [2, 2]}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_textShadow__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/fontSize__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.fontSize (binding)",
+    "description": "Conformance fixture for 'fontSize' on Label (section: Label, class: visual). Value under test: \"@{boundFontSize}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__binding",
+      "description": "Conformance fixture for 'fontSize' on Label (section: Label, class: visual). Value under test: \"@{boundFontSize}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_fontSize__binding"
+        }
+      ]
+    }
+  ]
+}

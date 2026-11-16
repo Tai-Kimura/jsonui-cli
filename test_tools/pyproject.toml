@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jsonui_test_cli*"]
+
+[tool.setuptools.package-data]
+# Non-.py assets shipped inside the package so they survive `pip install -e .`.
+# Read at runtime via importlib.resources, never by repo-relative path.
+# Only static/ ships: the sole runtime-read asset is static/panel.html
+# (mock/server.py). The mock editor/doc schema (mock.schema.json) is NOT read at
+# runtime and belongs with the other editor schemas in the jsonui-test-runner
+# top-level schemas/ (plan D5), so it is not packaged here.
+jsonui_test_cli = ["static/*"]
+
+[project]
+name = "jsonui-test-cli"
+version = "2.5.47"
+description = "CLI tool for validating JsonUI test files and generating test templates"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Tai Kimura"}
+]
+keywords = ["jsonui", "testing", "ui-testing", "validation"]
+# PyYAML: an OpenAPI document written in YAML (mock generate / serve, validate's mock gate, contracts), read by
+# shared/core/openapi_file.py. Imported only when such a document is read; without it the reader says so in one line.
+dependencies = ["PyYAML>=6.0"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+jsonui-test = "jsonui_test_cli.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[tool.pytest.ini_options]
+# Keep tmp_path only for failed tests: the default kept every test's for
+# the last 3 runs (527 MB per run of this suite, measured 2026-10-15).
+tmp_path_retention_policy = "failed"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["jsonui_test_cli"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

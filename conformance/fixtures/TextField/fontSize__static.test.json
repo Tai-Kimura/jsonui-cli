@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/fontSize__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.fontSize (static)",
+    "description": "Conformance fixture for 'fontSize' on TextField (section: TextField, class: visual). Value under test: 20.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontSize__static",
+      "description": "Conformance fixture for 'fontSize' on TextField (section: TextField, class: visual). Value under test: 20.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_fontSize__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "IconLabel",
+      "id": "target",
+      "width": 200,
+      "height": "wrapContent",
+      "text": "Sample",
+      "icon_off": "conformance_sample",
+      "icon_on": "conformance_sample_alt",
+      "selectedFontColor": "#FF0000",
+      "selected": false
+    }
+  ]
+}

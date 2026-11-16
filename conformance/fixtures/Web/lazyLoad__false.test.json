@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/lazyLoad__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.lazyLoad (false)",
+    "description": "Conformance fixture for 'lazyLoad' on Web (section: Web, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "lazyLoad__false",
+      "description": "Conformance fixture for 'lazyLoad' on Web (section: Web, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_lazyLoad__false"
+        }
+      ]
+    }
+  ]
+}

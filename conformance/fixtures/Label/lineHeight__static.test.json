@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/lineHeight__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.lineHeight (static)",
+    "description": "Conformance fixture for 'lineHeight' on Label (section: Label, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "lineHeight__static",
+      "description": "Conformance fixture for 'lineHeight' on Label (section: Label, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_lineHeight__static"
+        }
+      ]
+    }
+  ]
+}

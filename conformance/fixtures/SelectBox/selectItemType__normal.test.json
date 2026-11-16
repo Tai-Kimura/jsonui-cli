@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/selectItemType__normal.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.selectItemType (normal)",
+    "description": "Conformance fixture for 'selectItemType' on SelectBox (section: SelectBox, class: visual). Value under test: \"Normal\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectItemType__normal",
+      "description": "Conformance fixture for 'selectItemType' on SelectBox (section: SelectBox, class: visual). Value under test: \"Normal\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_selectItemType__normal"
+        }
+      ]
+    }
+  ]
+}

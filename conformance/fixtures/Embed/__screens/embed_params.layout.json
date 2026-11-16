@@ -1,0 +1,43 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "embed_params_container",
+  "width": "matchParent",
+  "height": "wrapContent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "profile",
+      "class": "Object",
+      "defaultValue": {
+        "name": "",
+        "meta": {
+          "age": ""
+        }
+      }
+    }
+  ],
+  "child": [
+    {
+      "type": "Label",
+      "id": "embed-params-name",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{profile.name}"
+    },
+    {
+      "type": "Label",
+      "id": "embed-params-age",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{profile.meta.age}"
+    }
+  ]
+}

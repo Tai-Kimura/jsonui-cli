@@ -1,0 +1,79 @@
+{
+ "$schema": "https://jsonui.dev/schemas/infra-prices/v0.json",
+ "version": 0,
+ "id": "example",
+ "label": "見本の単価（実の単価ではない）",
+ "currency": "USD",
+ "prices": [
+  {
+   "provider": "aws",
+   "service": "ecs.fargate",
+   "sku": "vcpu",
+   "region": "ap-northeast-1",
+   "unit": "vCPU-hour",
+   "price_usd": 0.05,
+   "effective": "2026-10-01",
+   "source": "manual",
+   "note": "見本の値"
+  },
+  {
+   "provider": "aws",
+   "service": "ecs.fargate",
+   "sku": "memory",
+   "region": "ap-northeast-1",
+   "unit": "GB-hour",
+   "price_usd": 0.005,
+   "effective": "2026-10-01",
+   "source": "manual",
+   "note": "見本の値"
+  },
+  {
+   "provider": "aws",
+   "service": "rds.mysql",
+   "sku": "db.r6g.large",
+   "region": "ap-northeast-1",
+   "unit": "instance-hour",
+   "price_usd": 0.3,
+   "effective": "2026-10-01",
+   "source": "manual",
+   "note": "見本の値"
+  },
+  {
+   "provider": "aws",
+   "service": "cloudfront",
+   "sku": "data-out-japan",
+   "region": "global",
+   "unit": "GB",
+   "tiers": [
+    {
+     "from": 0,
+     "to": 10240,
+     "price_usd": 0.11
+    },
+    {
+     "from": 10240,
+     "price_usd": 0.09
+    }
+   ],
+   "free": {
+    "amount": 1024,
+    "period": "month"
+   },
+   "effective": "2026-10-01",
+   "source": "manual",
+   "note": "見本の値"
+  },
+  {
+   "provider": "aws",
+   "service": "s3",
+   "sku": "get",
+   "region": "ap-northeast-1",
+   "unit": "request",
+   "per_units": 1000,
+   "price_usd": 0.00037,
+   "effective": "2026-10-01",
+   "source": "manual",
+   "note": "見本の値"
+  }
+ ]
+}

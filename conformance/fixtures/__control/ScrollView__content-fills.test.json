@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/ScrollView__content-fills.layout.json"
+  },
+  "metadata": {
+    "name": "conformance ScrollView__content-fills",
+    "description": "Control for the short-content ScrollView: the same 200x200 vertical ScrollView with its box 200 high, filling it — a centring and a top-aligned platform draw the same picture.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "ScrollView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "ScrollView__content-fills",
+      "description": "Control for the short-content ScrollView: the same 200x200 vertical ScrollView with its box 200 high, filling it — a centring and a top-aligned platform draw the same picture.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "ScrollView_ScrollView__content-fills"
+        }
+      ]
+    }
+  ]
+}

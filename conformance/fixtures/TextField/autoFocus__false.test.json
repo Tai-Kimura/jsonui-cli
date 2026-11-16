@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/autoFocus__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.autoFocus (false)",
+    "description": "Conformance fixture for 'autoFocus' on TextField (section: TextField, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "autoFocus__false",
+      "description": "Conformance fixture for 'autoFocus' on TextField (section: TextField, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_autoFocus__false"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+# frozen_string_literal: true
+
+require 'swiftui/helpers/string_manager_helper'
+
+RSpec.describe SjuiTools::SwiftUI::Helpers::StringManagerHelper do
+  # Examples here announce layouts (current_namespaces): put the helper back
+  # as found, so no later spec resolves strings with these sections.
+  before(:context) { @kept = ProcessStateGuard.keep(described_class) }
+  after(:context) { ProcessStateGuard.put_back(@kept) }
+
+  # Create a test class that includes the helper
+  let(:helper_instance) do
+    Class.new do
+      include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+    end.new
+  end
+
+  describe '#get_text_with_string_manager' do
+    context 'with snake_case text' do
+      it 'returns localized string for simple snake_case' do
+        result = helper_instance.get_text_with_string_manager('"hello_world"')
+        expect(result).to eq('"hello_world".localized()')
+      end
+
+      it 'returns localized string for snake_case with numbers' do
+        result = helper_instance.get_text_with_string_manager('"item_count_3"')
+        expect(result).to eq('"item_count_3".localized()')
+      end
+
+      it 'returns localized string for single word' do
+        result = helper_instance.get_text_with_string_manager('"settings"')
+        expect(result).to eq('"settings".localized()')
+      end
+    end
+
+    context 'with regular text (not snake_case)' do
+      it 'returns original text for CamelCase' do
+        result = helper_instance.get_text_with_string_manager('"HelloWorld"')
+        expect(result).to eq('"HelloWorld"')
+      end
+
+      it 'returns original text with spaces' do
+        result = helper_instance.get_text_with_string_manager('"Hello World"')
+        expect(result).to eq('"Hello World"')
+      end
+
+      it 'returns original text with uppercase' do
+        result = helper_instance.get_text_with_string_manager('"HELLO"')
+        expect(result).to eq('"HELLO"')
+      end
+
+      it 'returns original text starting with uppercase' do
+        result = helper_instance.get_text_with_string_manager('"Hello_world"')
+        expect(result).to eq('"Hello_world"')
+      end
+    end
+
+    context 'with binding expression' do
+      it 'returns original binding' do
+        result = helper_instance.get_text_with_string_manager('"@{userName}"')
+        expect(result).to eq('"@{userName}"')
+      end
+
+      it 'handles binding without quotes' do
+        result = helper_instance.get_text_with_string_manager('@{userName}')
+        expect(result).to eq('@{userName}')
+      end
+    end
+
+    context 'with single quotes' do
+      it 'processes single-quoted snake_case' do
+        result = helper_instance.get_text_with_string_manager("'hello_world'")
+        expect(result).to eq('"hello_world".localized()')
+      end
+    end
+
+    # A cell under a screen directory owns two section spellings (sjui
+    # names sections by basename, kjui by relative path), so the same
+    # text can be declared twice. Scanning strings.json in file order made
+    # the winner depend on how the SSoT happened to be sorted.
+    context 'when more than one strings.json section declares the text' do
+      let(:strings) do
+        {
+          'hero_section_cell' => { 'rating' => 'RATING' },
+          'item_detail_hero_section_cell' => { 'rating' => 'RATING', 'imported_by' => 'Imported by ' }
+        }
+      end
+
+      before do
+        allow(helper_instance).to receive(:load_strings_json).and_return(strings)
+        described_class.current_namespaces = []
+      end
+
+      after { described_class.current_namespaces = [] }
+
+      it 'prefers the section the layout owns, not the first one in the file' do
+        described_class.current_namespaces = %w[hero_section_cell item_detail_hero_section_cell]
+        expect(helper_instance.get_text_with_string_manager('"RATING"'))
+          .to eq('StringManager.HeroSectionCell.rating()')
+
+        described_class.current_namespaces = %w[item_detail_hero_section_cell]
+        expect(helper_instance.get_text_with_string_manager('"RATING"'))
+          .to eq('StringManager.ItemDetailHeroSectionCell.rating()')
+      end
+
+      # A bare key declared only under a foreign section is known-
+      # unresolvable on this face — .localized() looks the bare spelling up
+      # in Localizable.strings, which only carries section-prefixed keys, so
+      # the RAW KEY reaches the screen. The emit is unchanged; the silence
+      # is what shipped one to a Release face (asymmetric-resolution filing,
+      # 2026-08-11).
+      it 'warns when a bare key is declared only under a foreign section' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"rating"'))
+          .to eq('"rating".localized()')
+        expect(SjuiTools::Core::Logger).to have_received(:warn)
+          .with(a_string_matching(
+            /foreign strings\.json section\(s\) hero_section_cell, item_detail_hero_section_cell/
+          ))
+      end
+
+      # warnings: false is the data-default face — a defaultValue can be
+      # sentinel vocabulary colliding with some section's key, so that face
+      # resolves best-effort and never gates the build (2026-08-11 filing).
+      it 'suppresses the foreign-bare warning on the data-default face' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"rating"', warnings: false))
+          .to eq('"rating".localized()')
+        expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
+      it 'suppresses value-path warnings too on the data-default face' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"RATING"', warnings: false))
+          .to eq('StringManager.HeroSectionCell.rating()')
+        expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
+      it 'stays silent for an undeclared snake_case literal' do
+        allow(SjuiTools::Core::Logger).to receive(:warn)
+        described_class.current_namespaces = %w[member_cell]
+        expect(helper_instance.get_text_with_string_manager('"nowhere_declared"'))
+          .to eq('"nowhere_declared".localized()')
+        expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+      end
+
+      it 'is not swayed by the order of sections in strings.json' do
+        described_class.current_namespaces = %w[item_detail_hero_section_cell]
+        reordered = { 'hero_section_cell' => strings['hero_section_cell'] }
+        allow(helper_instance).to receive(:load_strings_json)
+          .and_return(strings.to_a.reverse.to_h, reordered.merge(strings))
+
+        first = helper_instance.get_text_with_string_manager('"RATING"')
+        second = helper_instance.get_text_with_string_manager('"RATING"')
+        expect(first).to eq(second)
+      end
+
+      it 'falls back to a section the layout does not own rather than inventing one' do
+        described_class.current_namespaces = %w[hero_section_cell]
+        expect(helper_instance.get_text_with_string_manager('"Imported by "'))
+          .to eq('StringManager.ItemDetailHeroSectionCell.importedBy()')
+      end
+
+      it 'keeps file order when the layout owns no declared section' do
+        expect(helper_instance.get_text_with_string_manager('"RATING"'))
+          .to eq('StringManager.HeroSectionCell.rating()')
+      end
+
+      it 'leaves a text no section declares alone instead of minting a key' do
+        expect(helper_instance.get_text_with_string_manager('"Undeclared text"'))
+          .to eq('"Undeclared text"')
+      end
+
+      it 'prefers an owned section for a bare key lookup too' do
+        described_class.current_namespaces = %w[item_detail_hero_section_cell]
+        expect(helper_instance.get_text_with_string_manager('"rating"'))
+          .to eq('StringManager.ItemDetailHeroSectionCell.rating()')
+      end
+    end
+
+    # The extractor truncates long ASCII text to 31 chars, which can leave a
+    # trailing underscore ("foo_bar_baz_qux_quux_corge_gra_"). Such a key is
+    # as declared as any other; the old snake_case gate rejected the spelling
+    # and the emit fell through to the raw literal — or worse, to a legacy
+    # poison entry whose VALUE is the raw key (downstream login screen, 2026-08-09).
+    context 'with a declared key the snake_case gate used to reject' do
+      let(:strings) do
+        {
+          'login' => {
+            'foo_bar_baz_qux_quux_corge_gra_' => {
+              'en' => "Foo bar? Baz qux quux corge grault",
+              'ja' => 'あいうえおかきくけこ'
+            },
+            # Legacy poison: a key whose value IS the other key's spelling.
+            'foo_bar_baz_qux_quux_corge_gra' => 'foo_bar_baz_qux_quux_corge_gra_'
+          }
+        }
+      end
+
+      before do
+        allow(helper_instance).to receive(:load_strings_json).and_return(strings)
+        described_class.current_namespaces = %w[login]
+      end
+
+      after { described_class.current_namespaces = [] }
+
+      it 'resolves a declared trailing-underscore key as the key itself' do
+        expect(helper_instance.get_text_with_string_manager('"foo_bar_baz_qux_quux_corge_gra_"'))
+          .to eq('StringManager.Login.fooBarBazQuxQuuxCorgeGra()')
+      end
+
+      it 'prefers key membership over a value reverse-lookup hit' do
+        # Without key-first ordering the poison entry's value match wins and
+        # the emit resolves the poison key instead of the declared key.
+        allow(helper_instance).to receive(:lookup_string_manager_by_value)
+          .and_return('StringManager.Login.poison()')
+        expect(helper_instance.get_text_with_string_manager('"foo_bar_baz_qux_quux_corge_gra_"'))
+          .to eq('StringManager.Login.fooBarBazQuxQuuxCorgeGra()')
+      end
+
+      it 'falls back to .localized() for an UNDECLARED trailing-underscore key' do
+        expect(helper_instance.get_text_with_string_manager('"undeclared_key_"'))
+          .to eq('"undeclared_key_".localized()')
+      end
+    end
+
+    context 'edge cases' do
+      it 'handles empty string' do
+        result = helper_instance.get_text_with_string_manager('""')
+        expect(result).to eq('""')
+      end
+
+      it 'handles string with only underscores' do
+        result = helper_instance.get_text_with_string_manager('"___"')
+        expect(result).to eq('"___"')
+      end
+
+      it 'handles numbers only' do
+        result = helper_instance.get_text_with_string_manager('"123"')
+        expect(result).to eq('"123"')
+      end
+    end
+  end
+
+  describe 'the advice for a string that resolves to another section' do
+    # Reported 2026-09-07: the two warnings' repairs regenerated each other.
+    # "Register it under your own section" makes a second declaration, which
+    # is the duplicate warning; deleting the duplicate brings this one back.
+    # A user following the tool could not reach zero warnings, so a project
+    # whose invariant is `jui build` warning 0 could not share a string.
+    let(:shared) { { 'intro' => { 'product_name' => 'Acme' } } }
+
+    before do
+      allow(helper_instance).to receive(:load_strings_json).and_return(shared)
+      allow(SjuiTools::Core::Logger).to receive(:warn)
+      described_class.current_namespaces = %w[messages]
+    end
+
+    it 'names the key form, which is the spelling that reaches zero' do
+      helper_instance.get_text_with_string_manager('"Acme"')
+      expect(SjuiTools::Core::Logger).to have_received(:warn).with(
+        satisfy do |m|
+          # ONE matcher, not two: `.with(a).with(b)` keeps only the LAST,
+          # so the chained form asserted the second pattern and silently
+          # dropped the first. Removing "name the KEY instead of the value"
+          # from both faces left this arm green (measured 2026-09-07).
+          m =~ /name the KEY instead of the value/ &&
+            m =~ /"defaultValue": "<section>_<key>"/
+        end
+      )
+    end
+
+    it 'says why the obvious repair loops' do
+      helper_instance.get_text_with_string_manager('"Acme"')
+      expect(SjuiTools::Core::Logger).to have_received(:warn)
+        .with(/the two repairs\s+regenerate each other|regenerate each other/)
+    end
+
+    it 'is silent for the spelling it recommends' do
+      # The arm that makes the advice worth giving: following it reaches 0.
+      expect(helper_instance.get_text_with_string_manager('"intro_product_name"'))
+        .to eq('StringManager.Intro.productName()')
+      expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+    end
+
+    it 'emits the same reference for the value and for the key' do
+      # If the two spellings emitted different code the advice would be a
+      # behaviour change, not a wording change.
+      by_value = helper_instance.get_text_with_string_manager('"Acme"')
+      by_key = helper_instance.get_text_with_string_manager('"intro_product_name"')
+      expect(by_value).to eq(by_key)
+    end
+  end
+
+end

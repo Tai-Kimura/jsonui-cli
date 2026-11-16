@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
+  "entries": [
+    {
+      "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_selectedIndex__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
+      "screenshot": "TabView_selectedIndex__static.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 12,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_showLabels__false.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
+      "screenshot": "TabView_showLabels__true.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_tabBarBackground__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
+      "screenshot": "TabView_tabBarBackground__static.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_tabs__static.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_tintColor__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
+      "screenshot": "TabView_tintColor__static.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "TabView_unselectedColor__binding.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": "binding / showLabels false variant of the same glyph source, measured 2026-10-05 (local full run, conf_ci)"
+    },
+    {
+      "screenshot": "TabView_unselectedColor__static.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    },
+    {
+      "screenshot": "control_TabView.png",
+      "platform": "android",
+      "env": "local",
+      "status": "mismatch",
+      "distance": 11,
+      "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
+      "note": ""
+    }
+  ]
+}

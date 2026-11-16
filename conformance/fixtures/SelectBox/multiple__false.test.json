@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/multiple__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.multiple (false)",
+    "description": "Conformance fixture for 'multiple' on SelectBox (section: SelectBox, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "multiple__false",
+      "description": "Conformance fixture for 'multiple' on SelectBox (section: SelectBox, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_multiple__false"
+        }
+      ]
+    }
+  ]
+}

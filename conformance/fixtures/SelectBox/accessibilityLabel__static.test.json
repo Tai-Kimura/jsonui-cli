@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/accessibilityLabel__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.accessibilityLabel (static)",
+    "description": "Conformance fixture for 'accessibilityLabel' on SelectBox (section: SelectBox, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "accessibilityLabel__static",
+      "description": "Conformance fixture for 'accessibilityLabel' on SelectBox (section: SelectBox, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_accessibilityLabel__static"
+        }
+      ]
+    }
+  ]
+}

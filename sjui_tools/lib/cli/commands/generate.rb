@@ -1,0 +1,392 @@
+# frozen_string_literal: true
+
+require 'optparse'
+require_relative '../../core/config_manager'
+require_relative '../../core/project_finder'
+require_relative '../../core/converter_generator_core'
+
+module SjuiTools
+  module CLI
+    module Commands
+      class Generate
+        SUBCOMMANDS = {
+          'view' => 'Generate a new view with JSON and binding',
+          'partial' => 'Generate a partial view',
+          'collection' => 'Generate a collection view',
+          'binding' => 'Not a generator: `sjui build` writes the binding files (UIKit)',
+          'converter' => 'Generate a custom converter',
+          'adapter' => 'Generate adapter for existing View (for Dynamic mode)'
+        }.freeze
+
+        def run(args)
+          subcommand = args.shift
+
+          if subcommand.nil? || subcommand == 'help'
+            show_help
+            return
+          end
+
+          unless SUBCOMMANDS.key?(subcommand)
+            puts "Unknown generate command: #{subcommand}"
+            show_help
+            exit 1
+          end
+
+          # Detect mode
+          mode = Core::ConfigManager.detect_mode
+
+          case subcommand
+          when 'view'
+            generate_view(args, mode)
+          when 'partial'
+            generate_partial(args, mode)
+          when 'collection'
+            generate_collection(args, mode)
+          when 'binding'
+            # Until 1.9.0 this branch read `when 'uikit'`, which no
+            # subcommand is: `sjui g binding X` did nothing, said nothing and
+            # exited 0 (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
+            generate_binding(args, mode)
+          when 'converter'
+            generate_converter(args, mode)
+          when 'adapter'
+            generate_adapter(args, mode)
+          end
+        end
+
+        private
+
+        def generate_view(args, mode)
+          options = parse_view_options(args)
+          name = args.shift
+
+          if name.nil? || name.empty?
+            puts "Error: View name is required"
+            puts "Usage: sjui generate view <name> [options]"
+            exit 1
+          end
+
+          # Setup project paths
+          unless Core::ProjectFinder.setup_paths
+            puts "Error: Could not find project file (.xcodeproj or Package.swift)"
+            exit 1
+          end
+
+          case mode
+          when 'uikit'
+            require_relative '../../uikit/xcode_project/generators/view_generator'
+            generator = SjuiTools::UIKit::XcodeProject::Generators::ViewGenerator.new(name, options)
+            generator.generate
+          when 'swiftui'
+            require_relative '../../swiftui/generators/view_generator'
+            generator = SjuiTools::SwiftUI::Generators::ViewGenerator.new(name, options)
+            generator.generate
+          else
+            puts "Error: Unknown mode: #{mode}"
+            exit 1
+          end
+        end
+
+        def generate_partial(args, mode)
+          options = parse_overwrite_options(args)
+          name = args.shift
+
+          if name.nil? || name.empty?
+            puts "Error: Partial name is required"
+            puts "Usage: sjui generate partial <name>"
+            exit 1
+          end
+
+          # Setup project paths
+          unless Core::ProjectFinder.setup_paths
+            puts "Error: Could not find project file (.xcodeproj or Package.swift)"
+            exit 1
+          end
+
+          case mode
+          when 'uikit'
+            require_relative '../../uikit/xcode_project/generators/partial_generator'
+            project_file = Core::ProjectFinder.find_project_file
+            generator = SjuiTools::UIKit::XcodeProject::Generators::PartialGenerator.new(project_file, options)
+            generator.generate(name)
+          when 'swiftui'
+            require_relative '../../swiftui/generators/partial_generator'
+            generator = SjuiTools::SwiftUI::Generators::PartialGenerator.new(name, options)
+            generator.generate
+          else
+            puts "Error: Unknown mode: #{mode}"
+            exit 1
+          end
+        end
+
+        def generate_collection(args, mode)
+          options = parse_overwrite_options(args)
+          name = args.shift
+
+          if name.nil? || name.empty?
+            puts "Error: Collection name is required"
+            puts "Usage: sjui generate collection <name>"
+            exit 1
+          end
+
+          # Setup project paths
+          unless Core::ProjectFinder.setup_paths
+            puts "Error: Could not find project file (.xcodeproj or Package.swift)"
+            exit 1
+          end
+
+          case mode
+          when 'uikit'
+            require_relative '../../uikit/xcode_project/generators/collection_generator'
+            project_file = Core::ProjectFinder.find_project_file
+            generator = SjuiTools::UIKit::XcodeProject::Generators::CollectionGenerator.new(project_file, options)
+            generator.generate(name)
+          when 'swiftui'
+            require_relative '../../swiftui/generators/collection_generator'
+            generator = SjuiTools::SwiftUI::Generators::CollectionGenerator.new(name, options)
+            generator.generate
+          else
+            puts "Error: Unknown mode: #{mode}"
+            exit 1
+          end
+        end
+
+        def generate_binding(args, mode)
+          name = args.shift
+
+          if name.nil? || name.empty?
+            puts "Error: Binding name is required"
+            puts "Usage: sjui generate binding <name>"
+            exit 1
+          end
+
+          if mode != 'uikit'
+            puts "Binding generation is only available in UIKit mode"
+            exit 1
+          end
+
+          # There is no binding generator to call (the file this required
+          # never existed): a binding file is written from its layout by
+          # `sjui build`, and by `sjui g view / partial / collection`, which run
+          # it. Said, and not a success.
+          puts "sjui g binding #{name}: nothing written — binding files are not generated one by one; " \
+               "`sjui build` writes #{name.sub(/Binding\z/, '')}Binding.swift from its layout " \
+               "(and `sjui g view / partial / collection` run it)"
+          exit 1
+        end
+
+        def generate_converter(args, mode)
+          options = parse_converter_options(args)
+          name = args.shift
+
+          if name.nil? || name.empty?
+            puts "Error: Converter name is required"
+            puts "Usage: sjui generate converter <name> [options]"
+            exit 1
+          end
+
+          case mode
+          when 'uikit'
+            require_relative '../../uikit/xcode_project/generators/converter_generator'
+            generator = SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator.new(name, options)
+            generator.generate
+          when 'swiftui'
+            require_relative '../../swiftui/generators/converter_generator'
+            generator = SjuiTools::SwiftUI::Generators::ConverterGenerator.new(name, options)
+            generator.generate
+          else
+            puts "Error: Unknown mode: #{mode}"
+            exit 1
+          end
+        end
+
+        def parse_view_options(args)
+          options = {
+            root: false,
+            mode: nil
+          }
+
+          OptionParser.new do |opts|
+            opts.on('--root', 'Generate root view controller') do
+              options[:root] = true
+            end
+
+            opts.on('--mode MODE', 'Override mode (uikit, swiftui, dynamic)') do |mode|
+              options[:mode] = mode
+            end
+
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
+          end.parse!(args)
+
+          options
+        end
+
+        # --force / --skip-existing, for the commands that take no other
+        # option (partial, collection, adapter). Until 1.9.0 these commands
+        # parsed nothing, so both flags were ignored: `g partial --force`
+        # kept the file, `g collection --skip-existing` (SwiftUI) overwrote it.
+        def parse_overwrite_options(args)
+          options = {}
+          OptionParser.new do |opts|
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
+          end.parse!(args)
+          options
+        end
+
+        def parse_converter_options(args)
+          options = {
+            use_default_attributes: true,
+            attributes: {},
+            is_container: nil,  # nil means auto-detect based on children (SwiftUI only)
+            class_name: nil,
+            import_module: nil
+          }
+
+          OptionParser.new do |opts|
+            opts.on('--no-default-attributes', 'Do not use default attributes') do
+              options[:use_default_attributes] = false
+            end
+
+            opts.on('--container', 'Force component to be a container (handles children) [SwiftUI only]') do
+              options[:is_container] = true
+            end
+
+            opts.on('--no-container', 'Force component to not be a container (ignores children) [SwiftUI only]') do
+              options[:is_container] = false
+            end
+
+            opts.on('--class-name NAME', 'Custom class name for the view [UIKit only]') do |name|
+              options[:class_name] = name
+            end
+
+            opts.on('--import-module MODULE', 'Import module for the custom view [UIKit only]') do |module_name|
+              options[:import_module] = module_name
+            end
+
+            # The overwrite options the converter core has always read (its
+            # `may_write?`) — until 1.8.113 only rjui's CLI parsed them, so these were
+            # "invalid option" here while the scaffold header named --force.
+            opts.on('--force', 'Overwrite existing converter/scaffold files without prompting') do
+              options[:force] = true
+            end
+
+            opts.on('--skip-existing', 'Leave existing converter/scaffold files untouched (non-interactive)') do
+              options[:skip_existing] = true
+            end
+
+            # The component spec's prop descriptions, handed down by
+            # `jui g converter --from / --all` so attribute_definitions/<Name>.json
+            # keeps them instead of "<key> attribute".
+            opts.on('--attribute-descriptions JSON', 'Descriptions for the attribute definition: {"attr": "text"}') do |json|
+              begin
+                options[:attribute_descriptions] = JsonUIShared::ConverterGeneratorCore.parse_attribute_descriptions(json)
+              rescue ArgumentError => e
+                puts "Error: #{e.message}"
+                exit 1
+              end
+            end
+
+            opts.on('--attributes KEY:TYPE', 'Add custom attribute (can be used multiple times or comma-separated)') do |attr|
+              # Handle comma-separated attributes
+              split_top_level_commas(attr).each do |single_attr|
+                key, type = single_attr.strip.split(':', 2)
+                if key && type
+                  options[:attributes][key] = type
+                else
+                  puts "Error: Invalid attribute format. Use KEY:TYPE"
+                  exit 1
+                end
+              end
+            end
+          end.parse!(args)
+
+          options
+        end
+
+        # Split an --attributes list on top-level commas only. Spec prop
+        # types can contain commas themselves (multi-arg closure types like
+        # `((String, String) -> Void)?`) — commas nested in parens/brackets
+        # belong to the type, not the list.
+        def split_top_level_commas(str)
+          parts = []
+          depth = 0
+          current = +''
+          str.each_char do |ch|
+            case ch
+            when '(', '[' then depth += 1
+            when ')', ']' then depth -= 1
+            when ','
+              if depth.zero?
+                parts << current
+                current = +''
+                next
+              end
+            end
+            current << ch
+          end
+          parts << current unless current.empty?
+          parts
+        end
+
+        def generate_adapter(args, mode)
+          options = parse_overwrite_options(args)
+          name = args.shift
+
+          if name.nil? || name.empty?
+            puts "Error: View name is required"
+            puts "Usage: sjui generate adapter <name>"
+            puts "Example: sjui g adapter Home  # Creates HomeViewAdapter for HomeView"
+            exit 1
+          end
+
+          if mode != 'swiftui'
+            puts "Adapter generation is only available in SwiftUI mode"
+            exit 1
+          end
+
+          # Setup project paths (like other generators)
+          unless Core::ProjectFinder.setup_paths
+            puts "Error: Could not find project file (.xcodeproj or Package.swift)"
+            exit 1
+          end
+
+          require_relative '../../swiftui/generators/view_adapter_generator'
+          generator = SjuiTools::SwiftUI::Generators::ViewAdapterGenerator.new(name, options)
+          generator.generate
+        end
+
+        def show_help
+          puts "Usage: sjui generate SUBCOMMAND [options]"
+          puts
+          puts "Subcommands:"
+          SUBCOMMANDS.each do |cmd, desc|
+            puts "  #{cmd.ljust(12)} #{desc}"
+          end
+          puts
+          puts "Examples:"
+          puts "  sjui g view HomeView           # Generate a view"
+          puts "  sjui g view RootView --root    # Generate root view"
+          puts "  sjui g partial Header          # Generate a partial"
+          puts "  sjui g collection Post/Cell    # Generate collection cell"
+          puts
+          puts "  # Every command above keeps a file that exists: on a terminal it"
+          puts "  # asks first; any other stdin is not read and the file is kept."
+          puts "  # --skip-existing keeps it without asking, --force replaces it."
+          puts
+          puts "  # SwiftUI converter"
+          puts "  sjui g converter MyConverter   # Generate custom converter"
+          puts "  sjui g converter MyConverter --attributes text:String,color:Color"
+          puts
+          puts "  # UIKit converter"
+          puts "  sjui g converter MyCustomView  # Generate custom UIKit converter"
+          puts "  sjui g converter MyCustomView --attributes title:String,count:Int"
+          puts "  sjui g converter MyCustomView --class-name CustomUIView --import-module CustomModule"
+          puts
+          puts "  # View adapter for Dynamic mode (allows TabView to render existing views)"
+          puts "  sjui g adapter Home            # Creates HomeViewAdapter for HomeView"
+          puts "  sjui g adapter Search          # Creates SearchViewAdapter for SearchView"
+        end
+      end
+    end
+  end
+end

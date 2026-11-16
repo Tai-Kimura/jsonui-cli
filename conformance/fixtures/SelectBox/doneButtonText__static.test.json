@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/doneButtonText__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.doneButtonText (static)",
+    "description": "Conformance fixture for 'doneButtonText' on SelectBox (section: SelectBox, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "doneButtonText__static",
+      "description": "Conformance fixture for 'doneButtonText' on SelectBox (section: SelectBox, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_doneButtonText__static"
+        }
+      ]
+    }
+  ]
+}

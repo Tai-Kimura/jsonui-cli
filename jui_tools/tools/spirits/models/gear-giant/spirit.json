@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": {"ja": "歯車の巨人", "en": "Gear Giant"},
+  "weight": 1,
+  "spirit": {
+    "file": "spirit.glb", "at": "back", "scale": 0.8, "opacity": 0.6, "tint": "#ffc860",
+    "clips": {"appear": "appear", "loop": "loop", "leave": "leave"},
+    "material": {"kind": "ghost", "rim": "#fff0b0", "shade": "#5a4020", "rimK": 1.2, "pow": 2.0, "yFade": 0.6, "yFadeLen": 1.0},
+    "outline": {"color": "#2a1c08", "width": 0.02}
+  },
+  "parts": [{"file": "robot-goggles.glb", "at": "head"}],
+  "robot": {"hide": ["band"], "eyes": {"shape": "sharp", "color": "#ffb020"}, "pose": "type", "tag": "auto"},
+  "effects": {"afterimage": {"count": 3, "spreadDeg": 18}, "sparks": {"color": "#ffd060", "rate": 10, "rise": 1.2}},
+  "shouts": {"texts": {"ja": ["カチ", "ゴン"], "en": ["Clank", "Bong"]}, "everySec": 0.5, "style": {"fill": "#ffe08a", "stroke": "#3a2400", "skew": -10}}
+}

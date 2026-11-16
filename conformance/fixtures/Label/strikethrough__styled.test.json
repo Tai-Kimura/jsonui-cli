@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/strikethrough__styled.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.strikethrough (styled)",
+    "description": "Conformance fixture for 'strikethrough' on Label (section: Label, class: visual). Value under test: {\"color\": \"#FF0000\", \"lineStyle\": \"Single\"}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "strikethrough__styled",
+      "description": "Conformance fixture for 'strikethrough' on Label (section: Label, class: visual). Value under test: {\"color\": \"#FF0000\", \"lineStyle\": \"Single\"}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_strikethrough__styled"
+        }
+      ]
+    }
+  ]
+}

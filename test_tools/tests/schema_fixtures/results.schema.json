@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/results.schema.json",
+  "title": "JsonUI Test Results",
+  "description": "Standardized test-run results emitted by all platform drivers; consumed by `jsonui-test report`",
+  "type": "object",
+
+  "properties": {
+    "format": { "const": "jsonui-test-results" },
+    "version": { "const": 1 },
+    "platform": {
+      "type": "string",
+      "enum": ["ios", "android", "web"]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "The progress run id (progress.schema.json `run`) of the run this file records, so a reader can tell this file and the live progress lines of the same run apart from two runs. Written only in files at the default location (a run with no resultsPath); absent in a resultsPath file, where readers that predate it would reject the key."
+    },
+    "app": {
+      "type": "string",
+      "description": "Which app wrote this file: the Android target package, the iOS UI-test runner's bundle id (<ui test bundle id>.xctrunner), or the web project's package.json name (else the folder name). Names the default-location folder. Written only in default-location files."
+    },
+    "suites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "suiteName": { "type": "string" },
+          "file": {
+            "type": "string",
+            "description": "The test file this suite came from, the same string the progress records carry as `file` (e.g. screens/login.test.json, or `inline`). Lets a reader tie a result to a spec by path rather than by name. Written only in default-location files."
+          },
+          "totalDurationMs": { "type": "number", "minimum": 0 },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "testName": { "type": "string" },
+                "caseName": { "type": "string" },
+                "status": {
+                  "type": "string",
+                  "enum": ["passed", "failed", "skipped"]
+                },
+                "error": { "type": "string" },
+                "failureReason": {
+                  "type": "string",
+                  "enum": ["element-not-found", "timeout", "assertion", "invalid-test", "mock", "setup", "teardown", "launch", "action", "other"],
+                  "description": "Machine-readable counterpart to 'error', which is prose and changes between releases: consumers matched on sentences and one aggregation went silent when a sentence was deleted. Optional, and absent on drivers that predate it — absent means unknown, never 'no reason'. The vocabulary is the failure's STAGE, not the exception class: the three drivers do not share a taxonomy (ios has a typed action error, android throws IllegalArgumentException 75 times, web throws bare Error 80 times), so mapping classes would have produced three different enums. 'setup' and 'teardown' are the case's own fixture steps, which all three drivers record on separate code paths — a teardown failure says nothing about the behaviour under test. 'action' is an action that ran without achieving its effect; 'other' is unclassified and must carry prose in 'error' — a rising 'other' count is the signal that this list is short."
+                },
+                "skipReason": {
+                  "type": "string",
+                  "enum": ["platform", "responsive"],
+                  "description": "Why a skipped result was skipped (platform gate vs responsive gate); only meaningful when status is 'skipped'"
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "durationMs": { "type": "number", "minimum": 0 },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many times the case ran in total, retries included (1 = settled on the first run). Absent when the driver does not track attempts. Without this, a pass on the second attempt is byte-identical to a first-run pass and flake rates cannot be computed."
+                },
+                "flaky": {
+                  "type": "boolean",
+                  "description": "True when the case ultimately passed but needed more than one attempt. Absent when the driver does not track attempts; only meaningful when status is 'passed'"
+                },
+                "declaredOrientation": {
+                  "type": "string",
+                  "enum": ["portrait", "landscape"],
+                  "description": "The orientation this case asked for, after resolving the whole chain: a setOrientation step, else the file's top-level 'orientation', else the run default for this device's tier. Absent when the driver does not report orientation."
+                },
+                "observedOrientation": {
+                  "type": "string",
+                  "enum": ["portrait", "landscape"],
+                  "description": "The orientation the device was actually in, asked of the device rather than inferred from the declaration. Reported SEPARATELY from declaredOrientation on purpose: 'portrait' resolves to setOrientationNatural() on Android, and a tablet whose natural orientation is landscape does not turn portrait — so a run that declared landscape and executed in portrait would otherwise pass with nothing recording the difference. One field would assume the agreement this pair exists to measure. Absent when the driver does not report orientation."
+                }
+              },
+              "required": ["testName", "caseName", "status", "durationMs"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["suiteName", "results"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["format", "version", "platform", "suites"],
+  "additionalProperties": false
+}

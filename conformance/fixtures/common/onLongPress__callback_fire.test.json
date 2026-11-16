@@ -1,0 +1,46 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/onLongPress__callback_fire.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.onLongPress (callback_fire)",
+    "description": "Interactive conformance fixture for 'onLongPress' on Button (section: common, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "interactive",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "onLongPress__callback_fire",
+      "description": "Interactive conformance fixture for 'onLongPress' on Button (section: common, case: callback_fire). State contract: see manifest state / INTERACTIVE_HOST_CONTRACT.md.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "ready"
+        },
+        {
+          "action": "longPress",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "mirror",
+          "equals": "fired"
+        }
+      ]
+    }
+  ]
+}

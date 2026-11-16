@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/underline__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.underline (false)",
+    "description": "Conformance fixture for 'underline' on IconLabel (section: IconLabel, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "underline__false",
+      "description": "Conformance fixture for 'underline' on IconLabel (section: IconLabel, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_underline__false"
+        }
+      ]
+    }
+  ]
+}

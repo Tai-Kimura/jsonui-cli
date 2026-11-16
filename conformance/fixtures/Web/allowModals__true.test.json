@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/allowModals__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.allowModals (true)",
+    "description": "Conformance fixture for 'allowModals' on Web (section: Web, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "allowModals__true",
+      "description": "Conformance fixture for 'allowModals' on Web (section: Web, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_allowModals__true"
+        }
+      ]
+    }
+  ]
+}

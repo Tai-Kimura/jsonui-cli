@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/selectedIcon__checkmark-square-fill.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.selectedIcon (checkmark-square-fill)",
+    "description": "Conformance fixture for 'selectedIcon' on Radio (section: Radio, class: visual). Value under test: \"checkmark.square.fill\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "selectedIcon__checkmark-square-fill",
+      "description": "Conformance fixture for 'selectedIcon' on Radio (section: Radio, class: visual). Value under test: \"checkmark.square.fill\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_selectedIcon__checkmark-square-fill"
+        }
+      ]
+    }
+  ]
+}

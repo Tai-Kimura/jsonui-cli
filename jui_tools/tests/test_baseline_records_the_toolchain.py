@@ -1,0 +1,238 @@
+"""The baseline records the subject AND the tools that drew the picture.
+
+`rendered_by` held the library SHA — the subject. The tools that decide
+what the picture looks like (Xcode, the SDK, the simulator runtime, the
+device; on Android the API level and AGP) were recorded nowhere. So when
+an entry `moved`, the file could say "the library is the same / different"
+and nothing else: a token change in a new Xcode moves pictures that use
+none of the changed features, and from the baseline alone that is
+indistinguishable from a library regression.
+
+🔻 The mechanism was already there and one leg was already using it.
+`rendered_by` is a free-form dict, and the web leg has passed
+`chromium=<version>` since it was written. iOS and Android passed the
+library SHA only. Nothing had to be built — the empty half had to be
+filled, and an arm had to hold it filled.
+
+That is why the arms below are about the WORKFLOW and not only the writer:
+the writer accepted tool keys all along. What did not exist was anyone
+passing them, and nothing that noticed the absence.
+"""
+from __future__ import annotations
+
+import re
+import unittest
+from pathlib import Path
+
+from tests._shared_core import conformance_with_shared_core
+
+REPO = Path(__file__).resolve().parents[2]
+WORKFLOW = REPO / ".github" / "workflows" / "conformance-mobile.yml"
+
+# 🔻 THE INVOCATION'S SHAPE CHANGED AND THIS REGEX DID NOT. It read the flags
+# out of one long `python -c` line (`'--rendered-by','key=`). When the report
+# job became a shell block that builds an args array — so a run missing a leg
+# can still judge the legs it has — the pairs moved to
+# `args+=(--rendered-by "key=…")` and this matched NOTHING. The arms below then
+# asserted against an empty set and went red, which is the honest outcome: the
+# control arm ("no --rendered-by at all") is exactly what fired first.
+#
+# Both spellings are accepted, so the arm keeps working through the next move.
+_RENDERED_BY = re.compile(r"""--rendered-by['",\s]+['"]?([A-Za-z0-9_.]+)=""")
+
+
+class TheWorkflowPassesToolsNotOnlyTheSubject(unittest.TestCase):
+    """Both halves, for every platform that bakes pictures."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = WORKFLOW.read_text(encoding="utf-8")
+        cls.keys = set(_RENDERED_BY.findall(cls.text))
+
+    def test_the_gate_is_still_the_place_that_passes_them(self):
+        """Positive control: if the flag moved, every arm below goes quiet."""
+        self.assertGreater(
+            len(self.keys), 0, "no --rendered-by in the workflow — the arms below measure nothing"
+        )
+
+    def test_every_platform_records_its_subject(self):
+        for key in ("swiftjsonui.src", "kotlinjsonui.src", "rjui.src"):
+            self.assertIn(key, self.keys, f"{key} missing — the subject is unrecorded")
+
+    def test_every_platform_records_its_tools(self):
+        """The half that was empty. web already had `chromium`."""
+        for key in ("ios.toolchain", "android.toolchain", "chromium"):
+            self.assertIn(key, self.keys, f"{key} missing — the tools are unrecorded")
+
+    def test_the_tool_keys_are_fed_by_a_step_that_measures(self):
+        """A hardcoded string would satisfy the arm above and record a lie.
+
+        Each toolchain value must come from a job output, and that output
+        must come from a step that runs something.
+        """
+        for job, step_id in (("android", "android_toolchain"),):
+            self.assertIn(
+                f"toolchain: ${{{{ steps.{step_id}.outputs.spec }}}}",
+                self.text,
+                f"{job}: toolchain output is not wired to a step",
+            )
+            self.assertIn(f"id: {step_id}", self.text, f"{job}: no step with id {step_id}")
+        # iOS runs as shards (IOS_SHARDS), which have no single job output:
+        # each shard writes the measured spec into its meta.json, and ios-merge
+        # (which refuses shards that disagree) outputs it for the report.
+        self.assertIn("id: toolchain", self.text, "ios: no step with id toolchain")
+        self.assertIn('"${{ steps.toolchain.outputs.spec }}" > "$out/meta.json"', self.text,
+                      "ios: a shard does not record the measured toolchain")
+        self.assertIn("toolchain: ${{ steps.merge.outputs.toolchain }}", self.text,
+                      "ios-merge does not output the shards' toolchain")
+        self.assertIn("ios.toolchain=${{ needs.ios-merge.outputs.toolchain }}", self.text,
+                      "the report does not take the toolchain from ios-merge")
+
+    def _step(self, step_id: str) -> str:
+        """The step's own text, bounded by the NEXT step — not by a character count.
+
+        🔻 THIS USED TO SLICE 2000 CHARACTERS AND THAT MADE COMMENT LENGTH PART
+        OF THE PREDICATE. Adding nine lines of comment to the android step on
+        2026-09-15 pushed its `echo "spec=api_level=…"` past the window, and the
+        arm failed reporting that the step "does not record api_level=" — which
+        was false: the field was there, four lines further down. A test that
+        reads a fixed span asserts something about formatting while claiming to
+        assert something about content.
+        """
+        start = self.text.index(f"id: {step_id}")
+        rest = self.text[start:]
+        # Steps start with `      - name:` at a fixed indent in these workflows.
+        nxt = rest.find("\n      - name:")
+        return rest if nxt == -1 else rest[:nxt]
+
+    def test_ios_names_the_four_tools_that_move_pictures(self):
+        """Xcode / SDK / simulator OS / device. Dropping one loses a cause."""
+        block = self._step("toolchain")
+        for field in ("xcode=", "sdk=", "simulator_os=", "device="):
+            self.assertIn(field, block, f"ios toolchain does not record {field}")
+
+    def test_ios_reads_the_tools_instead_of_hardcoding_them(self):
+        block = self._step("toolchain")
+        self.assertIn("xcodebuild -version", block)
+        self.assertIn("--show-sdk-version", block)
+        self.assertIn("simctl list runtimes", block)
+
+    def test_android_names_its_tools(self):
+        block = self._step("android_toolchain")
+        for field in ("api_level=", "agp=", "gradle="):
+            self.assertIn(field, block, f"android toolchain does not record {field}")
+
+
+def _step_text(text: str, step_id: str) -> str:
+    """A step bounded by the NEXT step, not by a character count — see the note
+    on the helper above. These two call sites used [:2600] and were the same
+    defect waiting for the same trigger: a comment long enough to push the
+    assertion past the window."""
+    start = text.index(f"id: {step_id}")
+    rest = text[start:]
+    nxt = rest.find("\n      - name:")
+    return rest if nxt == -1 else rest[:nxt]
+
+
+class RecordingIsNotPinning(unittest.TestCase):
+    """The class above proves the tools are WRITTEN DOWN. That is a different
+    claim from their being CHOSEN, and the gap between the two was live.
+
+    `simctl` lists every runtime installed on the machine, not the ones the
+    selected Xcode shipped with, and the host script took the newest of them.
+    So the Xcode pin was honoured while the runtime underneath moved with the
+    runner image. The committed results carry the proof: the iOS runner version
+    goes 18.6 -> 26.2 -> 18.6 across four bakes (05d0fde0, 761cc64c, 290f96a7)
+    with the Xcode pin unchanged, and at 761cc64c the two iOS lanes disagreed
+    with EACH OTHER in one tree -- results/ios said ios-18.6 while
+    codegen/ios said ios-26.2, which is the pair `gate --parity` compares.
+
+    A faithful record of an unchosen input is not a small problem: it looks
+    exactly like a measurement.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_every_simulator_name_is_accompanied_by_a_runtime_pin(self):
+        """A device without a runtime is still 'whatever is newest'."""
+        # Anchored on a YAML assignment, not a substring: the first version of
+        # this arm counted `SIMULATOR_OS:` anywhere and matched the shell's
+        # `${SIMULATOR_OS:-<unset>}` inside the step body, reporting 4 pins for
+        # 3 devices. The predicate was wrong, not the workflow.
+        names = len(re.findall(r"^\s+SIMULATOR_NAME: ", self.text, re.M))
+        pins = len(re.findall(r"^\s+SIMULATOR_OS: ", self.text, re.M))
+        self.assertGreater(names, 0, "no SIMULATOR_NAME — this arm measures nothing")
+        self.assertEqual(
+            pins, names, f"{names} simulator selections but {pins} runtime pins"
+        )
+
+    def test_the_recorded_runtime_is_filtered_by_the_same_pin(self):
+        """Recording a runtime the run will not use is worse than recording none.
+
+        The toolchain step and the suite must apply one pin, or the manifest
+        holds a value that drew nothing.
+        """
+        block = _step_text(self.text, "toolchain")
+        self.assertIn("SIMULATOR_OS", block, "toolchain step ignores the pin")
+        self.assertNotIn(
+            'rs[-1]["version"] if rs else "unknown"\')',
+            block.replace("\n", ""),
+            "toolchain step still takes the newest installed runtime unfiltered",
+        )
+
+    def test_an_unmatched_pin_fails_instead_of_falling_through(self):
+        """Falling through to a neighbouring runtime is how an unpinned input
+        looked pinned for months."""
+        block = _step_text(self.text, "toolchain")
+        self.assertIn("no available iOS runtime matches", block)
+        self.assertIn("exit 1", block)
+
+    def test_the_ios_jobs_are_on_an_sdk_that_has_the_effect_under_test(self):
+        """iOS 26 attributes render as nothing on an iOS 18 SDK, and a fixture
+        that renders as nothing still produces a baseline that matches itself."""
+        pins = re.findall(r'xcode-version: "([0-9.]+)"', self.text)
+        self.assertTrue(pins, "no Xcode pin — this arm measures nothing")
+        for pin in pins:
+            self.assertGreaterEqual(
+                int(pin.split(".")[0]), 26, f"Xcode {pin} has no Liquid Glass SDK"
+            )
+
+
+class WhatTheRecordCannotDo(unittest.TestCase):
+    """Name the limits in an arm, so a later reader does not over-read it."""
+
+    def test_the_record_is_metadata_and_never_part_of_a_comparison(self):
+        """Folding tools into `hashes` would make an Xcode bump read as
+        "the picture changed" — the confusion this exists to end."""
+        from jui_cli.conformance import baseline
+
+        src = Path(baseline.__file__).read_text(encoding="utf-8")
+        head = src[: src.index('"hashes": hashes')]
+        self.assertIn('"rendered_by"', head, "rendered_by must be written outside hashes")
+
+    def test_a_local_bake_records_no_tools_by_default(self):
+        """Guessing them here would write a confident wrong answer — the
+        same reason the library SHA is absent unless passed."""
+        import tempfile
+
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed (jui-tools[conformance])")
+        from jui_cli.conformance import baseline
+        import json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = conformance_with_shared_core(tmp)
+            shots = conf / "artifacts" / "ios"
+            shots.mkdir(parents=True)
+            Image.new("L", (8, 8), 9).save(shots / "A.png")
+            baseline.update_baseline(conf, "ios")
+            m = _json.loads((conf / "baselines" / "local" / "ios.hashes.json").read_text())
+            self.assertEqual(m["rendered_by"], {})
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,452 @@
+# frozen_string_literal: true
+
+module KjuiTools
+  module Compose
+    module Helpers
+      class ImportManager
+        def self.get_imports_map(package_name = nil)
+          # Use provided package name or default to sample app
+          pkg_name = package_name || 'com.example.kotlinjsonui.sample'
+
+          {
+            lazy_column: "import androidx.compose.foundation.lazy.LazyColumn",
+            lazy_row: "import androidx.compose.foundation.lazy.LazyRow",
+            background: "import androidx.compose.foundation.background",
+            border: "import androidx.compose.foundation.border",
+            shape: ["import androidx.compose.foundation.shape.RoundedCornerShape",
+                    "import androidx.compose.ui.draw.clip",
+                    "import androidx.compose.ui.draw.clipToBounds"],
+            # Used when a border or shadow modifier renders without an
+            # accompanying `cornerRadius` — `RectangleShape` lives in a
+            # different package than `RoundedCornerShape`, so registering
+            # `:shape` alone is not enough.
+            rectangle_shape: "import androidx.compose.ui.graphics.RectangleShape",
+            text_align: "import androidx.compose.ui.text.style.TextAlign",
+            text_overflow: "import androidx.compose.ui.text.style.TextOverflow",
+            text_auto_size: "import androidx.compose.foundation.text.TextAutoSize",
+            text_style: "import androidx.compose.ui.text.TextStyle",
+            local_text_style: "import androidx.compose.material3.LocalTextStyle",
+            font_weight: "import androidx.compose.ui.text.font.FontWeight",
+            font_family: ["import androidx.compose.ui.text.font.Font",
+                          "import androidx.compose.ui.text.font.FontFamily"],
+            font_style: "import androidx.compose.ui.text.font.FontStyle",
+            font_spec: ["import com.kotlinjsonui.core.FontSpec",
+                        "import com.kotlinjsonui.core.ResolvedFont"],
+            text_unit: "import androidx.compose.ui.unit.TextUnit",
+            visual_transformation: "import androidx.compose.ui.text.input.PasswordVisualTransformation",
+            secure_text_field: ["import androidx.compose.material3.SecureTextField",
+                                "import androidx.compose.foundation.text.input.rememberTextFieldState"],
+            text_field_state: ["import androidx.compose.foundation.text.input.rememberTextFieldState",
+                               "import androidx.compose.foundation.text.input.TextFieldState"],
+            shadow: "import androidx.compose.ui.draw.shadow",
+            drop_shadow: ["import androidx.compose.ui.draw.dropShadow",
+                          "import androidx.compose.ui.graphics.shadow.Shadow"],
+            dp_offset: "import androidx.compose.ui.unit.DpOffset",
+            scale: "import androidx.compose.ui.draw.scale",
+            compose_key: "import androidx.compose.runtime.key",
+            arrangement: "import androidx.compose.foundation.layout.Arrangement",
+            absolute_offset: "import androidx.compose.foundation.layout.absoluteOffset",
+            offset: "import androidx.compose.foundation.layout.offset",
+            keyboard_type: ["import androidx.compose.foundation.text.KeyboardOptions",
+                            "import androidx.compose.ui.text.input.KeyboardType"],
+            keyboard_actions: "import androidx.compose.foundation.text.KeyboardActions",
+            keyboard_capitalization: "import androidx.compose.ui.text.input.KeyboardCapitalization",
+            focus_requester: ["import androidx.compose.ui.focus.FocusRequester",
+                              "import androidx.compose.ui.focus.focusRequester"],
+            focus_changed: "import androidx.compose.ui.focus.onFocusChanged",
+            software_keyboard_controller: "import androidx.compose.ui.platform.LocalSoftwareKeyboardController",
+            ime_action: "import androidx.compose.ui.text.input.ImeAction",
+            ime_padding: "import androidx.compose.foundation.layout.imePadding",
+            button_colors: "import androidx.compose.material3.ButtonDefaults",
+            button_padding: "import androidx.compose.foundation.layout.PaddingValues",
+            padding_values: "import androidx.compose.foundation.layout.PaddingValues",
+            text_decoration: "import androidx.compose.ui.text.style.TextDecoration",
+            # `contentInsetAdjustmentBehavior` — the safe-area inset a
+            # LazyColumn/LazyRow takes as contentPadding (plan 49 lane C).
+            window_insets: ["import androidx.compose.foundation.layout.WindowInsets",
+                            "import androidx.compose.foundation.layout.safeDrawing",
+                            "import androidx.compose.foundation.layout.asPaddingValues"],
+            # the safe-area overlap a scrollable adds (ContentInsetHelper).
+            safe_area_overlap: "import com.kotlinjsonui.components.rememberSafeAreaOverlap",
+            kjui_network_image: "import com.kotlinjsonui.image.KjuiNetworkImage",
+            window_insets_sides_enum: "import androidx.compose.foundation.layout.WindowInsetsSides",
+            window_insets_sides: ["import androidx.compose.foundation.layout.WindowInsetsSides",
+                                  "import androidx.compose.foundation.layout.only"],
+            # `keyboardAvoidancePadding` — the IME's current height, read to
+            # pad the scrollable only while the keyboard is up.
+            window_insets_ime: ["import androidx.compose.foundation.layout.WindowInsets",
+                                "import androidx.compose.foundation.layout.ime",
+                                "import androidx.compose.ui.platform.LocalDensity",
+                                "import androidx.compose.ui.unit.dp"],
+            # `Dp.Infinity` — the unresolved value of a bound maxWidth/maxHeight
+            # (a 0.dp cap would annihilate the view). Plan 49 lane C.
+            dp_infinity: "import androidx.compose.ui.unit.Dp",
+            # `safeAreaInsetPositions`: the system bars' inset on the named
+            # sides (SafeAreaEdges).
+            safe_area_sides: ["import androidx.compose.foundation.layout.WindowInsets",
+                              "import androidx.compose.foundation.layout.WindowInsetsSides",
+                              "import androidx.compose.foundation.layout.only",
+                              "import androidx.compose.foundation.layout.systemBars",
+                              "import androidx.compose.foundation.layout.windowInsetsPadding"],
+            shadow_style: ["import androidx.compose.ui.text.TextStyle",
+                           "import androidx.compose.ui.graphics.Shadow",
+                           "import androidx.compose.ui.geometry.Offset"],
+            switch_colors: "import androidx.compose.material3.SwitchDefaults",
+            slider_colors: "import androidx.compose.material3.SliderDefaults",
+            checkbox_colors: "import androidx.compose.material3.CheckboxDefaults",
+            dropdown_menu: ["import androidx.compose.material3.DropdownMenu",
+                            "import androidx.compose.material3.DropdownMenuItem",
+                            "import androidx.compose.ui.res.painterResource",
+                            "import androidx.compose.foundation.clickable"],
+            outlined_text_field: "import androidx.compose.material3.OutlinedTextField",
+            # `Icons.Filled.*` / `Icons.Outlined.*` are extension properties on
+            # `Icons.Filled` / `Icons.Outlined`, so both the `Icons` object and the
+            # per-style wildcard extension imports are required. painterResource
+            # stays for the drawable-resource fallback path.
+            icons: ["import androidx.compose.ui.res.painterResource",
+                    "import androidx.compose.material.icons.Icons",
+                    "import androidx.compose.material.icons.filled.*",
+                    "import androidx.compose.material.icons.outlined.*"],
+            # TabView tab icons (tabview_component): selected tabs emit
+            # Icons.Filled.<Name>, unselected tabs Icons.Outlined.<Name>
+            # (the Material convention the dynamic component also follows).
+            material_icons: ["import androidx.compose.material.icons.Icons",
+                             "import androidx.compose.material.icons.filled.*",
+                             "import androidx.compose.material.icons.outlined.*"],
+            icon_button: "import androidx.compose.material3.IconButton",
+            clickable: "import androidx.compose.foundation.clickable",
+            # onLongPress Initial-pass detector (ModifierBuilder.build_long_pressable).
+            # withTimeout / viewConfiguration / awaitPointerEvent are
+            # AwaitPointerEventScope members — no import needed.
+            long_press_gesture: ["import androidx.compose.foundation.gestures.awaitEachGesture",
+                                 "import androidx.compose.foundation.gestures.awaitFirstDown",
+                                 "import androidx.compose.ui.input.pointer.PointerEvent",
+                                 "import androidx.compose.ui.input.pointer.PointerEventPass",
+                                 "import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException",
+                                 "import androidx.compose.ui.input.pointer.pointerInput"],
+            # tapBackground on a node with a click: the watched press
+            # (ModifierBuilder.background_stage).
+            pressed_background: ["import androidx.compose.foundation.gestures.awaitEachGesture",
+                                 "import androidx.compose.foundation.gestures.awaitFirstDown",
+                                 "import androidx.compose.foundation.gestures.waitForUpOrCancellation",
+                                 "import androidx.compose.runtime.getValue",
+                                 "import androidx.compose.runtime.mutableStateOf",
+                                 "import androidx.compose.runtime.remember",
+                                 "import androidx.compose.runtime.setValue",
+                                 "import androidx.compose.ui.input.pointer.pointerInput"],
+            # onPan drag detector (ModifierBuilder.build_pannable).
+            pan_gesture: ["import androidx.compose.foundation.gestures.detectDragGestures",
+                          "import androidx.compose.ui.geometry.Offset",
+                          "import androidx.compose.ui.input.pointer.pointerInput"],
+            # onPinch zoom loop (ModifierBuilder.build_pinchable).
+            # calculateZoom is a top-level function in foundation.gestures.
+            pinch_gesture: ["import androidx.compose.foundation.gestures.awaitEachGesture",
+                            "import androidx.compose.foundation.gestures.awaitFirstDown",
+                            "import androidx.compose.foundation.gestures.calculateZoom",
+                            "import androidx.compose.ui.input.pointer.PointerEvent",
+                            "import androidx.compose.ui.input.pointer.pointerInput"],
+            radio_colors: "import androidx.compose.material3.RadioButtonDefaults",
+            async_image: "import coil3.compose.AsyncImage",
+            image_request: "import coil3.request.ImageRequest",
+            # Coil 3: headers live on NetworkHeaders, applied through the
+            # `httpHeaders` extension on the request builder.
+            network_headers: ["import coil3.network.NetworkHeaders",
+                              "import coil3.network.httpHeaders"],
+            content_scale: "import androidx.compose.ui.layout.ContentScale",
+            lazy_grid: ["import androidx.compose.foundation.lazy.grid.LazyVerticalGrid",
+                        "import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid",
+                        "import androidx.compose.foundation.lazy.grid.GridCells",
+                        "import androidx.compose.ui.Alignment"],
+            lazy_grid_state: "import androidx.compose.foundation.lazy.grid.rememberLazyGridState",
+            horizontal_pager: ["import androidx.compose.foundation.pager.HorizontalPager",
+                               "import androidx.compose.foundation.pager.rememberPagerState"],
+            snapshot_flow: "import androidx.compose.runtime.snapshotFlow",
+            flow_first: "import kotlinx.coroutines.flow.first",
+            flow_collect_latest: "import kotlinx.coroutines.flow.collectLatest",
+            flow_drop: "import kotlinx.coroutines.flow.drop",
+            remember_updated_state: "import androidx.compose.runtime.rememberUpdatedState",
+            # Button pressed-state colours (highlightBackground/highlightColor).
+            pressed_state: ["import androidx.compose.foundation.interaction.MutableInteractionSource",
+                            "import androidx.compose.foundation.interaction.collectIsPressedAsState",
+                            "import androidx.compose.runtime.getValue",
+                            "import androidx.compose.runtime.remember"],
+            # ScrollView paging: per-item snap on the existing Lazy list.
+            snap_fling: ["import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior",
+                         "import androidx.compose.foundation.lazy.rememberLazyListState"],
+            # ScrollView.defaultScrollAnchor without paging: the state alone.
+            lazy_list_state: "import androidx.compose.foundation.lazy.rememberLazyListState",
+            # The one-shot anchor scroll (suspend, item-agnostic).
+            scroll_by: "import androidx.compose.foundation.gestures.scrollBy",
+            # A flow Collection with `lazy` in effect scrolls vertically inside
+            # its own bounds (2026-09-03 ruling). FlowRow is not a lazy
+            # container, so the scroll is a modifier on it rather than a
+            # LazyColumn — "scrolls" is the whole contract, not virtualization.
+            vertical_scroll: ["import androidx.compose.foundation.verticalScroll",
+                              "import androidx.compose.foundation.rememberScrollState"],
+            # A flow's scrollTo (collection_component flow_scroll_code): the
+            # cells' places in the scrolled content, recorded as they are laid
+            # out.
+            on_globally_positioned: "import androidx.compose.ui.layout.onGloballyPositioned",
+            # The wrapContent Collection's Column (collection_component
+            # generate_non_lazy): a layout step that bounds the height the
+            # verticalScroll measures in.
+            layout_modifier: "import androidx.compose.ui.layout.layout",
+            # The matchParent flow arm: scroll decided by the parent's
+            # constraints on the device, as the dynamic renderer decides it.
+            box_with_constraints: ["import androidx.compose.foundation.layout.BoxWithConstraints",
+                                   "import androidx.compose.foundation.layout.fillMaxSize",
+                                   "import androidx.compose.foundation.layout.fillMaxWidth"],
+            color_manager: "import com.kotlinjsonui.generated.ColorManager",
+            # Collection listStyle chrome — the shared library composable
+            # both paths render (CollectionCellChrome).
+            collection_cell_chrome: "import com.kotlinjsonui.components.CollectionCellChrome",
+            material_theme: "import androidx.compose.material3.MaterialTheme",
+            grid_item_span: "import androidx.compose.foundation.lazy.grid.GridItemSpan",
+            # 🔻 `KjuiWebViewClient`, NOT a bare `android.webkit.WebViewClient`.
+            # The bare one overrides nothing, so the generated WebView emits no
+            # completion signal and a conformance host captures the page at an
+            # uncontrolled moment. Measured 2026-09-16 on conformance-mobile run
+            # 34987243780: the dynamic leg reported markerAbsent=0 and the
+            # codegen leg markerAbsent=2 — same run, same emulator image. The
+            # library client is behaviourally identical and counts the load.
+            webview: ["import android.webkit.WebView",
+                      "import android.webkit.WebChromeClient",
+                      "import com.kotlinjsonui.core.KjuiWebViewClient",
+                      "import androidx.compose.ui.viewinterop.AndroidView"],
+            # Web onLoadFailed / reloadToken (Helpers::WebLoadState).
+            web_load_state: "import com.kotlinjsonui.core.KjuiWebLoadState",
+            constraint_layout: ["import androidx.constraintlayout.compose.ConstraintLayout",
+                                "import androidx.constraintlayout.compose.Dimension"],
+            remember_state: ["import androidx.compose.runtime.remember",
+                             "import androidx.compose.runtime.mutableStateOf",
+                             "import androidx.compose.runtime.getValue",
+                             "import androidx.compose.runtime.setValue"],
+            remember: "import androidx.compose.runtime.remember",
+            # The object face of underline/strikethrough with a declared
+            # colour (text_component#decoration_color_expression): the native
+            # TextDecoration cannot colour a line, so the shared library
+            # device draws it from the captured TextLayoutResult.
+            styled_text_lines: ["import com.kotlinjsonui.components.StyledLine",
+                                "import com.kotlinjsonui.components.StyledLineState",
+                                "import com.kotlinjsonui.components.styledTextLines"],
+            # A Label's line height from L, one undeclared line
+            # (attribute_semantics lineHeightMultipleBase / lineSpacingBetween).
+            # LocalDensity: LabelLineHeight puts the line height on the
+            # device's pixel grid.
+            label_line_height: ["import com.kotlinjsonui.components.LabelLineHeight",
+                                "import androidx.compose.ui.platform.LocalDensity"],
+            line_spacing_between: "import com.kotlinjsonui.components.lineSpacingBetween",
+            # Every text size through the text size rule (Helpers::FontScale).
+            json_ui_font_size: "import com.kotlinjsonui.core.jsonUIFontSize",
+            json_ui_letter_spacing: "import com.kotlinjsonui.core.jsonUILetterSpacing",
+            json_ui_line_height: "import com.kotlinjsonui.core.jsonUILineHeight",
+            graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
+            LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
+            launched_effect: "import androidx.compose.runtime.LaunchedEffect",
+            # A Collection's scrollTo landing runs in the composition's scope,
+            # outside the effect the value keys (collection_component
+            # scroll_to_effect).
+            scroll_to_landing: ["import androidx.compose.runtime.rememberCoroutineScope",
+                                "import kotlinx.coroutines.launch"],
+            # A Collection's anchored scrollTo (collection_component
+            # anchored_scroll_code): the difference to the anchor, scrolled.
+            # Its own key: it was a second :scroll_by (jsonui-cli 1.9.23),
+            # which overwrote the ScrollView anchor's and gave every
+            # ScrollView with defaultScrollAnchor an unused animateScrollBy
+            # import (kjui-import-manager-duplicate-scroll-by-key).
+            anchored_scroll_by: ["import androidx.compose.foundation.gestures.scrollBy",
+                                 "import androidx.compose.foundation.gestures.animateScrollBy"],
+            # The screen's Collection scrollTo memory (KotlinJsonUI
+            # CollectionScrollMemory): read by a Collection with an id,
+            # provided at the root of the view that holds one.
+            collection_scroll_memory: "import com.kotlinjsonui.components.LocalCollectionScrollMemory",
+            provide_collection_scroll_memory: "import com.kotlinjsonui.components.ProvideCollectionScrollMemory",
+            disposable_effect: "import androidx.compose.runtime.DisposableEffect",
+            alignment: "import androidx.compose.ui.Alignment",
+            bias_alignment: "import androidx.compose.ui.BiasAlignment",
+            circle_shape: "import androidx.compose.foundation.shape.CircleShape",
+            alpha: "import androidx.compose.ui.draw.alpha",
+            semantics: "import androidx.compose.ui.semantics.semantics",
+            # A TextField's contentType as Compose's autofill hint.
+            autofill_content_type: ["import androidx.compose.ui.semantics.semantics",
+                                    "import androidx.compose.ui.semantics.contentType",
+                                    "import androidx.compose.ui.autofill.ContentType"],
+            role: "import androidx.compose.ui.semantics.Role",
+            semantics_disabled: ["import androidx.compose.ui.semantics.semantics",
+                                 "import androidx.compose.ui.semantics.disabled"],
+            # A TabView item's badge, on the item where a screen reader reads it.
+            semantics_state_description: ["import androidx.compose.ui.semantics.semantics",
+                                          "import androidx.compose.ui.semantics.stateDescription"],
+            # userInteractionEnabled consumes events in the Initial pass.
+            interaction_blocker: ["import androidx.compose.ui.input.pointer.PointerEventPass",
+                                  "import androidx.compose.ui.input.pointer.pointerInput"],
+            test_tag: "import androidx.compose.ui.platform.testTag",
+            test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
+            # A control's screen-reader name, and a node read out when it
+            # changes (shared/core/control_accessibility.rb).
+            semantics_content_description: ["import androidx.compose.ui.semantics.semantics",
+                                            "import androidx.compose.ui.semantics.contentDescription"],
+            semantics_live_region: ["import androidx.compose.ui.semantics.semantics",
+                                    "import androidx.compose.ui.semantics.liveRegion",
+                                    "import androidx.compose.ui.semantics.LiveRegionMode"],
+            semantics_selected: ["import androidx.compose.ui.semantics.semantics",
+                                 "import androidx.compose.ui.semantics.selected"],
+            image: "import androidx.compose.foundation.Image",
+            color_filter: "import androidx.compose.ui.graphics.ColorFilter",
+            local_content_color: "import androidx.compose.material3.LocalContentColor",
+            painter_class: ["import androidx.compose.ui.graphics.painter.Painter",
+                            "import androidx.compose.ui.geometry.Size",
+                            "import androidx.compose.ui.graphics.drawscope.DrawScope"],
+            local_context: "import androidx.compose.ui.platform.LocalContext",
+            painter_resource: "import androidx.compose.ui.res.painterResource",
+            string_resource: "import androidx.compose.ui.res.stringResource",
+            color_resource: "import androidx.compose.ui.res.colorResource",
+            r_class: "import #{pkg_name}.R",
+            to_argb: "import androidx.compose.ui.graphics.toArgb",
+            gradient: "import androidx.compose.ui.graphics.Brush",
+            blur: "import androidx.compose.ui.draw.blur",
+            navigation: ["import androidx.navigation.NavController",
+                         "import androidx.navigation.compose.NavHost",
+                         "import androidx.navigation.compose.composable",
+                         "import androidx.navigation.compose.rememberNavController"],
+            selectbox_component: "import com.kotlinjsonui.components.SelectBox",
+            selectbox_caret: "import com.kotlinjsonui.components.SelectBoxCaret",
+            date_selectbox_component: "import com.kotlinjsonui.components.DateSelectBox",
+            simple_date_selectbox_component: "import com.kotlinjsonui.components.SimpleDateSelectBox",
+            visibility_wrapper: "import com.kotlinjsonui.components.VisibilityWrapper",
+            custom_textfield: ["import com.kotlinjsonui.components.CustomTextField",
+                               "import com.kotlinjsonui.components.CustomTextFieldWithMargins"],
+            partial_attributes_text: ["import com.kotlinjsonui.components.PartialAttributesText",
+                                      "import com.kotlinjsonui.components.PartialAttribute"],
+            segment: ["import com.kotlinjsonui.components.Segment",
+                      "import com.kotlinjsonui.components.SegmentTab"],
+            dynamic_mode_manager: "import com.kotlinjsonui.core.DynamicModeManager",
+            configuration: "import com.kotlinjsonui.core.Configuration",
+            safe_dynamic_view: "import com.kotlinjsonui.components.SafeDynamicView",
+            circular_progress_indicator: "import androidx.compose.material3.CircularProgressIndicator",
+            wrapContentSize: "import androidx.compose.foundation.layout.wrapContentSize",
+            box: "import androidx.compose.foundation.layout.Box",
+            DynamicView: "import com.kotlinjsonui.dynamic.DynamicView",
+            JsonObject: "import com.google.gson.JsonObject",
+            JsonParser: "import com.google.gson.JsonParser",
+            keyboard_avoidance: "import com.kotlinjsonui.components.keyboardAvoidance",
+            dashed_border: ["import com.kotlinjsonui.dynamic.helpers.dashedBorder",
+                            "import com.kotlinjsonui.dynamic.helpers.dottedBorder"],
+            border_stroke: "import androidx.compose.foundation.BorderStroke",
+            intrinsic_size: "import androidx.compose.foundation.layout.IntrinsicSize",
+            distribution_fill: ["import com.kotlinjsonui.components.DistributionFillRow",
+                                "import com.kotlinjsonui.components.DistributionFillColumn"],
+            # A reorderable Collection (ticket jui-collection-drag-to-reorder): KotlinJsonUI's
+            # library (com.kotlinjsonui.components.CollectionReorder*).
+            collection_reorder: ["import com.kotlinjsonui.components.CollectionReorder",
+                                 "import com.kotlinjsonui.components.CollectionReorderRow",
+                                 "import com.kotlinjsonui.components.CollectionReorderScope",
+                                 "import com.kotlinjsonui.components.collectionReorderActions",
+                                 "import com.kotlinjsonui.components.collectionReorderContainer",
+                                 "import com.kotlinjsonui.components.rememberCollectionReorder"],
+            collection_reorder_handle: "import com.kotlinjsonui.components.collectionReorderHandle",
+            collection_stack: ["import com.kotlinjsonui.components.CollectionStack",
+                               "import com.kotlinjsonui.components.CollectionStackMode",
+                               "import com.kotlinjsonui.components.CollectionStackAxis"],
+            safe_area_config: ["import com.kotlinjsonui.dynamic.LocalSafeAreaConfig",
+                               "import com.kotlinjsonui.dynamic.SafeAreaConfig"],
+            # EmbedContainer + friends live in the MAIN library module (not
+            # `library-dynamic`). Static codegen emits `EmbedContainer(...)`
+            # into every consumer GeneratedView, which has to compile in
+            # release builds where the dynamic artifact isn't on the
+            # classpath. KotlinJsonUI >= 2.8.2 ships these at
+            # com.kotlinjsonui.embed.*.
+            embed_container: ["import com.kotlinjsonui.embed.EmbedContainer",
+                              "import com.kotlinjsonui.embed.EmbedNavigationMode"],
+            # Registered ONLY for navigationMode:"isolated" call sites (new in
+            # KotlinJsonUI 2.12.0) — keeping it out of :embed_container keeps
+            # delegate-mode generated files byte-identical AND makes isolated
+            # output fail to compile against pre-2.12.0 libraries (the
+            # version-skew guard).
+            embed_isolated_navigation: "import com.kotlinjsonui.embed.EmbedIsolatedNavigation",
+            # Child-side embed init-params wiring, emitted unconditionally at
+            # the top of every GeneratedView body (no-op when the screen is
+            # not embedded). New in KotlinJsonUI 2.13.0.
+            drive_embed_init_params: "import com.kotlinjsonui.embed.DriveEmbedInitParams",
+            # Screen identity beacon, emitted for SCREEN layouts only (never
+            # cells or partials). New in KotlinJsonUI 2.15.0 — registering it
+            # only at marked call sites keeps unmarked output byte-identical
+            # and makes marked output fail to compile against an older
+            # library (the version-skew guard).
+            screen_marker: "import com.kotlinjsonui.core.ScreenMarker",
+            # The test bridge beside the marker (jsonui-test-runner spec
+            # 10.3-10.4), screens only. New in KotlinJsonUI 2.44.0.
+            test_bridge: "import com.kotlinjsonui.core.rememberTestBridge",
+            embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
+            viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
+            # `hiltViewModel(viewModelStoreOwner, key)`. Works for both
+            # @HiltViewModel-annotated VMs (resolved via HiltViewModelFactory)
+            # and plain no-arg VMs (fallback to NewInstanceFactory). Used by
+            # EmbedComponent so child ViewModels load in Hilt projects without
+            # NoSuchMethodException on missing no-arg ctor.
+            #
+            # The androidx.hilt.navigation.compose spelling is deprecated in
+            # favour of this one (the deprecation carries the ReplaceWith
+            # verbatim). A project declaring hilt-navigation-compose gets the
+            # new module transitively through its api dependency, so nothing
+            # has to be added downstream. VERIFIED FLOOR: 1.4.0 — the version
+            # measured. Which earlier version first shipped this package was
+            # NOT measured, so 1.3.x may or may not work.
+            hilt_viewmodel: "import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel",
+            composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
+            local_interaction_stopped: "import com.kotlinjsonui.core.LocalInteractionStopped",
+            # A container's tintColor handed down (InheritedTint): the local
+            # it provides, and the read a control makes where it declares no
+            # accent of its own.
+            local_jsonui_tint: "import com.kotlinjsonui.core.LocalJsonUITint",
+            jsonui_tint_or: "import com.kotlinjsonui.core.jsonUITintOr",
+            # A group of single Radios written with a static selection keeps it in
+            # the view's own map (RadioComponent / ComposeBuilder
+            # #provide_radio_groups): the provider, its CompositionLocal and the
+            # observable map.
+            radio_group_selections: ["import androidx.compose.runtime.CompositionLocalProvider",
+                                     "import androidx.compose.runtime.compositionLocalOf",
+                                     "import androidx.compose.runtime.mutableStateMapOf",
+                                     "import androidx.compose.runtime.remember"],
+            # Responsive branches read LocalWindowInfo.containerSize (pixels)
+            # and convert to dp via LocalDensity — replaces the deprecated
+            # LocalConfiguration.screenWidthDp / .orientation reads.
+            local_window_info: ["import androidx.compose.ui.platform.LocalWindowInfo",
+                                "import androidx.compose.ui.platform.LocalDensity"]
+          }
+        end
+
+        def self.update_imports(content, required_imports)
+          imports_map = get_imports_map
+
+          required_imports.each do |import_key|
+            import_lines = imports_map[import_key]
+            next unless import_lines
+
+            if import_lines.is_a?(Array)
+              import_lines.each do |import_line|
+                unless content.include?(import_line)
+                  # Add import after the last import statement
+                  if content =~ /^(import .+\n)+/m
+                    last_import_end = $~.end(0)
+                    content.insert(last_import_end, "#{import_line}\n")
+                  end
+                end
+              end
+            else
+              unless content.include?(import_lines)
+                # Add import after the last import statement
+                if content =~ /^(import .+\n)+/m
+                  last_import_end = $~.end(0)
+                  content.insert(last_import_end, "#{import_lines}\n")
+                end
+              end
+            end
+          end
+
+          content
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SafeAreaView/direction__righttoleft.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SafeAreaView.direction (righttoleft)",
+    "description": "Conformance fixture for 'direction' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: \"rightToLeft\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SafeAreaView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "direction__righttoleft",
+      "description": "Conformance fixture for 'direction' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: \"rightToLeft\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SafeAreaView_direction__righttoleft"
+        }
+      ]
+    }
+  ]
+}

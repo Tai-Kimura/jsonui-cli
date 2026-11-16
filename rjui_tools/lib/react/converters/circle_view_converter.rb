@@ -1,0 +1,98 @@
+# frozen_string_literal: true
+
+require_relative 'base_converter'
+
+module RjuiTools
+  module React
+    module Converters
+      class CircleViewConverter < BaseConverter
+        def convert(indent = 2)
+          class_name = build_class_name
+          style_attr = build_circle_style
+          children = convert_children(indent)
+          id_attr = build_id_attr
+          testid_attr = build_testid_attr
+          tag_attr = build_tag_attr
+          onclick_attr = build_onclick_attr
+
+          jsx = if children.empty?
+            "#{indent_str(indent)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr} />"
+          else
+            <<~JSX.chomp
+              #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
+              #{children}
+              #{indent_str(indent)}</div>
+            JSX
+          end
+
+          wrap_with_visibility(jsx, indent)
+        end
+
+        protected
+
+        def build_class_name
+          classes = [super]
+
+          # Make it circular
+          classes << 'rounded-full'
+
+          # Overflow hidden to clip children
+          classes << 'overflow-hidden'
+
+          # Flex for centering content
+          classes << 'flex items-center justify-center' if json['child'] || json['children']
+
+          # Cursor pointer for clickable items
+          classes << 'cursor-pointer' if tap_handler?(attributes['onClick'], attributes['onclick'])
+
+          finalize_classes(classes)
+        end
+
+        def build_circle_style
+          style_parts = []
+
+          # Fill color (takes precedence over background for circle)
+          # A bound fill is the base's (`--jui-bg` and its class); an inline
+          # backgroundColor here beat it, unresolved by ColorManager.
+          fill_color = attributes['background']
+          style_parts << "backgroundColor: '#{fill_color}'" if fill_color && !has_binding?(fill_color)
+
+          # Border/Stroke
+          stroke_color = attributes['borderColor']
+          stroke_width = attributes['borderWidth']
+          stroke_style = attributes['borderStyle'] || 'solid'
+
+          # A bound border is the base's (`--jui-border-*` on the ::after);
+          # written here as well it went inline with the `@{…}` text in it.
+          if (stroke_color || stroke_width) && !border_bound?
+            stroke_width ||= 1
+            stroke_color ||= '#000000'
+            style_parts << "border: '#{stroke_width}px #{stroke_style} #{stroke_color}'"
+          end
+
+          # Shadow — the one value every web path writes (shadow_css_expr), with
+          # its declared defaults; the circle's own `x` / `y` / `blur` spellings
+          # read as offsetX / offsetY / radius. One the base already made a
+          # style (bound, or a colors.json key) is not written twice: two
+          # boxShadow keys do not compile.
+          shadow = attributes['shadow']
+          if shadow.is_a?(Hash) && !dynamic_styles.include?('boxShadow') # a style key, not an attribute read
+            circle = { 'color' => shadow['color'], 'opacity' => shadow['opacity'],
+                       'offsetX' => shadow['x'] || shadow['offsetX'], 'offsetY' => shadow['y'] || shadow['offsetY'],
+                       'radius' => shadow['blur'] || shadow['radius'] }.compact
+            style_parts << "boxShadow: #{shadow_css_expr(circle)}"
+          end
+
+          return build_style_attr if style_parts.empty?
+
+          existing_style = build_style_attr
+          if existing_style.empty?
+            " style={{ #{style_parts.join(', ')} }}"
+          else
+            existing_style.sub(/\}\}$/) { ", #{style_parts.join(', ')} }}" }
+          end
+        end
+      end
+    end
+  end
+end

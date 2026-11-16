@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/hintAttributes__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.hintAttributes (static)",
+    "description": "Conformance fixture for 'hintAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"lineHeightMultiple\": 1.5}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintAttributes__static",
+      "description": "Conformance fixture for 'hintAttributes' on Label (section: Label, class: visual). Value under test: {\"font\": \"bold\", \"fontSize\": 24, \"fontColor\": \"#FF0000\", \"lineHeightMultiple\": 1.5}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_hintAttributes__static"
+        }
+      ]
+    }
+  ]
+}

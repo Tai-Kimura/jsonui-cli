@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/renderingMode__template.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.renderingMode (template)",
+    "description": "Conformance fixture for 'renderingMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"template\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "renderingMode__template",
+      "description": "Conformance fixture for 'renderingMode' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"template\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_renderingMode__template"
+        }
+      ]
+    }
+  ]
+}

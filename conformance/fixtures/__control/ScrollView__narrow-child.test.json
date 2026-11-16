@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/ScrollView__narrow-child.layout.json"
+  },
+  "metadata": {
+    "name": "conformance ScrollView__narrow-child",
+    "description": "Control for the narrow-child ScrollViews: a 200x200 vertical ScrollView holding one 40x40 box and no gravity anywhere — the box at x 0 (gravityDefaults top|start).",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "ScrollView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "ScrollView__narrow-child",
+      "description": "Control for the narrow-child ScrollViews: a 200x200 vertical ScrollView holding one 40x40 box and no gravity anywhere — the box at x 0 (gravityDefaults top|start).",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "ScrollView_ScrollView__narrow-child"
+        }
+      ]
+    }
+  ]
+}

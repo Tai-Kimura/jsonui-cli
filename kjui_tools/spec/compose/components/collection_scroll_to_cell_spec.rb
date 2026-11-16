@@ -1,0 +1,1161 @@
+# frozen_string_literal: true
+
+require 'open3'
+require 'set'
+require 'tmpdir'
+require_relative '../../../lib/compose/components/collection_component'
+require_relative '../../../lib/compose/generators/cell_generator'
+require_relative '../../support/kotlin_compiler'
+
+# What a Collection's `scrollTo` names across sections (the orchestrator's ruling 2026-09-27;
+# the SSoT's Collection.scrollTo description, jsonui-cli 1.9.0): an Int is the
+# index of a CELL counted across the drawn sections in order — a section's
+# header or footer item, and a grid's filler item, is not counted; a String
+# (cellIdProperty) is the FIRST cell, in section order, whose key (its
+# cellId, else its cellIdProperty value) it is — and a key two sections share
+# is two items' key no more (a later section's is "<section>:<key>"). On the Kotlin paths a String
+# no cell has as its key is read, as before, as the lazy item index
+# ("0#<time>" — a consuming screen's bottom-most item under reverseLayout).
+#
+# Until jsonui-cli 1.9.0 the value was the lazy item index itself — every
+# header, footer and filler item counted — and a String was read as that
+# index, so a key scrolled nowhere.
+#
+# The arm RUNS the emitted code: compiled with kotlinc and run on the JVM
+# against stubs whose lazy scopes record the items the builder emits, in
+# order, each as what its content draws (a cell its letter and the index its
+# test tag carries, a header H, a footer F, an empty item `_`), and whose
+# LaunchedEffect runs the effect after the content is built, as Compose does.
+# The answer is the item the scroll asked for. The stubs are a transcription
+# of the builder's API, not Compose: a green says the emitted effect asks for
+# the item that holds the cell.
+RSpec.describe 'kjui codegen: scrollTo names a cell' do
+  def emit(node)
+    %i[info debug warn].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
+    KjuiTools::Compose::Components::CollectionComponent.generate(JSON.parse(JSON.generate(node)), 1, Set.new, nil)
+  end
+
+  def scaffold(class_name, letter)
+    generator = KjuiTools::Compose::Generators::CellGenerator.allocate
+    view = generator.send(:main_cell_content, class_name, nil, 'com.example')
+    model = generator.send(:cell_viewmodel_content, class_name, 'x_cell', 'com.example')
+    params = view[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
+    update = model[/fun updateData\((.*?)\)/, 1] or raise "no updateData in the scaffold"
+    # A drawn cell is named by its letter and the n of its address
+    # (`<id>_item_<n>`), which counts across the sections since 2.5.39 (ruling
+    # (a2)): the n scrollTo's Int names — "6" lands on B6, the seventh cell.
+    "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
+      "@Composable fun #{class_name}View(#{params.strip}) { Drawn.draw(\"#{letter}\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")) }\n"
+  end
+
+  KJ_SCROLL_STUBS = <<~KOTLIN
+    package stubs
+    import kotlinx.coroutines.launch
+
+    annotation class Composable
+    interface Modifier { companion object : Modifier }
+    class Tagged(val tag: String) : Modifier
+    fun Modifier.testTag(tag: String): Modifier = Tagged(tag)
+    fun Modifier.fillMaxWidth(): Modifier = this
+    fun Modifier.fillMaxSize(): Modifier = this
+    class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
+    fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
+    class Dp(val v: Int = 0) { operator fun plus(o: Dp) = Dp(v + o.v) }
+    val Int.dp: Dp get() = Dp(this)
+    interface Alignment { companion object { val TopStart = object : Alignment {}; val Top = object : Alignment {}
+        val Bottom = object : Alignment { override fun toString() = "Bottom" }; val End = object : Alignment { override fun toString() = "End" }
+        val CenterHorizontally = object : Alignment { override fun toString() = "CenterHorizontally" }
+        val CenterVertically = object : Alignment { override fun toString() = "CenterVertically" } } }
+    // What an arrangement packs to (null: the start), as the grid records it.
+    class Arrangement(val alignment: Alignment? = null) { companion object { fun spacedBy(space: Dp, alignment: Alignment? = null): Arrangement = Arrangement(alignment)
+        fun aligned(alignment: Alignment): Arrangement = Arrangement(alignment)
+        val Bottom = Arrangement(Alignment.Bottom); val Center = Arrangement(Alignment.CenterVertically) } }
+    // Content padding (round 15): the values, top,start,bottom,end, recorded
+    // in the modifier chain where the padding is applied (Drawn.chain).
+    class PaddingValues(val top: Int, val start: Int, val bottom: Int, val end: Int) { override fun toString() = "$top.$start.$bottom.$end" }
+    fun PaddingValues(all: Dp) = PaddingValues(all.v, all.v, all.v, all.v)
+    fun PaddingValues(horizontal: Dp = Dp(), vertical: Dp = Dp()) = PaddingValues(vertical.v, horizontal.v, vertical.v, horizontal.v)
+    fun PaddingValues(start: Dp = Dp(), top: Dp = Dp(), end: Dp = Dp(), bottom: Dp = Dp()) = PaddingValues(top.v, start.v, bottom.v, end.v)
+    fun Modifier.padding(values: PaddingValues): Modifier { Drawn.chain += "pad($values)"; return this }
+    // Round 17: a PaddingValues read side by side (the safe area and the
+    // Collection's own padding added in the layout's direction).
+    fun PaddingValues.calculateStartPadding(dir: androidx.compose.ui.unit.LayoutDirection) = Dp(start)
+    fun PaddingValues.calculateEndPadding(dir: androidx.compose.ui.unit.LayoutDirection) = Dp(end)
+    fun PaddingValues.calculateTopPadding() = Dp(top)
+    fun PaddingValues.calculateBottomPadding() = Dp(bottom)
+    // The safe area (round 16): a status bar of 24 and a navigation bar of 48,
+    // as insets are, left / top / right / bottom; a container's contentPadding
+    // is recorded as cp(top.start.bottom.end).
+    enum class WindowInsetsSides { Vertical, Horizontal }
+    class WindowInsets(val l: Int, val t: Int, val r: Int, val b: Int) {
+        companion object { val safeDrawing = WindowInsets(0, 24, 0, 48) }
+        fun only(sides: WindowInsetsSides) = if (sides == WindowInsetsSides.Vertical) WindowInsets(0, t, 0, b) else WindowInsets(l, 0, r, 0)
+        fun add(o: WindowInsets) = WindowInsets(l + o.l, t + o.t, r + o.r, b + o.b)
+        fun asPaddingValues() = PaddingValues(t, l, b, r)
+    }
+    fun WindowInsets(left: Dp = Dp(), top: Dp = Dp(), right: Dp = Dp(), bottom: Dp = Dp()) = WindowInsets(left.v, top.v, right.v, bottom.v)
+    fun contentPadded(values: PaddingValues?) { values?.let { Drawn.chain += "cp($it)" } }
+    // KotlinJsonUI's rememberSafeAreaOverlap (jsonui-cli 2.5.40): the part of
+    // the safe area the scrollable's frame overlaps. These programs have no
+    // window, so the frame is the whole window's and the overlap is all of
+    // safeDrawing; the overlap arithmetic is pinned in KotlinJsonUI's
+    // SafeAreaOverlapTest.
+    class SafeAreaOverlap(val insets: WindowInsets) {
+        val modifier: Modifier = Modifier
+        fun contentPadding(own: PaddingValues = PaddingValues(0, 0, 0, 0)) =
+            PaddingValues(own.top + insets.t, own.start + insets.l, own.bottom + insets.b, own.end + insets.r)
+    }
+    fun rememberSafeAreaOverlap(sides: WindowInsetsSides? = null) =
+        SafeAreaOverlap(if (sides == null) WindowInsets.safeDrawing else WindowInsets.safeDrawing.only(sides))
+    object GridCells { class Fixed(val count: Int) }
+    class GridItemSpan(val span: Int)
+    class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)
+
+    // What an item's content draws, the items in the order they were emitted
+    // (each 28 high — a header or footer 10), the scroll asked for, and what
+    // was logged.
+    object Drawn {
+        var mark = StringBuilder()
+        fun draw(s: String) { mark.append(s) }
+        val items = mutableListOf<String>()
+        fun sizeOf(item: String) = if (item == "H" || item == "F") 10 else 28
+        var scrolledTo = -1
+        // The last scroll modifier's `enabled` (the user's scrolling), and where a grid packs.
+        var userScroll: Boolean? = null
+        var packed: String? = null
+        // The scroll and padding modifiers, in the order the chain applies them.
+        val chain = mutableListOf<String>()
+        var offset = 0
+        val logs = mutableListOf<String>()
+        val effects = mutableListOf<suspend () -> Unit>()
+        fun record(content: () -> Unit) { mark = StringBuilder(); content(); items += mark.toString().ifEmpty { "_" } }
+        // A lazy list's item keys, and one two items shared (Compose throws
+        // "Key … was already used" when both are composed).
+        val keys = mutableSetOf<Any>()
+        var duplicate: Any? = null
+        fun key(key: ((Int) -> Any)?, count: Int) { key?.let { k -> repeat(count) { i -> k(i).let { if (!keys.add(it)) duplicate = it } } } }
+    }
+    // A composition's positional slots: what remember keeps and the keys a
+    // LaunchedEffect restarts on, across recompositions, as Compose keeps them.
+    object Composition {
+        val slots = mutableListOf<Any?>()
+        var cursor = 0
+        @Suppress("UNCHECKED_CAST")
+        fun <T> slot(init: () -> T): T {
+            if (cursor < slots.size) return slots[cursor++] as T
+            val value = init(); slots += value; cursor++; return value
+        }
+    }
+    class Keyed(var key: Any?, var value: Any?)
+    // The screen's scrollTo memory (KotlinJsonUI CollectionScrollMemory), a
+    // transcription: provided once per run (a screen), outside the
+    // composition's slots, so it survives a Collection leaving and coming back.
+    class CollectionScrollMemory {
+        private val seen = HashMap<String, Any?>()
+        fun isRequestOnEntry(id: String?, value: Any?): Boolean = id != null && seen.containsKey(id) && seen[id] != value
+        fun record(id: String?, value: Any?) { if (id != null) seen[id] = value }
+    }
+    object LocalCollectionScrollMemory { var current: CollectionScrollMemory? = null }
+    class MutableState<T>(var value: T)
+    fun <T> mutableStateOf(value: T) = MutableState(value)
+    fun <T> remember(calculation: () -> T): T = Composition.slot(calculation)
+    @Suppress("UNCHECKED_CAST")
+    fun <T> remember(key1: Any?, calculation: () -> T): T {
+        val slot = Composition.slot { Keyed(Any(), null) }
+        if (slot.key != key1) { slot.key = key1; slot.value = calculation() }
+        return slot.value as T
+    }
+    fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = remember(listOf(key1, key2), calculation)
+    fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+        val slot = Composition.slot { Keyed(Any(), null) }
+        if (slot.key == key1) return
+        slot.key = key1
+        val live = Live.scope
+        if (live == null) { Drawn.effects += { kotlinx.coroutines.coroutineScope { block() } }; return }
+        // Live: as Compose runs an effect — a coroutine of its own, cancelled
+        // when the key changes (and the one for the new key started).
+        (slot.value as? kotlinx.coroutines.Job)?.cancel()
+        slot.value = live.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { block() }
+    }
+    // Live runs (the landing arm): effects and landings are coroutines on
+    // one event loop, and an animated scroll takes Live.animationMs of it;
+    // the composition's scope is the loop's. Otherwise a scope that runs a
+    // landing at once, inside the effect that launches it.
+    object Live { var scope: kotlinx.coroutines.CoroutineScope? = null; var animationMs = 0L
+        suspend fun animate() { if (animationMs > 0) kotlinx.coroutines.delay(animationMs) } }
+    fun rememberCoroutineScope(): kotlinx.coroutines.CoroutineScope =
+        remember { Live.scope ?: kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined) }
+    // The lazy states (jsonui-cli 1.9.23: an anchored scroll lays the item
+    // out, then scrolls the difference to its anchor). The items lie end to
+    // end; none is laid out until a scrollToItem, which puts its item at
+    // -scrollOffset of a 100 viewport — so the answer stays the item the
+    // scroll asked for — and scrollBy moves that offset by what it scrolls.
+    // scrollBy / animateScrollBy are ScrollableState extensions in Compose
+    // (ScrollExtensionsKt, foundation-android 1.12.1); members here.
+    object Scrolled {
+        var laidOut = false
+        var position = 0
+        fun start(index: Int) = Drawn.items.take(index).sumOf { Drawn.sizeOf(it) }
+        fun visible(): List<Pair<Int, Int>> = if (!laidOut) emptyList() else
+            Drawn.items.indices.map { it to start(it) - position }.filter { (i, at) -> at < 100 && at + Drawn.sizeOf(Drawn.items[i]) > 0 }
+        fun to(index: Int, scrollOffset: Int) { laidOut = true; position = start(index) + scrollOffset; Drawn.scrolledTo = index; Drawn.offset = scrollOffset }
+        fun by(value: Float): Float { position += value.toInt(); Drawn.offset += value.toInt(); return value }
+    }
+    class ListItemInfo(val index: Int, val offset: Int, val size: Int)
+    class ListLayoutInfo(val viewportStartOffset: Int, val viewportEndOffset: Int, val visibleItemsInfo: List<ListItemInfo>)
+    class LazyListState {
+        val layoutInfo get() = ListLayoutInfo(0, 100, Scrolled.visible().map { (i, at) -> ListItemInfo(i, at, Drawn.sizeOf(Drawn.items[i])) })
+        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Live.animate(); Scrolled.to(index, scrollOffset) }
+        suspend fun scrollBy(value: Float): Float = Scrolled.by(value)
+        suspend fun animateScrollBy(value: Float): Float { Live.animate(); return Scrolled.by(value) }
+    }
+    class IntSize(val width: Int, val height: Int)
+    class IntOffset(val x: Int, val y: Int)
+    class GridItemInfo(val index: Int, val offset: IntOffset, val size: IntSize)
+    class GridLayoutInfo(val viewportStartOffset: Int, val viewportEndOffset: Int, val visibleItemsInfo: List<GridItemInfo>)
+    class LazyGridState {
+        val layoutInfo get() = GridLayoutInfo(0, 100, Scrolled.visible().map { (i, at) -> GridItemInfo(i, IntOffset(at, at), IntSize(60, Drawn.sizeOf(Drawn.items[i]))) })
+        suspend fun scrollToItem(index: Int, scrollOffset: Int = 0) = Scrolled.to(index, scrollOffset)
+        suspend fun animateScrollToItem(index: Int, scrollOffset: Int = 0) { Live.animate(); Scrolled.to(index, scrollOffset) }
+        suspend fun scrollBy(value: Float): Float = Scrolled.by(value)
+        suspend fun animateScrollBy(value: Float): Float { Live.animate(); return Scrolled.by(value) }
+    }
+    fun rememberLazyGridState() = remember { LazyGridState() }
+    class LazyGridScope {
+        fun item(span: (LazyGridItemSpanScope.() -> GridItemSpan)? = null, content: () -> Unit) = Drawn.record(content)
+        fun items(count: Int, key: ((Int) -> Any)? = null, span: (LazyGridItemSpanScope.(Int) -> GridItemSpan)? = null, itemContent: (Int) -> Unit) {
+            Drawn.key(key, count)
+            repeat(count) { i -> Drawn.record { itemContent(i) } }
+        }
+    }
+    class LazyListScope {
+        fun item(content: () -> Unit) = Drawn.record(content)
+        fun items(count: Int, key: ((Int) -> Any)? = null, itemContent: (Int) -> Unit) {
+            Drawn.key(key, count)
+            repeat(count) { i -> Drawn.record { itemContent(i) } }
+        }
+    }
+    fun LazyVerticalGrid(columns: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
+                         horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
+                         contentPadding: PaddingValues? = null,
+                         content: LazyGridScope.() -> Unit) { Drawn.packed = verticalArrangement?.alignment?.toString(); contentPadded(contentPadding); LazyGridScope().content() }
+    // Along its axis, a horizontal grid packs by its horizontalArrangement.
+    fun LazyHorizontalGrid(rows: GridCells.Fixed, reverseLayout: Boolean = false, verticalArrangement: Arrangement? = null,
+                           horizontalArrangement: Arrangement? = null, modifier: Modifier = Modifier, state: LazyGridState? = null,
+                           contentPadding: PaddingValues? = null,
+                           content: LazyGridScope.() -> Unit) { Drawn.packed = horizontalArrangement?.alignment?.toString(); contentPadded(contentPadding); LazyGridScope().content() }
+    enum class CollectionStackMode { LAZY, EAGER, NONE;
+        companion object { fun fromJson(value: Any?) = when (value) { "eager" -> EAGER; "none" -> NONE; else -> LAZY } } }
+    enum class CollectionStackAxis { VERTICAL, HORIZONTAL }
+    // The lazy content under LAZY; the eager content (the cells composed in
+    // order, each recording its place) under EAGER and NONE.
+    // A reversed vertical EAGER container lays its cells out from the bottom
+    // up (CollectionStack's ReversedColumn, KotlinJsonUI 2.42.0): Positions.
+    fun CollectionStack(mode: CollectionStackMode, axis: CollectionStackAxis, modifier: Modifier = Modifier, spacing: Dp? = null,
+                        userScrollEnabled: Boolean = true, reverseLayout: Boolean = false, lazyState: LazyListState? = null,
+                        eagerScrollState: ScrollState? = null, contentAtBottom: Boolean = false, rowContentAlignment: Alignment? = null,
+                        columnContentAlignment: Alignment? = null, contentPadding: PaddingValues? = null,
+                        insetLeading: Dp? = null, insetTrailing: Dp? = null,
+                        lazyContent: LazyListScope.() -> Unit, eagerContent: () -> Unit) {
+        insetLeading?.let { Drawn.chain += "lead(${it.v})" }
+        Drawn.userScroll = userScrollEnabled
+        if (contentAtBottom) Drawn.packed = "Bottom"
+        rowContentAlignment?.let { Drawn.packed = it.toString() }
+        columnContentAlignment?.let { Drawn.packed = it.toString() }
+        contentPadded(contentPadding)
+        if (mode == CollectionStackMode.LAZY) LazyListScope().lazyContent()
+        else { Positions.reversed = reverseLayout && axis == CollectionStackAxis.VERTICAL && mode == CollectionStackMode.EAGER; eagerContent() }
+    }
+    fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) { content() }
+    inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
+    class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
+    class CollectionDataSection(
+        val header: HeaderFooterData? = null,
+        val footer: HeaderFooterData? = null,
+        val cells: CellData? = null
+    ) {
+        class CellData(val viewName: String, val data: List<Map<String, Any>>)
+        class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
+    }
+    // `anchor` is Any?: the layouts bind scrollAnchor to it without declaring its class, so the emitter reads it
+    // as an unknown type (`?.toString()`); a String here made that call redundant under allWarningsAsErrors.
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy", val t: Int? = 20, val anchor: Any? = "bottom")
+
+    // The pager composes each page in turn; the page it was asked for is the scroll.
+    class PagerState(val pageCount: () -> Int) {
+        val currentPage = 0
+        suspend fun animateScrollToPage(page: Int) { Drawn.scrolledTo = page }
+        suspend fun scrollToPage(page: Int) { Drawn.scrolledTo = page }
+    }
+    fun rememberPagerState(pageCount: () -> Int) = remember { PagerState(pageCount) }
+    fun HorizontalPager(state: PagerState, modifier: Modifier = Modifier, userScrollEnabled: Boolean = true, pageContent: (Int) -> Unit) {
+        Drawn.userScroll = userScrollEnabled
+        repeat(state.pageCount()) { page -> Drawn.record { pageContent(page) } }
+    }
+
+    // The flow: a column of FlowRows. Each laid-out node is 28 below the one
+    // positioned before it, in composition order — the scrolled content
+    // first, then the cells — which is enough to say WHICH cell's place a
+    // scroll read; where Compose lays them out is the device arm's. The same
+    // for the non-lazy containers (the EAGER CollectionStack, the
+    // wrapContent Column): their viewport, then their cells; along x too, for
+    // a row (28 wide, 28 to the right of the one before).
+    class FlowCoordinates(val y: Int) : androidx.compose.ui.layout.LayoutCoordinates {
+        override val isAttached = true
+        override val size = IntSize(28, 28)
+        override fun localPositionOf(sourceCoordinates: androidx.compose.ui.layout.LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset) =
+            ((sourceCoordinates as FlowCoordinates).y - y).toFloat().let { androidx.compose.ui.geometry.Offset(it, it) }
+    }
+    // Reversed (a vertical EAGER container under reverseLayout, resting at
+    // its bottom in a 100 viewport): the k-th cell laid out at 100 - 28 k.
+    object Positions { var next = 0; var reversed = false; var k = 0 }
+    fun Modifier.onGloballyPositioned(onGloballyPositioned: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit): Modifier {
+        if (Positions.reversed) { Positions.k++; onGloballyPositioned(FlowCoordinates(100 - 28 * Positions.k)); return this }
+        onGloballyPositioned(FlowCoordinates(Positions.next)); Positions.next += 28; return this
+    }
+    fun Modifier.then(other: Modifier): Modifier = this
+    class ScrollState { val viewportSize = 100; val value = 0; val maxValue = 1000
+        suspend fun animateScrollTo(value: Int) { Drawn.scrolledTo = value }
+        suspend fun scrollTo(value: Int) { Drawn.scrolledTo = value } }
+    fun Modifier.wrapContentHeight(): Modifier = this
+    fun Modifier.fillMaxHeight(): Modifier = this
+    // The wrapContent Column's bounding layout step: compiled, not run (the
+    // device arm measures what it does).
+    class Placeable(val width: Int, val height: Int) { fun place(x: Int, y: Int) {} }
+    interface Measurable { fun measure(constraints: androidx.compose.ui.unit.Constraints): Placeable }
+    class MeasureResult
+    class MeasureScope { fun layout(width: Int, height: Int, placementBlock: () -> Unit): MeasureResult = MeasureResult() }
+    fun Modifier.layout(measure: MeasureScope.(Measurable, androidx.compose.ui.unit.Constraints) -> MeasureResult): Modifier = this
+    fun rememberScrollState() = remember { ScrollState() }
+    fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier { Drawn.userScroll = enabled; Drawn.chain += "scroll"; return this }
+    fun Modifier.requiredHeight(height: Dp): Modifier = this
+    fun Modifier.wrapContentHeight(align: Alignment, unbounded: Boolean = false): Modifier = this
+    fun Column(modifier: Modifier = Modifier, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    fun FlowRow(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    fun Row(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    // A lazy grid drawn a row per item (lazy_grid_row_columns): the row's
+    // height, its weighted cell boxes and the filler of a short last row.
+    enum class IntrinsicSize { Min, Max }
+    fun Modifier.height(intrinsicSize: IntrinsicSize): Modifier = this
+    fun Modifier.weight(weight: Float): Modifier = this
+    fun Spacer(modifier: Modifier = Modifier) {}
+    // The matchParent flow's box, measured with a bounded height.
+    class BoxWithConstraintsScope { val constraints = androidx.compose.ui.unit.Constraints(0, 100, 0, 100) }
+    fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) { BoxWithConstraintsScope().content() }
+    fun key(vararg keys: Any?, block: () -> Unit) { block() }
+  KOTLIN
+
+  # The stubs a fully-qualified name reaches.
+  KJ_SCROLL_QUALIFIED = {
+    'Lazy.kt' => "package androidx.compose.foundation.lazy\nfun rememberLazyListState() = stubs.remember { stubs.LazyListState() }\n",
+    # An enrichment that says it ran: "<key>_e".
+    'CellIdGenerator.kt' => "package com.kotlinjsonui.utils\nobject CellIdGenerator {\n" \
+                            "    fun enrichCellIds(data: List<Map<String, Any>>, primaryKey: String): List<Map<String, Any>> =\n" \
+                            "        data.map { it + (\"cellId\" to \"${it[primaryKey]}_e\") }\n}\n",
+    # A debuggable app, and what it logs.
+    'Platform.kt' => "package androidx.compose.ui.platform\nobject LocalContext { val current = android.content.Context() }\n",
+    'Context.kt' => "package android.content\nclass Context { val applicationInfo = android.content.pm.ApplicationInfo() }\n",
+    'ApplicationInfo.kt' => "package android.content.pm\nclass ApplicationInfo { var flags = FLAG_DEBUGGABLE\n    companion object { const val FLAG_DEBUGGABLE = 2 } }\n",
+    'Log.kt' => "package android.util\nobject Log { fun w(tag: String, msg: String): Int { stubs.Drawn.logs += msg; return 0 } }\n",
+    'Layout.kt' => "package androidx.compose.ui.layout\ninterface LayoutCoordinates { val isAttached: Boolean; val size: stubs.IntSize\n" \
+                   "    fun localPositionOf(sourceCoordinates: LayoutCoordinates, relativeToSource: androidx.compose.ui.geometry.Offset): androidx.compose.ui.geometry.Offset }\n",
+    'Geometry.kt' => "package androidx.compose.ui.geometry\nclass Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n",
+    # The non-lazy containers' scroll (round 12): a frame passes at once.
+    'Foundation.kt' => "package androidx.compose.foundation\nfun rememberScrollState() = stubs.remember { stubs.ScrollState() }\n",
+    'Runtime.kt' => "package androidx.compose.runtime\nsuspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(0L)\n",
+    'Unit.kt' => "package androidx.compose.ui.unit\nenum class LayoutDirection { Ltr, Rtl }\n" \
+                 "class Constraints(val minWidth: Int, val maxWidth: Int, val minHeight: Int, val maxHeight: Int) {\n" \
+                 "    val hasBoundedHeight get() = maxHeight != Int.MAX_VALUE\n" \
+                 "    companion object { fun fitPrioritizingWidth(minWidth: Int, maxWidth: Int, minHeight: Int, maxHeight: Int) = Constraints(minWidth, maxWidth, minHeight, maxHeight) } }\n",
+    'Direction.kt' => "package androidx.compose.ui.platform\nobject LocalLayoutDirection { val current = androidx.compose.ui.unit.LayoutDirection.Ltr }\n"
+  }.freeze
+
+  # Section A: header, cells A0…A4 (keys k0…k4), footer; section B: header,
+  # cells B0…B4 (keys k3 — shared with A — x1…x4). `grid: true` drops A's
+  # footer and B's header, so a filler item ends A's part-filled row.
+  def data_sections(grid: false, dup: false)
+    a = if dup
+          'cells = CollectionDataSection.CellData("A", listOf("k0", "k1", "k1", "k3", "k4").map { mapOf<String, Any>("key" to it) })'
+        else
+          'cells = CollectionDataSection.CellData("A", List(5) { mapOf<String, Any>("key" to "k$it") })'
+        end
+    b = 'cells = CollectionDataSection.CellData("B", listOf("k3", "x1", "x2", "x3", "x4").map { mapOf<String, Any>("key" to it) })'
+    edge = 'CollectionDataSection.HeaderFooterData("E", emptyMap())'
+    return "listOf(CollectionDataSection(header = #{edge}, #{a}), CollectionDataSection(#{b}))" if grid
+
+    "listOf(CollectionDataSection(header = #{edge}, footer = #{edge}, #{a}), CollectionDataSection(header = #{edge}, #{b}))"
+  end
+
+  def node(extra = {})
+    { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}',
+      'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell', 'header' => 'HCell' }] }.merge(extra)
+  end
+
+  def pager_node(extra = {})
+    { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'layout' => 'horizontal', 'paging' => true,
+      'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }.merge(extra)
+  end
+
+  def grid_node(extra = {})
+    node('columns' => 2, 'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell' }, { 'cell' => 'BCell' }]).merge(extra)
+  end
+
+  # route => [emitted body, data options, targets, first]: each target is a
+  # change from `first` (the value the Collection composes with, "" unless
+  # named); a nil first composes once, with the target.
+  def routes
+    # Integers are Int values; strings are Strings (the class decides what a
+    # value names, round 14).
+    ints = [0, 3, 6, 9, '3#77', -1]
+    keys = ['k3', 'x2', 'k1', '0#77', 'nothing', 3]
+    {
+      'stack' => [emit(node), {}, ints],
+      'stackReversed' => [emit(node('reverseLayout' => true)), {}, ints],
+      'stackKeys' => [emit(node('cellIdProperty' => 'key')), {}, keys],
+      # kjui-collection-scrollto-ignored-after-visibility-gone: the value a
+      # Collection comes back from gone with, against the one it left with.
+      'goneReturn' => [emit(node('cellIdProperty' => 'key')), { reenter: true }, %w[k3], ''],
+      'goneReturnSame' => [emit(node('cellIdProperty' => 'key')), { reenter: true }, %w[k3], 'k3'],
+      'goneReturnNoId' => [emit(node('cellIdProperty' => 'key').except('id')), { reenter: true }, %w[k3], ''],
+      'goneStays' => [emit(node('cellIdProperty' => 'key')), {}, %w[k3], ''],
+      'stackEnriched' => [emit(node('cellIdProperty' => 'key', 'autoChangeTrackingId' => true)), {}, %w[k3_e x2_e k3]],
+      'stackCenter' => [emit(node('scrollAnchor' => 'center')), {}, [6]],
+      'stackTop' => [emit(node('scrollAnchor' => 'top')), {}, [6]],
+      'stackDupKeys' => [emit(node('cellIdProperty' => 'key')), { dup: true }, %w[k1 k3]],
+      'stackInitial' => [emit(node), {}, [6], nil],
+      'stackAnchor' => [emit(node('defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'stackAnchorCenter' => [emit(node('defaultScrollAnchor' => 'center')), {}, [''], nil],
+      'grid' => [emit(grid_node), { grid: true }, ints],
+      'gridReversed' => [emit(grid_node('reverseLayout' => true)), { grid: true }, ints],
+      'gridBound' => [emit(grid_node('columns' => '@{cols}')), { grid: true }, ints],
+      'gridKeys' => [emit(grid_node('cellIdProperty' => 'key')), { grid: true }, keys],
+      'gridDupKeys' => [emit(grid_node('cellIdProperty' => 'key')), { grid: true, dup: true }, %w[k1]],
+      'gridAnchor' => [emit(grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
+      'classList' => [emit({ 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'columns' => 2,
+                             'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }), { grid: true }, [0, 6]],
+      'pager' => [emit(pager_node), { grid: true }, [0, 6, 9, 10]],
+      'pagerKeys' => [emit(pager_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2 0#77]],
+      'flow' => [emit(node('layout' => 'flow', 'height' => 100)), {}, [0, 6]],
+      'flowKeys' => [emit(node('layout' => 'flow', 'height' => 100, 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]],
+      # Round 12 (the orchestrator's rulings 2026-09-27): the EAGER CollectionStack, declared
+      # and bound; the wrapContent Column; defaultScrollAnchor under
+      # reverseLayout.
+      'eager' => [emit(node('lazy' => 'eager')), {}, [0, 6, 9, -1]],
+      'eagerKeys' => [emit(node('lazy' => 'eager', 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77 nothing]],
+      'eagerCenter' => [emit(node('lazy' => 'eager', 'scrollAnchor' => 'center')), {}, [6]],
+      'eagerTop' => [emit(node('lazy' => 'eager', 'scrollAnchor' => 'top')), {}, [6]],
+      'eagerInitial' => [emit(node('lazy' => 'eager')), {}, [6], nil],
+      'eagerAnchor' => [emit(node('lazy' => 'eager', 'defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'eagerRow' => [emit(node('lazy' => 'eager', 'layout' => 'horizontal')), {}, [6]],
+      'eagerBound' => [emit(node('lazy' => '@{mode}', 'cellIdProperty' => 'key')), { mode: 'eager' }, [6, '3#77']],
+      'eagerBoundLazy' => [emit(node('lazy' => '@{mode}', 'cellIdProperty' => 'key')), { mode: 'lazy' }, [6, '3#77']],
+      'wrap' => [emit(node('height' => 'wrapContent')), {}, [0, 6]],
+      'wrapKeys' => [emit(node('height' => 'wrapContent', 'cellIdProperty' => 'key')), {}, %w[k3 x2 0#77]],
+      'wrapAnchor' => [emit(node('height' => 'wrapContent', 'defaultScrollAnchor' => 'center')), {}, [''], nil],
+      'wrapNone' => [emit(node('height' => 'wrapContent', 'lazy' => 'none')), {}, [6]],
+      'stackReversedAnchor' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'stackReversedAnchorTop' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), {}, [''], nil],
+      'stackReversedAnchorCenter' => [emit(node('reverseLayout' => true, 'defaultScrollAnchor' => 'center')), {}, [''], nil],
+      'gridReversedAnchor' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil],
+      'gridReversedAnchorTop' => [emit(grid_node('reverseLayout' => true, 'defaultScrollAnchor' => 'top')), { grid: true }, [''], nil],
+      # Round 13 (the orchestrator's rulings 2026-09-27): the reversed vertical EAGER container,
+      # scrollEnabled false, a bound `lazy` NONE on a wrapContent Column, a
+      # short reversed grid.
+      'eagerReversed' => [emit(node('lazy' => 'eager', 'reverseLayout' => true)), {}, [6, 0]],
+      'eagerReversedTop' => [emit(node('lazy' => 'eager', 'reverseLayout' => true, 'scrollAnchor' => 'top')), {}, [6]],
+      'eagerReversedAnchorTop' => [emit(node('lazy' => 'eager', 'reverseLayout' => true, 'defaultScrollAnchor' => 'top')), {}, [''], nil],
+      'eagerReversedAnchorBottom' => [emit(node('lazy' => 'eager', 'reverseLayout' => true, 'defaultScrollAnchor' => 'bottom')), {}, [''], nil],
+      'eagerLocked' => [emit(node('lazy' => 'eager', 'scrollEnabled' => false)), {}, [6]],
+      'flowLocked' => [emit(node('layout' => 'flow', 'height' => 100, 'scrollEnabled' => false)), {}, [6]],
+      'wrapLocked' => [emit(node('height' => 'wrapContent', 'scrollEnabled' => false)), {}, [6]],
+      'pagerLocked' => [emit(pager_node('scrollEnabled' => false)), { grid: true }, [6]],
+      'wrapBound' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}')), { mode: 'lazy' }, [6]],
+      'wrapBoundNone' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}')), { mode: 'none' }, [6]],
+      'gridReversedSpaced' => [emit(grid_node('reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
+      'gridSpaced' => [emit(grid_node('lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 14: not reversed, defaultScrollAnchor bottom — short content at the bottom.
+      'stackBottom' => [emit(node('defaultScrollAnchor' => 'bottom')), {}, [0]],
+      'stackBottomReversed' => [emit(node('defaultScrollAnchor' => 'bottom', 'reverseLayout' => true)), {}, [0]],
+      'gridBottom' => [emit(grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [0]],
+      'gridBottomSpaced' => [emit(grid_node('defaultScrollAnchor' => 'bottom', 'lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 15: contentPadding / insets on the containers that are not lazy
+      # lists; a short horizontal list where defaultScrollAnchor says.
+      'wrapInset' => [emit(node('height' => 'wrapContent', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'wrapBoundInset' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}', 'insets' => [12, 0, 6, 0])), { mode: 'lazy' }, [0]],
+      'wrapBoundNoneInset' => [emit(node('height' => 'wrapContent', 'lazy' => '@{mode}', 'insets' => [12, 0, 6, 0])), { mode: 'none' }, [0]],
+      'noneInset' => [emit(node('lazy' => 'none', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'noneRowInset' => [emit(node('lazy' => 'none', 'layout' => 'horizontal', 'insetHorizontal' => 16)), {}, [0]],
+      'flowInset' => [emit(node('layout' => 'flow', 'height' => 100, 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'flowParentInset' => [emit(node('layout' => 'flow', 'height' => 'matchParent', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'flowNoneInset' => [emit(node('layout' => 'flow', 'lazy' => 'none', 'insets' => [12, 0, 6, 0])), {}, [0]],
+      'row' => [emit(node('layout' => 'horizontal')), {}, [0]],
+      'rowTop' => [emit(node('layout' => 'horizontal', 'defaultScrollAnchor' => 'top')), {}, [0]],
+      'rowBottom' => [emit(node('layout' => 'horizontal', 'defaultScrollAnchor' => 'bottom')), {}, [0]],
+      'rowCenter' => [emit(node('layout' => 'horizontal', 'defaultScrollAnchor' => 'center')), {}, [0]],
+      'rowEagerBottom' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'defaultScrollAnchor' => 'bottom')), {}, [0]],
+      'rowEagerCenter' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'defaultScrollAnchor' => 'center')), {}, [0]],
+      'hgrid' => [emit(grid_node('layout' => 'horizontal')), { grid: true }, [0]],
+      'hgridBottom' => [emit(grid_node('layout' => 'horizontal', 'defaultScrollAnchor' => 'bottom')), { grid: true }, [0]],
+      'hgridCenterSpaced' => [emit(grid_node('layout' => 'horizontal', 'defaultScrollAnchor' => 'center', 'lineSpacing' => 4)), { grid: true }, [0]],
+      'hgridReversedSpaced' => [emit(grid_node('layout' => 'horizontal', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 16: insets read as paddings are, in each declared form; the
+      # insets added to the safe area; a short vertical list centred.
+      'padArray' => [emit(node('insets' => [8, 16, 4, 2])), {}, [0]],
+      'padString' => [emit(node('insets' => '8|16|4|2')), {}, [0]],
+      'padTwo' => [emit(node('insets' => '8|16')), {}, [0]],
+      'padTwoArray' => [emit(node('insets' => [8, 16])), {}, [0]],
+      'padOne' => [emit(node('insets' => [6])), {}, [0]],
+      'padThree' => [emit(node('insets' => '1|2|3')), {}, [0]],
+      'gridPadArray' => [emit(grid_node('insets' => [8, 16, 4, 2])), { grid: true }, [0]],
+      'wrapPadString' => [emit(node('height' => 'wrapContent', 'insets' => '8|16|4|2')), {}, [0]],
+      'safeInsets' => [emit(node('insetVertical' => 8, 'insetHorizontal' => 16, 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'safeInsetsAxes' => [emit(grid_node('insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'scrollableAxes')), { grid: true }, [0]],
+      'safeOnly' => [emit(node('contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'safeNever' => [emit(node('insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'never')), {}, [0]],
+      'safeDeclared' => [emit(node('insets' => [8, 0, 0, 0], 'insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'safeMalformed' => [emit(node('insets' => '1|2|3', 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'stackCenterV' => [emit(node('defaultScrollAnchor' => 'center')), {}, [0]],
+      'eagerCenterV' => [emit(node('lazy' => 'eager', 'defaultScrollAnchor' => 'center')), {}, [0]],
+      'gridCenterV' => [emit(grid_node('defaultScrollAnchor' => 'center')), { grid: true }, [0]],
+      'gridCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'lineSpacing' => 4)), { grid: true }, [0]],
+      'gridReversedCenterVSpaced' => [emit(grid_node('defaultScrollAnchor' => 'center', 'reverseLayout' => true, 'lineSpacing' => 4)), { grid: true }, [0]],
+      # Round 17: a declared insets added to insetHorizontal / insetVertical and
+      # the safe area; a binding in the array; a row's insetHorizontal kept
+      # in contentPadding with the rest.
+      'addInsets' => [emit(node('insets' => [8, 0, 0, 0], 'insetVertical' => 8, 'insetHorizontal' => 16)), {}, [0]],
+      'addInsetsSafe' => [emit(node('insets' => [8, 0, 0, 0], 'insetVertical' => 8, 'contentInsetAdjustmentBehavior' => 'always')), {}, [0]],
+      'addInsetsSafeOnly' => [emit(grid_node('insets' => [8, 4, 0, 2], 'contentInsetAdjustmentBehavior' => 'always')), { grid: true }, [0]],
+      'bindInsets' => [emit(node('insets' => ['@{t}', 0, 0, 0], 'insetVertical' => 8)), {}, [0]],
+      'rowInsetH' => [emit(node('layout' => 'horizontal', 'insetHorizontal' => 14, 'insetVertical' => 4)), {}, [0]],
+      'rowInsetHSafe' => [emit(node('layout' => 'horizontal', 'lazy' => 'eager', 'insetHorizontal' => 14, 'contentInsetAdjustmentBehavior' => 'scrollableAxes')), {}, [0]],
+      # jsonui-cli 1.9.29: a bound scrollAnchor, chosen per request — the
+      # stack, the grid, the flow, the EAGER container, reversed, and a bound
+      # value that is no anchor.
+      'stackBoundTop' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'stackBoundCenter' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'center' }, [6]],
+      'stackBoundBottom' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'bottom' }, [6]],
+      'stackBoundOdd' => [emit(node('scrollAnchor' => '@{anchor}')), { anchor: 'sideways' }, [6]],
+      'stackReversedTop' => [emit(node('reverseLayout' => true, 'scrollAnchor' => 'top')), {}, [6]],
+      'stackReversedBoundTop' => [emit(node('reverseLayout' => true, 'scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'stackReversedBoundBottom' => [emit(node('reverseLayout' => true, 'scrollAnchor' => '@{anchor}')), { anchor: 'bottom' }, [6]],
+      'gridBoundCenter' => [emit(grid_node('scrollAnchor' => '@{anchor}')), { grid: true, anchor: 'center' }, [6]],
+      'flowBoundTop' => [emit(node('layout' => 'flow', 'height' => 100, 'scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'eagerBoundTop' => [emit(node('lazy' => 'eager', 'scrollAnchor' => '@{anchor}')), { anchor: 'top' }, [6]],
+      'eagerBoundCenter' => [emit(node('lazy' => 'eager', 'scrollAnchor' => '@{anchor}')), { anchor: 'center' }, [6]]
+    }
+  end
+
+  def program(routes)
+    functions = routes.map { |name, (body, _, _)| "@Composable fun #{name}(data: Data, viewModel: Any) {\n#{body}\n}" }
+    calls = routes.flat_map do |name, (_, options, targets, *first)|
+      first = first.empty? ? '' : first.first
+      targets.map do |target|
+        sections = data_sections(**options.except(:mode, :anchor, :reenter))
+        mode = options[:mode] ? ", mode = \"#{options[:mode]}\"" : ''
+        mode += ", anchor = \"#{options[:anchor]}\"" if options[:anchor]
+        first_arg = first.nil? ? 'null' : "\"#{first}\""
+        target_arg = target.is_a?(Integer) ? target.to_s : "\"#{target}\""
+        reenter = options[:reenter] ? ', reenter = true' : ''
+        "    run(\"#{name} #{target}\", #{first_arg}, #{target_arg}#{reenter}) { value -> #{name}(Data(CollectionDataSource(#{sections}), value#{mode}), Any()) }"
+      end
+    end
+    ["import stubs.*\nimport kotlinx.coroutines.launch\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
+     functions.join("\n\n"),
+     <<~KOTLIN
+       // One composition, then its effects — as a frame does.
+       fun frame(value: Any?, compose: (Any?) -> Unit) {
+           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0; Positions.reversed = false; Positions.k = 0; Drawn.chain.clear()
+           compose(value)
+           val effects = Drawn.effects.toList(); Drawn.effects.clear()
+           kotlinx.coroutines.runBlocking { effects.forEach { it() } }
+       }
+       // reenter: the Collection leaves the composition between the first value
+       // and the target (visibility gone) — its slots are gone, the screen's
+       // scrollTo memory is not.
+       fun run(label: String, first: String?, target: Any?, reenter: Boolean = false, compose: (Any?) -> Unit) {
+           LocalCollectionScrollMemory.current = CollectionScrollMemory()
+           Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Scrolled.laidOut = false; Scrolled.position = 0; Drawn.logs.clear(); Drawn.duplicate = null
+           Drawn.userScroll = null; Drawn.packed = null
+           if (first != null) frame(first, compose)
+           if (reenter) { Composition.slots.clear(); Drawn.effects.clear() }
+           frame(target, compose)
+           val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
+           println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " logs " + Drawn.logs.size +
+               " of " + Drawn.items.joinToString(" ") + " | user " + Drawn.userScroll + " packed " + Drawn.packed +
+               " chain " + Drawn.chain.joinToString(",").ifEmpty { "-" } + " | duplicate key " + Drawn.duplicate)
+       }
+       fun main() {
+       #{calls.join("\n")}
+       }
+     KOTLIN
+    ].join("\n")
+  end
+
+  # Compiles and runs the program; `route target => item [@index of items]`.
+  # One compile and run per program: the examples read the same printout
+  # (a compile is ~40 s).
+  KJ_SCROLL_RUNS = {}
+
+  def run_emitted(routes)
+    skip "compile: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
+
+    KJ_SCROLL_RUNS[program(routes)] ||= compile_and_run(routes)
+  end
+
+  def compile_and_run(routes)
+
+    stdlib = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    coroutines = KotlinCompiler.jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    reflect = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annotations = KotlinCompiler.jar('org.jetbrains', 'annotations')
+    Dir.mktmpdir('kjui_scroll') do |dir|
+      files = { 'Emitted.kt' => program(routes), 'Stubs.kt' => KJ_SCROLL_STUBS }.merge(KJ_SCROLL_QUALIFIED)
+      files.each { |name, source| File.write(File.join(dir, name), source) }
+      compiler_cp = KotlinCompiler.compiler_classpath
+      out, status = KotlinCompiler.java_capture2e('-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+                                    '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
+                                    '-d', File.join(dir, 'out'), *files.keys.map { |name| File.join(dir, name) })
+      errors = out.lines.grep(/error:/)
+      raise "the emitted code did not compile:\n#{errors.join}\n#{files['Emitted.kt']}" unless status.success? && errors.empty?
+
+      run, status = KotlinCompiler.java_capture2e('-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+      raise "the emitted code did not run:\n#{run}" unless status.success?
+
+      run.lines.to_h { |l| k, v = l.chomp.split(' => ', 2); [k, v] }
+    end
+  end
+
+  # One file, for the suite's compile ratchet (compile_as_kotlin compiles one
+  # source): the stubs in the file's own package, and the names the emit
+  # writes fully qualified reached through stubs of the same simple name.
+  # The run arm below compiles the emit as it is, in several files.
+  def one_file(routes)
+    program(routes).sub("import stubs.*\n", '')
+                   .gsub('androidx.compose.foundation.lazy.rememberLazyListState()', 'rememberLazyListState()')
+                   .gsub('com.kotlinjsonui.utils.CellIdGenerator.', 'CellIdGenerator.')
+                   .gsub('androidx.compose.ui.platform.LocalContext.', 'LocalContext.')
+                   .gsub('android.content.pm.ApplicationInfo.', 'ApplicationInfo.')
+                   .gsub('android.util.Log.', 'Log.')
+                   .gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
+                   .gsub('androidx.compose.ui.geometry.Offset', 'Offset')
+                   .gsub('androidx.compose.foundation.rememberScrollState()', 'rememberScrollState()')
+                   .gsub('androidx.compose.runtime.withFrameNanos', 'withFrameNanos')
+                   .gsub('androidx.compose.ui.unit.Constraints', 'Constraints')
+                   .gsub('androidx.compose.ui.platform.LocalLayoutDirection', 'LocalLayoutDirection')
+                   .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
+      "\n" + KJ_SCROLL_STUBS.sub("package stubs\nimport kotlinx.coroutines.launch\n", '').gsub('androidx.compose.ui.layout.LayoutCoordinates', 'LayoutCoordinates')
+                            .gsub('androidx.compose.ui.geometry.Offset', 'Offset').gsub('androidx.compose.ui.unit.Constraints', 'Constraints')
+                            .gsub('androidx.compose.ui.unit.LayoutDirection', 'LayoutDirection') +
+      "fun rememberLazyListState() = remember { LazyListState() }\n" +
+      KJ_SCROLL_QUALIFIED['CellIdGenerator.kt'].sub("package com.kotlinjsonui.utils\n", '') +
+      "object LocalContext { val current = Context() }\nclass Context { val applicationInfo = ApplicationInfo() }\n" \
+      "class ApplicationInfo { var flags = FLAG_DEBUGGABLE\n    companion object { const val FLAG_DEBUGGABLE = 2 } }\n" \
+      "object Log { fun w(tag: String, msg: String): Int = 0 }\n" \
+      "interface LayoutCoordinates { val isAttached: Boolean; val size: IntSize\n" \
+      "    fun localPositionOf(sourceCoordinates: LayoutCoordinates, relativeToSource: Offset): Offset }\n" \
+      "class Offset(val x: Float, val y: Float) { companion object { val Zero = Offset(0f, 0f) } }\n" \
+      "suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(0L)\n" \
+      "enum class LayoutDirection { Ltr, Rtl }\nobject LocalLayoutDirection { val current = LayoutDirection.Ltr }\n" \
+      "class Constraints(val minWidth: Int, val maxWidth: Int, val minHeight: Int, val maxHeight: Int) {\n" \
+      "    val hasBoundedHeight get() = maxHeight != Int.MAX_VALUE\n" \
+      "    companion object { fun fitPrioritizingWidth(minWidth: Int, maxWidth: Int, minHeight: Int, maxHeight: Int) = Constraints(minWidth, maxWidth, minHeight, maxHeight) } }\n"
+  end
+
+  it 'every route compiles (the compile arm; the run below compiles it again to run it)' do
+    expect(one_file(routes)).to compile_as_kotlin.with_warnings_as_errors
+  end
+
+  def landed(lines, label)
+    (lines[label] or raise "no run for #{label}: #{lines.keys.inspect}").split(' ').first
+  end
+
+  # `route target` => { at:, index:, offset:, logs:, user:, packed:, chain: }
+  def read(lines, label)
+    line = lines[label] or raise "no run for #{label}: #{lines.keys.inspect}"
+    at, index, offset, logs = line.match(/\A(\S+) @(-?\d+) offset (-?\d+) logs (\d+)/).captures
+    user, packed, chain = line.match(/\| user (\S+) packed (\S+) chain (\S+) \|/).captures
+    { at: at, index: index.to_i, offset: offset.to_i, logs: logs.to_i, user: user, packed: packed, chain: chain }
+  end
+
+  it 'an Int is a cell counted across the sections; a key the first cell that has it, on the stack and the grid' do
+    lines = run_emitted(routes)
+    # The stack's items: H A0 A1 A2 A3 A4 F H B0 … — item 6 is F, item 3 A2.
+    # The Ints are cells; -1 names none. The String "3#77" is no cell's key
+    # (key = cellId here, and no cell has one): the legacy lazy item 3, A2 on
+    # the stack (B2, reversed), and said.
+    expect([0, 3, 6, 9, '3#77', -1].map { |t| landed(lines, "stack #{t}") }).to eq(%w[A0 A3 B6 B9 A2 none]), lines.inspect
+    expect([0, 3, 6, 9, -1].map { |t| landed(lines, "stackReversed #{t}") }).to eq(%w[A0 A3 B6 B9 none]), lines.inspect
+    expect(read(lines, 'stack 3#77')[:logs]).to eq(1), lines.inspect
+    # The grid's items: H A0 … A4 _ B0 … — A4 leaves its row part filled, so a
+    # filler precedes B0; item 6 is the filler.
+    %w[grid gridReversed gridBound].each do |route|
+      expect([0, 3, 6, 9, -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B6 B9 none]), lines.inspect
+    end
+    %w[stackKeys gridKeys].each do |route|
+      # k3 is A3's key and B0's: the first section's. "0#77" is no key: read,
+      # as before jsonui-cli 1.9.0, as the lazy item index — item 0, the
+      # header — and said (the orchestrator's ruling, round 11). "nothing" scrolls nowhere.
+      expect(%w[k3 x2 k1 0#77 nothing].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A3 B7 A1 H none]), lines.inspect
+      expect(%w[k3 0#77 nothing].map { |t| read(lines, "#{route} #{t}")[:logs] }).to eq([0, 1, 0]), lines.inspect
+      # An Int with cellIdProperty is the counted cell — A3 — not a key and
+      # not the lazy item 3 (A2) it was read as until jsonui-cli 1.9.0.
+      expect(read(lines, "#{route} 3").values_at(:at, :logs)).to eq(['A3', 0]), lines.inspect
+    end
+    # Under autoChangeTrackingId a cell's key is its enriched cellId.
+    expect(%w[k3_e x2_e k3].map { |t| landed(lines, "stackEnriched #{t}") }).to eq(%w[A3 B7 none]), lines.inspect
+    # The class-list grid: a header item, then every data section's cells,
+    # each drawn with cellClasses[0] (so the second section's cell 1 is A6:
+    # its address counts the first section's five, 2.5.39).
+    expect([0, 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A6 @7]]), lines.inspect
+  end
+
+  # Round 11 (the orchestrator's ruling 2026-09-27).
+  it 'a scroll runs on a change: the value the list first composes with scrolls nowhere' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'stackInitial 6')[:index]).to eq(-1), lines.inspect
+    expect(read(lines, 'stack 6')[:at]).to eq('B6'), lines.inspect
+  end
+
+  it 'scrollAnchor lands the item: bottom its end at the viewport end, center its middle, top its start; reversed, top and bottom trade' do
+    lines = run_emitted(routes)
+    # A cell is 28 high in a 100 viewport.
+    expect(read(lines, 'stack 6')[:offset]).to eq(-72), lines.inspect        # bottom (the default)
+    expect(read(lines, 'grid 6')[:offset]).to eq(-72), lines.inspect
+    expect(read(lines, 'stackCenter 6')[:offset]).to eq(-36), lines.inspect
+    expect(read(lines, 'stackTop 6')[:offset]).to eq(0), lines.inspect
+    expect(read(lines, 'stackReversed 6')[:offset]).to eq(0), lines.inspect  # bottom, reversed: the list's start
+  end
+
+  # A bound scrollAnchor (jsonui-cli 1.9.29,
+  # jui-collection-scrollto-per-request-anchor) lands where the written one
+  # does, chosen per request; reversed, top and bottom trade at run time as
+  # the written ones trade; a value that is no anchor lands as bottom and a
+  # debuggable app hears it.
+  it 'a bound scrollAnchor lands as the written one, per request, on every route' do
+    lines = run_emitted(routes)
+    expect(%w[Top Center Bottom].map { |a| read(lines, "stackBound#{a} 6")[:offset] }).to eq([0, -36, -72]), lines.inspect
+    expect(read(lines, 'stackBoundOdd 6').values_at(:offset, :logs)).to eq([-72, 1]), lines.inspect
+    expect(read(lines, 'stackBoundTop 6')[:logs]).to eq(0), lines.inspect
+    expect(read(lines, 'stackReversedBoundTop 6')[:offset]).to eq(read(lines, 'stackReversedTop 6')[:offset]), lines.inspect
+    expect(read(lines, 'stackReversedBoundTop 6')[:offset]).to eq(-72), lines.inspect      # top, reversed: the viewport's far end
+    expect(read(lines, 'stackReversedBoundBottom 6')[:offset]).to eq(read(lines, 'stackReversed 6')[:offset]), lines.inspect
+    expect(read(lines, 'gridBoundCenter 6')[:offset]).to eq(-36), lines.inspect
+    expect(read(lines, 'flowBoundTop 6')[:index]).to eq(196), lines.inspect                # 28 (6 + 1), top-anchored
+    expect(read(lines, 'eagerBoundTop 6')[:index]).to eq(read(lines, 'eagerTop 6')[:index]), lines.inspect
+    expect(read(lines, 'eagerBoundCenter 6')[:index]).to eq(read(lines, 'eagerCenter 6')[:index]), lines.inspect
+  end
+
+  it 'a bound scrollAnchor is read in the effect the scrollTo value keys, and keys nothing itself' do
+    code = emit(node('scrollAnchor' => '@{anchor}'))
+    expect(code).to include('LaunchedEffect(data.target) {')
+    expect(code).not_to match(/LaunchedEffect\([^)]*data\.anchor/)
+    effect = code[/LaunchedEffect\(data\.target\) \{.*/m]
+    expect(effect).to include('val scrollAnchorNow = (data.anchor')
+    expect(code.scan('data.anchor').size).to eq(1)
+    expect(emit(node('scrollAnchor' => 'top'))).not_to include('scrollAnchorNow')
+  end
+
+  # kjui-collection-scrollto-ignored-after-visibility-gone (2026-10-14):
+  # visibility gone takes a Collection out of the composition; the value it
+  # comes back with, written in the same update, was read as the value it is
+  # drawn with. The screen remembers the value each Collection (by its id) was
+  # last seen with: a different value on the way back is a request.
+  it 'a value a Collection comes back from gone with is a request when the screen saw it with another' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'goneStays k3')[:at]).to eq('A3'), lines.inspect        # control: no gone in between
+    expect(read(lines, 'goneReturn k3')[:at]).to eq('A3'), lines.inspect       # "" when it left, k3 when it came back
+    expect(read(lines, 'goneReturnSame k3')[:index]).to eq(-1), lines.inspect  # the value it left with: nothing to do
+    expect(read(lines, 'goneReturnNoId k3')[:index]).to eq(-1), lines.inspect  # no id, nothing remembered: the first-draw rule
+  end
+
+  it 'defaultScrollAnchor counts cells across the sections, as scrollTo does' do
+    lines = run_emitted(routes)
+    # Ten cells: bottom is the last, B4 (item 12, after H A0…A4 F H B0…B3);
+    # center the sixth, B0. The grid: B4 after its filler, item 11.
+    expect(read(lines, 'stackAnchor ').values_at(:at, :index)).to eq(['B9', 12]), lines.inspect
+    expect(read(lines, 'stackAnchorCenter ').values_at(:at, :index)).to eq(['B5', 8]), lines.inspect
+    # centred, not at the top edge (kjui-defaultscrollanchor-center-differs-
+    # when-content-overflows): scrollToItem puts B0 at 0, then it goes back
+    # by (100 - 28) / 2 to its middle. Until 2026-10-14 no shift was made.
+    expect(read(lines, 'stackAnchorCenter ')[:offset]).to eq(-36), lines.inspect
+    expect(read(lines, 'gridAnchor ').values_at(:at, :index)).to eq(['B9', 11]), lines.inspect
+  end
+
+  it 'the pager and the flow scroll by the rule too (they read no scrollTo before 1.9.0)' do
+    lines = run_emitted(routes)
+    # A page is a cell: A0…A4 B0…B4. "10" names no page; "0#77" (no key) is
+    # the legacy item index, page 0, and is said.
+    expect([0, 6, 9, 10].map { |t| read(lines, "pager #{t}")[:index] }).to eq([0, 6, 9, -1]), lines.inspect
+    expect(%w[k3 x2 0#77].map { |t| read(lines, "pagerKeys #{t}").values_at(:index, :logs) }).to eq([[3, 0], [7, 0], [0, 1]]), lines.inspect
+    # The flow scrolls its own scroll state to the cell's place: the content
+    # at 0, cell n at 28 (n + 1) in the stubs' layout, bottom-anchored in a
+    # 100 viewport — 28 (n + 1) - 72 (k3 is A3, n 3; x2 is B2, n 7). A String that is no key names nothing
+    # on a flow (no lazy item).
+    expect([0, 6].map { |t| read(lines, "flow #{t}")[:index] }).to eq([0, 124]), lines.inspect
+    expect(%w[k3 x2 0#77].map { |t| read(lines, "flowKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
+  end
+
+  # Round 12 (the orchestrator's rulings 2026-09-27). In the stubs a non-lazy container's
+  # viewport is laid out first, then its cells, each 28 below the last: cell
+  # n at 28 (n + 1), in a 100 viewport scrolled to 0. What the scroll asks
+  # for is the scroll position — bottom-anchored (the default) 28 (n + 1) - 72.
+  it 'the EAGER CollectionStack scrolls to the cell by the rule — an Int the counted cell, a String a key, landed by scrollAnchor, on a change' do
+    lines = run_emitted(routes)
+    # 0 → A0 (28 - 72, the top: 0); 6 → B1 (196 - 72); 9 → B4; -1 nowhere.
+    expect([0, 6, 9, -1].map { |t| read(lines, "eager #{t}")[:index] }).to eq([0, 124, 208, -1]), lines.inspect
+    # k3 is A3's key (and B0's): A3, 112 - 72; x2 is B2's: 224 - 72. The
+    # legacy "0#77" names no cell here — the container has no lazy item —
+    # and nothing is said.
+    expect(%w[k3 x2 0#77 nothing].map { |t| read(lines, "eagerKeys #{t}").values_at(:index, :logs) }).to eq([[40, 0], [152, 0], [-1, 0], [-1, 0]]), lines.inspect
+    expect(read(lines, 'eagerCenter 6')[:index]).to eq(160), lines.inspect   # 196 - 36
+    expect(read(lines, 'eagerTop 6')[:index]).to eq(196), lines.inspect
+    expect(read(lines, 'eagerInitial 6')[:index]).to eq(-1), lines.inspect   # the value it composes with
+    expect(read(lines, 'eagerRow 6')[:index]).to eq(124), lines.inspect      # along x
+  end
+
+  it "a bound `lazy` decides at run time: EAGER scrolls its cells, LAZY its items (and reads the legacy form)" do
+    lines = run_emitted(routes)
+    expect(%w[6 3#77].map { |t| read(lines, "eagerBound #{t}").values_at(:index, :logs) }).to eq([[124, 0], [-1, 0]]), lines.inspect
+    expect(%w[6 3#77].map { |t| read(lines, "eagerBoundLazy #{t}").values_at(:at, :logs) }).to eq([['B6', 0], ['A2', 1]]), lines.inspect
+  end
+
+  it 'the wrapContent Column scrolls to the cell by the rule; `lazy: none` scrolls nowhere' do
+    lines = run_emitted(routes)
+    expect([0, 6].map { |t| read(lines, "wrap #{t}")[:index] }).to eq([0, 124]), lines.inspect
+    expect(%w[k3 x2 0#77].map { |t| read(lines, "wrapKeys #{t}")[:index] }).to eq([40, 152, -1]), lines.inspect
+    expect(read(lines, 'wrapNone 6')[:index]).to eq(-1), lines.inspect
+  end
+
+  # center lands the middle cell's middle at the viewport's middle, as iOS
+  # and the web draw a list longer than its viewport
+  # (kjui-defaultscrollanchor-center-differs-when-content-overflows,
+  # 2026-10-14); it went to the top edge, 168.
+  it 'defaultScrollAnchor on a non-lazy container: the last cell at its top edge, the middle one centred, once the cells arrive' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'eagerAnchor ')[:index]).to eq(280), lines.inspect    # B4, the tenth cell: 28 × 10
+    expect(read(lines, 'wrapAnchor ')[:index]).to eq(132), lines.inspect     # center: B0, the sixth, 28 × 6 - (100 - 28) / 2
+  end
+
+  it 'defaultScrollAnchor under reverseLayout: bottom is where the list rests, top the cell drawn at the visual top' do
+    lines = run_emitted(routes)
+    # The reversed stack emits B first: H B0 … B4 H A0 … A4 F. bottom moves
+    # nothing (until jsonui-cli 1.9.0 it went to B4, item 5 — the visual
+    # top); top goes to the last cell emitted, A4 (item 11); center is the
+    # middle cell, B0.
+    expect(read(lines, 'stackReversedAnchor ')[:index]).to eq(-1), lines.inspect
+    expect(read(lines, 'stackReversedAnchorTop ').values_at(:at, :index)).to eq(['A4', 11]), lines.inspect
+    expect(read(lines, 'stackReversedAnchorCenter ').values_at(:at, :index)).to eq(['B5', 1]), lines.inspect
+    expect(read(lines, 'gridReversedAnchor ')[:index]).to eq(-1), lines.inspect
+    expect(read(lines, 'gridReversedAnchorTop ')[:at]).to eq('A4'), lines.inspect
+  end
+
+  # Round 13 (the orchestrator's rulings 2026-09-27).
+  it 'the reversed vertical EAGER container draws reverseLayout: it rests at its bottom, a scroll counts from there' do
+    lines = run_emitted(routes)
+    # Emitted last-first (B's cells, then A's), laid out from the bottom: B0
+    # at 72, B1 at 44 … A0 at -68 … A4 at -180 in the 100 viewport, resting
+    # at value 0. scrollTo 6 (B1) bottom-anchored: its end to 100 — 28 up;
+    # 0 (A0): 140 up. Top-anchored B1 (44 to 0) is past the rest: 0.
+    expect([6, 0].map { |t| read(lines, "eagerReversed #{t}")[:index] }).to eq([28, 140]), lines.inspect
+    expect(read(lines, 'eagerReversedTop 6')[:index]).to eq(0), lines.inspect
+    # defaultScrollAnchor: top, reversed, goes to the visual top — the last
+    # cell emitted, A4, to the start edge (the bottom): 252 up; bottom is
+    # where it rests and moves nothing.
+    expect(read(lines, 'eagerReversedAnchorTop ')[:index]).to eq(252), lines.inspect
+    expect(read(lines, 'eagerReversedAnchorBottom ')[:index]).to eq(-1), lines.inspect
+  end
+
+  it 'scrollEnabled false stops the user only: the container keeps its scroll and a scrollTo still moves it' do
+    lines = run_emitted(routes)
+    { 'eagerLocked 6' => 124, 'flowLocked 6' => 124, 'wrapLocked 6' => 124, 'pagerLocked 6' => 6 }.each do |label, to|
+      expect(read(lines, label).values_at(:index, :user)).to eq([to, 'false']), "#{label}: #{lines[label]}"
+    end
+    expect(read(lines, 'flow 6')[:user]).to eq('true'), lines.inspect
+  end
+
+  it 'a bound `lazy` that is NONE at run time does not scroll the wrapContent Column' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'wrapBound 6')[:index]).to eq(124), lines.inspect
+    expect(read(lines, 'wrapBoundNone 6')[:index]).to eq(-1), lines.inspect
+  end
+
+  it 'a short reversed grid with lineSpacing packs to its bottom; unreversed, to its top' do
+    lines = run_emitted(routes)
+    expect(read(lines, 'gridReversedSpaced 0')[:packed]).to eq('Bottom'), lines.inspect
+    expect(read(lines, 'gridSpaced 0')[:packed]).to eq('null'), lines.inspect
+  end
+
+  # Round 14 (the orchestrator's ruling 2026-09-27).
+  it 'not reversed, defaultScrollAnchor bottom puts short content at the bottom — the stack and the grid' do
+    lines = run_emitted(routes)
+    %w[stackBottom gridBottom gridBottomSpaced].each do |route|
+      expect(read(lines, "#{route} 0")[:packed]).to eq('Bottom'), "#{route}: #{lines["#{route} 0"]}"
+    end
+    # A reversed stack packs to its bottom in the library already (reverseLayout).
+    expect(read(lines, 'stackBottomReversed 0')[:packed]).to eq('null'), lines.inspect
+    expect(read(lines, 'stack 0')[:packed]).to eq('null'), lines.inspect
+  end
+
+  # Round 15 (the orchestrator's rulings 2026-09-27).
+  it 'contentPadding / insets pad the cells of the containers that are not lazy lists — inside the scroll where they scroll' do
+    lines = run_emitted(routes)
+    # insets [12, 0, 6, 0]: top 12, bottom 6 (the stubs print top.start.bottom.end).
+    { 'wrapInset 0' => 'scroll,pad(12.0.6.0)', 'wrapBoundInset 0' => 'scroll,pad(12.0.6.0)', 'wrapBoundNoneInset 0' => 'pad(12.0.6.0)',
+      'noneInset 0' => 'pad(12.0.6.0)', 'noneRowInset 0' => 'pad(0.16.0.16)', 'flowInset 0' => 'scroll,pad(12.0.6.0)',
+      'flowParentInset 0' => 'scroll,pad(12.0.6.0)', 'flowNoneInset 0' => 'pad(12.0.6.0)',
+      # Nothing declared, nothing padded.
+      'wrap 0' => 'scroll', 'flow 0' => 'scroll' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it 'a short horizontal list sits where defaultScrollAnchor says: bottom its end, center its middle — the stack, LAZY and EAGER, and the grid' do
+    lines = run_emitted(routes)
+    { 'rowBottom 0' => 'End', 'rowCenter 0' => 'CenterHorizontally', 'rowEagerBottom 0' => 'End', 'rowEagerCenter 0' => 'CenterHorizontally',
+      'hgridBottom 0' => 'End', 'hgridCenterSpaced 0' => 'CenterHorizontally',
+      # The start where nothing moves it; the end, reversed (round 13).
+      'row 0' => 'null', 'rowTop 0' => 'null', 'hgrid 0' => 'null', 'hgridReversedSpaced 0' => 'End' }.each do |label, packed|
+      expect(read(lines, label)[:packed]).to eq(packed), "#{label}: #{lines[label]}"
+    end
+  end
+
+  # Round 16 (the orchestrator's rulings 2026-09-27).
+  it 'insets are read as paddings are: 1, 2 or 4 values, an array or a |-separated string; four are [top, right, bottom, left]' do
+    lines = run_emitted(routes)
+    # cp(top.start.bottom.end): [8, 16, 4, 2] is top 8, right (end) 16, bottom 4, left (start) 2.
+    { 'padArray 0' => 'cp(8.2.4.16)', 'padString 0' => 'cp(8.2.4.16)', 'padTwo 0' => 'cp(8.16.8.16)', 'padTwoArray 0' => 'cp(8.16.8.16)',
+      'padOne 0' => 'cp(6.6.6.6)', 'gridPadArray 0' => 'cp(8.2.4.16)', 'wrapPadString 0' => 'scroll,pad(8.2.4.16)',
+      # Three values are no form: nothing.
+      'padThree 0' => '-' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it 'insetHorizontal / insetVertical are added to the safe area, as iOS adds them — a declared insets too (round 17)' do
+    lines = run_emitted(routes)
+    # The stubs' safe area: top 24, bottom 48.
+    { 'safeInsets 0' => 'cp(32.16.56.16)', 'safeInsetsAxes 0' => 'cp(32.0.56.0)', 'safeOnly 0' => 'cp(24.0.48.0)',
+      'safeNever 0' => 'cp(8.0.8.0)', 'safeDeclared 0' => 'cp(40.0.56.0)',
+      # An insets no form takes declares nothing: the safe area applies.
+      'safeMalformed 0' => 'cp(24.0.48.0)' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it 'a short vertical list with defaultScrollAnchor center sits in the middle — the stack, LAZY and EAGER, and the grid' do
+    lines = run_emitted(routes)
+    { 'stackCenterV 0' => 'CenterVertically', 'eagerCenterV 0' => 'CenterVertically', 'gridCenterV 0' => 'CenterVertically',
+      'gridCenterVSpaced 0' => 'CenterVertically', 'gridReversedCenterVSpaced 0' => 'CenterVertically',
+      # Controls: bottom and none, unchanged.
+      'stackBottom 0' => 'Bottom', 'stack 0' => 'null', 'gridSpaced 0' => 'null' }.each do |label, packed|
+      expect(read(lines, label)[:packed]).to eq(packed), "#{label}: #{lines[label]}"
+    end
+  end
+
+  # Round 17 (the orchestrator's rulings 2026-09-27).
+  it 'a declared insets is added to insetHorizontal / insetVertical and the safe area; a binding in it binds; a row keeps them all' do
+    lines = run_emitted(routes)
+    # The stubs' safe area: top 24, bottom 48 (horizontal sides 0); t = 20.
+    { 'addInsets 0' => 'cp(16.16.8.16)', 'addInsetsSafe 0' => 'cp(40.0.56.0)', 'addInsetsSafeOnly 0' => 'cp(32.2.48.4)',
+      'bindInsets 0' => 'cp(28.0.8.0)',
+      # A row: insetHorizontal and insetVertical in contentPadding, no insetLeading
+      # / insetTrailing beside it (they replaced it, and dropped the rest).
+      'rowInsetH 0' => 'cp(4.14.4.14)', 'rowInsetHSafe 0' => 'cp(0.14.0.14)' }.each do |label, chain|
+      expect(read(lines, label)[:chain]).to eq(chain), "#{label}: #{lines[label]}"
+    end
+  end
+
+  it "no two items of a lazy list share a key — two sections', or two cells of one section" do
+    lines = run_emitted(routes)
+    # Section B's k3 is "1:k3"; section A's second k1 is "k1#2".
+    expect(lines.select { |_, v| !v.end_with?('| duplicate key null') }).to eq({}), lines.inspect
+    # The first cell with the key is still the one a key names.
+    expect(landed(lines, 'stackDupKeys k1')).to eq('A1'), lines.inspect
+    expect(landed(lines, 'stackDupKeys k3')).to eq('A3'), lines.inspect
+    expect(landed(lines, 'gridDupKeys k1')).to eq('A1'), lines.inspect
+  end
+  # kjui-collection-scrollto-landing-cancelled-by-next-value: a landing in
+  # flight is not cut by a change to a value that names no cell — "", null, a
+  # key no cell has, an index out of range — and a value that names another
+  # cell replaces it. A consumer names a cell and puts the value back to ""
+  # 200 ms later, so that the same cell can be named again; a landing took
+  # 173–269 ms on an Android 15 emulator, and every one longer than that was
+  # cut where its first step left it.
+  #
+  # LIVE runs: the effects and the landings are coroutines on one event loop,
+  # an effect is cancelled when its key changes (Compose's LaunchedEffect),
+  # and an animated scroll step takes 100 ms. A step list is (ms after the
+  # previous step, value); each run's answer is where it came to rest, read
+  # against the same route landing on the value it ends on with nothing in
+  # between.
+  LIVE_STEPS = {
+    'clear' => [[0, 'TARGET'], [30, '']],
+    'clearLate' => [[0, 'TARGET'], [150, '']],
+    'null' => [[0, 'TARGET'], [30, nil]],
+    'unknown' => [[0, 'TARGET'], [30, 'UNKNOWN']],
+    'other' => [[0, 'TARGET'], [30, 'OTHER']],
+    'alone' => [[0, 'TARGET']],
+    'otherAlone' => [[0, 'OTHER']]
+  }.freeze unless defined?(LIVE_STEPS)
+
+  def live_routes
+    {
+      # The reported shape: keys, reverseLayout, scrollAnchor top (the
+      # landing lays the item out, then scrolls to its anchor).
+      'liveChat' => [emit(node('cellIdProperty' => 'key', 'reverseLayout' => true, 'scrollAnchor' => 'top')), {},
+                     { 'TARGET' => 'x2', 'OTHER' => 'k1', 'UNKNOWN' => 'nothing' }],
+      'liveCenter' => [emit(node('scrollAnchor' => 'center')), {}, { 'TARGET' => 6, 'OTHER' => 1, 'UNKNOWN' => 99 }],
+      'liveGrid' => [emit(grid_node('cellIdProperty' => 'key', 'scrollAnchor' => 'center')), { grid: true },
+                     { 'TARGET' => 'x2', 'OTHER' => 'k1', 'UNKNOWN' => 'nothing' }]
+    }
+  end
+
+  def kotlin_value(value)
+    return 'null' if value.nil?
+
+    value.is_a?(Integer) ? value.to_s : "\"#{value}\""
+  end
+
+  def live_program
+    routes = live_routes
+    functions = routes.map { |name, (body, _, _)| "@Composable fun #{name}(data: Data, viewModel: Any) {\n#{body}\n}" }
+    calls = routes.flat_map do |name, (_, options, values)|
+      sections = data_sections(**options)
+      LIVE_STEPS.map do |step_name, steps|
+        list = steps.map { |delay, v| "#{delay}L to #{kotlin_value(values.fetch(v, v))}" }.join(', ')
+        "    live(\"#{name} #{step_name}\", listOf<Pair<Long, Any?>>(#{list})) { value -> #{name}(Data(CollectionDataSource(#{sections}), value), Any()) }"
+      end
+    end
+    ["import stubs.*\nimport kotlinx.coroutines.launch\n", scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H'), scaffold('FCell', 'F'),
+     functions.join("\n\n"),
+     <<~KOTLIN
+       fun recompose(value: Any?, compose: (Any?) -> Unit) {
+           Composition.cursor = 0; Drawn.items.clear(); Drawn.keys.clear(); Positions.next = 0; Positions.reversed = false; Positions.k = 0; Drawn.chain.clear()
+           compose(value)
+       }
+       fun live(label: String, steps: List<Pair<Long, Any?>>, compose: (Any?) -> Unit) {
+           Composition.slots.clear(); Drawn.effects.clear(); Drawn.scrolledTo = -1; Drawn.offset = 0; Scrolled.laidOut = false; Scrolled.position = 0
+           kotlinx.coroutines.runBlocking {
+               Live.scope = this; Live.animationMs = 100
+               recompose("", compose)
+               for ((wait, value) in steps) { kotlinx.coroutines.delay(wait); recompose(value, compose) }
+               kotlinx.coroutines.delay(1000)
+               Live.scope = null
+           }
+           Live.animationMs = 0
+           val at = Drawn.items.getOrNull(Drawn.scrolledTo) ?: "none"
+           println(label + " => " + at + " @" + Drawn.scrolledTo + " offset " + Drawn.offset + " position " + Scrolled.position)
+       }
+       fun main() {
+       #{calls.join("\n")}
+       }
+     KOTLIN
+    ].join("\n")
+  end
+
+  def run_live
+    skip "compile: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
+
+    KJ_SCROLL_RUNS[live_program] ||= compile_and_run_source(live_program)
+  end
+
+  def compile_and_run_source(source)
+    stdlib = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    coroutines = KotlinCompiler.jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    reflect = KotlinCompiler.jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annotations = KotlinCompiler.jar('org.jetbrains', 'annotations')
+    Dir.mktmpdir('kjui_scroll_live') do |dir|
+      files = { 'Emitted.kt' => source, 'Stubs.kt' => KJ_SCROLL_STUBS }.merge(KJ_SCROLL_QUALIFIED)
+      files.each { |name, text| File.write(File.join(dir, name), text) }
+      out, status = KotlinCompiler.java_capture2e('-cp', KotlinCompiler.compiler_classpath, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+                                                  '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
+                                                  '-d', File.join(dir, 'out'), *files.keys.map { |name| File.join(dir, name) })
+      errors = out.lines.grep(/error:/)
+      raise "the emitted code did not compile:\n#{errors.join}" unless status.success? && errors.empty?
+
+      run, status = KotlinCompiler.java_capture2e('-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+      raise "the emitted code did not run:\n#{run}" unless status.success?
+
+      run.lines.to_h { |l| k, v = l.chomp.split(' => ', 2); [k, v] }
+    end
+  end
+
+  it 'a landing in flight is not cut by a value that names no cell, and a value that names another cell replaces it' do
+    lines = run_live
+    misses = live_routes.keys.flat_map do |route|
+      alone = lines.fetch("#{route} alone")
+      other = lines.fetch("#{route} otherAlone")
+      expect(alone).not_to start_with('none'), "#{route}: the uninterrupted landing went nowhere: #{alone}"
+      expect(other).not_to eq(alone), "#{route}: the two targets land alike, so the arm cannot tell them apart"
+      { 'clear' => alone, 'clearLate' => alone, 'null' => alone, 'unknown' => alone, 'other' => other }.filter_map do |steps, want|
+        got = lines.fetch("#{route} #{steps}")
+        "#{route} #{steps}: #{got}, expected #{want}" if got != want
+      end
+    end
+    expect(misses).to be_empty, "#{misses.size} misses:\n#{misses.join("\n")}"
+  end
+
+  # kjui-collection-lazy-grid-and-flow-rows-do-not-align-cell-heights: a
+  # section of the vertical lazy grid whose cells fill their row's height is
+  # drawn a full-width item per row. scrollTo counts that section in rows: the
+  # Int it names lands on the item that holds the cell of that address
+  # (`_item_<n>`, drawn here as its letter and n) — in the row section, before
+  # it, after it, with both sections in rows, under defaultScrollAnchor and on
+  # the class-list grid.
+  describe 'a grid whose cells fill their row' do
+    ROW_CELL = { 'type' => 'View', 'width' => 'matchParent', 'height' => 'matchParent' }.freeze
+
+    def emit_with_rows(cells, node)
+      KjuiTools::Compose::Helpers::ResourceResolver.cell_layouts = cells.to_h { |c| [c, ROW_CELL] }
+      emit(node)
+    ensure
+      KjuiTools::Compose::Helpers::ResourceResolver.cell_layouts = nil
+    end
+
+    it 'scrollTo n lands on the row that holds the cell addressed n' do
+      targets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      routes = {
+        'rowsBoth' => [emit_with_rows(%w[ACell BCell], grid_node), { grid: true }, targets],
+        'rowsFirst' => [emit_with_rows(%w[ACell], grid_node), { grid: true }, targets],
+        'rowsSecond' => [emit_with_rows(%w[BCell], grid_node), { grid: true }, targets],
+        'rowsKeys' => [emit_with_rows(%w[ACell BCell], grid_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2]]
+      }
+      expect(routes['rowsBoth'][0]).to include('span = { GridItemSpan(maxLineSpan) }) { rowIndex ->')
+      expect(routes['rowsFirst'][0].scan('{ rowIndex ->').size).to eq(1)
+      lines = run_emitted(routes)
+      %w[rowsBoth rowsFirst rowsSecond].each do |route|
+        targets.each do |n|
+          name = n < 5 ? "A#{n}" : "B#{n}"
+          expect(landed(lines, "#{route} #{n}")).to include(name), "#{route} #{n}: #{lines["#{route} #{n}"]}"
+        end
+      end
+      # A row is one item: the rows of both sections are A0A1 A2A3 A4 and B5B6 B7B8 B9.
+      expect(lines['rowsBoth 0']).to include('of H A0A1 A2A3 A4 B5B6 B7B8 B9'), lines['rowsBoth 0']
+      # Keys: the first cell with the key (k3 is A3's), its row.
+      expect(landed(lines, 'rowsKeys k3')).to eq('A2A3')
+      expect(landed(lines, 'rowsKeys x2')).to eq('B7B8')
+    end
+
+    it 'defaultScrollAnchor bottom rests on the last row' do
+      routes = { 'rowsAnchor' => [emit_with_rows(%w[ACell BCell], grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil] }
+      expect(read(run_emitted(routes), 'rowsAnchor ')[:at]).to eq('B9')
+    end
+
+    it 'the class-list grid counts its rows too' do
+      node = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'columns' => 2,
+               'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }
+      routes = { 'rowsClassList' => [emit_with_rows(%w[ACell], node), { grid: true }, [0, 4, 6, 9]] }
+      lines = run_emitted(routes)
+      # Every data section drawn with cellClasses[0]: rows A0A1 A2A3 A4, then A5A6 A7A8 A9.
+      expect([0, 4, 6, 9].map { |n| landed(lines, "rowsClassList #{n}") }).to eq(%w[A0A1 A4 A5A6 A9]), lines.inspect
+    end
+
+    it 'each cell keeps its own onItemAppear, inside its row' do
+      code = emit_with_rows(%w[ACell BCell], grid_node('onItemAppear' => '@{onAppear}'))
+      rows = code.scan(/\{ rowIndex ->.*?\n\s*Row\(.*?for \(columnIndex in 0 until 2\) \{.*?if \(cellIndex < .*?\) \{\n\s*Box\(.*?\) \{\n\s*(LaunchedEffect\(Unit\) \{ [^\n]*cellIndex[^\n]* \})/m)
+      expect(rows.size).to eq(2), code
+    end
+  end
+
+end

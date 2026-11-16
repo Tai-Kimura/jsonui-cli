@@ -1,0 +1,431 @@
+"""Reader for the `checks` / `databases` sections of jui.config.json.
+
+Deliberately self-contained: does NOT import jui_tools (the sys.path bridge
+has a known failure mode — see docs/bugs history). Only json + pathlib.
+
+Security contract (doc-contract-check plan 01 §6):
+- Only commands declared in config are ever executed.
+- Command scripts must live inside the project root (no absolute paths,
+  no `..`, symlink escapes rejected via resolve()).
+- Credentials must not appear in config — connection info comes from
+  environment variables at check time.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shlex
+from dataclasses import dataclass, field
+from pathlib import Path
+
+CONFIG_FILENAME = "jui.config.json"
+
+KNOWN_CHECK_TYPES = {"builtin:db-schema", "builtin:openapi-diff", "builtin:infra-iac", "builtin:infra-code", "builtin:infra-load", "checker"}
+
+# Interpreters allowed as the first token of a declared command. The script
+# they run must still be a project-internal path (or a `-m` module resolved
+# from the project root cwd).
+_ALLOWED_INTERPRETERS = {"python", "python3", "ruby", "node", "sh", "bash"}
+
+_MODULE_RE = re.compile(r"[A-Za-z_]\w*(\.\w+)*$")
+_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]*$")
+
+# Keys that smell like credentials/connection info — hard error, never warn.
+_FORBIDDEN_DECL_KEYS = {
+    "url", "dsn", "password", "user", "username",
+    "connection", "connection_string", "connection_url", "host", "port",
+}
+
+
+class ProjectConfigError(Exception):
+    """Invalid checks/databases declaration."""
+
+
+@dataclass
+class CheckDecl:
+    name: str
+    type: str
+    timeout_seconds: int = 60
+    # builtin:db-schema
+    database: str = "default"
+    dump_command: list[str] | None = None
+    ignore_tables: list[str] = field(default_factory=list)
+    # builtin:openapi-diff
+    impl_openapi_command: list[str] | None = None
+    ignore_paths: list[str] = field(default_factory=list)
+    ignore_response_codes: list[str] = field(default_factory=list)
+    # Per-comparison-key severity. A key names one schema comparison
+    # (`format`, `nullable`, `enum`, `required`, `type`), NOT a field path.
+    # ignore_schema_keys drops the comparison; downgrade_to_warning keeps the
+    # finding with its expected/actual detail but stops it gating CI. Both
+    # exist because a doc that is deliberately STRICTER than the impl
+    # (`format: uuid` over FastAPI's bare `str`) is not drift the project
+    # intends to fix — and silencing it by loosening the doc, or by tightening
+    # the impl (which changes what the API accepts), corrupts the thing being
+    # checked instead of the tool doing the checking.
+    ignore_schema_keys: list[str] = field(default_factory=list)
+    downgrade_to_warning: list[str] = field(default_factory=list)
+    scope: str = "all"           # "all" | "generated" (honor api.schemas paths)
+    api_path_filters: tuple = ()  # (include_globs, exclude_globs) when scope=generated
+    # builtin:infra-iac / builtin:infra-code / builtin:infra-load (the server room's model, docs/infra)
+    ignore_types: list[str] = field(default_factory=list)   # IaC resource types not compared (beyond the built-in fine-grained ones)
+    gate: bool = False                                       # findings gate CI (exit 1) only when true; else warnings
+    # checker (full-checker plugin)
+    command: list[str] | None = None
+    # Raw declaration for display (`check --list`)
+    raw: dict = field(default_factory=dict)
+
+
+@dataclass
+class DbDecl:
+    name: str
+    dialect: str
+    version: str | None = None
+
+
+def find_jui_config(start_dir: Path) -> Path | None:
+    """Walk upward from start_dir looking for jui.config.json."""
+    current = start_dir.resolve()
+    while True:
+        candidate = current / CONFIG_FILENAME
+        if candidate.is_file():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def load_config_dict(config_path: Path) -> dict:
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ProjectConfigError(f"{config_path}: top level must be an object")
+    return data
+
+
+def _validate_project_path(raw: str, project_root: Path, context: str) -> None:
+    if raw.startswith("-"):
+        raise ProjectConfigError(f"{context}: '{raw}' looks like a flag, not a path")
+    p = Path(raw)
+    if p.is_absolute():
+        raise ProjectConfigError(f"{context}: absolute paths are not allowed ('{raw}')")
+    if ".." in p.parts:
+        raise ProjectConfigError(f"{context}: '..' is not allowed ('{raw}')")
+    resolved = (project_root / p).resolve()
+    try:
+        resolved.relative_to(project_root.resolve())
+    except ValueError:
+        raise ProjectConfigError(
+            f"{context}: '{raw}' resolves outside the project root (symlink escape?)"
+        )
+
+
+def parse_command(raw: str, project_root: Path, context: str) -> list[str]:
+    """Validate a declared command string and return its argv list.
+
+    Accepted forms:
+    - `<project-relative-script> [args...]`
+    - `<interpreter> <project-relative-script> [args...]`
+    - `<interpreter> -m <dotted.module> [args...]`  (module resolved from
+      the project-root cwd — still project code)
+
+    The returned list is passed to subprocess with shell=False, so shell
+    metacharacters in args are inert.
+    """
+    if not isinstance(raw, str):
+        # Naming the type given: an argv list is the intuitive guess here, and
+        # the old message ("must be a non-empty string") read as if the value
+        # were empty rather than the wrong shape.
+        raise ProjectConfigError(
+            f"{context}: command must be a string, got {type(raw).__name__}"
+            + (" — pass one command line, not an argv list"
+               if isinstance(raw, (list, tuple)) else "")
+        )
+    if not raw.strip():
+        raise ProjectConfigError(f"{context}: command must be a non-empty string")
+    tokens = shlex.split(raw)
+    head = tokens[0]
+    if head in _ALLOWED_INTERPRETERS:
+        if len(tokens) >= 3 and tokens[1] == "-m":
+            if not _MODULE_RE.match(tokens[2]):
+                raise ProjectConfigError(
+                    f"{context}: invalid module name '{tokens[2]}' after -m"
+                )
+            return tokens
+        if len(tokens) >= 2:
+            _validate_project_path(tokens[1], project_root, context)
+            return tokens
+        raise ProjectConfigError(
+            f"{context}: interpreter '{head}' needs a project script or -m module"
+        )
+    _validate_project_path(head, project_root, context)
+    return tokens
+
+
+def _str_list(value, context: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+        raise ProjectConfigError(f"{context}: must be a list of strings")
+    return value
+
+
+# The schema comparisons openapi-diff performs. Closed set on purpose: a
+# typo'd key would otherwise silently widen nothing and the project would
+# believe it had suppressed noise it is still gating on.
+#
+# `format` splits in two. One side declaring a format the other omits is an
+# annotation difference (`format_presence`) — same type, same wire, same
+# generated DTO, and the shape a docs side written stricter than the
+# implementation takes. Both sides declaring a format and disagreeing is a
+# contradiction about what the value is, and stays under `format`. Naming
+# `format` covers both, so a config written before the split is unchanged in
+# meaning; naming `format_presence` silences only the annotation class.
+SCHEMA_COMPARISON_KEYS = ("type", "nullable", "enum", "required", "format",
+                          "format_presence")
+
+# key -> the narrower kinds a declaration of it also covers
+KEY_COVERAGE = {"format": ("format", "format_presence")}
+
+
+def _key_coverage(key: str) -> tuple[str, ...]:
+    return KEY_COVERAGE.get(key, (key,))
+
+
+def _schema_keys(value, context: str) -> list[str]:
+    keys = _str_list(value, context)
+    unknown = [k for k in keys if k not in SCHEMA_COMPARISON_KEYS]
+    if unknown:
+        raise ProjectConfigError(
+            f"{context}: unknown comparison key(s) {unknown} "
+            f"(available: {', '.join(SCHEMA_COMPARISON_KEYS)}). "
+            "These name schema comparisons, not field paths — use "
+            "ignore_paths for endpoints."
+        )
+    return keys
+
+
+def load_checks(config: dict, project_root: Path) -> list[CheckDecl]:
+    raw_checks = config.get("checks", [])
+    if not isinstance(raw_checks, list):
+        raise ProjectConfigError("'checks' must be an array")
+    decls: list[CheckDecl] = []
+    seen_names: set[str] = set()
+    for i, raw in enumerate(raw_checks):
+        ctx = f"checks[{i}]"
+        if not isinstance(raw, dict):
+            raise ProjectConfigError(f"{ctx}: must be an object")
+        forbidden = _FORBIDDEN_DECL_KEYS.intersection(raw.keys())
+        if forbidden:
+            raise ProjectConfigError(
+                f"{ctx}: credentials/connection info must not be in config "
+                f"(found: {sorted(forbidden)}). Use environment variables."
+            )
+        name = raw.get("name")
+        if not isinstance(name, str) or not _NAME_RE.match(name):
+            raise ProjectConfigError(f"{ctx}: 'name' must match {_NAME_RE.pattern}")
+        if name in seen_names:
+            raise ProjectConfigError(f"{ctx}: duplicate check name '{name}'")
+        seen_names.add(name)
+        ctype = raw.get("type")
+        if ctype not in KNOWN_CHECK_TYPES:
+            raise ProjectConfigError(
+                f"{ctx} ('{name}'): unknown type '{ctype}' "
+                f"(known: {sorted(KNOWN_CHECK_TYPES)})"
+            )
+        timeout = raw.get("timeout_seconds", 60)
+        if not isinstance(timeout, int) or not (1 <= timeout <= 3600):
+            raise ProjectConfigError(
+                f"{ctx} ('{name}'): timeout_seconds must be an int in [1, 3600]"
+            )
+        decl = CheckDecl(name=name, type=ctype, timeout_seconds=timeout, raw=dict(raw))
+
+        if ctype == "builtin:db-schema":
+            database = raw.get("database", "default")
+            if not isinstance(database, str) or not database:
+                raise ProjectConfigError(f"{ctx} ('{name}'): 'database' must be a string")
+            decl.database = database
+            if "dump_command" in raw:
+                decl.dump_command = parse_command(
+                    raw["dump_command"], project_root, f"{ctx}.dump_command"
+                )
+            decl.ignore_tables = _str_list(
+                raw.get("ignore_tables"), f"{ctx}.ignore_tables"
+            )
+        elif ctype in ("builtin:infra-iac", "builtin:infra-code", "builtin:infra-load"):
+            decl.ignore_types = _str_list(raw.get("ignore_types"), f"{ctx}.ignore_types")
+            gate = raw.get("gate", False)
+            if not isinstance(gate, bool):
+                raise ProjectConfigError(f"{ctx} ('{name}'): gate must be true or false")
+            decl.gate = gate
+        elif ctype == "builtin:openapi-diff":
+            if "impl_openapi_command" not in raw:
+                raise ProjectConfigError(
+                    f"{ctx} ('{name}'): 'impl_openapi_command' is required"
+                )
+            decl.impl_openapi_command = parse_command(
+                raw["impl_openapi_command"], project_root, f"{ctx}.impl_openapi_command"
+            )
+            decl.ignore_paths = _str_list(raw.get("ignore_paths"), f"{ctx}.ignore_paths")
+            decl.ignore_response_codes = [
+                str(c) for c in raw.get("ignore_response_codes", [])
+            ]
+            decl.ignore_schema_keys = _schema_keys(
+                raw.get("ignore_schema_keys"), f"{ctx}.ignore_schema_keys"
+            )
+            decl.downgrade_to_warning = _schema_keys(
+                raw.get("downgrade_to_warning"), f"{ctx}.downgrade_to_warning"
+            )
+            # Compare what each list actually covers, so the umbrella `format`
+            # in one list and the narrower `format_presence` in the other is
+            # caught too: the dropped comparison would swallow the downgrade.
+            ignored = {k for key in decl.ignore_schema_keys
+                       for k in _key_coverage(key)}
+            downgraded = {k for key in decl.downgrade_to_warning
+                          for k in _key_coverage(key)}
+            both = ignored & downgraded
+            if both:
+                raise ProjectConfigError(
+                    f"{ctx} ('{name}'): {sorted(both)} covered by BOTH "
+                    "ignore_schema_keys and downgrade_to_warning — a dropped "
+                    "comparison cannot also be reported"
+                )
+            scope = raw.get("scope", "all")
+            if scope not in ("all", "generated"):
+                raise ProjectConfigError(
+                    f"{ctx} ('{name}'): scope must be 'all' or 'generated'"
+                )
+            decl.scope = scope
+            if scope == "generated":
+                # honor the DTO-generation path filters (jui.config.json
+                # api.schemas.include_paths / exclude_paths) — front teams
+                # only want the drift that affects their generated models
+                api_cfg = config.get("api", {})
+                schemas_cfg = api_cfg.get("schemas", {}) if isinstance(api_cfg, dict) else {}
+                inc = schemas_cfg.get("include_paths", [])
+                exc = schemas_cfg.get("exclude_paths", [])
+                inc = [inc] if isinstance(inc, str) else list(inc or [])
+                exc = [exc] if isinstance(exc, str) else list(exc or [])
+                decl.api_path_filters = (inc, exc)
+        elif ctype == "checker":
+            if "command" not in raw:
+                raise ProjectConfigError(f"{ctx} ('{name}'): 'command' is required")
+            decl.command = parse_command(raw["command"], project_root, f"{ctx}.command")
+
+        decls.append(decl)
+    return decls
+
+
+def load_databases(config: dict) -> dict[str, DbDecl]:
+    """Parse `databases: {name: {dialect, version}}` with the legacy
+    single-DB `db: {dialect}` fallback (plan 04 §2)."""
+    result: dict[str, DbDecl] = {}
+    raw_dbs = config.get("databases")
+    if raw_dbs is not None:
+        if not isinstance(raw_dbs, dict):
+            raise ProjectConfigError("'databases' must be an object")
+        for name, decl in raw_dbs.items():
+            if not isinstance(decl, dict) or not isinstance(decl.get("dialect"), str):
+                raise ProjectConfigError(
+                    f"databases.{name}: must be an object with a 'dialect' string"
+                )
+            result[name] = DbDecl(
+                name=name,
+                dialect=decl["dialect"],
+                version=decl.get("version"),
+            )
+        return result
+    legacy = config.get("db")
+    if isinstance(legacy, dict) and isinstance(legacy.get("dialect"), str):
+        result["default"] = DbDecl(
+            name="default", dialect=legacy["dialect"], version=legacy.get("version")
+        )
+    return result
+
+
+def _declares_specs(config: Path) -> bool:
+    """Whether this config can enumerate specs at all."""
+    try:
+        return bool(json.loads(config.read_text(encoding="utf-8")).get("spec_directory"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _extends_target(config: Path) -> Path | None:
+    """The config this one extends, resolved against its own directory.
+
+    ⚠️ Same rule as `shared/core/openapi_canonical._follow_extends`, which
+    resolves against the directory of the config it is reading. Both accept a
+    DIRECTORY and complete it with `jui.config.json`: a consumer writing
+    `extends: "../../admin"` must not resolve on one face and fail on the
+    other. Change one and change the other.
+    """
+    try:
+        raw = json.loads(config.read_text(encoding="utf-8"))
+        extends = raw.get("extends")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(extends, str) or not extends.strip():
+        return None
+    resolved = (config.parent / extends).resolve()
+    if resolved.is_dir():
+        resolved = resolved / "jui.config.json"
+    return resolved
+
+
+#: How far `extends` is followed, matching
+#: `openapi_canonical._follow_extends`'s `_depth > 4`: four hops past the
+#: first config, so five files at most. Bounded because the chain is data —
+#: a config that extends itself, or two that extend each other, must end the
+#: search rather than the process.
+_MAX_EXTENDS_HOPS = 4
+
+
+def _follow_extends(config: Path) -> tuple[Path | None, Path]:
+    """``(a config that declares specs, the last file actually read)``.
+
+    ⚠️ Shares a name with `shared/core/openapi_canonical._follow_extends` and
+    does a different job: that one MERGES — it walks the chain and returns the
+    config that owns the tree, for reading settings out of. This one only
+    RESOLVES A PATH, and stops at the first config that can enumerate specs.
+    The traversal rules are deliberately identical (resolve against the
+    config's own directory, complete a directory with `jui.config.json`, four
+    hops), because a consumer writes one `extends` and both faces read it.
+    Change the rules in one and change them in the other.
+
+    ⚠️ A third copy of the same rules: `follow_extends` / `_extends_target` /
+    `MAX_EXTENDS_HOPS` in jui_tools/jui_cli/viz/sources/jsonui_project.py
+    (jui viz reading the specs of every app in a room). It is not imported
+    from here because jui_cli reaches this package only through the sys.path
+    bridge; tests/test_viz_nested_specs.py runs both on the same trees.
+
+    A config that cannot enumerate but declares `extends` is not a dead end —
+    it is a POINTER, and the project wrote it deliberately. The real tree
+    keeps a stub at `docs/<app>/jui.config.json` carrying only
+    `layouts_directory` and `extends: ../../<app>/jui.config.json`, so a
+    search that stops at the first file it finds stops on a signpost and
+    reports that the destination does not exist.
+
+    The second element is what to name when nothing declares: the file the
+    search actually ended on, so the warning points at something real rather
+    than at where the search began.
+    """
+    seen: set[Path] = set()
+    current, last = config, config
+    # hops + 1 visits: the first config is not a hop, matching
+    # `openapi_canonical._follow_extends`, which refuses at `_depth > 4`
+    # having already read five files.
+    for _ in range(_MAX_EXTENDS_HOPS + 1):
+        if current in seen:
+            break
+        seen.add(current)
+        last = current
+        if _declares_specs(current):
+            return current, current
+        nxt = _extends_target(current)
+        if nxt is None or not nxt.is_file():
+            break
+        current = nxt
+    return None, last

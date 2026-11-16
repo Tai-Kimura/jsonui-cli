@@ -1,0 +1,496 @@
+#!/usr/bin/env ruby
+
+require_relative 'base_view_converter'
+require_relative 'text_style_helper'
+require_relative '../helpers/font_helper'
+require_relative '../helpers/string_manager_helper'
+require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      # Generated code button converter
+      # Dynamic mode equivalent: Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic/Converters/ButtonConverter.swift
+      class ButtonConverter < BaseViewConverter
+        include SjuiTools::SwiftUI::Helpers::FontHelper
+        include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include SjuiTools::SwiftUI::Views::TextStyleHelper
+        def convert
+          # Always use StateAwareButtonView for dynamic state change support
+          convert_state_aware_button
+        end
+
+        private
+
+        def convert_state_aware_button
+          image = @component['image']
+          has_image = !image.nil? && !image.to_s.empty?
+          # "Button" is the placeholder for a button with nothing in it. An
+          # icon-only button has content, so it must not render the word
+          # "Button" beside its icon. Without an icon the fallback is
+          # unchanged (including the explicit empty-string case).
+          text = if has_image
+                   @component['text'].to_s
+                 else
+                   @component['text'] || "Button"
+                 end
+          # An empty or blank handler is no action (TapAccessibility.handler?).
+          action = @component['onClick'] if JsonUIShared::TapAccessibility.handler?(@component['onClick'])
+
+          # Use StateAwareButtonView for state-dependent styling
+          # `image:` / `imageTint:` are new parameters, so generated output
+          # for an icon button does not compile against an older library.
+          add_line '// Requires SwiftJsonUI >= 10.9.0 (Button image)' if has_image
+          add_line '// Requires SwiftJsonUI >= 10.29.0 (Button textAlignment)' if button_text_alignment
+          add_line "StateAwareButtonView("
+          indent do
+            # Process text with binding support
+            if text.include?('@{')
+              # Text with interpolation: "Some text @{property} more text".
+              # Only the literal segments are escaped.
+              interpolated = text.split(/(@\{[^}]+\})/).map do |part|
+                if (m = part.match(/\A@\{([^}]+)\}\z/))
+                  # For interpolated text, use data directly
+                  "\\(data.#{m[1]})"
+                else
+                  JsonUIShared::StringLiterals.swift_body(part)
+                end
+              end.join
+              add_line "text: \"#{interpolated}\","
+            else
+              # Check if it's snake_case for localized strings
+              text_content = get_text_with_string_manager("\"#{text}\"")
+              # If it's a localized string (StringManager call or .localized()), use it directly
+              if text_content.start_with?('StringManager.') || text_content.end_with?('.localized()')
+                add_line "text: #{text_content},"
+              else
+                # Regular text
+                add_line "text: #{swift_string_literal(text)},"
+              end
+            end
+
+            # Add partialAttributes if present (same as label)
+            if @component['partialAttributes'] && @component['partialAttributes'].is_a?(Array) && !@component['partialAttributes'].empty?
+              add_line "partialAttributes: ["
+              indent do
+                @component['partialAttributes'].each_with_index do |partial, index|
+                  add_line "PartialAttribute("
+                  indent do
+                    # Handle range - either array or string
+                    if partial['range']
+                      if partial['range'].is_a?(Array) && partial['range'].length == 2
+                        add_line "range: #{partial['range'][0]}..<#{partial['range'][1]},"
+                      elsif partial['range'].is_a?(String)
+                        # Use StringManager for snake_case range text
+                        range_text = get_text_with_string_manager("\"#{partial['range']}\"")
+                        add_line "textPattern: #{range_text},"
+                      end
+                    end
+
+                    # Add fontColor
+                    if partial['fontColor']
+                      color = get_swiftui_color(partial['fontColor'])
+                      add_line "fontColor: #{color},"
+                    end
+
+                    # Add fontSize
+                    if partial['fontSize']
+                      add_line "fontSize: #{partial['fontSize']},"
+                    end
+
+                    # Add fontWeight
+                    if partial['fontWeight']
+                      weight = font_weight_to_swiftui(partial['fontWeight'])
+                      add_line "fontWeight: #{weight},"
+                    end
+
+                    # Add underline
+                    if line_decoration?(partial['underline'])
+                      add_line "underline: true,"
+                    end
+
+                    # Add strikethrough
+                    if line_decoration?(partial['strikethrough'])
+                      add_line "strikethrough: true,"
+                    end
+
+                    # Add backgroundColor
+                    if partial['background']
+                      bg_color = get_swiftui_color(partial['background'])
+                      add_line "backgroundColor: #{bg_color},"
+                    end
+
+                    # Add onClick as closure (SwiftUI uses onClick, not onclick)
+                    # onClick (camelCase) -> binding format only (@{functionName})
+                    # The range's handler (TapAccessibility.range_handler): onClick
+                    # first, then onclick, its selector alias — which this dropped.
+                    kind, value = JsonUIShared::TapAccessibility.range_handler(partial)
+                    if kind == :binding
+                      # For partial click, no value to pass
+                      handler_call = get_event_handler_invocation(value, view_id, nil)
+                      add_line "onClick: { #{handler_call} },"
+                    elsif kind == :selector
+                      add_line "onClick: { #{range_handler_call(partial)} },"
+                    end
+
+                    # Remove trailing comma from last item
+                    @generated_code[-1] = @generated_code[-1].chomp(',')
+                  end
+                  add_line ")#{ index < @component['partialAttributes'].length - 1 ? ',' : '' }"
+                end
+              end
+              add_line "],"
+            end
+
+            # Action (onClick uses binding format @{functionName})
+            # onClick (camelCase) -> binding format only (@{functionName})
+            # `canTap` gates the action's handler call (attribute_definitions
+            # common.canTap: false turns onClick off), as it gates every other
+            # type's tap — not `.disabled`: a button that cannot be tapped is
+            # not disabled to a screen reader. In the action rather than as a
+            # hit-testing gate, because VoiceOver activates a Button through
+            # its action, not a touch — which is also why
+            # `userInteractionEnabled`, whose stop is `.allowsHitTesting`, gates
+            # it here as canTap does, on the button and from a node around it
+            # (tap_shut?, gated_handler_call).
+            if action && is_binding?(action) && !tap_shut?
+              handler_call = gated_handler_call(get_event_handler_invocation(action, view_id, nil))
+              add_line "action: { #{handler_call} },"
+            elsif !action && JsonUIShared::TapAccessibility.handler?(@component['onclick']) && !tap_shut?
+              # `onclick`, the selector spelling (a method name, no binding),
+              # is declared on every type and read on a View's path
+              # (build_selector_click_lines); a Button's action read onClick
+              # only, so a Button tapped and called nothing, with no warning
+              # (ticket sjui-button-onclick-selector-and-onlongpress-are-never-
+              # called). camelCase wins when both are present, as on a View.
+              calls = JsonUIShared::TapAccessibility.handler_values(@component['onclick'])
+                                                     .map { |n| no_value_call(to_camel_case(handler_property(n))) }
+              add_line "action: { #{gated_handler_call(calls.join('; '))} },"
+            else
+              add_line "action: { },"
+            end
+
+            # Font properties
+            if @component['fontSize']
+              add_line "fontSize: #{padding_value(@component['fontSize'])},"
+            end
+            # StateAwareButtonView takes the weight either as a Font.Weight or
+            # as the String spelling (it has both initializers), and the
+            # String one is what the static path uses. A binding went into
+            # those quotes and the button asked for a weight literally named
+            # "@{weight}", which `Font.Weight.from(string:)` resolves to
+            # .regular — the declaration compiled and did nothing. The bound
+            # form resolves the same vocabulary itself and passes a
+            # Font.Weight, which picks the other initializer.
+            if (bound_weight = swift_weight_expr(@component['fontWeight']) ||
+                               swift_weight_expr(@component['font']))
+              add_line "fontWeight: #{bound_weight},"
+            elsif (numeric_weight = numeric_weight_table[@component['fontWeight'].to_i]) &&
+                  @component['fontWeight'].to_s.match?(/\A\d+\z/)
+              # A NUMERIC weight is a declared spelling — "e.g. 'bold',
+              # 'semibold', '500', 600". The String initializer resolves it
+              # through `Font.Weight.from(string:)`, which knows names only,
+              # so `600` arrived as `.regular`. Resolve it here instead, which
+              # also picks the Font.Weight initializer.
+              add_line "fontWeight: #{numeric_weight},"
+            elsif @component['fontWeight']
+              add_line "fontWeight: \"#{@component['fontWeight']}\","
+            elsif @component['font']
+              add_line "fontWeight: \"#{@component['font']}\","
+            end
+            # fontFamily rides into StateAwareButtonView, which routes it
+            # through PartialAttributedText's FontSpec path (family + weight +
+            # size to Configuration.fontProvider) — the declared semantics.
+            # Read-only binding: the parameter is a String?, not a Binding.
+            if @component['fontFamily']
+              if is_binding?(@component['fontFamily'])
+                prop = extract_binding_property(@component['fontFamily'])
+                add_line "fontFamily: data.#{prop},"
+              else
+                add_line "fontFamily: \"#{@component['fontFamily']}\","
+              end
+            end
+
+            # Color properties
+            if @component['fontColor']
+              add_line "fontColor: #{get_swiftui_color(@component['fontColor'])},"
+            end
+            if @component['background']
+              add_line "backgroundColor: #{get_swiftui_color(@component['background'])},"
+            end
+
+            # State-dependent colors
+            if @component['tapBackground']
+              add_line "tapBackground: #{get_swiftui_color(@component['tapBackground'])},"
+            end
+            highlight_color = attr_with_alias('highlightColor', 'hilightColor')
+            if highlight_color
+              add_line "highlightColor: #{get_swiftui_color(highlight_color)},"
+            end
+            # highlightBackground is the UIKit-era spelling of the pressed-state
+            # background; the SwiftUI component's parameter is tapBackground.
+            # Emitting the attribute name verbatim produced an "extra argument"
+            # compile error (caught by the codegen parity host). Canonical
+            # tapBackground wins when both are present.
+            if @component['highlightBackground'] && !@component['tapBackground']
+              add_line "tapBackground: #{get_swiftui_color(@component['highlightBackground'])},"
+            end
+            if @component['disabledFontColor']
+              add_line "disabledFontColor: #{get_swiftui_color(@component['disabledFontColor'])},"
+            end
+            if @component['disabledBackground']
+              add_line "disabledBackground: #{get_swiftui_color(@component['disabledBackground'])},"
+            end
+
+            # Corner radius and border - all applied inside StateAwareButtonView
+            if @component['cornerRadius']
+              add_line "cornerRadius: #{padding_value(@component['cornerRadius'])},"
+            end
+            if @component['borderWidth']
+              add_line "borderWidth: #{padding_value(@component['borderWidth'])},"
+            end
+            if @component['borderColor']
+              add_line "borderColor: #{get_swiftui_color(@component['borderColor'])},"
+            end
+
+            # The Button's padding is its content padding: StateAwareButtonView
+            # pads the label inside its background and border, as Compose's
+            # contentPadding does (button_content_insets).
+            if (insets = button_content_insets)
+              add_line "padding: EdgeInsets(top: #{insets[0]}, leading: #{insets[1]}, bottom: #{insets[2]}, trailing: #{insets[3]}),"
+            end
+
+            # Enabled state
+            if @component['enabled'] != nil
+              enabled_value = @component['enabled']
+              if enabled_value.is_a?(String) && enabled_value.start_with?('@{') && enabled_value.end_with?('}')
+                enabled_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(enabled_value[2..-2], kind: :bool)
+                add_line "isEnabled: #{enabled_expr},"
+              elsif enabled_value == false
+                add_line "isEnabled: false,"
+              elsif enabled_value == true
+                add_line "isEnabled: true,"
+              end
+            else
+              add_line "isEnabled: true,"
+            end
+
+            # Handle width/height - pass to StateAwareButtonView so background fills the frame
+            if @component['width'] == 'matchParent' || @component['width'] == -1
+              add_line "width: -1,"
+            elsif @component['width'].is_a?(Numeric) && @component['width'] > 0
+              add_line "width: #{@component['width']},"
+            elsif @component['weight'] && @component['weight'].to_f > 0
+              parent_orientation = @component['parent_orientation']
+              if parent_orientation == 'horizontal'
+                add_line "width: -1,"
+              end
+            end
+
+            if @component['height'] == 'matchParent' || @component['height'] == -1
+              add_line "height: -1,"
+            elsif @component['height'].is_a?(Numeric) && @component['height'] > 0
+              add_line "height: #{@component['height']},"
+            elsif @component['weight'] && @component['weight'].to_f > 0
+              parent_orientation = @component['parent_orientation']
+              if parent_orientation == 'vertical'
+                add_line "height: -1,"
+              end
+            end
+
+            # Icon. `image` was declared for Button but no SwiftUI converter
+            # read it, so an icon-only button rendered as an empty button.
+            # Resolution follows Image#srcName: a bare name is an asset name,
+            # a binding resolves through data.
+            #
+            # The tint is only passed when the layout asked for one — a
+            # template rendering mode would flatten a multi-colour asset to a
+            # single colour. Same rule as the Compose and web converters.
+            #
+            # Emitted LAST: Swift requires call-site argument order to match
+            # the declaration, and image/imageTint are the final parameters of
+            # StateAwareButtonView.init ("argument 'isEnabled' must precede
+            # argument 'image'" — caught by the codegen parity host).
+            if has_image
+              if is_binding?(image)
+                add_line "image: data.#{extract_binding_property(image)},"
+              else
+                add_line "image: \"#{image}\","
+              end
+              image_tint = @component['tintColor'] || @component['fontColor']
+              add_line "imageTint: #{get_swiftui_color(image_tint)}," if image_tint
+            end
+
+            # textAlign places the label across the button (the SSoT: a
+            # Button's text is placed horizontally by textAlign alone, default
+            # centre; the orchestrator's ruling 2026-09-27). The environment modifier below
+            # aligns the lines of a multi-line label but not the label in the
+            # button's frame, so until jsonui-cli 1.9.0 `Left` and `Right`
+            # stood in the middle. The last parameter, after image/imageTint.
+            button_alignment = button_text_alignment
+            add_line "textAlignment: #{button_alignment}," if button_alignment
+
+            # Remove trailing comma from last parameter
+            if @generated_code.last&.end_with?(',')
+              @generated_code[-1] = @generated_code.last.chomp(',')
+            end
+          end
+          add_line ")"
+
+          # textAlign. StateAwareButtonView has no alignment argument and
+          # nothing here read the attribute, so the declared alignment was
+          # inert on this platform. `multilineTextAlignment` is an
+          # environment modifier, so it reaches the Text inside the button
+          # without the library growing a parameter — the same treatment the
+          # TextField converter gives the same spelling.
+          # The lines follow the same answer as the placement above: an
+          # undeclared spelling draws Button's default, the centre, not
+          # `text_alignment_to_swiftui`'s `.leading` fallback (which is
+          # Label's default, not Button's).
+          if @component['textAlign']
+            @modifier_bag.append(:component_specific,
+                                 ".multilineTextAlignment(#{button_text_alignment || '.center'})")
+          end
+
+          # Apply frame constraints and margins
+          # Note: background, cornerRadius, border are all applied inside StateAwareButtonView
+          apply_frame_constraints
+          apply_frame_size
+          apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
+
+          # The common events a View takes in apply_modifiers, which a Button
+          # does not run: onLongPress was never attached to a Button (same
+          # ticket), and onPan / onPinch / onAppear / onDisappear were not
+          # either. The long press is simultaneous so the Button's own tap
+          # still fires; pan and pinch already are.
+          apply_button_long_press_to_bag
+          apply_pan_to_bag
+          apply_pinch_to_bag
+          apply_lifecycle_events_to_bag
+
+          # confirmationDialog / alert (iOS 15+)
+          apply_confirmation_dialog_to_bag
+          apply_alert_to_bag
+
+          # userInteractionEnabled
+          register_hit_test_gate
+
+          generated_code
+        end
+
+        def apply_button_long_press_to_bag
+          handler = @component['onLongPress']
+          return unless handler && is_binding?(handler)
+
+          @modifier_bag.register(:on_long_press, [
+            ".simultaneousGesture(LongPressGesture().onEnded { _ in",
+            "    #{no_value_call(extract_binding_property(handler))}",
+            "})"
+          ])
+        end
+
+        # [top, leading, bottom, trailing] of a Button's content padding, or nil
+        # when none is declared — read as SwiftJsonUI Dynamic reads a Button's
+        # (DynamicHelpers.getPadding) and KotlinJsonUI's contentPadding does:
+        # `paddings` / `padding` (one value, [vertical, horizontal], or [top,
+        # right, bottom, left]), else each edge, paddingStart / paddingEnd
+        # before paddingLeft / paddingRight, then the declared aliases
+        # leftPadding / rightPadding / topPadding / bottomPadding. Until
+        # jsonui-cli 1.9.14 this face entered the edge branch only on
+        # leftPadding / rightPadding / paddingTop / paddingBottom, so a Button
+        # with the canonical paddingLeft / paddingRight alone emitted no
+        # padding and its label ran to the border (ticket
+        # sjui-button-drops-padding-left-right); `padding`, paddingStart /
+        # paddingEnd and topPadding / bottomPadding were never read, and a
+        # four-value `paddings` put its right value on the leading edge. A
+        # number is written as declared; a binding is read from the data.
+        def button_content_insets
+          edge = ->(value) { value.nil? ? 0 : (bound_number(value) || value) }
+          base = @component['paddings'] || @component['padding']
+          unless base.nil?
+            values = base.is_a?(Array) ? base : [base]
+            return case values.length
+                   when 1 then Array.new(4, edge.(values[0]))
+                   when 2 then [edge.(values[0]), edge.(values[1]), edge.(values[0]), edge.(values[1])]
+                   when 4 then [edge.(values[0]), edge.(values[3]), edge.(values[2]), edge.(values[1])]
+                   end
+          end
+
+          top = @component['paddingTop'] || @component['topPadding']
+          leading = @component['paddingStart'] || @component['paddingLeft'] || @component['leftPadding']
+          bottom = @component['paddingBottom'] || @component['bottomPadding']
+          trailing = @component['paddingEnd'] || @component['paddingRight'] || @component['rightPadding']
+          return nil if [top, leading, bottom, trailing].all?(&:nil?)
+
+          [top, leading, bottom, trailing].map { |v| edge.(v) }
+        end
+
+        def apply_padding_to_text
+          # Apply paddings to the Text inside the button（UIKitに合わせてpaddingsに統一）
+          if @component['paddings']
+            padding = @component['paddings']
+            # Handle array padding values (from style files)
+            if padding.is_a?(Array)
+              case padding.length
+              when 1
+                add_modifier_line ".padding(#{padding[0].to_i})"
+              when 2
+                # Vertical, Horizontal padding
+                add_modifier_line ".padding(.horizontal, #{padding[1].to_i})"
+                add_modifier_line ".padding(.vertical, #{padding[0].to_i})"
+              when 4
+                # Top, Right, Bottom, Left
+                add_modifier_line ".padding(.top, #{padding[0].to_i})"
+                add_modifier_line ".padding(.trailing, #{padding[1].to_i})"
+                add_modifier_line ".padding(.bottom, #{padding[2].to_i})"
+                add_modifier_line ".padding(.leading, #{padding[3].to_i})"
+              end
+            else
+              add_modifier_line ".padding(#{padding.to_i})"
+            end
+          elsif @component['paddingTop'] || @component['paddingBottom'] ||
+                @component['paddingLeft'] || @component['paddingRight']
+            # UIKitに合わせてpaddingTop形式に統一
+            top = @component['paddingTop'] || 0
+            bottom = @component['paddingBottom'] || 0
+            left = @component['paddingLeft'] || 0
+            right = @component['paddingRight'] || 0
+
+            add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
+          end
+        end
+
+        def button_style_to_swiftui(style)
+          case style
+          when 'plain'
+            '.plain'
+          when 'bordered'
+            '.bordered'
+          when 'borderedProminent'
+            '.borderedProminent'
+          when 'borderless'
+            '.borderless'
+          else
+            '.automatic'
+          end
+        end
+
+        # `.leading` / `.trailing` for textAlign Left / Right, nil for
+        # Center, none, or any spelling Button does not declare (822e5efe:
+        # a value is its declared spelling, case and all — Button declares
+        # Left / Center / Right only, so `left` / `start` / `trailing` draw
+        # the default) — StateAwareButtonView's default is the centre.
+        def button_text_alignment
+          case JsonUIShared::EnumSpelling.lowered(@component['textAlign'], 'Button', 'textAlign')
+          when 'left' then '.leading'
+          when 'right' then '.trailing'
+          end
+        end
+      end
+    end
+  end
+end

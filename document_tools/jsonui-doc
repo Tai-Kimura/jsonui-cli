@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""JsonUI Document CLI entry point.
+
+Puts its own directory on `sys.path` AND the sibling `test_tools`, because
+`jsonui_doc_cli.validator` imports `jsonui_test_cli` — this is the only one
+of the two CLIs that reaches across packages, and the launcher was
+self-contained only about its own.
+
+That asymmetry is what made the failure look like a broken install rather
+than a broken launcher: on the same PATH and the same python,
+`jsonui-test --version` answers and `jsonui-doc --version` raises
+ModuleNotFoundError before reaching any subcommand. Two lanes reported it
+independently; a third read the same traceback and concluded their local
+1.7.42 was corrupt.
+
+It fires whenever `python3` resolves to an interpreter other than the one
+`install.sh` used — which is every shell with a project venv active, i.e.
+the normal state for a consumer. It is invisible from a shell without one,
+and invisible in CI, which pip-installs both packages from git and never
+runs the distributed launcher. A green CI says nothing about whether the
+distributed copy starts.
+
+The sibling is added only when it is actually there, so an environment
+that resolves these packages through pip keeps its own resolution order.
+"""
+import sys
+from pathlib import Path
+
+_root = Path(__file__).resolve().parent
+_sibling = _root.parent / "test_tools"
+
+# The sibling goes AFTER this package's own directory, and the position is
+# computed rather than assumed. Running the launcher already puts its own
+# directory at sys.path[0], so the `not in sys.path` guard skips re-adding
+# it — and a loop that inserted both at 0 left the SIBLING in front, which
+# is the opposite of what the loop order reads like. `tests` is the one
+# top-level name that exists in both trees. Nothing shipped imports it, so
+# this is the order being right rather than a fix for a live failure.
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+if _sibling.is_dir() and str(_sibling) not in sys.path:
+    sys.path.insert(sys.path.index(str(_root)) + 1, str(_sibling))
+
+from jsonui_doc_cli.cli import main
+
+if __name__ == "__main__":
+    # The exit code, not just the output. Bare `main()` discarded it, so a
+    # check that printed `✗ MISMATCH` still exited 0 and gated nothing —
+    # measured against the same broken document through both routes: this
+    # launcher exited 0, the pip-installed console script exited 1.
+    #
+    # The console script is why CI never saw it: `[project.scripts]` wraps
+    # `main` in `sys.exit(...)` for whoever installs the package, and CI
+    # installs. The docstring at the top of this file already said a green
+    # CI says nothing about whether the distributed launcher works — so the
+    # scope was named, and the one line inside that scope was still wrong.
+    # Naming a gap is not checking inside it.
+    sys.exit(main())

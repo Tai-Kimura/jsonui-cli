@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/edgeInset__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.edgeInset (static)",
+    "description": "Conformance fixture for 'edgeInset' on Label (section: Label, class: visual). Value under test: [8, 8, 8, 8].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "edgeInset__static",
+      "description": "Conformance fixture for 'edgeInset' on Label (section: Label, class: visual). Value under test: [8, 8, 8, 8].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_edgeInset__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "conformanceText",
+      "class": "String",
+      "defaultValue": ""
+    }
+  ],
+  "child": [
+    {
+      "type": "Label",
+      "id": "variant-host-marker",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "host"
+    },
+    {
+      "type": "TextField",
+      "id": "variant_state_input",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{conformanceText}"
+    },
+    {
+      "type": "Embed",
+      "id": "variant-pane",
+      "width": "matchParent",
+      "height": "wrapContent",
+      "screen": "variant_state",
+      "navigationMode": "delegate",
+      "params": {
+        "fieldValue": "@{conformanceText}"
+      }
+    }
+  ]
+}

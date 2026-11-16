@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/javaScriptEnabled__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.javaScriptEnabled (false)",
+    "description": "Conformance fixture for 'javaScriptEnabled' on Web (section: Web, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "android",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "javaScriptEnabled__false",
+      "description": "Conformance fixture for 'javaScriptEnabled' on Web (section: Web, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_javaScriptEnabled__false"
+        }
+      ]
+    }
+  ]
+}

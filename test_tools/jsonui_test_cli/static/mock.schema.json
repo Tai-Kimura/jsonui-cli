@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/mock.schema.json",
+  "title": "JsonUI API Mock Definition",
+  "description": "Editor/documentation schema for *.mock.json. The CLI validates via validation/mock.py, not this file.",
+  "type": "object",
+  "required": ["source", "scenarios"],
+  "additionalProperties": false,
+  "definitions": {
+    "violationPaths": {
+      "description": "Paths the checker reports, e.g. '.crate.variants[].spec_digest'. A bare string is one path.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+      ]
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "swagger": { "type": "string" },
+        "operationId": { "type": "string" },
+        "method": {
+        "description": "HTTP method. The tools uppercase before matching, so any case is accepted and the lowercase spellings are listed here for that reason -- an editor that marked `get` invalid would be rejecting input the CLI and the mock server both take. Uppercase is canonical and is what `mock generate` writes.",
+        "type": "string",
+        "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
+                 "get", "post", "put", "delete", "patch", "head", "options"]
+      },
+        "path": { "type": "string" }
+      }
+    },
+    "activeScenario": { "type": "string", "default": "default" },
+    "scenarios": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+          "body": {},
+          "delayMs": { "type": "number", "minimum": 0 },
+          "contentType": { "type": "string" },
+          "bodyFile": { "type": ["string", "null"] },
+          "headers": {
+            "description": "Response headers sent with this scenario, by mock serve and by the generated branch tests (Retry-After, Content-Disposition, X-Request-ID...). A name is an HTTP token; Content-Type and Content-Length are the server's own (contentType and the body decide them). Under CORS their names are listed in Access-Control-Expose-Headers. mock generate writes the ones the OpenAPI response declares with a value; --check compares them as it does the body (headers.<name>).",
+            "type": "object",
+            "propertyNames": { "pattern": "^(?![Cc][Oo][Nn][Tt][Ee][Nn][Tt]-([Tt][Yy][Pp][Ee]|[Ll][Ee][Nn][Gg][Tt][Hh])$)[!#$%&'*+.^_`|~0-9A-Za-z-]+$" },
+            "additionalProperties": { "type": "string", "pattern": "^[^\\r\\n]*$" }
+          },
+          "contractViolations": {
+            "description": "Contract violations this scenario makes ON PURPOSE — a mock that omits a required field is how a test proves the client fails closed when the server omits it. The contract check subtracts exactly the paths named here; an undeclared violation in the same scenario still fails, and a declaration that stops matching is reported (a negative scenario that quietly turned positive). Paths use the checker's spelling; '[]' matches every element of an array, '[0]' one.",
+            "type": "object",
+            "required": ["reason"],
+            "additionalProperties": false,
+            "minProperties": 2,
+            "properties": {
+              "missing": { "$ref": "#/definitions/violationPaths" },
+              "extra": { "$ref": "#/definitions/violationPaths" },
+              "violations": { "$ref": "#/definitions/violationPaths" },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          },
+          "skipRequestValidation": {
+            "description": "Do not check what the APP SENT against the swagger for this scenario. The mock server validates request bodies and query strings and RECORDS the violations (it never rejects — a 422 here would turn 'the implementation is wrong' into 'this screen should show an error' in every test that touches it). Set this on a scenario that deliberately drives a request the contract does not allow, so the recording stays a list of real problems.",
+            "type": "boolean"
+          },
+          "undeclaredStatus": {
+            "description": "This scenario answers a status its operation does not declare, ON PURPOSE — a fail-open regression, or an edge the contract will never state. Without this the check gates on it (forms A and C: a code the contract declares somewhere, attached to an operation that does not declare it), and a gate a project cannot clear is one people learn to read past. Authoring-time only: nothing at runtime reads this key, so it carries no driver requirement.",
+            "type": "object",
+            "required": ["reason"],
+            "additionalProperties": false,
+            "properties": {
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

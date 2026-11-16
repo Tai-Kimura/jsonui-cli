@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/minRightMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.minRightMargin (binding)",
+    "description": "Conformance fixture for 'minRightMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMinRightMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios"
+  ],
+  "cases": [
+    {
+      "name": "minRightMargin__binding",
+      "description": "Conformance fixture for 'minRightMargin' on View (section: common, class: declaration-only). Value under test: \"@{boundMinRightMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

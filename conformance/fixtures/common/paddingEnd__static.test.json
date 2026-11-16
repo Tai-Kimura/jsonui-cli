@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/paddingEnd__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.paddingEnd (static)",
+    "description": "Conformance fixture for 'paddingEnd' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "paddingEnd__static",
+      "description": "Conformance fixture for 'paddingEnd' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_paddingEnd__static"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/flowOverflow__wrap.layout.json"
+  },
+  "metadata": {
+    "name": "conformance flowOverflow__wrap",
+    "description": "A wrapContent flow Collection with lazy in effect, holding 12 cells inside a vertical ScrollView, has no bounds of its own: every row is laid out at content height and the ScrollView scrolls. A renderer that scrolls the wrapping node instead of the parent renders this like its 100pt control — or, on Android, throws (a vertically scrollable node measured with an infinite max height).",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flowOverflow__wrap",
+      "description": "A wrapContent flow Collection with lazy in effect, holding 12 cells inside a vertical ScrollView, has no bounds of its own: every row is laid out at content height and the ScrollView scrolls. A renderer that scrolls the wrapping node instead of the parent renders this like its 100pt control — or, on Android, throws (a vertically scrollable node measured with an infinite max height).",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_flowOverflow__wrap"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+# frozen_string_literal: true
+
+require 'open3'
+require 'rbconfig'
+require 'tmpdir'
+require 'json'
+require 'fileutils'
+
+# The Compose build cache, and the gates that must survive it.
+#
+# `save_cache` rebuilt the layouts path as `<source_path>/assets/Layouts`
+# while build.rb resolves `<source_path>/<source_directory>/…`. With a stock
+# `source_directory` of `app/src/main` those are different directories,
+# `File.exist?` was false for every layout, and `last_updated.json` stayed
+# `{}` — measured on a probe project: 12 consecutive builds, "all cached" 0
+# times. The cache was inert, which also meant the validation-skip defect on
+# this face could not be measured at all.
+#
+# Everything resolves from this checkout: no installed CLI, `kjui_tools`
+# symlinked so its relative `lib/core/*` links still point at `shared/core`.
+RSpec.describe 'the Compose build cache' do
+  let(:repo_root) { File.expand_path('../../..', __dir__) }
+
+  # A settled build: healthy and styled cached, sample converted again. From
+  # 1.9.0 a refused layout is never recorded — it is converted, and refused,
+  # again on every build (ticket build-caches-a-refused-layout-as-built) — so
+  # a settled run says "Updating 1 of 3 files", not "all cached".
+  def settled
+    'Updating 1 of 3 files'
+  end
+
+  def project
+    dir = Dir.mktmpdir('kjui_cache')
+    File.write(File.join(dir, 'jui.config.json'), JSON.pretty_generate(
+      'project_name' => 'KProbe', 'spec_directory' => 'docs/screens/json',
+      'component_spec_directory' => 'docs/components/json', 'strings_file' => '',
+      'type_map_file' => '.jsonui-type-map.json',
+      'platforms' => { 'android' => { 'root' => '.', 'layoutsDir' => 'app/src/main/assets/Layouts', 'mode' => 'compose' } }
+    ))
+    File.write(File.join(dir, 'kjui.config.json'), JSON.pretty_generate(
+      'mode' => 'compose', 'project_name' => 'KProbe',
+      'source_directory' => 'app/src/main', 'layouts_directory' => 'assets/Layouts',
+      'styles_directory' => 'assets/Styles',
+      'data_directory' => 'kotlin/com/example/app/data',
+      'viewmodel_directory' => 'kotlin/com/example/app/viewmodels',
+      'view_directory' => 'kotlin/com/example/app/views',
+      'extension_directory' => 'kotlin/com/example/app/extensions',
+      'adapter_directory' => 'kotlin/com/example/app/adapters',
+      'resource_manager_directory' => 'app/src/main/kotlin/com/kotlinjsonui/generated',
+      'package_name' => 'com.example.app',
+      'string_files' => ['res/values/strings.xml'], 'use_network' => true
+    ))
+    File.write(File.join(dir, '.jsonui-type-map.json'), '{}')
+    layouts = File.join(dir, 'app', 'src', 'main', 'assets', 'Layouts')
+    styles = File.join(dir, 'app', 'src', 'main', 'assets', 'Styles')
+    FileUtils.mkdir_p(layouts)
+    FileUtils.mkdir_p(styles)
+    File.write(File.join(styles, 'base.json'), JSON.generate('background' => '#EEEEEE'))
+    # Only `styled` depends on the style, so touching it must not rebuild the
+    # other two — a cache that invalidates everything is as useless as one
+    # that invalidates nothing.
+    File.write(File.join(layouts, 'styled.json'), JSON.generate(
+      'type' => 'View', 'id' => 'root', 'width' => 'matchParent',
+      'height' => 'matchParent', 'style' => 'base', 'child' => []
+    ))
+    File.write(File.join(layouts, 'sample.json'),
+               JSON.generate('type' => 'Segment', 'id' => 'seg', 'items' => '@{choices}'))
+    File.write(File.join(layouts, 'healthy.json'), JSON.generate(
+      'type' => 'View', 'id' => 'root', 'width' => 'matchParent',
+      'height' => 'matchParent', 'child' => []
+    ))
+    FileUtils.ln_s(File.join(repo_root, 'kjui_tools'), File.join(dir, 'kjui_tools'))
+    dir
+  end
+
+  def kjui(dir, *args)
+    Open3.capture2e(RbConfig.ruby, File.join(dir, 'kjui_tools', 'bin', 'kjui'), 'build', *args, chdir: dir)
+  end
+
+  # Build until the cache skips every layout it may skip (`settled`).
+  #
+  # The number of builds it takes from a cold cache is NOT fixed: measured on
+  # sjui, six back-to-back runs all reported work to do and the same untouched
+  # tree said "all cached" a minute later, and the docs-site lane saw the same
+  # variability (a stamp newer than the layouts while files are still
+  # processed). The mechanism is unexplained — this loop routes around it, it
+  # does not account for it.
+  #
+  # A fixed "the second run is cached" would still not pass while broken here,
+  # because the examples assert `all cached`; it would go intermittently RED
+  # in an environment where the second run misses. The loop removes that,
+  # and raises rather than skipping so a spec that established nothing says so.
+  def settle(dir)
+    8.times do
+      log, = kjui(dir)
+      return log if log.include?(settled)
+
+      sleep 1.1
+    end
+    raise 'the cache never settled; this spec would assert nothing'
+  end
+
+  def cache(dir)
+    path = File.join(dir, '.kjui_cache', 'last_updated.json')
+    File.exist?(path) ? JSON.parse(File.read(path)) : {}
+  end
+
+  def views(dir)
+    Dir.glob(File.join(dir, '**', '*GeneratedView.kt'))
+  end
+
+  it 'records every layout it built on the first build — not the refused one' do
+    dir = project
+    kjui(dir)
+
+    expect(cache(dir).keys.sort).to eq(%w[healthy styled])
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
+  it 'skips codegen on an unchanged second build' do
+    dir = project
+    kjui(dir)
+    before = views(dir).map { |p| [p, File.mtime(p)] }.to_h
+    expect(before).not_to be_empty, 'fixture generated nothing, so this asserts nothing'
+
+    log = settle(dir)
+
+    expect(log).to include(settled), log
+    rewritten = before.reject { |p, t| File.mtime(p) == t }
+    expect(rewritten).to be_empty, "codegen ran on a cached build: #{rewritten.keys.inspect}"
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
+  it 'rebuilds only the layout that uses a touched style' do
+    dir = project
+    settle(dir) # a settled cache, so the rebuild below is caused by the touch
+    before = views(dir).map { |p| [p, File.mtime(p)] }.to_h
+
+    sleep 1.1
+    FileUtils.touch(File.join(dir, 'app', 'src', 'main', 'assets', 'Styles', 'base.json'))
+    kjui(dir)
+
+    rewritten = before.reject { |p, t| File.mtime(p) == t }.keys.map { |p| File.basename(p) }
+    expect(rewritten).to include('StyledGeneratedView.kt')
+    expect(rewritten).not_to include('HealthyGeneratedView.kt')
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+
+  # Measurable on this face only now that the cache works at all: the
+  # settled run must still validate and still name a refused layout.
+  it 'still validates and still records a refused layout when everything else is cached' do
+    dir = project
+    settle(dir)
+
+    log, status = kjui(dir, '--strict')
+
+    expect(log).to include(settled), log
+    expect(log).to match(/Binding variable/), log
+    expect(log).to include('was not generated'), log
+    expect(log).to include('did not complete'), log
+    expect(status.exitstatus).to eq(1), "cached --strict must fail like the first run\n#{log}"
+  ensure
+    FileUtils.rm_rf(dir) if dir
+  end
+end

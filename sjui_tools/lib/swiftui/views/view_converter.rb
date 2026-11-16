@@ -1,0 +1,809 @@
+#!/usr/bin/env ruby
+
+require_relative 'base_view_converter'
+require_relative 'stack_alignment_helper'
+require_relative 'relative_positioning_helper'
+require_relative 'child_rendering_helper'
+require_relative 'modifier_helper'
+require_relative 'positioning_helper'
+require_relative 'alignment_wrapper_helper'
+require_relative 'visibility_helper'
+require_relative 'responsive_helper'
+require_relative '../../core/responsive_resolver'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      class ViewConverter < BaseViewConverter
+        include StackAlignmentHelper
+        include RelativePositioningHelper
+        include ChildRenderingHelper
+        include ModifierHelper
+        include PositioningHelper
+        include AlignmentWrapperHelper
+        include VisibilityHelper
+        include ResponsiveHelper
+
+        # Stores child code/weight for each WeightedStack child (used for body splitting)
+        attr_reader :weighted_children_info
+
+        # `alignment` is the declared string alternative to gravity
+        # (attribute_definitions common.alignment). A View with no gravity
+        # reads it as the gravity it names, so every gravity reader here
+        # (stack alignment, spacers, the frame alignment) places the children:
+        # only the ZStack's own `alignment:` read it, inside a frame that
+        # still pinned the content to the top left, so a 200 box with
+        # `alignment: bottom` drew its children at 0, 0 where Android places
+        # them bottom centre (frame-parity common/alignment, 2026-10-05). The
+        # table is the kjui codegen's (container_component.rb
+        # ALIGNMENT_GRAVITY); SwiftJsonUI Dynamic reads the same
+        # (DynamicDecodingHelper.alignmentAsGravity).
+        ALIGNMENT_GRAVITY = {
+          'topleading' => %w[top left],
+          'top' => %w[top centerHorizontal],
+          'toptrailing' => %w[top right],
+          'leading' => %w[centerVertical left],
+          'center' => %w[center],
+          'trailing' => %w[centerVertical right],
+          'bottomleading' => %w[bottom left],
+          'bottom' => %w[bottom centerHorizontal],
+          'bottomtrailing' => %w[bottom right]
+        }.freeze
+
+        DISTRIBUTION_FILL_MIN_LIBRARY_VERSION = '10.29.6'
+
+        # Where DistributionFillLayout puts a child across the axis, from the
+        # stack alignment the gravity gives (0 top / leading, 1 bottom / trailing).
+        def cross_bias(alignment)
+          { '.center' => '0.5', '.bottom' => '1', '.trailing' => '1' }.fetch(alignment, '0')
+        end
+
+        def self.alignment_as_gravity(component)
+          return nil unless component.is_a?(Hash) && component['type'] == 'View' && component['gravity'].nil?
+          return nil unless component['alignment'].is_a?(String)
+
+          ALIGNMENT_GRAVITY[JsonUIShared::EnumSpelling.lowered(component['alignment'], 'common', 'alignment')]
+        end
+
+        def initialize(component, indent_level = 0, action_manager = nil, converter_factory = nil, view_registry = nil, binding_registry = nil)
+          if (gravity = self.class.alignment_as_gravity(component))
+            component = component.merge('gravity' => gravity)
+          end
+          super(component, indent_level, action_manager, binding_registry)
+          @converter_factory = converter_factory
+          @view_registry = view_registry || SjuiTools::SwiftUI::ViewRegistry.new
+          @weighted_children_info = nil
+        end
+
+        def should_add_leading_spacer_for_hstack(gravity)
+          # HStack with right/trailing gravity needs leading spacer
+          # Extract horizontal component from gravity
+          horizontal = extract_horizontal_from_gravity(gravity)
+          # A rightToLeft row with no horizontal gravity starts at the right
+          # edge (FrameHelper#direction_start_edge).
+          horizontal == 'right' || direction_start_edge == 'right'
+        end
+
+        def should_add_trailing_spacer_for_hstack(gravity)
+          # HStack with left/leading gravity needs trailing spacer
+          horizontal = extract_horizontal_from_gravity(gravity)
+          horizontal == 'left' && direction_start_edge.nil?
+        end
+
+        def should_add_leading_spacer_for_vstack(gravity)
+          # VStack with bottom gravity needs leading spacer
+          vertical = extract_vertical_from_gravity(gravity)
+          # A bottomToTop column with no vertical gravity starts at the bottom
+          # edge (FrameHelper#direction_start_edge).
+          vertical == 'bottom' || direction_start_edge == 'bottom'
+        end
+
+        def should_add_trailing_spacer_for_vstack(gravity)
+          # VStack with top gravity needs trailing spacer
+          vertical = extract_vertical_from_gravity(gravity)
+          vertical == 'top' && direction_start_edge.nil?
+        end
+
+        def extract_horizontal_from_gravity(gravity)
+          gravity = gravity || 'left|top'
+          if gravity.is_a?(Array)
+            # centerHorizontalはcenterとして扱う
+            result = gravity.find { |g| ['left', 'center', 'right', 'centerHorizontal'].include?(g) } || 'left'
+            result == 'centerHorizontal' ? 'center' : result
+          elsif gravity.is_a?(String)
+            if gravity.include?('|')
+              parts = gravity.split('|')
+              result = parts.find { |p| ['left', 'center', 'right', 'centerHorizontal'].include?(p) } || 'left'
+              result == 'centerHorizontal' ? 'center' : result
+            else
+              # centerHorizontalはcenterとして扱う
+              return 'center' if gravity == 'centerHorizontal'
+              ['left', 'center', 'right'].include?(gravity) ? gravity : 'left'
+            end
+          else
+            'left'
+          end
+        end
+
+        def extract_vertical_from_gravity(gravity)
+          gravity = gravity || 'left|top'
+          if gravity.is_a?(Array)
+            # centerVerticalはcenterとして扱う
+            result = gravity.find { |g| ['top', 'center', 'bottom', 'centerVertical'].include?(g) } || 'top'
+            result == 'centerVertical' ? 'center' : result
+          elsif gravity.is_a?(String)
+            if gravity.include?('|')
+              parts = gravity.split('|')
+              result = parts.find { |p| ['top', 'center', 'bottom', 'centerVertical'].include?(p) } || 'top'
+              result == 'centerVertical' ? 'center' : result
+            else
+              # centerVerticalはcenterとして扱う
+              return 'center' if gravity == 'centerVertical'
+              ['top', 'center', 'bottom'].include?(gravity) ? gravity : 'top'
+            end
+          else
+            'top'
+          end
+        end
+
+        def convert
+          # ビューレジストリに自身を登録
+          if @component['id'] && @view_registry
+            @view_registry.register_view(@component['id'], @component)
+          end
+
+          child_data = @component['child'] || []
+          # childが単一要素の場合は配列に変換
+          children = child_data.is_a?(Array) ? child_data : [child_data]
+          # Filter out data declarations - only if it's a data declaration (has 'data' key and no other view properties)
+          children = children.reject { |child|
+            child.is_a?(Hash) && child['data'] && !child['type'] && !child['include']
+          }
+
+          # 子ビューもレジストリに登録
+          children.each do |child|
+            if child.is_a?(Hash) && child['id'] && @view_registry
+              @view_registry.register_view(child['id'], child)
+            end
+          end
+
+          # Check for responsive container (has children + responsive block)
+          if responsive?(@component) && !children.empty? && @converter_factory
+            return convert_responsive_container(children)
+          end
+
+          # orientationを先に取得
+          orientation = @component['orientation']
+
+          # `direction` reverses the children along the orientation axis —
+          # UIKit resolves it exactly that way (SJUIView: a vertical stack
+          # honours `bottomToTop`, a horizontal one `rightToLeft`, everything
+          # else is the natural order), and the Compose converter reverses the
+          # child list for the same two values. Nothing here read the
+          # attribute, so it was inert on this platform: `jui conformance
+          # codegen-effect` measured the same emission for every value.
+          case @component['direction']
+          when 'bottomToTop'
+            children = children.reverse if orientation == 'vertical'
+          when 'rightToLeft'
+            children = children.reverse if orientation == 'horizontal'
+          end
+
+          # 相対配置が必要かチェック
+          # orientationが指定されている場合（HStack/VStackになる場合）、
+          # centerHorizontal/centerVerticalなどは相対配置ではなく、子要素の配置制御として扱う
+          # 相対配置が必要なのはorientationがない場合（ZStackになる場合）のみ
+          @needs_relative_positioning = orientation.nil? && has_relative_positioning?(children)
+          @has_view_ids = children.any? { |child| child.is_a?(Hash) && child['id'] }
+
+          if children.empty?
+            # 子要素がない場合
+            # backgroundが設定されている場合はRectangleを使用（dividerなど）
+            if @component['background'] && !gradient_wins_over_background? && pressed_background_color
+              # The fill takes the pressed colour while the view is pressed
+              # (base_view_converter#pressed_background_color).
+              add_line "PressedFill(pressed: #{pressed_background_color}, base: #{disabled_aware_color(get_swiftui_color(@component['background']))})"
+              @modifier_bag.register(:background, "")
+              @fill_is_the_content = true
+            elsif @component['background']
+              add_line "Rectangle()"
+              # A declared gradient fills the shape itself. Filling with the
+              # background colour instead left the gradient behind an opaque
+              # rectangle, i.e. invisible — the defect the `backgroundFill`
+              # ruling refuses to promote (one fill per surface, the more
+              # specific declaration wins). Without a gradient this is
+              # unchanged, and so is the gradient-only case below, which never
+              # reached this branch and already drew correctly.
+              if gradient_wins_over_background?
+                add_modifier_line ".fill(#{gradient_expression})"
+                @gradient_consumed_as_fill = true
+              else
+                # disabledBackground while disabled, fixed or bound: the fill is this view's surface
+                add_modifier_line ".fill(#{disabled_aware_color(get_swiftui_color(@component['background']))})"
+              end
+              # Rectangleの場合はbackgroundを適用しない - register background to prevent apply_modifiers from adding it
+              @modifier_bag.register(:background, "")
+              @fill_is_the_content = true
+            elsif empty_view_takes_space?
+              # A spacer: an axis with a size, a weight or a gradient to paint.
+              add_line "Color.clear"
+            elsif empty_view_declares_a_margin?
+              # A box of 0 that its margin can pad. EmptyView lays out nothing
+              # in a stack, so the margin's `.padding` went with it and the
+              # next child sat where the margin should have pushed it (ticket
+              # ios-an-empty-views-margin-vanishes-with-it; the margin is outer
+              # space and stays, user ruling 2026-10-07). Sized here: an
+              # unsized Color.clear takes all the space offered. SwiftJsonUI
+              # Dynamic draws the same (DynamicViewContainer.emptyContent).
+              add_line "Color.clear"
+              add_modifier_line ".frame(width: 0, height: 0)"
+            else
+              add_line "EmptyView()"
+            end
+          else
+            # 複数の子要素がある場合
+            # orientationが指定されていない場合はZStackを使用
+
+            # 子要素のweightをチェック
+            # `fillEqually` is the SIZE half of distribution and the canon cell
+            # is "equal frames on each child" — which IS equal weights, so it
+            # routes through the weighted stack rather than the separator arm
+            # it used to share with `equalSpacing` (the GAP half). Both values
+            # emitting one between-children Spacer made them the same picture.
+            # F's dynamic half is SwiftJsonUI 4801af7, `implicitWeight`.
+            fills_equally = JsonUIShared::EnumSpelling.lowered(@component['distribution'], 'View', 'distribution') == 'fillequally'
+            has_weights = fills_equally || children.any? { |child|
+              weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first ||
+                # a weight a size class declares makes the stack weighted too: the weights are run-time values
+                # (ticket sjui-responsive-weight-overrides-are-not-drawn)
+                (ResponsiveHelper.overrides_any?(child, WEIGHT_KEYS) &&
+                 JsonUIShared::ResponsiveResolver.build_branches(child).any? { |b| weight_expression(b[:attrs]['weight'] || b[:attrs]['widthWeight'] || b[:attrs]['heightWeight']).first })
+            }
+
+            # Get spacing value (default 0). A bound spacing lands in the
+            # stack's `spacing:` argument, which is a CGFloat — pasting the
+            # declaration there emitted `HStack(alignment: .top, spacing:
+            # @{gap})` and the build died on the first stack that used it.
+            spacing_value = bound_number(@component['spacing']) || @component['spacing'] || 0
+
+            # `distribution: fill` grows each child from its content
+            # (SwiftJsonUI DistributionFillLayout): an HStack / VStack of
+            # `.frame(maxWidth: .infinity)` children split the axis equally,
+            # which is fillEqually — a 300 row of a 60 box and the labels
+            # "BBBB" / "CCCCCCCC" drew 60 / 120 / 120 where Android draws
+            # 60 / 97 / 143 (frame-parity common/distribution__fill,
+            # 2026-10-05). The layout reads which child may grow from the
+            # child itself, so no gravity spacer goes inside it.
+            fill_layout = !has_weights && %w[horizontal vertical].include?(orientation) &&
+                          JsonUIShared::EnumSpelling.lowered(@component['distribution'], 'View', 'distribution') == 'fill'
+
+            if has_weights && (orientation == 'horizontal' || orientation == 'vertical')
+              # weightがある場合はWeightedStack用の子要素を構築
+              @weighted_children_info = []  # Track child codes for body splitting
+              weighted_children = []
+              children.each do |child|
+                _applies, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
+                # `fillEqually` means equal frames, so a child that
+                # declares no weight of its own gets one — UNLESS it declares
+                # its own main-axis size: explicit child size wins over the
+                # size half of distribution (canon childSizePrecedence,
+                # 2026-08-05; the dynamic half's `explicitChildSizeWins`
+                # reads the same way). Handing the sized child a weight too
+                # forced every child to 1/n and drew the declared 60 as 100
+                # (View_distribution__fillequally parity d=106, run
+                # 31202080745 — the dynamic render was the correct one).
+                axis = orientation == 'horizontal' ? 'width' : 'height'
+                declares_axis_size = child[axis] && child[axis] != 'wrapContent'
+                weight = 1 if fills_equally && weight.to_s == '0' && !declares_axis_size
+                weighted_children << { child: child, weight: weight }
+              end
+
+              if orientation == 'horizontal'
+                alignment = get_hstack_alignment
+                # `hasMatchParentCrossAxis` toggles the inner
+                # `.fixedSize(vertical: ...)` in SwiftJsonUI's WeightedHStack.
+                # Default false → vertical fixedSize → HStack takes children's
+                # natural height. When this View has `height: matchParent`,
+                # children may legitimately want the proposed pane height
+                # (Embeds with `.frame(maxHeight: .infinity)` overflow), so
+                # honor the parent proposal instead. The flag is the *last*
+                # named arg in SwiftJsonUI's init (after `children`), so we
+                # append it on the closing line, not the opening line.
+                @weighted_has_cross_match = @component['height'] == 'matchParent'
+                add_line "WeightedHStack(alignment: #{alignment}, spacing: #{spacing_value}, children: ["
+              elsif orientation == 'vertical'
+                alignment = get_vstack_alignment
+                @weighted_has_cross_match = false
+                add_line "WeightedVStack(alignment: #{alignment}, spacing: #{spacing_value}, children: ["
+              end
+            elsif orientation == 'horizontal'
+              # HStackでgravityを反映
+              alignment = get_hstack_alignment
+              if fill_layout
+                add_line "// Requires SwiftJsonUI >= #{DISTRIBUTION_FILL_MIN_LIBRARY_VERSION} (DistributionFillLayout)"
+                add_line "DistributionFillLayout(axis: .horizontal, spacing: #{spacing_value}, crossBias: #{cross_bias(alignment)}) {"
+              else
+                add_line "HStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
+              end
+
+              # Leading spacer: gravity, or equalCentering's END unit.
+              # semantics.distribution iosGapConstruction: equalCentering is
+              # ONE spacer at each end and TWO between each pair (ends = half
+              # a between gap, justify-around); equalSpacing is between-only,
+              # ends FLUSH (justify-between) — it gets NO leading spacer. The
+              # previous emit gave both values 1/1/1, which is neither, and
+              # made the two values one picture on ios while android/web
+              # distinguish them (collapsedPairs, run 5).
+              distribution = @component['distribution']
+              gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
+              if !fill_layout && distribution == 'equalCentering'
+                indent do
+                  add_line "Spacer(minLength: 0)"
+                end
+              elsif !fill_layout && !gap_distribution && should_add_leading_spacer_for_hstack(@component['gravity'])
+                indent do
+                  add_gravity_spacer(children_take_main_axis_space(children, 'horizontal'))
+                end
+              end
+            elsif orientation == 'vertical'
+              # VStackでgravityを反映
+              alignment = get_vstack_alignment
+              if fill_layout
+                add_line "// Requires SwiftJsonUI >= #{DISTRIBUTION_FILL_MIN_LIBRARY_VERSION} (DistributionFillLayout)"
+                add_line "DistributionFillLayout(axis: .vertical, spacing: #{spacing_value}, crossBias: #{cross_bias(alignment)}) {"
+              else
+                add_line "VStack(alignment: #{alignment}, spacing: #{spacing_value}) {"
+              end
+
+              # Leading spacer: gravity, or equalCentering's END unit
+              # (same construction note as the HStack branch above).
+              distribution = @component['distribution']
+              gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
+              if !fill_layout && distribution == 'equalCentering'
+                indent do
+                  add_line "Spacer(minLength: 0)"
+                end
+              elsif !fill_layout && !gap_distribution && should_add_leading_spacer_for_vstack(@component['gravity'])
+                indent do
+                  add_gravity_spacer(children_take_main_axis_space(children, 'vertical'))
+                end
+              end
+            else
+              # orientationがない場合はZStack（重ね合わせ）
+              # 相対配置が必要な場合は特別な処理
+              if @needs_relative_positioning
+                generate_relative_positioning_zstack(children)
+                # 相対配置の場合はここで処理完了
+              else
+                # 通常のZStack
+                alignment = get_zstack_alignment
+                add_line "ZStack(alignment: #{alignment}) {"
+              end
+            end
+
+            # 相対配置の場合は子要素の処理をスキップ
+            if !@needs_relative_positioning || orientation
+              if has_weights && (orientation == 'horizontal' || orientation == 'vertical')
+                # WeightedStackの場合は特別な処理
+                indent do
+                  children.each_with_index do |child, index|
+                    if ResponsiveHelper.overrides_any?(child, WEIGHT_KEYS)
+                      weight, fixed_size_modifier = responsive_weight_plan(child, orientation, fills_equally)
+                      emit_weighted_child(child, index, children.size, orientation, weight, fixed_size_modifier)
+                      next
+                    end
+                    weighted, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
+                    if fills_equally && !weighted
+                      # Explicit child size wins over the size half of
+                      # distribution (canon childSizePrecedence, 2026-08-05;
+                      # the dynamic half's `explicitChildSizeWins` reads the
+                      # same way): a child declaring its own main-axis size
+                      # keeps it and takes no implicit weight. THIS loop is
+                      # the emitting one — it also rewrites child['width'] to
+                      # matchParent for weighted children, which is how the
+                      # declared 60 vanished entirely and drew as 100
+                      # (View_distribution__fillequally parity d=106, runs
+                      # 31202080745/31234163967).
+                      axis = orientation == 'horizontal' ? 'width' : 'height'
+                      declares_axis_size = child[axis] && child[axis] != 'wrapContent'
+                      unless declares_axis_size
+                        weighted = true
+                        weight = 1
+                      end
+                    end
+
+                    # weight > 0: set matchParent on main axis so .frame(maxWidth/maxHeight: .infinity)
+                    # is applied inside the converter BEFORE .background()
+                    if weighted
+                      if orientation == 'horizontal'
+                        unless child['width'] == 'matchParent' || child['width'] == -1
+                          child['width'] = 'matchParent'
+                        end
+                      else
+                        unless child['height'] == 'matchParent' || child['height'] == -1
+                          child['height'] = 'matchParent'
+                        end
+                      end
+                    end
+
+                    # weight: 0 の子要素で、サイズ指定がない場合は cross-axis の
+                    # .fixedSize() を付与する (wrapContent 契約)。これにより
+                    # WeightedHStack/VStack が intrinsic size を正しく計測できる。
+                    fixed_size = -> { weighted ? nil : wrap_fixed_size(child, orientation) }
+                    emit_weighted_child(child, index, children.size, orientation, weight, fixed_size)
+                  end
+                end
+                # Close the WeightedStack. `hasMatchParentCrossAxis` is
+                # appended here (after `children:`) to match the
+                # declaration order in SwiftJsonUI's WeightedHStack init.
+                if @weighted_has_cross_match
+                  add_line "], hasMatchParentCrossAxis: true)"
+                else
+                  add_line "])"
+                end
+              else
+                # 通常のStack処理
+                distribution = @component['distribution']
+                indent do
+                  children.each_with_index do |child, index|
+                    if @converter_factory
+                      apply_distribution_fill(child, distribution, orientation)
+                      render_child_element(child, orientation, index, 0, 0)
+                    end
+
+                    # Between-children spacers (semantics.distribution
+                    # iosGapConstruction): equalSpacing ONE per pair,
+                    # equalCentering TWO per pair — the 1:2 end:between count
+                    # ratio is what makes each end gap exactly half a between
+                    # gap. fillEqually keeps its single separator.
+                    if index < children.size - 1
+                      case distribution
+                      when 'equalCentering'
+                        add_line "Spacer(minLength: 0)"
+                        add_line "Spacer(minLength: 0)"
+                      # `fillEqually` is NOT here any more: it is the SIZE
+                      # half and routes to the weighted stack. Emitting a
+                      # separator for it made it the same picture as
+                      # `equalSpacing`, which is the GAP half.
+                      when 'equalSpacing'
+                        add_line "Spacer(minLength: 0)"
+                      end
+                    end
+                  end
+
+                  # Add trailing Spacer based on gravity or distribution
+                  # ただし、親からcenterHorizontal/centerVerticalでラップされている場合はSpacerを追加しない
+                  # また、wrapContent/具体的なサイズの場合はSpacerを追加しない（matchParentや-1の場合のみ追加）
+                  unless @component['_skip_trailing_spacer'] || fill_layout
+                    width = @component['width']
+                    height = @component['height']
+                    # Spacerはコンテナが拡大する場合のみ意味がある
+                    # wrapContentや具体的なサイズの場合はSpacerを追加しても意味がない
+                    width_expands = width == 'matchParent' || width == -1
+                    height_expands = height == 'matchParent' || height == -1
+
+                    # equalCentering's trailing END unit is emitted
+                    # unconditionally (below, outside the expands gate) so the
+                    # two ends stay symmetric with the leading one;
+                    # equalSpacing ends are FLUSH and get nothing.
+                    # A gap distribution owns the free-space construction —
+                    # gravity's spacers must not stack on top of it (a
+                    # default-gravity trailing spacer would give equalSpacing
+                    # a phantom end gap and equalCentering a doubled one).
+                    gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
+                    if !gap_distribution && orientation == 'horizontal' && width_expands && should_add_trailing_spacer_for_hstack(@component['gravity'])
+                      add_gravity_spacer(children_take_main_axis_space(children, orientation))
+                    elsif !gap_distribution && orientation == 'vertical' && height_expands && should_add_trailing_spacer_for_vstack(@component['gravity'])
+                      add_gravity_spacer(children_take_main_axis_space(children, orientation))
+                    end
+                  end
+                  # equalCentering trailing END unit. Emitted for FIXED sizes
+                  # too (fixed = free space for the ratio, cannot be expanded
+                  # — the old widthExpands gate was too narrow), but stays out
+                  # of a wrapContent AXIS, where a spacer expands the
+                  # container and swallows the trailing padding (F's dynamic
+                  # implementation e8f99c7, measured; the leading unit is
+                  # unconditional on both faces).
+                  if distribution == 'equalCentering'
+                    axis_size = orientation == 'horizontal' ? @component['width'] : @component['height']
+                    axis_wraps = axis_size.nil? || axis_size == 'wrapContent'
+                    add_line "Spacer(minLength: 0)" unless axis_wraps
+                  end
+                end
+              end
+
+              # 閉じ括弧を追加
+              # orientationがある場合（HStack/VStack）は常に閉じ括弧が必要
+              # orientationがない場合（ZStack）は相対配置でない場合のみ
+              if orientation || !@needs_relative_positioning
+                if !has_weights || (orientation != 'horizontal' && orientation != 'vertical')
+                  # 通常のStackの場合のみ閉じ括弧が必要
+                  # WeightedStackは既に閉じている
+                  add_line "}"  # 通常のStack/ZStackを閉じる
+                end
+              end
+            end
+
+            # ZStackで相対配置が必要な場合はcoordinateSpaceを設定
+            if !orientation && has_relative_positioning?(children) && !@needs_relative_positioning
+              add_modifier_line ".coordinateSpace(name: \"ZStackCoordinateSpace\")"
+            end
+          end
+
+          # 共通のモディファイアを適用
+          # 相対配置の場合、paddingはRelativePositionContainer内部で処理されるのでスキップ
+          # An empty View whose fill IS its content takes no padding either:
+          # there is nothing to inset, and the padding applied outside the
+          # shape left it painting only the inner box (100 x 40 with padding 8
+          # painted 84 x 24; the padding is the element, user ruling
+          # 2026-10-06; ticket ios-an-empty-view-with-a-background-paints-only-
+          # inside-its-padding). SwiftJsonUI Dynamic skips it in the same case.
+          apply_modifiers(skip_padding: @needs_relative_positioning || @fill_is_the_content)
+
+          # グラデーション
+          if @component['gradient']
+            apply_gradient
+          end
+
+          # SafeAreaView needs nothing extra here: `apply_modifiers` runs
+          # `apply_safe_area_insets_to_bag` for EVERY component, SafeAreaView
+          # included, which is the routing the SSoT describes. This second
+          # call appended the modifier twice. It was invisible while the emit
+          # was `.ignoresSafeArea(...)` — ignoring an edge twice ignores it
+          # once — and stops being invisible the moment the emit reserves
+          # space instead: two `.safeAreaPadding` calls inset twice.
+
+          # Apply binding modifiers (borderColor, background, etc. with @{...})
+          apply_binding_modifiers
+
+          generated_code
+        end
+
+        private
+
+        # An empty View is Color.clear — which takes all the space it is
+        # offered — only when the SwiftJsonUI Dynamic runtime makes it one
+        # (DynamicViewContainer.emptyContent): an axis declares a size that is
+        # not 0 (a number, matchParent or a binding), or the node has a
+        # weight, or a gradient to paint. Otherwise it is EmptyView, 0 x 0, as
+        # the SSoT declares a wrapContent box with nothing in it. Until
+        # jsonui-cli 1.9.18 the KEY was enough: `"width": "wrapContent"` or
+        # `"width": 0` drew a box filling the screen on iOS codegen while
+        # Dynamic and Android drew nothing (ticket sjui-codegen-an-empty-view-
+        # fills-the-offered-space-and-its-id-box-includes-the-margin), and a
+        # gradient-only empty View drew nothing here while Dynamic painted it.
+        # Whether an empty View declares a margin: a number other than 0, a
+        # binding (resolved only at run time), or a `margins` value.
+        EMPTY_VIEW_MARGIN_KEYS = %w[leftMargin rightMargin topMargin bottomMargin startMargin endMargin margins].freeze
+
+        def empty_view_declares_a_margin?
+          EMPTY_VIEW_MARGIN_KEYS.any? do |key|
+            value = @component[key]
+            case value
+            when nil then false
+            when Numeric then value != 0
+            when Array then value.any? { |v| !(v.is_a?(Numeric) && v.zero?) }
+            else true
+            end
+          end
+        end
+
+        def empty_view_takes_space?
+          %w[width height].any? { |key| sized_axis?(@component[key]) } ||
+            %w[weight widthWeight heightWeight].any? { |key| weighted?(@component[key]) } ||
+            gradient_wins_over_background?
+        end
+
+        # An empty SafeAreaView takes the same rule (ConverterFactory hands both
+        # types to this class): it was always EmptyView, as Dynamic's was, and a
+        # sized one with a background drew nothing on iOS while Android and the
+        # web drew the box. Dynamic hands an empty SafeAreaView to the View
+        # container now (ticket 2026-11-08-ios-dynamic-empty-view-bound-background).
+
+        def sized_axis?(value)
+          case value
+          when nil then false
+          when Numeric then value != 0
+          when String
+            return false if value == 'wrapContent' || value.strip.empty?
+            return value.to_f != 0 if value.match?(/\A-?\d+(\.\d+)?\z/)
+
+            true # matchParent, or a binding resolved at run time
+          else true
+          end
+        end
+
+        # The keys a weighted stack reads from its child.
+        WEIGHT_KEYS = %w[weight widthWeight heightWeight].freeze
+
+        # One child of a WeightedHStack / WeightedVStack: `(view: AnyView(...), weight: ...)`. *fixed_size* is the
+        # cross-axis `.fixedSize(...)` of an unweighted wrapContent child (or a lambda that decides it once the child is
+        # converted), kept in @weighted_children_info too: inline emit and section extraction (view_updater) must use the
+        # same modifier, or the call-site modifier is lost (drops-weighted-child-call-site-fixed-size bug).
+        def emit_weighted_child(child, index, count, orientation, weight, fixed_size)
+          # 各子要素を(view: AnyView, weight: CGFloat)のタプルとして追加
+          add_line "("
+          add_line "  view: AnyView("
+
+          # 子要素を生成
+          # Pass parent orientation to child for proper frame handling
+          child['parent_orientation'] = orientation
+
+          # Capture full child code including VisibilityWrapper if needed
+          before_count = @generated_code.size
+
+          has_visibility = ResponsiveHelper.visibility_declared?(child)
+          # If visibility wrapper is needed, child content goes 1 level deeper
+          child_indent = has_visibility ? @indent_level + 3 : @indent_level + 2
+
+          child_converter = @converter_factory.create_converter(child, child_indent, @action_manager, @converter_factory, @view_registry)
+          return unless child_converter
+          child_code = child_converter.convert
+
+          if has_visibility
+            # Wrap with VisibilityWrapper (canonical expression
+            # parsing shared with view_binding_handler#parse_binding)
+            visibility_param = ResponsiveHelper.visibility_param(child)
+            wrapper_indent = "    " * (@indent_level + 2)
+            @generated_code << "#{wrapper_indent}VisibilityWrapper(#{visibility_param}) {"
+            child_code.split("\n").each { |line| @generated_code << line }
+            @generated_code << "#{wrapper_indent}}"
+          else
+            child_code.split("\n").each { |line| @generated_code << line }
+          end
+
+          # Capture the full generated code for this child (including VisibilityWrapper)
+          full_child_code = @generated_code[before_count..].join("\n")
+          fixed_size_modifier = fixed_size.respond_to?(:call) ? fixed_size.call : fixed_size
+
+          # Save full child code + fixedSize contract for potential body splitting
+          @weighted_children_info << { code: full_child_code, weight: weight, fixed_size: fixed_size_modifier }
+
+          # State変数を継承
+          if child_converter.respond_to?(:state_variables) && child_converter.state_variables
+            @state_variables.concat(child_converter.state_variables)
+          end
+
+          # inline emit: AnyView(...) の内側に fixedSize を追加
+          if fixed_size_modifier
+            add_line "    #{fixed_size_modifier}"
+          end
+
+          add_line "  ),"
+          add_line "  weight: #{weight}"
+          add_line ")#{index < count - 1 ? ',' : ''}"
+        end
+
+        # The cross-axis fixedSize of an unweighted child whose main axis is wrapContent or undeclared, or nil.
+        def wrap_fixed_size(attrs, orientation)
+          axis = orientation == 'horizontal' ? 'width' : 'height'
+          return nil unless attrs[axis].nil? || attrs[axis] == 'wrapContent'
+
+          orientation == 'horizontal' ? '.fixedSize(horizontal: true, vertical: false)' : '.fixedSize(horizontal: false, vertical: true)'
+        end
+
+        # A child whose size class overrides its weight: the weight it is drawn with, per size class
+        # (ResponsiveHelper.per_size_class), and its fixedSize, also per size class. The main axis is matchParent
+        # where the child is weighted — in the base, and in each size class — and its own declaration elsewhere, so
+        # the child's function switches the frame with the weight. The stack read the base weight alone, so a weight
+        # written only under `responsive` drew nothing (ticket sjui-responsive-weight-overrides-are-not-drawn).
+        def responsive_weight_plan(child, orientation, fills_equally)
+          axis = orientation == 'horizontal' ? 'width' : 'height'
+          plan = lambda do |attrs|
+            weighted, weight = weight_expression(attrs['weight'] || attrs['widthWeight'] || attrs['heightWeight'])
+            # fillEqually: an undeclared weight is 1 unless the child declares its own main-axis size
+            # (canon childSizePrecedence, as for a child without overrides)
+            weighted, weight = true, 1 if fills_equally && !weighted && !(attrs[axis] && attrs[axis] != 'wrapContent')
+            [weighted, weight]
+          end
+          original = Marshal.load(Marshal.dump(child))
+          weight = ResponsiveHelper.per_size_class(original) { |attrs| plan.(attrs)[1].to_s }
+          fixed = ResponsiveHelper.per_size_class(original) { |attrs| !plan.(attrs)[0] && wrap_fixed_size(attrs, orientation) ? 'true' : 'false' }
+          fixed_size_modifier =
+            case fixed
+            when 'false' then nil
+            when 'true' then wrap_fixed_size({}, orientation)
+            else orientation == 'horizontal' ? ".fixedSize(horizontal: #{fixed}, vertical: false)" : ".fixedSize(horizontal: false, vertical: #{fixed})"
+            end
+
+          fills = ->(value) { value == 'matchParent' || value == -1 }
+          base = original.reject { |k, _| k == 'responsive' }
+          base_weighted = plan.(base)[0]
+          child[axis] = 'matchParent' if base_weighted && !fills.(child[axis])
+          child['responsive'] = original['responsive'].to_h do |size_class, overrides|
+            next [size_class, overrides] unless overrides.is_a?(Hash)
+
+            resolved = JsonUIShared::ResponsiveResolver.resolve(original, size_class)
+            overrides = overrides.dup
+            if plan.(resolved)[0]
+              overrides[axis] = 'matchParent' unless fills.(resolved[axis])
+            elsif base_weighted && !overrides.key?(axis) && !fills.(original[axis])
+              overrides[axis] = original[axis] || 'wrapContent'   # the base was made to fill; this size class does not
+            end
+            [size_class, overrides]
+          end
+          [weight, fixed_size_modifier]
+        end
+
+        def weighted?(value)
+          case value
+          when nil then false
+          when Numeric then value > 0
+          when String then !value.match?(/\A-?\d+(\.\d+)?\z/) || value.to_f > 0
+          else true
+          end
+        end
+
+        # `distribution: fill` — the SIZE half of distribution is carried to
+        # the CHILDREN, not spelled as a container arrangement. The canon cell
+        # (attribute_semantics.json semantics.distribution.perValueMapping
+        # .fill.swiftui) is ".frame(maxWidth/maxHeight: .infinity) on each
+        # child", and the ruling names ios outstanding on both faces: neither
+        # this converter nor the dynamic container read `fill` at all, so it
+        # fell through every arm and rendered the default. F's dynamic half is
+        # SwiftJsonUI 440c06a; this is the codegen one.
+        #
+        # Asking for the frame by setting the child's own main-axis size is
+        # how the weighted stack above already asks for the same thing, which
+        # puts the fill INSIDE the child's modifier chain (before its
+        # background) rather than in an outer wrapper the child floats in.
+        #
+        # Unlike the weighted main axis this does NOT override a declared
+        # size: `explicitChildSizeWins` puts distribution's size half at the
+        # bottom of the size topic's explicit > bounds > fill order, so only
+        # an undeclared axis grows.
+        def apply_distribution_fill(child, distribution, orientation)
+          return unless JsonUIShared::EnumSpelling.lowered(distribution, 'View', 'distribution') == 'fill'
+          return unless orientation == 'horizontal' || orientation == 'vertical'
+
+          axis = orientation == 'horizontal' ? 'width' : 'height'
+          return unless child[axis].nil? || child[axis] == 'wrapContent'
+
+          child[axis] = 'matchParent'
+        end
+
+        # Handle responsive container: generate a wrapper function call + children inline
+        def convert_responsive_container(children)
+          func_name = @converter_factory.next_responsive_name
+
+          # Generate the responsive wrapper function and register it
+          func_code = ResponsiveHelper.generate_container_function(
+            func_name, @component, self
+          )
+          @converter_factory.register_responsive_function(func_code)
+
+          # Generate the function call with children as content closure
+          add_line "#{func_name} {"
+
+          orientation = @component['orientation']
+          indent do
+            children.each_with_index do |child, index|
+              if @converter_factory
+                render_child_element(child, orientation, index, 0, 0)
+              end
+            end
+          end
+
+          add_line "}"
+
+          # All container modifiers (padding / margin / frame / background /
+          # cornerRadius / border / alpha / shadow / etc.) are emitted INSIDE
+          # the wrapper function per branch via
+          # ResponsiveHelper.generate_container_function +
+          # BaseViewConverter#collect_modifiers_for, so the call site adds
+          # only binding-driven modifiers that don't make sense per-branch.
+          apply_binding_modifiers
+
+          # ... and `.disabled` again after the identifier, as every other
+          # path writes it (apply_outer_disabled): inside the wrapper it is
+          # outside the accessibility element the identifier forms. Read off
+          # the node's own `enabled`; a size class that overrides `enabled`
+          # still gets its own `.disabled` inside the wrapper.
+          @outer_disabled = disabled_line(@component['enabled'])
+
+          generated_code
+        end
+      end
+    end
+  end
+end

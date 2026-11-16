@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/hintColor__alias_placeholderColor.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.hintColor (alias_placeholderColor)",
+    "description": "Conformance fixture for 'hintColor' on TextField (section: TextField, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "hintColor__alias_placeholderColor",
+      "description": "Conformance fixture for 'hintColor' on TextField (section: TextField, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_hintColor__alias_placeholderColor"
+        }
+      ]
+    }
+  ]
+}

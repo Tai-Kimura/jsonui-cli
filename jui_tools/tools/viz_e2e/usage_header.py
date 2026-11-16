@@ -1,0 +1,303 @@
+"""The usage limits in the header, end to end (requester, 10-18).
+
+The real `jui viz serve` in a throwaway HOME on a free port, fed by the real statusline.py with made-up status JSON
+(Claude Code 2.1.302's shape). Before any value: 上限の値なし. Then 0 / 50 / 99 %: the hue of the number falls as the
+share grows (interpolated, not steps), and the number and the % have one colour. 100 % (and 120, capped): no number and
+no %, 上限到達 in the inactive colour, the time to the reset still there. The time counts down; a value 20 minutes old
+says 20分前. Light and dark. No console error, nothing requested outside the server.
+"""
+
+from __future__ import annotations
+
+import colorsys
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import time
+
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, T_pattern, Watch, new_page, ready
+
+
+def five_words(rest: str) -> str:
+    """The five-hour window's words: its label, a space, then the share or the state (30-source-live.js renderUsage)."""
+    return f"{T('live.usage.five')} {rest}"
+
+
+def left_soon(h: int, minute_tens: str) -> re.Pattern:
+    """The time to the reset, h:<tens><any> left, as the page words it in the run's language."""
+    time_left = T_pattern("live.usage.left.time", h=str(h), m=re.compile(re.escape(minute_tens) + r"\d"))
+    return T_pattern("live.usage.left", left=re.compile(time_left.pattern))
+
+ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
+
+
+def check(failures, cond, text):
+    if not cond:
+        failures.append(f"usage: {text}")
+
+
+async def wait(page, js, timeout=20000, label=""):
+    try:
+        await page.wait_for_function(js, timeout=timeout, polling=200)
+    except Exception as e:
+        raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
+
+
+def _lum(rgb):
+    def c(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (c(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(css: str, bg_hex: str) -> float:
+    """WCAG contrast of an rgb() colour against a #rrggbb background, computed here (not by the page)."""
+    fg = [int(x) for x in re.findall(r"\d+", css)[:3]]
+    bg = [int(bg_hex.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    a, b = _lum(fg), _lum(bg)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+
+def hue(css: str) -> float:
+    r, g, b = (int(x) / 255 for x in re.findall(r"\d+", css)[:3])
+    return colorsys.rgb_to_hls(r, g, b)[0] * 360
+
+
+async def run_usage(pw, out, failures):
+    from run import free_port
+    out = pathlib.Path(out) / "usage"
+    out.mkdir(parents=True, exist_ok=True)
+    home = out / "home"
+    home.mkdir(exist_ok=True)
+    jt = pathlib.Path(__file__).resolve().parents[2]
+    script = jt / "jui_cli" / "viz" / "statusline.py"
+    port = free_port()
+    (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
+    base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
+    env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
+    log = open(out / "serve.log", "w")
+    srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
+    url = f"http://127.0.0.1:{port}"
+    res: dict = {}
+    now = int(time.time())
+
+    def feed(five, week, five_reset=now + 2 * 3600 + 13 * 60, week_reset=now + 4 * 86400 + 6 * 3600 + 30):
+        limits = {}
+        if five is not None:
+            limits["five_hour"] = {"used_percentage": five, "resets_at": five_reset}
+        if week is not None:
+            limits["seven_day"] = {"used_percentage": week, "resets_at": week_reset}
+        body = json.dumps({"model": {"display_name": "Opus"}, "rate_limits": limits}).encode()
+        subprocess.run([sys.executable, "-I", "-S", str(script)], input=body, capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
+
+    usage = "() => window.__dbg.usage()"
+
+    async def chips_hold(page, tag: str, width: int) -> None:
+        """A stale note (20 minutes on) leaves every header chip as tall as a fresh one, its text in the middle
+        (10-19: the note took the sticky-note card's .note style and the whole row swelled)."""
+        fresh = await page.evaluate("() => window.__dbg.chipBoxes()")
+        stale = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 20 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.chipBoxes()), 1500)); }")
+        res[f"chips-{tag}"] = {"fresh": fresh, "stale": stale}
+        await page.screenshot(path=str(out / f"header-stale-{tag}.png"), clip={"x": 0, "y": 0, "width": width, "height": 120})
+        # A longer row may wrap the header to two lines (fine, the requester, 10-19); it must hide nothing: everything in
+        # it ends above the view below, and パネルを閉じる is still the element under its own middle.
+        lay = res[f"layout-{tag}"] = await page.evaluate("""() => {
+          const top = Math.max(...[...document.querySelectorAll('.topbar *')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().bottom));
+          const below = ['.main', '#scene', '#side', '#floor-nav', '#room-solo'].map((s) => document.querySelector(s))
+            .filter((e) => e && e.offsetParent !== null).map((e) => ({ name: e.id || e.className, top: e.getBoundingClientRect().top }));
+          const b = document.getElementById('btn-side'), r = b.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { headerBottom: top, below, button: hit === b || b.contains(hit), buttonAt: [r.top, r.bottom] };
+        }""")
+        check(failures, lay["below"] and all(lay["headerBottom"] <= e["top"] + 0.5 for e in lay["below"]),
+              f"{tag}: the header ends above what is below it: {lay}")
+        check(failures, lay["button"], f"{tag}: パネルを閉じる can be pressed: {lay}")
+        await page.evaluate("() => window.__dbg.setClock(null)")
+        await wait(page, "() => window.__dbg.usage()[0].note === ''", label=f"{tag}: fresh again")
+        h = max(c["h"] for c in fresh)
+        check(failures, len(stale) == len(fresh) and all(c["h"] <= h + 0.5 for c in stale),
+              f"{tag}: a stale note keeps every chip at {h}px: {[(c['name'], c['h']) for c in stale]}")
+        check(failures, all(abs(c["mid"] - c["textMid"]) <= 2 for c in stale),
+              f"{tag}: each chip's text sits in its middle: {[(c['name'], c['mid'], c['textMid']) for c in stale]}")
+    async def buttons_right(page, tag: str, wrap: bool = False, wide: bool = False) -> None:
+        """通知 and パネルを閉じる stay at the header's right edge, on the first line or wrapped to the next, and nothing
+        sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). パネルを閉じる is on
+        通知's line unless it does not fit there: then it is on the very next line, both lines at the right edge (a phone in
+        English, ticket 2026-11-04-viz-en-phone-card-header-overflows-10px). Sideways is read against the viewport asked
+        for: with is_mobile the page's innerWidth grows with what overflows, so it passes whatever sticks out. Wide is 2400 px,
+        where the menu controls share their dedicated second row. With wrap,
+        the widest width (from 2400 down, 20 px a step) at which the buttons stand on a line of their own below the chips
+        (the requester's 09:08 screen) is found first."""
+        js = """() => {
+          const bar = document.querySelector('.topbar'), b = bar.getBoundingClientRect(), cs = getComputedStyle(bar);
+          const right = b.right - parseFloat(cs.paddingRight), menu = document.querySelector('.topbar-menu').getBoundingClientRect();
+          const box = (id) => { const e = document.getElementById(id); if (!e || e.offsetParent === null) return null;
+            const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+          const side = box('btn-side'), bell = box('btn-notify');
+          const btns = [...document.querySelectorAll('.controls button')].filter((e) => e.offsetParent !== null).map((e) => { const r = e.getBoundingClientRect(); return { id: e.id, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+          const overlap = btns.flatMap((a, i) => btns.slice(i + 1).filter((c) => a.left < c.right - 0.5 && c.left < a.right - 0.5 && a.top < c.bottom - 0.5 && c.top < a.bottom - 0.5).map((c) => [a.id, c.id]));
+          const left = b.left + parseFloat(cs.paddingLeft);
+          const outside = btns.filter((c) => c.left < left - 1 || c.right > right + 1).map((c) => c.id);
+          const bellLine = bell ? btns.filter((c) => Math.abs(c.top - bell.top) <= 2) : [];
+          const lineWith = side && bellLine.length ? Math.max(...bellLine.map((c) => c.right)) - Math.min(...bellLine.map((c) => c.left)) + parseFloat(getComputedStyle(document.querySelector('.controls')).columnGap) + (side.right - side.left) : 0;
+          const chips = document.querySelector('.chips').getBoundingClientRect(), ctl = document.querySelector('.controls').getBoundingClientRect();
+          return { w: document.documentElement.clientWidth, right, side, bell, overlap, outside, lineWith, room: menu.width, foot: b.bottom, oneLine: ctl.top < menu.top + ctl.height - 0.5, alone: ctl.top >= chips.bottom - 0.5,
+                   scrollW: document.documentElement.scrollWidth };
+        }"""
+        if wrap:
+            vp = page.viewport_size
+            for w in range(2400, 680, -20):
+                await page.set_viewport_size({"width": w, "height": vp["height"]})
+                await page.wait_for_timeout(120)
+                if (await page.evaluate(js))["alone"]:
+                    break
+        if wide:
+            await page.set_viewport_size({"width": 2400, "height": page.viewport_size["height"]})
+        await page.wait_for_timeout(300)
+        g = res[f"buttons-{tag}"] = await page.evaluate(js)
+        await page.screenshot(path=str(out / f"header-buttons-{tag}.png"), clip={"x": 0, "y": 0, "width": g["w"], "height": g["foot"] + 8})
+        if wrap:
+            check(failures, g["alone"], f"{tag}: the buttons wrapped to a line of their own at {g['w']} px (else this arm proves nothing): {g}")
+        elif wide:
+            check(failures, g["oneLine"], f"{tag}: at {g['w']} px the buttons share the menu row: {g}")
+        side, bell = g["side"], g["bell"]
+        check(failures, side is not None and abs(side["right"] - g["right"]) <= 1,
+              f"{tag}: パネルを閉じる ends at the header's right edge ({g['right']}): {side}")
+        if bell is not None and side is not None and side["top"] >= bell["bottom"] - 0.5:   # パネルを閉じる on a line below 通知's
+            check(failures, g["lineWith"] > g["room"], f"{tag}: パネルを閉じる leaves 通知's line only when it does not fit there ({g['lineWith']} in {g['room']}): {bell} {side}")
+            check(failures, side["top"] - bell["bottom"] <= 8, f"{tag}: パネルを閉じる is on the very next line: {bell} {side}")
+            check(failures, abs(bell["right"] - g["right"]) <= 1, f"{tag}: 通知's line ends at the header's right edge too ({g['right']}): {bell}")
+        else:
+            check(failures, bell is None or (bell["right"] <= side["left"] + 0.5 and abs(bell["top"] - side["top"]) <= 2 and side["left"] - bell["right"] <= 12),
+                  f"{tag}: 通知 sits just left of パネルを閉じる, on its line: {bell} {side}")
+        check(failures, not g["overlap"], f"{tag}: no button lies on another: {g['overlap']}")
+        check(failures, not g["outside"], f"{tag}: every button inside the header's padding: {g['outside']}")
+        asked = page.viewport_size["width"]
+        check(failures, g["scrollW"] <= asked, f"{tag}: nothing sticks out sideways: scrollWidth {g['scrollW']} > {asked}")
+
+    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+    t0 = time.monotonic()
+    try:
+        import urllib.request
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read()
+                break
+            except OSError:
+                time.sleep(0.1)
+        watch = Watch(origin=url)
+        page = await new_page(browser, watch, "usage", **DESKTOP)
+        await page.emulate_media(color_scheme="light")
+        await page.goto(url + "/")
+        await ready(page)
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
+        await wait(page, "() => window.__dbg.usage().length === 1", label="the chip")
+        r = res["none"] = await page.evaluate(usage)
+        check(failures, r[0]["text"] == T("live.usage.none") and r[0]["window"] is None, f"no value yet: {r}")
+        check(failures, r[0]["title"] == T("live.usage.none.title"), f"where the value comes from: {r[0]['title']}")
+        ink = await page.evaluate("() => window.__dbg.inkSoft()")
+
+        hues = {}
+        for pct in (0, 50, 99):
+            feed(pct, 18)
+            await wait(page, f"() => (window.__dbg.usage()[0] || {{}}).text.startsWith({json.dumps(five_words(f'{pct}%'))})", label=f"{pct}%")
+            r = await page.evaluate(usage)
+            five = r[0]
+            check(failures, five["num"] and five["num"] == five["pc"], f"{pct}%: the number and the % share one colour: {five}")
+            hues[pct] = hue(five["num"])
+            check(failures, not five["limit"] and left_soon(2, "1").search(five["text"]), f"{pct}%: the time to the reset: {five}")
+        res["hues"] = hues
+        check(failures, hues[0] > hues[50] > hues[99] and 100 < hues[0] <= 125 and hues[99] < 8 and 45 < hues[50] < 75,
+              f"the hue falls with the share, green to red, in between not a step: {hues}")
+        # contrast (reviewed 10-18): every share 0-99, light and dark, at least 4.5 against the chip (12 px bold: AA)
+        async def contrast_sweep(scheme):
+            await page.emulate_media(color_scheme=scheme)
+            await page.wait_for_timeout(300)
+            bg = await page.evaluate("() => getComputedStyle(document.documentElement).getPropertyValue('--chip').trim()")
+            cols = await page.evaluate("() => Array.from({ length: 100 }, (_, p) => window.__dbg.usageColor(p))")
+            ratios = [contrast(c, bg) for c in cols]
+            hs = [hue(c) for c in cols]
+            return {"bg": bg, "min": round(min(ratios), 2), "at": ratios.index(min(ratios)), "hues": [round(h) for h in hs[::11]],
+                    "falls": all(hs[i] >= hs[i + 1] - 0.5 for i in range(99))}
+        for scheme in ("light", "dark"):
+            c = res[f"contrast-{scheme}"] = await contrast_sweep(scheme)
+            check(failures, c["min"] >= 4.5, f"{scheme}: every share 0-99 at 4.5:1 or more: lowest {c['min']} at {c['at']}%")
+            check(failures, c["falls"] and c["hues"][0] > 100 and c["hues"][-1] < 10, f"{scheme}: still green to red, continuously: {c['hues']}")
+        await page.emulate_media(color_scheme="light")
+        await wait(page, "() => window.__dbg.usage()[0].num === window.__dbg.usageColor(99)", label="the chip repainted for light")
+        shown = await page.evaluate("() => [window.__dbg.usage()[0].num, window.__dbg.usageColor(99)]")
+        check(failures, shown[0] == shown[1], f"the chip shows the colour the sweep measured: {shown}")
+        r = res["week"] = await page.evaluate(usage)
+        check(failures, r[1]["window"] == "sevenDay" and r[1]["text"].startswith(f"{T('live.usage.week')} 18%") and T("live.usage.left.days", d=4, h=6) in r[1]["text"], f"the week: {r}")
+        await page.screenshot(path=str(out / "header-light.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
+        for pct in (100, 120):
+            feed(pct, 18)
+            await wait(page, "() => window.__dbg.usage()[0].limit", label=f"{pct}%: limit")
+            five = (await page.evaluate(usage))[0]
+            res[f"limit{pct}"] = five
+            check(failures, five["num"] is None and five["pc"] is None and "100" not in five["text"] and five["text"].startswith(five_words(T("live.usage.limit"))),
+                  f"{pct}%: 上限到達 in place of the number: {five}")
+            check(failures, five["limitColor"] == ink and left_soon(2, "1").search(five["text"]), f"{pct}%: inactive colour, the reset still shown: {five} vs {ink}")
+        await page.screenshot(path=str(out / "header-limit-light.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
+        # 99.7 right after the limit (so the wait cannot pass on an older 99): floored, a number, not the limit
+        feed(99.7, 18)
+        await wait(page, "() => !window.__dbg.usage()[0].limit", label="99.7% arrived")
+        five = res["99.7"] = (await page.evaluate(usage))[0]
+        check(failures, five["text"].startswith(five_words("99%")) and five["num"], f"99.7%: 99%, not 100 and not the limit: {five}")
+        # the time counts down; an old value says how old
+        feed(42, 18)
+        await wait(page, f"() => window.__dbg.usage()[0].text.startsWith({json.dumps(five_words('42%'))})", label="42%")
+        later = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 20 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.usage()), 1500)); }")
+        res["later"] = later
+        check(failures, left_soon(1, "5").search(later[0]["text"]) and later[0]["note"] == f" · {T('live.usage.ago.min', n=20)}" and later[1]["note"] == f" · {T('live.usage.ago.min', n=20)}",
+              f"20 minutes on: the time counts down and the value says its age: {later}")
+        await page.evaluate("() => window.__dbg.setClock(null)")
+        await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")
+        await chips_hold(page, "light", 1440)
+        await buttons_right(page, "wide-light", wide=True)
+        await buttons_right(page, "wrap-light", wrap=True)
+        await chips_hold(page, "wrap-light", page.viewport_size["width"])
+        await page.set_viewport_size(DESKTOP["viewport"])
+        # past a window's reset with no newer value: no share (it is not this window's any more)
+        feed(42, 18, five_reset=int(time.time()) + 60)
+        await wait(page, f"() => window.__dbg.usage()[0].text.startsWith({json.dumps(five_words('42%'))})", label="42%, resets in a minute")
+        gone = res["reset"] = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 3 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.usage()), 1500)); }")
+        check(failures, gone[0]["text"].startswith(five_words(T("live.usage.reset"))) and gone[0]["num"] is None and not T_pattern("live.usage.left").search(gone[0]["text"]) and "42" not in gone[0]["text"],
+              f"past the reset: リセット済み, no old share: {gone[0]}")
+        await page.evaluate("() => window.__dbg.setClock(null)")
+        feed(42, 18)
+        await wait(page, f"() => window.__dbg.usage()[0].text.startsWith({json.dumps(five_words('42%'))})", label="42% again")
+        await page.emulate_media(color_scheme="dark")
+        await page.wait_for_timeout(1500)
+        dark = res["dark"] = await page.evaluate(usage)
+        check(failures, dark[0]["num"] == dark[0]["pc"] and 50 < hue(dark[0]["num"]) < 90, f"dark: the same hue rule: {dark}")
+        await page.screenshot(path=str(out / "header-dark.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
+        await chips_hold(page, "dark", 1440)
+        await buttons_right(page, "wide-dark", wide=True)
+        await buttons_right(page, "wrap-dark", wrap=True)
+        await chips_hold(page, "wrap-dark", page.viewport_size["width"])
+        await page.set_viewport_size(DESKTOP["viewport"])
+        for scheme in ("light", "dark"):                             # and on a phone, where the chips wrap
+            phone = await new_page(browser, watch, f"usage-phone-{scheme}", **PHONE)
+            await phone.emulate_media(color_scheme=scheme)
+            await phone.goto(url + "/")
+            await ready(phone)
+            await wait(phone, "() => window.__dbg.usage().length === 2", label=f"phone {scheme}: the chips")
+            await chips_hold(phone, f"phone-{scheme}", 390)
+            await buttons_right(phone, f"phone-{scheme}")
+            await phone.close()
+        check(failures, not watch.console and not watch.foreign and not watch.csp, f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
+        await page.close()
+    finally:
+        await browser.close()
+        srv.terminate()  # our own child (started above)
+        try:
+            srv.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            srv.kill()
+        (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1))
+    print(f"  usage/header: {time.monotonic() - t0:.0f}s hues {res.get('hues')}", flush=True)

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/gravity__centervertical.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.gravity (centervertical)",
+    "description": "Conformance fixture for 'gravity' on View (section: common, class: visual). Value under test: \"centerVertical\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "gravity__centervertical",
+      "description": "Conformance fixture for 'gravity' on View (section: common, class: visual). Value under test: \"centerVertical\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_gravity__centervertical"
+        }
+      ]
+    }
+  ]
+}

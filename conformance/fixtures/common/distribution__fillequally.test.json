@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/distribution__fillequally.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.distribution (fillequally)",
+    "description": "Conformance fixture for 'distribution' on View (section: common, class: visual). Value under test: \"fillEqually\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "distribution__fillequally",
+      "description": "Conformance fixture for 'distribution' on View (section: common, class: visual). Value under test: \"fillEqually\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_distribution__fillequally"
+        }
+      ]
+    }
+  ]
+}

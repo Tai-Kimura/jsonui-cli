@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/bottomMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.bottomMargin (binding)",
+    "description": "Conformance fixture for 'bottomMargin' on View (section: common, class: visual). Value under test: \"@{boundBottomMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "bottomMargin__binding",
+      "description": "Conformance fixture for 'bottomMargin' on View (section: common, class: visual). Value under test: \"@{boundBottomMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_bottomMargin__binding"
+        }
+      ]
+    }
+  ]
+}

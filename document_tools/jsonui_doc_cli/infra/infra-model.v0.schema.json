@@ -1,0 +1,588 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jsonui.dev/schemas/infra-model/v0.json",
+  "title": "JsonUI infra model v0",
+  "description": "One file of a room's declared infrastructure (docs/infra/*.json, or the folder jui.config.json's infra.dir names). Every file of the folder together is the room's model. The display's only source (jui viz's server room); seed drafts it, check compares it with IaC and code. Boundary: docs/plans/2026-10-20-jui-viz-server-room-boundary.md. Holds no values: no ARN, IP address, account id, connection string or key (validate refuses their shapes anywhere in the file).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 0
+    },
+    "description": {
+      "$ref": "#/$defs/text"
+    },
+    "environments": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/environment"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "description": "Per file and for the room's model together: at most 5,000 (the target size is 2,000)."
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/edge"
+      },
+      "description": "Per file and for the room's model together: at most 10,000 (the target size is 5,000)."
+    },
+    "flows": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/flow"
+      },
+      "description": "What a request, a device, a schedule or an event sets going through the system, step by step (the server room ticket's item 7). Each step names nodes and edges as the load definitions do (node; edge, or from and to), so a load can be drawn from a flow later. Not the load file's \"flow\" (a kind of quantity there)."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "envRefs": {
+      "description": "The environments this belongs to (ids of environments[]). Left out: every environment.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "kind": {
+          "enum": [
+            "production",
+            "staging",
+            "development",
+            "preview",
+            "local",
+            "other"
+          ],
+          "default": "other"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "account",
+            "project",
+            "subscription",
+            "region",
+            "zone",
+            "network",
+            "subnet",
+            "cluster",
+            "namespace",
+            "host",
+            "logical"
+          ],
+          "description": "Nesting by parent: provider-side kinds (account, project, subscription, region, zone, network, subnet, cluster, namespace, host) and 'logical' — a group of the system's own (a product, a tier) that may hold groups and nodes of several providers. A group's provider is inherited by what it holds unless they name their own; a logical group has none."
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider"
+        },
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+        },
+        "parent": {
+          "$ref": "#/$defs/id"
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        }
+      }
+    },
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,39}$"
+    },
+    "category": {
+      "enum": [
+        "client",
+        "compute.vm",
+        "compute.container",
+        "compute.function",
+        "compute.k8s",
+        "compute.paas",
+        "edge.cdn",
+        "edge.dns",
+        "edge.waf",
+        "load_balancer",
+        "gateway.api",
+        "gateway.nat",
+        "network.ip",
+        "database.relational",
+        "database.document",
+        "database.kv",
+        "database.search",
+        "cache",
+        "storage.object",
+        "storage.file",
+        "storage.block",
+        "queue",
+        "stream",
+        "scheduler",
+        "mail",
+        "auth",
+        "secrets",
+        "monitoring",
+        "ci",
+        "external.saas",
+        "security.iam",
+        "security.policy",
+        "monitoring.alarm"
+      ]
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "category"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "category": {
+          "$ref": "#/$defs/category"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider",
+          "description": "The provider this node runs on or is (aws, gcp, azure, cloudflare, vercel, stripe, ...). Left out: the nearest enclosing group's provider. Nodes of one model may name different providers."
+        },
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._/-]{0,63}$"
+        },
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+          "description": "The region this node runs in (a price's region). Left out: the nearest enclosing group's region (a 'logical' group gives none). The merged model says it as regionResolved."
+        },
+        "group": {
+          "$ref": "#/$defs/id"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1
+        },
+        "app": {
+          "$ref": "#/$defs/text"
+        },
+        "engine": {
+          "$ref": "#/$defs/text"
+        },
+        "spec": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "The node's details for the display (ticket 2026-10-20-jui-viz-server-room-lines-dark-filter-spec §4): the instance type, memory, a version... as pairs in the order shown. Names a person reads, never a value of a secret (validate rejects the file). jui older than this field rejects a file that has it.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "value"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,39}$"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "\\S",
+                "maxLength": 120
+              }
+            }
+          }
+        },
+        "ha": {
+          "$ref": "#/$defs/text"
+        },
+        "managed_by": {
+          "enum": [
+            "iac",
+            "manual",
+            "external"
+          ],
+          "default": "iac"
+        },
+        "fold": {
+          "type": "boolean",
+          "description": "Folded (hidden until opened) on the display. Default: true for security.iam, security.policy and monitoring.alarm, false for the rest."
+        },
+        "data_doc": {
+          "enum": [
+            "docs/api",
+            "docs/db"
+          ]
+        },
+        "iac": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/relPath"
+        },
+        "pattern": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "relPath": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\\\:*?\"<>|]+$"
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/id"
+        },
+        "to": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9+.-]{0,23}$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "direction": {
+          "enum": [
+            "out",
+            "in",
+            "both"
+          ],
+          "default": "out"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        }
+      },
+      "description": "A connection between two nodes. It may join nodes of different providers; whether it crosses providers is not written here: the merged model says it (crossProvider), from the two nodes' providers."
+    },
+    "action": {
+      "enum": [
+        "request",
+        "response",
+        "read",
+        "write",
+        "upload",
+        "download",
+        "invoke",
+        "enqueue",
+        "dequeue",
+        "publish",
+        "subscribe",
+        "auth",
+        "schedule"
+      ],
+      "description": "What a step does. x-label is the verb the page shows after the node's name, x-icon its mark.",
+      "x-label": {
+        "request": "を呼ぶ",
+        "response": "に返す",
+        "read": "から読む",
+        "write": "に保存",
+        "upload": "にアップロード",
+        "download": "からダウンロード",
+        "invoke": "を実行",
+        "enqueue": "に積む",
+        "dequeue": "から取り出す",
+        "publish": "に通知",
+        "subscribe": "で受け取る",
+        "auth": "で認証",
+        "schedule": "を予定どおり起こす"
+      },
+      "x-icon": {
+        "request": "→",
+        "response": "←",
+        "read": "📖",
+        "write": "💾",
+        "upload": "⬆",
+        "download": "⬇",
+        "invoke": "⚡",
+        "enqueue": "📥",
+        "dequeue": "📤",
+        "publish": "📣",
+        "subscribe": "📡",
+        "auth": "🔑",
+        "schedule": "⏰"
+      }
+    },
+    "trigger": {
+      "enum": [
+        "user",
+        "device",
+        "schedule",
+        "event"
+      ],
+      "description": "What starts a flow: a person, a device (a beacon's base station...), a schedule, an event. x-label and x-icon as action's.",
+      "x-label": {
+        "user": "利用者の操作",
+        "device": "機器",
+        "schedule": "定期実行",
+        "event": "出来事"
+      },
+      "x-icon": {
+        "user": "👤",
+        "device": "📡",
+        "schedule": "⏰",
+        "event": "⚡"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One step: a move along an edge (edge, or from and to), a step at a node (node), a branch where a person chooses (branch), or lanes that run side by side (parallel). Exactly one of these. A move leaves the node the flow is at, and the flow is then at its other end (async too): a call and its reply are two steps, the request and then the response back along the same edge.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "What a choice's join names."
+        },
+        "edge": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/id"
+        },
+        "to": {
+          "$ref": "#/$defs/id"
+        },
+        "node": {
+          "$ref": "#/$defs/id"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "async": {
+          "type": "boolean",
+          "description": "Called without waiting for it; the flow still moves on to the node called."
+        },
+        "branch": {
+          "$ref": "#/$defs/branch"
+        },
+        "parallel": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/steps"
+          },
+          "description": "Lanes that run at once, each leaving from the node the flow is at; the flow stays at that node and the next step waits for all of them."
+        }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "choices"
+      ],
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "default": {
+          "$ref": "#/$defs/id",
+          "description": "The choice taken when the flow plays by itself; none: it stops here."
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/choice"
+          }
+        }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ],
+      "description": "One way on: its steps, then the flow goes on with the steps after the branch, from the node its steps end at; or goto another flow; or join a later step of this flow. A choice that ends the flow another way (an error sent back) joins the step that ends it, unless the branch is the flow's last step.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "steps": {
+          "$ref": "#/$defs/steps"
+        },
+        "goto": {
+          "$ref": "#/$defs/id"
+        },
+        "join": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "start",
+        "steps"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "description": {
+          "$ref": "#/$defs/text"
+        },
+        "start": {
+          "$ref": "#/$defs/id",
+          "description": "The node it starts at: any node (a client, a device, a scheduler, a queue...)."
+        },
+        "trigger": {
+          "$ref": "#/$defs/trigger"
+        },
+        "schedule": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Shown as written (rate(5 minutes), cron(...)): never read. Only with trigger schedule."
+        },
+        "environments": {
+          "$ref": "#/$defs/envRefs"
+        },
+        "steps": {
+          "$ref": "#/$defs/steps",
+          "description": "In order, each from where the one before left the flow; the first from start."
+        }
+      }
+    }
+  }
+}

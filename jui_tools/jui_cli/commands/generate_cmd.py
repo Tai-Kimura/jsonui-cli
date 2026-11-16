@@ -1,0 +1,1370 @@
+"""jui generate command — file generation from specs."""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+
+def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
+    """Register the generate subcommand."""
+    gen_parser = subparsers.add_parser(
+        "generate", aliases=["g"], help="Generate files from specs"
+    )
+    gen_sub = gen_parser.add_subparsers(dest="generate_type")
+
+    # jui g project
+    project_parser = gen_sub.add_parser("project", help="Generate all files from specs")
+    project_parser.add_argument("--file", metavar="SPEC_FILE", help="Single spec file to process")
+    project_parser.add_argument(
+        "--force", action="store_true",
+        help="Replace declaration files, and Layout JSON (screen, cell, header, footer) that "
+             "already exists and differs from what the spec generates — kept otherwise")
+    project_parser.add_argument("--skip-layout", action="store_true", help="Skip Layout JSON generation")
+    project_parser.add_argument("--dry-run", action="store_true", help="Show what would be generated")
+    project_parser.add_argument("--ios-only", action="store_true", help="Generate iOS files only")
+    project_parser.add_argument("--android-only", action="store_true", help="Generate Android files only")
+    project_parser.add_argument("--web-only", action="store_true", help="Generate Web files only")
+    project_parser.add_argument("--type-map", metavar="PATH", help="Path to type map file")
+
+    # jui g screen
+    screen_parser = gen_sub.add_parser("screen", help="Create spec template for new screen")
+    screen_parser.add_argument("names", nargs="+", help="Screen names (PascalCase)")
+    screen_parser.add_argument("--display-name", help="Display name (for single screen)")
+
+    # jui g converter
+    converter_parser = gen_sub.add_parser("converter", help="Generate custom component converter")
+    converter_parser.add_argument("name", nargs="?", help="Component name")
+    converter_parser.add_argument("--from", dest="from_spec", metavar="SPEC_FILE",
+                                  help="Generate from component spec file — a filename resolved "
+                                       "against component_spec_directory, or a path to the spec")
+    converter_parser.add_argument("--all", dest="all_specs", action="store_true",
+                                  help="Generate from all component specs")
+    converter_parser.add_argument("--attributes", help="Attributes (key:type,...)")
+    # Three states, as in each platform tool: --container, --no-container, or
+    # neither (the tool's default — a content slot drawn when the layout
+    # gives children). Until 1.9.0 only --container crossed, so a leaf
+    # could not be scaffolded through jui at all.
+    converter_parser.add_argument("--container", dest="container", action="store_const",
+                                  const=True, default=None, help="Container component")
+    converter_parser.add_argument("--no-container", dest="container", action="store_const",
+                                  const=False,
+                                  help="Leaf component: takes no children, and a layout that "
+                                       "gives it some is refused by the build")
+    converter_parser.add_argument(
+        "--skip-existing", action="store_true",
+        help="Leave existing converter and scaffold files untouched (no prompt)",
+    )
+    converter_parser.add_argument(
+        "--force", action="store_true",
+        help="Replace existing converter and scaffold files without prompting",
+    )
+
+    # jui g api — preview swagger-driven DTO + Domain model generation
+    api_parser = gen_sub.add_parser(
+        "api",
+        help="Preview swagger → DTO + Domain model generation (uses api.schemas filter)",
+    )
+    api_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be generated, but don't write any files",
+    )
+    api_parser.add_argument(
+        "--platform",
+        choices=("ios", "android", "web"),
+        help="Restrict to a single platform",
+    )
+    api_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="Emit JSON (used by MCP wrappers)",
+    )
+
+    # jui g attr-bindings — typed attribute extraction codegen (SSoT pillar C)
+    ab_parser = gen_sub.add_parser(
+        "attr-bindings",
+        help=(
+            "Generate typed attribute extraction code (Swift/Kotlin/Ruby) "
+            "from shared/core/attribute_definitions.json"
+        ),
+    )
+    ab_parser.add_argument(
+        "--lang",
+        choices=("swift", "kotlin", "ruby", "all"),
+        default="all",
+        help="Target language (default: all)",
+    )
+    ab_parser.add_argument(
+        "--out",
+        metavar="DIR",
+        help=(
+            "Output directory (default: <tool repo>/build/attr_codegen/<lang>). "
+            "With --lang all, per-language subdirectories are created under DIR."
+        ),
+    )
+    ab_parser.add_argument(
+        "--definitions",
+        metavar="PATH",
+        help="Override the attribute definitions file (default: bundled SSoT)",
+    )
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
+    """Execute jui generate."""
+    gen_type = getattr(args, "generate_type", None)
+
+    if gen_type == "project":
+        return _cmd_generate_project(args)
+    elif gen_type == "screen":
+        return _cmd_generate_screen(args)
+    elif gen_type == "converter":
+        return _cmd_generate_converter(args)
+    elif gen_type == "api":
+        return _cmd_generate_api(args)
+    elif gen_type == "attr-bindings":
+        return _cmd_generate_attr_bindings(args)
+    else:
+        print("Usage: jui generate <project|screen|converter|api|attr-bindings> [options]")
+        return 1
+
+
+def _cmd_generate_attr_bindings(args: argparse.Namespace) -> int:
+    """Execute jui g attr-bindings — typed attribute extraction codegen.
+
+    Emission is deterministic (sorted components/attributes, no
+    timestamps), so re-running always produces byte-identical output —
+    the results can sit under `jui verify`-style diff checks. The default
+    output stays inside this repo (build/attr_codegen/<lang>); writing
+    into external library repos requires an explicit ``--out``
+    (07/08/09 sync the build output instead of cross-repo writes).
+    """
+    import hashlib
+    import json
+    import shutil
+    from pathlib import Path
+
+    from ..generators.attr_codegen import model as attr_model
+    from ..generators.attr_codegen import (
+        kotlin_emitter,
+        ruby_emitter,
+        swift_emitter,
+    )
+
+    definitions = (
+        Path(args.definitions).resolve()
+        if args.definitions
+        else attr_model.default_definitions_path()
+    )
+    if not definitions.exists():
+        print(f"ERROR: attribute definitions not found: {definitions}")
+        return 1
+
+    model = attr_model.load_model(definitions)
+
+    emitters = {
+        "swift": swift_emitter.emit,
+        "kotlin": kotlin_emitter.emit,
+        "ruby": ruby_emitter.emit,
+    }
+    langs = list(emitters) if args.lang == "all" else [args.lang]
+
+    # Tool repo root (build/ output default) — generate_cmd.py lives at
+    # jui_tools/jui_cli/commands/, so repo root is three levels up.
+    repo_root = Path(__file__).resolve().parents[3]
+
+    skipped = attr_model.skipped_payload(model)
+    common_count = len(model.common.attrs)
+    component_count = len(model.components)
+    component_attr_count = sum(len(c.attrs) for c in model.components)
+
+    # `<lang>/<rel_path>` -> sha256 of the emitted content, for the manifest.
+    manifest_files: dict[str, str] = {}
+
+    for lang in langs:
+        if args.out:
+            out_dir = Path(args.out)
+            if args.lang == "all":
+                out_dir = out_dir / lang
+        else:
+            out_dir = repo_root / "build" / "attr_codegen" / lang
+            # Default dir is owned by this generator — wipe stale output so
+            # renamed/removed components never leave orphan files behind.
+            if out_dir.exists():
+                shutil.rmtree(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        files = emitters[lang](model)
+        for rel_path, content in files.items():
+            target = out_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            manifest_files[f"{lang}/{rel_path}"] = hashlib.sha256(
+                content.encode("utf-8")
+            ).hexdigest()
+
+        skip_path = out_dir / "skipped_attributes.json"
+        skipped_text = (
+            json.dumps(skipped, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
+        )
+        skip_path.write_text(skipped_text, encoding="utf-8")
+        manifest_files[f"{lang}/skipped_attributes.json"] = hashlib.sha256(
+            skipped_text.encode("utf-8")
+        ).hexdigest()
+
+        print(f"[{lang}] wrote {len(files) + 1} file(s) → {out_dir}")
+
+    # Manifest: per-file sha256 + source provenance, so the library repos'
+    # CI can verify their vendored copies against a pinned jsonui-cli ref
+    # (swift/kotlin have no in-repo diff guard the way ruby does). Only a
+    # full default emit describes the complete set — partial --lang or
+    # --out runs don't touch it. Deterministic on purpose (sorted, no
+    # timestamps, no version string): it changes iff the emitted bytes or
+    # the SSoT source change, and CI fails when the committed copy goes
+    # stale, same as the fixture-freshness gate.
+    if args.lang == "all" and not args.out:
+        try:
+            source_label = str(definitions.relative_to(repo_root))
+        except ValueError:
+            source_label = definitions.name
+        manifest = {
+            "_comment": (
+                "sha256 manifest of the attr-codegen emit. Committed so "
+                "SwiftJsonUI / KotlinJsonUI CI can verify their vendored "
+                "attribute tables against a pinned jsonui-cli ref. "
+                "Regenerate: jui generate attr-bindings --lang all "
+                "(re-vendor and manifest belong in the same commit)."
+            ),
+            "generatedBy": "jui generate attr-bindings --lang all",
+            "source": {
+                "file": source_label,
+                "sha256": hashlib.sha256(definitions.read_bytes()).hexdigest(),
+            },
+            "files": {key: manifest_files[key] for key in sorted(manifest_files)},
+        }
+        manifest_path = repo_root / "build" / "attr_codegen" / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[manifest] wrote {manifest_path} ({len(manifest_files)} file hashes)")
+
+    print(
+        f"\nComponents: {component_count} (+ common), attributes: "
+        f"{common_count} common + {component_attr_count} component-level, "
+        f"skipped: {len(model.skipped)}"
+    )
+    if model.skipped:
+        print("Skipped (see skipped_attributes.json):")
+        for s in model.skipped:
+            print(f"  - {s.component}.{s.name}: {s.reason}")
+    return 0
+
+
+def _cmd_generate_api(args: argparse.Namespace) -> int:
+    """Preview / drive the swagger → DTO + Domain pipeline.
+
+    v1 only supports ``--dry-run`` (returns the filter result + planned
+    file list without writing). A future ``jui g api`` without ``--dry-run``
+    will trigger the same emit path as ``jui build`` for the API model
+    portion only (use case 1 in the v3 plan §7 Phase 4). For now,
+    without ``--dry-run`` the user is pointed to ``jui build``.
+    """
+    import json
+
+    from ..core.api_model_sync import (
+        collect_docs,
+        has_planner,
+        plan_for,
+        planners_for,
+    )
+    from ..core.config_manager import ConfigManager
+    from ..core.openapi_loader import OpenAPILoadError
+
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        msg = "jui.config.json not found. Run 'jui init' first."
+        if getattr(args, "as_json", False):
+            print(json.dumps({"error": msg}, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR: {msg}")
+        return 1
+
+    if not args.dry_run:
+        # Without --dry-run we don't write here either — `jui build` is the
+        # canonical write path for the full pipeline. Surface that.
+        msg = (
+            "`jui g api` currently supports --dry-run only. "
+            "Use `jui build` to actually write DTO + Domain files."
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps({"error": msg}, indent=2, ensure_ascii=False))
+        else:
+            print(msg)
+        return 1
+
+    config = config_mgr.load()
+    platforms = config.get("platforms") or {}
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        if getattr(args, "as_json", False):
+            print(json.dumps({"error": absent}, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR: {absent}")
+        return 1
+
+    # Loader returns docs with kept/filtered_out already populated.
+    try:
+        docs = collect_docs(config_mgr)
+    except OpenAPILoadError as e:
+        payload = {
+            "error": str(e),
+            "code": getattr(e, "code", "openapi-load-error"),
+            "source": getattr(e, "source", ""),
+            "pointer": getattr(e, "pointer", ""),
+        }
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(f"ERROR [{payload['code']}]: {payload['error']}")
+        return 1
+
+    selected_platforms = (
+        [args.platform] if args.platform else planners_for(args)
+    )
+
+    swagger_files = [
+        {
+            "source_path": d.source_path,
+            "title": d.title,
+            "version": d.version,
+            "kept": sorted(s.name for s in d.schemas) + sorted(e.name for e in d.enums),
+            "filtered_out": sorted(d.filtered_out),
+            "skip_domain_matches": sorted(d.skip_domain_overrides),
+        }
+        for d in docs
+    ]
+
+    per_platform: dict[str, dict] = {}
+    for platform in selected_platforms:
+        if platform not in platforms or not has_planner(platform):
+            continue
+        try:
+            plan = plan_for(platform, config_mgr, platforms[platform], docs)
+        except OpenAPILoadError as e:
+            per_platform[platform] = {"error": str(e)}
+            continue
+        per_platform[platform] = {
+            "would_write_dto": sorted(str(p) for p in plan.expected_files),
+            "would_write_domain_scaffold": sorted(str(p) for p in plan.domain_scaffolds),
+        }
+
+    payload = {
+        "filter_active": any(d.filtered_out or d.skip_domain_overrides for d in docs),
+        "swagger_files": swagger_files,
+        "platforms": per_platform,
+    }
+
+    if getattr(args, "as_json", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        # Human-readable summary
+        for sf in swagger_files:
+            print(f"swagger: {sf['source_path']}")
+            print(f"  title:   {sf['title']} v{sf['version']}")
+            print(f"  kept:    {len(sf['kept'])} schemas/enums")
+            print(f"  excluded: {len(sf['filtered_out'])}")
+            if sf["skip_domain_matches"]:
+                print(f"  skip_domain: {', '.join(sf['skip_domain_matches'])}")
+        for platform, info in per_platform.items():
+            if "error" in info:
+                print(f"\n[{platform}] ERROR: {info['error']}")
+                continue
+            dtos = info["would_write_dto"]
+            doms = info["would_write_domain_scaffold"]
+            print(f"\n[{platform}] would write {len(dtos)} DTO files, {len(doms)} domain scaffolds")
+    return 0
+
+
+def _spec_matches_file(sf, spec_dir, requested: str) -> bool:
+    """--file accepts either the bare filename (login.spec.json) or a path
+    relative to spec_directory (learn/installation.spec.json). The bare-name
+    form is kept for backward compatibility with flat spec directories."""
+    try:
+        rel = sf.resolve().relative_to(spec_dir.resolve()).as_posix()
+    except ValueError:
+        rel = sf.name
+    return rel == requested or sf.name == requested
+
+
+def _cmd_generate_project(args: argparse.Namespace) -> int:
+    """Execute jui g project."""
+    from ..core.config_manager import ConfigManager
+    from ..core.spec_extractor import extract_screen_spec
+    from ..core.type_mapper import TypeMapper
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.parent_spec_merger import ParentSpecMerger
+    from ..core.spec_kind import describes_a_screen as _describes_a_screen
+    from ..generators.layout_generator import LayoutGenerator
+    from ..generators.cell_layout_generator import CellLayoutGenerator
+    from ..generators.ios_generator import IosGenerator
+    from ..generators.android_generator import AndroidGenerator
+    from ..generators.web_generator import WebGenerator, owns_viewmodel_base
+    from ..core.diff_checker import DiffChecker
+
+    import json
+    from pathlib import Path
+
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        print("ERROR: jui.config.json not found. Run 'jui init' first.")
+        return 1
+
+    from ..core.spec_kind import missing_table_error
+    missing = missing_table_error("jui g project")
+    if missing:
+        print(missing)
+        return 1
+
+    config = config_mgr.load()
+    # `--ios-only` on a config without ios used to generate nothing for it and
+    # end rc 0 (ticket jui-verify-and-others-platform-asked-by-name-absent-exits-0).
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, config.get("platforms") or {})
+    if absent:
+        print(f"ERROR: {absent}")
+        return 1
+    spec_dir = config_mgr.spec_directory
+
+    # Collect spec files. --file scopes PER-SCREEN artifacts only (the
+    # generation loop below filters on args.file); the aggregated
+    # Repository / UseCase protocols are built from every spec in the
+    # project, so all specs are always collected and parsed — otherwise a
+    # single-spec run would silently rewrite the aggregated protocols with
+    # just that spec's methods.
+    if args.file:
+        requested = spec_dir / args.file
+        if not requested.exists():
+            print(f"ERROR: Spec file not found: {requested}")
+            return 1
+        spec_files = sorted(spec_dir.glob("*.spec.json"))
+        if requested not in spec_files:
+            # --file may point into a subdirectory of spec_directory
+            spec_files.append(requested)
+        print(f"Found {len(spec_files)} spec file(s) "
+              f"(generating {args.file}; aggregation uses all)")
+    else:
+        spec_files = sorted(spec_dir.glob("*.spec.json"))
+        if not spec_files:
+            print(f"No spec files found in {spec_dir}")
+            return 1
+        print(f"Found {len(spec_files)} spec file(s)")
+
+    # Validate specs. The validator is found beside this jui (see
+    # document_tools_import): the launcher's sys.path alone never reached it,
+    # so every face skipped this step with one WARNING line.
+    config_mgr.ensure_document_tools_importable()
+    from ..core.document_tools_import import load_spec_validator
+    SpecValidator, where = load_spec_validator()
+    if SpecValidator is None:
+        print(f"WARNING: document_tools not available, skipping validation ({where})")
+    else:
+        validator = SpecValidator()
+        for sf in spec_files:
+            try:
+                result = validator.validate_file(sf)
+            except ImportError as e:
+                # The validator was found but a module it needs was not — name
+                # it rather than folding it into "not available".
+                print(f"WARNING: spec validation could not run ({e}); skipping validation")
+                break
+            if not result.is_valid:
+                print(f"\nERROR: Validation failed for {sf.name}:")
+                for e in result.errors:
+                    print(f"  {e}")
+                return 1
+            for w in result.warnings:
+                print(f"  {w}")
+            for i in getattr(result, "infos", []):
+                print(f"  {i}")
+
+    # Load type mapper
+    type_map_path = Path(args.type_map) if args.type_map else config_mgr.type_map_file
+    type_mapper = TypeMapper(type_map_path)
+
+    # Resolve sub-spec paths referenced by any parent_spec (they should
+    # not be generated on their own — they're merged into the parent).
+    sub_spec_paths: set[Path] = set()
+    for sf in spec_files:
+        try:
+            with open(sf, "r", encoding="utf-8") as f:
+                head = json.load(f)
+        except json.JSONDecodeError:
+            continue
+        if head.get("type") != "screen_parent_spec":
+            continue
+        for entry in head.get("subSpecs", []) or []:
+            ref = entry.get("file")
+            if not ref:
+                continue
+            resolved = (sf.parent / ref).resolve()
+            if resolved.exists():
+                sub_spec_paths.add(resolved)
+
+    merger = ParentSpecMerger(spec_dir=spec_dir)
+
+    # Parse all specs (merging parent_spec + sub-specs as we go)
+    all_specs = []
+    for sf in spec_files:
+        if sf.resolve() in sub_spec_paths:
+            # Skip sub-specs — they're represented by their parent
+            continue
+        with open(sf, "r", encoding="utf-8") as f:
+            spec_data = json.load(f)
+
+        # ⚠️ Asked before anything is scaffolded or aggregated from this file,
+        # as `jui build` does. Read as a screen, a spec that describes none
+        # (an `app_contracts_spec`) became a ScreenSpec named from its
+        # `metadata.name` — an app's display name — and was scaffolded as one.
+        # A known non-screen is skipped; an unknown type is skipped and SAID,
+        # because both guesses about it have been wrong before.
+        spec_kind = _describes_a_screen(spec_data.get("type"))
+        if spec_kind is False:
+            continue
+        if spec_kind is None:
+            print(f"\nWARNING: {sf.name} has type {spec_data.get('type')!r}, which is "
+                  "neither a screen nor a known non-screen type — not generated")
+            continue
+
+        if spec_data.get("type") == "screen_parent_spec":
+            merge_result = merger.merge_from_file(sf)
+            if merge_result.has_conflicts:
+                # First-write-wins is already applied inside ParentSpecMerger.merge,
+                # so merge_result.spec is usable. Surface the conflicts as warnings
+                # and continue — halting the whole project generate over a single
+                # parent's overlap would block unrelated specs from regenerating.
+                print(f"\nWARNING: parent_spec merge conflicts in {sf.name} (kept first-write-wins):")
+                for c in merge_result.conflicts:
+                    print(f"  {c.path}: {c.message}")
+            spec_data = merge_result.spec
+
+        screen_spec = extract_screen_spec(spec_data, sf)
+        all_specs.append((sf, screen_spec))
+
+    if args.file:
+        # The generation loop scopes on args.file — fail loudly here if the
+        # requested spec won't match anything (e.g. it is a sub-spec that
+        # was folded into its parent) instead of silently generating nothing.
+        if not any(_spec_matches_file(sf, spec_dir, args.file)
+                   for sf, _ in all_specs):
+            if (spec_dir / args.file).resolve() in sub_spec_paths:
+                print(f"ERROR: {args.file} is a sub-spec of a parent_spec — "
+                      f"generate the parent spec instead.")
+            else:
+                print(f"ERROR: {args.file} did not yield a screen spec.")
+            return 1
+
+    # Aggregate repositories / use cases across all specs
+    aggregator = RepositoryAggregator()
+    for sf, screen_spec in all_specs:
+        aggregator.add_spec(sf.name, screen_spec)
+
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError as e:
+        print(f"\nERROR: {e}")
+        return 1
+    if aggregated.has_conflicts:
+        # Same philosophy as parent_spec merge conflicts: warn and proceed
+        # with the first-seen signature so an in-progress rename doesn't
+        # halt the whole project regenerate.
+        print(
+            f"\nWARNING: {len(aggregated.conflicts)} aggregator signature "
+            f"conflict(s) (kept first-write-wins):"
+        )
+        for c in aggregated.conflicts:
+            print(c.format())
+            print()
+
+    # Save cache
+    aggregator.save_cache(config_mgr.project_root / ".jui_cache.json", spec_files)
+
+    # Determine target platforms
+    platforms = _resolve_platforms(args, config)
+
+    diff_checker = DiffChecker()
+    generated_files = []
+    skipped_files = []
+    warnings = []
+    errors: list[str] = []
+
+    # Per-screen generation (Layout + ViewModel)
+    for sf, screen_spec in all_specs:
+        if args.file and not _spec_matches_file(sf, spec_dir, args.file):
+            continue
+
+        print(f"\nProcessing: {sf.name} ({screen_spec.name})")
+
+        # Layout JSON — output to shared layouts_directory (single source of truth)
+        # Skip when spec uses layoutFile mode with no components (layout JSON is
+        # authored externally — generating would overwrite it with a stub).
+        # The @generated marker is injected during `jui build` distribution,
+        # not here, so both spec-generated and externally-authored source
+        # layouts remain marker-free and hand-editable.
+        uses_external_layout = (
+            screen_spec.layout_file and not screen_spec.layout_components
+        )
+        if uses_external_layout:
+            print(f"  Skipped layout (authored externally): {screen_spec.layout_file}.json")
+        elif not args.skip_layout:
+            layout_gen = LayoutGenerator(type_mapper)
+            layout_json = layout_gen.generate(screen_spec)
+            cell_gen = CellLayoutGenerator(layout_gen)
+
+            layouts_dir = config_mgr.layouts_directory
+            if screen_spec.layout_file:
+                layout_path = layouts_dir / f"{screen_spec.layout_file}.json"
+            else:
+                snake_name = _to_snake_case(screen_spec.name)
+                layout_path = layouts_dir / f"{snake_name}.json"
+
+            # Hard error if the existing Layout JSON has data entries that
+            # won't survive the regen — spec is the single source of truth
+            # for data shape (Layout JSON → spec is never automatic), so any
+            # orphan means the author needs to either declare it in
+            # stateManagement.uiVariables or consciously drop it.
+            _write_layout(
+                layout_path, layout_json, args=args, project_root=config_mgr.project_root,
+                label="", where="spec.uiVariables (stateManagement.uiVariables)",
+                generated_files=generated_files, skipped_files=skipped_files, errors=errors)
+
+            # Generate the cell / header / footer Layout JSON each entry opts
+            # into — for every declared Collection (structure.collection +
+            # structure.collections[]). The same rule as the screen layout.
+            for coll_def in screen_spec.collections:
+                for slot in cell_gen.slots_to_generate(coll_def):
+                    _write_layout(
+                        cell_gen.slot_output_path(coll_def, slot, layouts_dir),
+                        cell_gen.generate_slot(slot, screen_spec), args=args,
+                        project_root=config_mgr.project_root, label=f"{slot.kind} ",
+                        where=f"structure.collection.{slot.kind}.uiVariables",
+                        generated_files=generated_files, skipped_files=skipped_files, errors=errors)
+
+        # Extract subdir from metadata.layoutFile (e.g. "mypage/change_email_sheet" -> "mypage")
+        vm_subdir = ""
+        if screen_spec.layout_file and "/" in screen_spec.layout_file:
+            vm_subdir = "/".join(screen_spec.layout_file.split("/")[:-1])
+
+        # ViewModel (per platform)
+        for platform, pconfig in platforms.items():
+            generator = _get_generator(platform, pconfig, config_mgr, type_mapper)
+            if not generator:
+                continue
+
+            # ViewModel declaration (auto-update). Skipped where another tool
+            # owns the file: `jui build`'s protocol sync stopped writing the
+            # web Base, and seeding it here would just re-plant the
+            # round-trip from the scaffolding side.
+            if owns_viewmodel_base(platform):
+                decl_path = generator.viewmodel_protocol_path(
+                    screen_spec.name, vm_subdir)
+                decl_content = generator.generate_viewmodel_protocol(screen_spec)
+
+                if decl_path.exists() and not args.force:
+                    diff = diff_checker.check(decl_path, decl_content)
+                    if diff:
+                        warnings.append(f"WARNING: {decl_path.relative_to(config_mgr.project_root)}\n{diff}")
+                    else:
+                        skipped_files.append(decl_path)
+                else:
+                    if args.dry_run:
+                        print(f"  [DRY-RUN] Would create: {decl_path}")
+                    else:
+                        decl_path.parent.mkdir(parents=True, exist_ok=True)
+                        decl_path.write_text(decl_content, encoding="utf-8")
+                        generated_files.append(decl_path)
+
+            # ViewModel implementation (never overwrite)
+            impl_path = generator.viewmodel_impl_path(screen_spec.name, vm_subdir)
+            if impl_path.exists():
+                skipped_files.append(impl_path)
+            else:
+                impl_content = generator.generate_viewmodel_impl(screen_spec)
+                if args.dry_run:
+                    print(f"  [DRY-RUN] Would create: {impl_path}")
+                else:
+                    impl_path.parent.mkdir(parents=True, exist_ok=True)
+                    impl_path.write_text(impl_content, encoding="utf-8")
+                    generated_files.append(impl_path)
+
+    # Aggregated Repository / UseCase generation
+    print("\nGenerating aggregated Repository / UseCase files...")
+    for platform, pconfig in platforms.items():
+        generator = _get_generator(platform, pconfig, config_mgr, type_mapper)
+        if not generator:
+            continue
+
+        has_separate_protocol = getattr(generator, "has_separate_protocol", True)
+
+        for repo_name, repo_def in aggregated.repositories.items():
+            filtered_repo = _filter_for_platform(repo_def, platform)
+            if not filtered_repo.methods:
+                continue
+
+            # Declaration (skip when generator has no separate protocol file)
+            if has_separate_protocol:
+                decl_path = generator.repository_protocol_path(repo_name)
+                decl_content = generator.generate_repository_protocol(repo_name, filtered_repo)
+                if decl_path.exists() and not args.force:
+                    diff = diff_checker.check(decl_path, decl_content)
+                    if diff:
+                        warnings.append(f"WARNING: {decl_path.relative_to(config_mgr.project_root)}\n{diff}")
+                    else:
+                        skipped_files.append(decl_path)
+                else:
+                    if not args.dry_run:
+                        decl_path.parent.mkdir(parents=True, exist_ok=True)
+                        decl_path.write_text(decl_content, encoding="utf-8")
+                        generated_files.append(decl_path)
+
+            # Implementation
+            impl_path = generator.repository_impl_path(repo_name)
+            if impl_path.exists():
+                skipped_files.append(impl_path)
+            elif not args.dry_run:
+                impl_content = generator.generate_repository_impl(repo_name, filtered_repo)
+                impl_path.parent.mkdir(parents=True, exist_ok=True)
+                impl_path.write_text(impl_content, encoding="utf-8")
+                generated_files.append(impl_path)
+
+        for uc_name, uc_def in aggregated.use_cases.items():
+            filtered_uc = _filter_for_platform(uc_def, platform)
+            if not filtered_uc.methods:
+                continue
+
+            # Declaration (skip when generator has no separate protocol file)
+            if has_separate_protocol:
+                decl_path = generator.usecase_protocol_path(uc_name)
+                decl_content = generator.generate_usecase_protocol(uc_name, filtered_uc)
+                if decl_path.exists() and not args.force:
+                    diff = diff_checker.check(decl_path, decl_content)
+                    if diff:
+                        warnings.append(f"WARNING: {decl_path.relative_to(config_mgr.project_root)}\n{diff}")
+                    else:
+                        skipped_files.append(decl_path)
+                else:
+                    if not args.dry_run:
+                        decl_path.parent.mkdir(parents=True, exist_ok=True)
+                        decl_path.write_text(decl_content, encoding="utf-8")
+                        generated_files.append(decl_path)
+
+            # Implementation
+            impl_path = generator.usecase_impl_path(uc_name)
+            if impl_path.exists():
+                skipped_files.append(impl_path)
+            elif not args.dry_run:
+                impl_content = generator.generate_usecase_impl(uc_name, filtered_uc)
+                impl_path.parent.mkdir(parents=True, exist_ok=True)
+                impl_path.write_text(impl_content, encoding="utf-8")
+                generated_files.append(impl_path)
+
+    # Summary
+    print(f"\n--- Summary ---")
+    print(f"  Generated: {len(generated_files)} file(s)")
+    print(f"  Skipped (existing): {len(skipped_files)} file(s)")
+    if warnings:
+        print(f"  Warnings: {len(warnings)}")
+        for w in warnings:
+            print(f"\n{w}")
+
+    if errors:
+        print(f"\n--- Errors ---")
+        print(f"  {len(errors)} spec(s) had unresolved Data orphans:")
+        for e in errors:
+            print(f"\n{e}")
+        return 1
+
+    return 0
+
+
+def _filter_for_platform(definition, platform: str):
+    """Return a copy of a Repository/UseCase with only methods for *platform*.
+
+    A method with an empty `platforms` list is considered available on every
+    platform (default behavior before this feature).
+    """
+    from dataclasses import replace
+    kept = [
+        m for m in definition.methods
+        if not m.platforms or platform in m.platforms
+    ]
+    return replace(definition, methods=kept)
+
+
+def _resolve_platforms(args: argparse.Namespace, config: dict) -> dict:
+    """Resolve which platforms to generate for."""
+    all_platforms = config.get("platforms", {})
+    if args.ios_only:
+        return {k: v for k, v in all_platforms.items() if k == "ios"}
+    if args.android_only:
+        return {k: v for k, v in all_platforms.items() if k == "android"}
+    if args.web_only:
+        return {k: v for k, v in all_platforms.items() if k == "web"}
+    return all_platforms
+
+
+def _get_layout_path(platform: str, pconfig: dict, screen_name: str, config_mgr: ConfigManager) -> Path:
+    """Get the layout JSON path for a platform."""
+    root = config_mgr.project_root / pconfig["root"]
+    snake_name = _to_snake_case(screen_name)
+    if platform == "android":
+        return root / "app/src/main/assets/Layouts" / f"{snake_name}.json"
+    elif platform == "web":
+        return root / "src/Layouts" / f"{snake_name}.json"
+    else:  # ios
+        return root / "Layouts" / f"{snake_name}.json"
+
+
+def _get_generator(platform: str, pconfig: dict, config_mgr, type_mapper):
+    """Get the appropriate generator for a platform."""
+    from ..generators.ios_generator import IosGenerator
+    from ..generators.android_generator import AndroidGenerator
+    from ..generators.web_generator import WebGenerator
+
+    root = config_mgr.project_root / pconfig["root"]
+    if platform == "ios":
+        return IosGenerator(root, pconfig, type_mapper)
+    elif platform == "android":
+        return AndroidGenerator(root, pconfig, type_mapper)
+    elif platform == "web":
+        return WebGenerator(root, pconfig, type_mapper)
+    return None
+
+
+def _write_layout(path, layout_json: dict, *, args, project_root, label: str, where: str,
+                  generated_files: list, skipped_files: list, errors: list) -> None:
+    """Write one Layout JSON `jui g project` generates — the screen's, or a
+    cell / header / footer's.
+
+    - not there: written.
+    - there, byte for byte what the spec generates: left as it is.
+    - there and different: KEPT, and a line names it and `--force` — the
+      Layout JSON is hand-edited from here (design-philosophy.md: "jui g
+      project → Layout JSON (SSoT for UI, hand-edited from here)"). On a
+      terminal the run asks first; a stdin that is not a terminal is not read.
+    - replaced (--force, or "y"): not while its data section holds entries
+      the spec does not declare — those are named and the file kept, as
+      before.
+
+    Until jsonui-cli 1.9.0 every run rewrote an existing layout: an edit
+    outside the data section (a style, a node) was lost with "Created:"
+    printed for it (measured 2026-09-26 on a scratch project).
+    """
+    import json as _json
+    import sys as _sys
+
+    rel = path.relative_to(project_root) if str(path).startswith(str(project_root)) else path
+    text = _json.dumps(layout_json, indent=2, ensure_ascii=False) + "\n"
+    exists = path.exists()
+    if exists:
+        try:
+            current = path.read_text(encoding="utf-8")
+        except OSError:
+            current = None
+        if current == text:
+            skipped_files.append(path)
+            return
+        replace = bool(args.force)
+        if not replace and not args.dry_run and _sys.stdin is not None and _sys.stdin.isatty():
+            answer = input(f"  {rel} differs from what the spec generates. Replace it? [y/N] ")
+            replace = answer.strip().lower() in ("y", "yes")
+        if not replace:
+            print(f"  Kept existing {label}layout: {rel} (it differs from what the spec generates; "
+                  f"--force replaces it)")
+            skipped_files.append(path)
+            return
+        orphans = _find_data_orphans(path, layout_json)
+        if orphans:
+            lines = [f"ERROR: {rel}: existing {label}Layout JSON has data entries not declared in {where}:"]
+            for name, klass in orphans:
+                lines.append(f"  - data.{name} ({klass})")
+            lines.append(
+                "  → add each to the uiVariables, or delete the entry from the Layout JSON's data "
+                "section to acknowledge the removal; replacing the file would drop it.")
+            errors.append("\n".join(lines))
+            skipped_files.append(path)
+            return
+    if args.dry_run:
+        print(f"  [DRY-RUN] Would {'replace' if exists else 'create'} {label}layout: {rel}")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    generated_files.append(path)
+    print(f"  {'Replaced' if exists else 'Created'} {label}layout: {rel}" if label
+          else f"  {'Replaced' if exists else 'Created'}: {rel}")
+
+
+def _find_data_orphans(
+    existing_layout_path,
+    new_layout_json: dict,
+) -> list[tuple[str, str]]:
+    """Return ``(name, class)`` pairs that are present in the existing
+    Layout JSON's ``data`` section but not in the freshly-generated one.
+
+    Used to surface migration regressions — e.g. spec event_handlers used
+    to emit callbacks into Data but no longer do, so the next regen
+    silently loses those entries unless the author migrated them to
+    ``uiVariables``.
+
+    Both sides are read wherever they declare `data` (layout_data): until
+    jsonui-cli 1.9.0 only the root section was, so a layout keeping its data in a
+    child — the usual hand-written form — was overwritten with nothing
+    reported.
+
+    An `include` is not opened (layout_data.data_entries_with_includes is the
+    reader that does). A replacement does drop an include, and with it the
+    entries it brings, but that is the whole node going — the structural
+    change the prompt above already names — and the remedy printed here,
+    deleting the entry from this file's data section, is not one an entry
+    declared in the included file has.
+    """
+    import json as _json
+    from ..core.layout_data import layout_data_entries
+
+    try:
+        with open(existing_layout_path, "r", encoding="utf-8") as f:
+            old = _json.load(f)
+    except (OSError, ValueError):
+        return []
+
+    new_names = {entry["name"] for entry in layout_data_entries(new_layout_json)}
+    orphans: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for entry in layout_data_entries(old):
+        name = entry["name"]
+        if name and name not in new_names and name not in seen:
+            seen.add(name)
+            orphans.append((name, entry.get("class", "?")))
+    return orphans
+
+
+def _to_snake_case(name: str) -> str:
+    """Convert PascalCase to snake_case."""
+    import re
+    s = re.sub(r"([A-Z])", r"_\1", name).lower().lstrip("_")
+    return s
+
+
+def _cmd_generate_screen(args: argparse.Namespace) -> int:
+    """Execute jui g screen."""
+    from ..core.config_manager import ConfigManager
+    import json
+
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        print("ERROR: jui.config.json not found. Run 'jui init' first.")
+        return 1
+
+    spec_dir = config_mgr.spec_directory
+    spec_dir.mkdir(parents=True, exist_ok=True)
+
+    for name in args.names:
+        snake_name = _to_snake_case(name)
+        file_path = spec_dir / f"{snake_name}.spec.json"
+        if file_path.exists():
+            print(f"SKIP: {file_path.name} already exists")
+            continue
+
+        display_name = args.display_name if args.display_name and len(args.names) == 1 else name
+        template = _screen_spec_template(name, display_name)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(template, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        print(f"Created: {file_path}")
+
+    return 0
+
+
+def _screen_spec_template(name: str, display_name: str) -> dict:
+    """Create a minimal screen spec template."""
+    return {
+        "type": "screen_spec",
+        "version": "1.0",
+        "metadata": {
+            "name": name,
+            "displayName": display_name,
+            "description": "",
+        },
+        "structure": {
+            "components": [
+                {
+                    "type": "View",
+                    "id": "root_view",
+                    "description": "Root container",
+                }
+            ],
+            "layout": {
+                "root": "root_view",
+                "children": [],
+            },
+        },
+        "dataFlow": {
+            "repositories": [],
+            "useCases": [],
+            "apiEndpoints": [],
+        },
+        "stateManagement": {
+            "uiVariables": [],
+            "eventHandlers": [],
+            "displayLogic": [],
+        },
+    }
+
+
+def _cmd_generate_converter(args: argparse.Namespace) -> int:
+    """Execute jui g converter."""
+    from ..core.config_manager import ConfigManager
+
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        print("ERROR: jui.config.json not found. Run 'jui init' first.")
+        return 1
+
+    config = config_mgr.load()
+    platforms = config.get("platforms", {})
+    skip_existing = bool(getattr(args, "skip_existing", False))
+    force = bool(getattr(args, "force", False))
+
+    # Converters are emitted per platform — with no platform configured the
+    # generation loop runs zero times, which used to exit 0 without creating
+    # any file. Fail loudly instead.
+    if not any(p in ("ios", "android", "web") for p in platforms):
+        print("ERROR: No platforms configured in jui.config.json — "
+              "run platform setup (platforms.ios / platforms.android / platforms.web) "
+              "before generating converters.")
+        return 1
+
+    refusal = _converter_flags_refusal(args)
+    if refusal:
+        print(f"ERROR: {refusal}")
+        return 1
+
+    if args.all_specs:
+        comp_dir = config_mgr.component_spec_directory
+        specs_to_process = sorted(comp_dir.glob("*.component.json"))
+        if not specs_to_process:
+            print(f"No component specs found in {comp_dir}")
+            return 1
+        return _run_converters_from_specs(
+            specs_to_process, platforms, config_mgr, skip_existing=skip_existing,
+            force=force,
+        )
+    if args.from_spec:
+        # Accept either a bare filename (resolved against component_spec_directory)
+        # or a direct path to the spec file — joining a cwd-relative path onto
+        # component_spec_directory used to produce a doubled path that never exists.
+        direct_path = Path(args.from_spec)
+        if direct_path.is_file():
+            spec_path = direct_path
+        else:
+            spec_path = config_mgr.component_spec_directory / args.from_spec
+        if not spec_path.exists():
+            print(f"ERROR: Component spec not found: {spec_path}")
+            return 1
+        return _run_converters_from_specs(
+            [spec_path], platforms, config_mgr, skip_existing=skip_existing,
+            force=force, container=args.container, name=args.name,
+        )
+    if args.name:
+        # Direct mode — pass through to platform tools.
+        return _run_converter_direct(
+            args.name, args.attributes, args.container, platforms, config_mgr,
+            skip_existing=skip_existing, force=force,
+        )
+    print("Usage: jui g converter <name> | --from <spec> | --all")
+    return 1
+
+
+def _converter_flags_refusal(args) -> str | None:
+    """Why a flag given with ``--from`` / ``--all`` cannot be used, or None.
+
+    Those paths take the component's name and attributes from its spec, so a
+    flag that says otherwise is refused out loud rather than dropped. Until
+    jsonui-cli 2.3.29 every one of them was dropped with no word — measured:
+    ``--from`` ran the same converter with or without ``--container``,
+    ``--no-container``, ``--attributes`` or a different name, and ``--all``
+    with ``--from`` too (ticket jui-generate-converter-from-ignores-explicit-
+    no-container). ``--container`` / ``--no-container`` with ``--from`` are
+    used (_run_converters_from_specs); ``--force`` / ``--skip-existing``
+    always were.
+    """
+    if args.all_specs:
+        if args.from_spec:
+            return ("--all and --from name different sets of specs — give one "
+                    "(--all is every spec in component_spec_directory)")
+        if args.name:
+            return (f"--all takes every component's name from its spec; the name "
+                    f"'{args.name}' is not used — leave it out, or give --from <spec>")
+        if args.container is not None:
+            flag = "--container" if args.container else "--no-container"
+            return (f"{flag} says one component's shape, and --all generates every "
+                    f"spec's — give it with --from <spec> or a name "
+                    f"(jui g converter <Name> {flag})")
+    if (args.all_specs or args.from_spec) and args.attributes:
+        path = "--all" if args.all_specs else "--from"
+        return (f"{path} takes the attributes from the spec's props; --attributes "
+                f"is not used — write them in the spec, or give a name instead of {path}")
+    return None
+
+
+def _component_spec_texts(spec_data, spec_path: Path):
+    """The component spec with its `{"md": ...}` prose resolved.
+
+    The same resolver every other spec reader uses (shared/core/spec_texts.py).
+    Read raw, a texts-file prop description was a dict, failed the
+    `isinstance(..., str)` filter below and was dropped from the converter's
+    doc comment without a word. PyYAML is imported only when a reference is
+    met, so a spec without one needs nothing new. An unresolvable reference
+    is named here and its description left out, as before; `jsonui-doc
+    validate` is where it fails.
+    """
+    from jui_cli.core import shared_core
+    texts = shared_core.load("spec_texts")
+    if texts is None or not isinstance(spec_data, dict):
+        return spec_data
+    resolution = texts.resolve_spec_texts(spec_data, spec_path)
+    for message in resolution.errors:
+        print(f"WARNING: {spec_path.name}: {message} — its text is not "
+              f"passed to the converter")
+    return resolution.data
+
+
+def _run_converters_from_specs(
+    specs_to_process: list,
+    platforms: dict,
+    config_mgr,
+    *,
+    skip_existing: bool = False,
+    force: bool = False,
+    container: bool | None = None,
+    name: str | None = None,
+) -> int:
+    """Iterate component spec files and invoke each platform's `g converter`.
+
+    *container*: ``--container`` (True) / ``--no-container`` (False) given
+    with ``--from``; it wins over what the spec's slots give
+    (_container_from_slots). *name*: the name given with ``--from``, which
+    has to be the spec's own.
+
+    Called by `jui g converter --from / --all` only. (This said "also used by
+    `jui build`" — the build stopped auto-generating converters long ago and
+    has no call here; a downstream face grepped the distributed tree and
+    found 0.)
+
+    Each prop's `description` travels with its type as
+    `--attribute-descriptions`, so the rewritten
+    attribute_definitions/<Name>.json carries the spec's text. Until 1.8.113
+    only `name:type` crossed, and every rewrite replaced hand-written
+    descriptions with "<key> attribute" (measured on a face: two lost on one
+    component).
+    """
+    import json
+
+    failed = []
+    seen_names = set()
+    for spec_path in specs_to_process:
+        with open(spec_path, "r", encoding="utf-8") as f:
+            spec_data = json.load(f)
+        spec_data = _component_spec_texts(spec_data, Path(spec_path))
+
+        comp_name = spec_data.get("metadata", {}).get("name", spec_path.stem)
+        if name and name != comp_name:
+            print(f"ERROR: {Path(spec_path).name} is the spec of '{comp_name}', not "
+                  f"'{name}' — --from takes the name from the spec; leave the name "
+                  f"out, or give the spec of '{name}'")
+            return 1
+        if comp_name in seen_names:
+            continue
+        seen_names.add(comp_name)
+
+        props = spec_data.get("props", {}).get("items", [])
+        attr_pairs = [
+            (p["name"], p["type"]) for p in props
+            if "name" in p and "type" in p
+        ]
+        descriptions = {
+            p["name"]: p["description"] for p in props
+            if "name" in p and "type" in p
+            and isinstance(p.get("description"), str) and p["description"].strip()
+        }
+        # stateManagement.exposedEvents are callback props — merge them into
+        # the attribute list as Callback-typed attrs so the platform
+        # generators wire `"onFoo": "@{handler}"` bindings (unknown types
+        # fall through to binding-only in every generator, which is exactly
+        # what an event needs).
+        seen_attrs = {name for name, _ in attr_pairs}
+        events = (spec_data.get("stateManagement") or {}).get("exposedEvents") or []
+        for event in events:
+            event_name = event.get("name") if isinstance(event, dict) else None
+            if event_name and event_name not in seen_attrs:
+                seen_attrs.add(event_name)
+                attr_pairs.append((event_name, "Callback"))
+                text = event.get("description")
+                if isinstance(text, str) and text.strip():
+                    descriptions[event_name] = text
+        attrs = ",".join(f"{name}:{type_}" for name, type_ in attr_pairs)
+        shape = container if container is not None else _container_from_slots(spec_data.get("slots"))
+
+        print(f"\nGenerating converter: {comp_name}")
+        result = _run_converter_direct(
+            comp_name, attrs or None, shape, platforms, config_mgr,
+            skip_existing=skip_existing, force=force,
+            descriptions=descriptions or None,
+        )
+        if result != 0:
+            failed.append(comp_name)
+
+    if failed:
+        print(f"\nERROR: Converter generation failed for: {', '.join(failed)}")
+        return 1
+    return 0
+
+
+def _container_from_slots(slots) -> bool | None:
+    """The container mode a component spec's ``slots`` gives ``--from``.
+
+    - slots listed          → True  (``--container``)
+    - anything else         → None  (the tool's default)
+
+    An empty ``"items": []`` says the component has no place for content — a
+    leaf — and is deliberately NOT read as ``--no-container`` yet. Measured
+    2026-09-25 on copies of a face (KotlinJsonUI 2.41.1): the leaf wrapper kjui
+    writes calls a library helper that version does not have, so a wrapper
+    created or re-created by ``--all`` did not compile — for components the
+    face had not scaffolded yet, and for any whose wrapper is regenerated.
+    Until that is settled a leaf is scaffolded by asking for one:
+    ``jui g converter <Name> --no-container``, or ``--from <spec>
+    --no-container`` (an explicit flag wins over the slots since jsonui-cli
+    2.3.29). ``--all`` keeps it one: None
+    passes neither flag, and a tool run with neither keeps what the
+    component's definition already declares (until 1.9.0 it wrote the
+    default back over the leaf, and the build stopped refusing its children).
+    """
+    items = slots.get("items") if isinstance(slots, dict) else None
+    return True if isinstance(items, list) and items else None
+
+
+def split_top_level_commas(value: str) -> list[str]:
+    """Split a comma-joined attribute list on top-level commas only.
+
+    Spec prop types may themselves contain commas — e.g. the multi-arg
+    closure type ``((String, String) -> Void)?`` — so a plain split(',')
+    tears one attribute into invalid ``key:type`` fragments. Commas nested
+    inside parentheses or brackets belong to the type, not the list.
+    """
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in value:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
+def _container_flag(container: bool | None) -> list[str]:
+    """``--container`` / ``--no-container`` / nothing: the same three states
+    every platform tool parses."""
+    if container is True:
+        return ["--container"]
+    if container is False:
+        return ["--no-container"]
+    return []
+
+
+def _run_converter_direct(
+    name: str,
+    attributes: str | None,
+    container: bool | None,
+    platforms: dict,
+    config_mgr,
+    *,
+    skip_existing: bool = False,
+    force: bool = False,
+    descriptions: dict | None = None,
+) -> int:
+    """Run converter generation on each platform tool.
+
+    Uses ``tool_resolver.tool_command`` so project-local installations of
+    ``sjui`` / ``kjui`` / ``rjui`` work without the tools being on $PATH, on
+    the ruby their .ruby-version names.
+    When ``skip_existing`` is true, ``JUI_SKIP_EXISTING=1`` is exported —
+    the Ruby converter generators read that and bypass their interactive
+    "Overwrite? (y/n)" prompt, leaving existing files in place.
+    """
+    import json
+    import subprocess
+
+    from ..core.tool_resolver import tool_command
+
+    extra_env = {"JUI_SKIP_EXISTING": "1"} if skip_existing else None
+
+    failed = []
+    for platform, pconfig in platforms.items():
+        root = config_mgr.project_root / pconfig["root"]
+        if platform == "ios":
+            tool_name = "sjui"
+            cmd = [tool_name, "g", "converter", name]
+            if attributes:
+                cmd += ["--attributes", attributes]
+            cmd += _container_flag(container)
+        elif platform == "android":
+            tool_name = "kjui"
+            cmd = [tool_name, "g", "converter", name]
+            if attributes:
+                for attr in split_top_level_commas(attributes):
+                    cmd += ["--attr", attr]
+            cmd += _container_flag(container)
+        elif platform == "web":
+            tool_name = "rjui"
+            cmd = [tool_name, "g", "converter", name]
+            if attributes:
+                cmd += ["--attributes", attributes]
+            cmd += _container_flag(container)
+        else:
+            continue
+        # The same two options on every tool: each CLI parses them since
+        # 1.8.113 (sjui / kjui rejected --force and --skip-existing before).
+        if force:
+            cmd.append("--force")
+        if descriptions:
+            # \u-escaped (json.dumps' default), so the argument is ASCII
+            # whatever the locale: with LANG unset a raw UTF-8 argument
+            # reaches Ruby as binary (ASCII-8BIT).
+            cmd += ["--attribute-descriptions", json.dumps(descriptions)]
+
+        actual_cmd, env = tool_command(cmd, root, extra=extra_env)
+
+        try:
+            result = subprocess.run(actual_cmd, cwd=root, env=env)
+        except FileNotFoundError:
+            print(f"  WARNING: '{tool_name}' not found (searched local and PATH) — skipping {platform}")
+            failed.append(platform)
+            continue
+        if result.returncode != 0:
+            failed.append(platform)
+
+    if failed:
+        print(f"  Failed: {', '.join(failed)}")
+        return 1
+    return 0

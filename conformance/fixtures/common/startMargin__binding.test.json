@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/startMargin__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.startMargin (binding)",
+    "description": "Conformance fixture for 'startMargin' on View (section: common, class: visual). Value under test: \"@{boundStartMargin}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "startMargin__binding",
+      "description": "Conformance fixture for 'startMargin' on View (section: common, class: visual). Value under test: \"@{boundStartMargin}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_startMargin__binding"
+        }
+      ]
+    }
+  ]
+}

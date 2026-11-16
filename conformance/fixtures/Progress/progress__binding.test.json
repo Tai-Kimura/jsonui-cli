@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Progress/progress__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Progress.progress (binding)",
+    "description": "Conformance fixture for 'progress' on Progress (section: Progress, class: visual). Value under test: \"@{boundProgress}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Progress"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "progress__binding",
+      "description": "Conformance fixture for 'progress' on Progress (section: Progress, class: visual). Value under test: \"@{boundProgress}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Progress_progress__binding"
+        }
+      ]
+    }
+  ]
+}

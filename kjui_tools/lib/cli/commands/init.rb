@@ -1,0 +1,226 @@
+# frozen_string_literal: true
+
+require 'optparse'
+require 'fileutils'
+require 'json'
+require_relative '../../core/config_manager'
+require_relative '../../core/project_finder'
+# The compose default for resource_manager_directory is ColorManager's own
+# constant (one source for the fixed `com.kotlinjsonui.generated` path), so
+# the file that reads it loads it — the same form as build.rb / xml_builder.rb
+# loading resources_manager before they use it. Without this line the compose
+# branch raised `uninitialized constant KjuiTools::Core::Resources` in a fresh
+# process (2026-09-03), while the spec suite stayed green because sibling
+# specs had loaded the constant first.
+require_relative '../../core/resources/color_manager'
+
+module KjuiTools
+  module CLI
+    module Commands
+      class Init
+        def run(args)
+          options = parse_options(args)
+          
+          # Check if MODE file exists (set by installer)
+          installer_mode = nil
+          mode_file = File.join(File.dirname(__FILE__), '../../../../MODE')
+          if File.exist?(mode_file)
+            installer_mode = File.read(mode_file).strip
+          end
+          
+          # Detect or use specified mode
+          mode = options[:mode] || installer_mode || Core::ConfigManager.detect_mode
+          
+          puts "Initializing KotlinJsonUI project in #{mode} mode..."
+
+          # Create config file only - directories will be created by 'setup' command
+          create_config_file(mode, options[:package_name])
+
+          puts "Initialization complete!"
+          puts
+          puts "Next steps:"
+          puts "  1. Edit kjui.config.json to customize paths if needed"
+          puts "  2. Run 'kjui setup' to create directories and base files"
+          puts "  3. Run 'kjui g view HomeView' to generate your first view"
+        end
+
+        private
+
+        def parse_options(args)
+          options = {}
+          
+          OptionParser.new do |opts|
+            opts.banner = "Usage: kjui init [options]"
+            
+            opts.on('--mode MODE', ['all', 'xml', 'compose'], 
+                    'Initialize mode (all, xml, compose)') do |mode|
+              options[:mode] = mode
+            end
+            
+            # `jui init --package-name` passes its value here. Without it the
+            # package is detected from AndroidManifest.xml / build.gradle, and
+            # an empty directory (what `jui init` starts from) has neither, so
+            # the config fell back to com.example.app while jui.config.json
+            # said otherwise — and `jui g converter` wrote there.
+            opts.on('--package-name NAME',
+                    'Android package (default: detected from AndroidManifest.xml / build.gradle)') do |name|
+              options[:package_name] = name
+            end
+
+            opts.on('-h', '--help', 'Show this help message') do
+              puts opts
+              exit
+            end
+          end.parse!(args)
+          
+          options
+        end
+
+        def create_config_file(mode, package_name_option = nil)
+          config_file = 'kjui.config.json'
+          
+          if File.exist?(config_file)
+            puts "Config file already exists: #{config_file}"
+            # Check if source_directory needs to be updated
+            existing_config = JSON.parse(File.read(config_file))
+            if existing_config['source_directory'].to_s.empty?
+              Core::ProjectFinder.setup_paths
+              # Auto-detect source directory without checking config
+              project_dir = Core::ProjectFinder.project_dir
+              
+              # If project_dir is nil, fallback to finding gradle files
+              if project_dir.nil?
+                gradle_file = Dir.glob('build.gradle*').first || Dir.glob('../build.gradle*').first
+                project_dir = gradle_file ? File.dirname(File.expand_path(gradle_file)) : Dir.pwd
+              end
+              
+              common_names = ['app/src/main', 'src/main', 'src', File.basename(project_dir)]
+              
+              source_dir = nil
+              common_names.each do |name|
+                path = File.join(project_dir, name)
+                if Dir.exist?(path)
+                  source_dir = name
+                  break
+                end
+              end
+              
+              if source_dir && !source_dir.empty?
+                existing_config['source_directory'] = source_dir
+                File.write(config_file, JSON.pretty_generate(existing_config))
+                puts "Updated source_directory to: #{source_dir}"
+              end
+            end
+            return
+          end
+          
+          # Find project info
+          Core::ProjectFinder.setup_paths
+          
+          # Get project name from settings.gradle or current directory
+          project_name = get_project_name_from_gradle || File.basename(Dir.pwd)
+          
+          # Create base config based on mode
+          if mode == 'compose'
+            # The package the caller named wins; detection is the fallback.
+            package_name = package_name_option || Core::ProjectFinder.package_name
+            
+            # Compose-specific config with appropriate defaults
+            # Detect if we're in a module or main app
+            source_dir = if Dir.exist?('src/main')
+                          'src/main'
+                        elsif Dir.exist?('app/src/main')
+                          'app/src/main'
+                        else
+                          Core::ProjectFinder.find_source_directory || 'src/main'
+                        end
+            
+            config = {
+              'mode' => mode,
+              'project_name' => project_name,
+              'source_directory' => source_dir,
+              'layouts_directory' => 'assets/Layouts',
+              'styles_directory' => 'assets/Styles',
+              'data_directory' => "kotlin/#{package_name.gsub('.', '/')}/data",
+              'viewmodel_directory' => "kotlin/#{package_name.gsub('.', '/')}/viewmodels",
+              'view_directory' => "kotlin/#{package_name.gsub('.', '/')}/views",
+              'extension_directory' => "kotlin/#{package_name.gsub('.', '/')}/extensions",
+              'adapter_directory' => "kotlin/#{package_name.gsub('.', '/')}/adapters",
+              # NOT the project package: ColorManager.kt declares the fixed
+              # `com.kotlinjsonui.generated` (color_manager.rb), so a path
+              # built from the app's own package puts the file where its
+              # package says it does not belong — and every emit that
+              # imports `com.kotlinjsonui.generated.ColorManager` then fails
+              # to resolve. Both shipping consumers configure this by hand;
+              # a project that took the default was broken from `init`.
+              'resource_manager_directory' => File.join(source_dir, Core::Resources::ColorManager::DEFAULT_RESOURCE_MANAGER_SUFFIX),
+              'package_name' => package_name,
+              'string_files' => [
+                'res/values/strings.xml',
+                'res/values-ja/strings.xml'
+              ],
+              'use_network' => true  # Compose mode can use network for API calls
+            }
+          else
+            # XML / all mode is frozen (Compose only): its paths stay on the
+            # template package. Say so rather than drop the option silently.
+            if package_name_option
+              puts "Note: --package-name is not applied in #{mode} mode (its paths use the template package)"
+            end
+            # XML mode or all mode config
+            config = {
+              'mode' => mode,
+              'project_name' => project_name,
+              'project_file_name' => project_name,
+              'source_directory' => Core::ProjectFinder.find_source_directory || 'app/src/main',
+              'layouts_directory' => 'res/raw/layouts',
+              'styles_directory' => 'res/raw/styles',
+              'view_directory' => 'java/com/example/app/ui',
+              'data_directory' => 'java/com/example/app/data',
+              'viewmodel_directory' => 'java/com/example/app/viewmodel',
+              'bindings_directory' => 'java/com/example/app/bindings',
+              'extension_directory' => 'java/com/example/app/extensions',
+              'adapter_directory' => 'java/com/example/app/adapters',
+              'resource_manager_directory' => 'java/com/example/app/generated',
+              'string_files' => [
+                'res/values/strings.xml',
+                'res/values-ja/strings.xml'
+              ],
+              'use_network' => true
+            }
+
+            # Add Compose config if mode is 'all'
+            if mode == 'all'
+              config['compose'] = {
+                'output_directory' => 'java/com/example/app/generated'
+              }
+            end
+          end
+          
+          File.write(config_file, JSON.pretty_generate(config))
+          puts "Created config file: #{config_file}"
+        end
+
+        def get_project_name_from_gradle
+          # Try settings.gradle.kts first
+          if File.exist?('settings.gradle.kts')
+            content = File.read('settings.gradle.kts')
+            if content =~ /rootProject\.name\s*=\s*["']([^"']+)["']/
+              return $1
+            end
+          end
+          
+          # Try settings.gradle
+          if File.exist?('settings.gradle')
+            content = File.read('settings.gradle')
+            if content =~ /rootProject\.name\s*=\s*["']([^"']+)["']/
+              return $1
+            end
+          end
+          
+          nil
+        end
+      end
+    end
+  end
+end

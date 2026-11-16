@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/contentDescription__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.contentDescription (static)",
+    "description": "Conformance fixture for 'contentDescription' on IconLabel (section: IconLabel, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "contentDescription__static",
+      "description": "Conformance fixture for 'contentDescription' on IconLabel (section: IconLabel, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_contentDescription__static"
+        }
+      ]
+    }
+  ]
+}

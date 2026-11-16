@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Collection__flow-overflow-wrap.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection__flow-overflow-wrap",
+    "description": "Control for the flow-overflow wrap fixture: the same flow Collection inside the same ScrollView, self-bounded at 100pt (it clips at the box).",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Collection__flow-overflow-wrap",
+      "description": "Control for the flow-overflow wrap fixture: the same flow Collection inside the same ScrollView, self-bounded at 100pt (it clips at the box).",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_Collection__flow-overflow-wrap"
+        }
+      ]
+    }
+  ]
+}

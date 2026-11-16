@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/flexible__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.flexible (false)",
+    "description": "Conformance fixture for 'flexible' on TextView (section: TextView, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flexible__false",
+      "description": "Conformance fixture for 'flexible' on TextView (section: TextView, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_flexible__false"
+        }
+      ]
+    }
+  ]
+}

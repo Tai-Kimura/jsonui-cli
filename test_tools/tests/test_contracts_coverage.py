@@ -1,0 +1,881 @@
+"""`jsonui-test contracts coverage`, measured against the red-checks it must pass.
+
+One synthetic project, and each red-check a mutation of it with an expected
+DIFFERENCE from the baseline counts — so an arm that stopped counting would
+not pass by reporting the same zeros twice. The baseline itself is pinned
+first, with the arithmetic spelled out, because every mutation is read
+against it.
+
+The project (web and ios): a detail screen whose `approve` method
+
+  1. serves setApproval=default          -> then: getItem called, status
+  2. serves setApproval=default, getItem=error_404 -> then: transition
+  3. serves setApproval=error_500, alsoStatuses 429 -> then: banner
+  4. serves setApproval=error_409        -> then: banner "conflict"
+
+and excludes getItem's 500 as unreachable. getOther is declared in the
+dataFlow and reached by no row (unattributed).
+
+  approve × setApproval  200 401 403 404 409 429 500
+                         row 200, 409, 500, 429(also) · uncovered 401 403 404 (partial)
+  approve × getItem      200 404 500 default
+                         row 404 · unreachable 500 · uncovered 200 (partial) · default n/a
+  getOther (unattributed) 200 500 -> uncovered 2
+  required 12 = row 5 (alsoStatuses 1) + unreachable 1 + uncovered 6; outside 1
+"""
+from __future__ import annotations
+
+import copy
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from jsonui_test_cli import contracts_coverage as cc
+from jsonui_test_cli.contracts_coverage import CannotStart, run_coverage
+
+
+def _write(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+
+
+_OPENAPI = {
+    "openapi": "3.0.0",
+    "paths": {
+        "/api/items/{id}": {"get": {"operationId": "getItem", "responses": {
+            "200": {}, "404": {}, "500": {}, "default": {}}}},
+        "/api/items/{id}/approval": {"put": {"operationId": "setApproval", "responses": {
+            "200": {}, "401": {}, "403": {}, "404": {}, "409": {}, "429": {}, "500": {}}}},
+        "/api/other": {"get": {"operationId": "getOther", "responses": {"200": {}, "500": {}}}},
+        "/api/logout": {"post": {"operationId": "postLogout", "responses": {"204": {}}}},
+    },
+}
+
+_MOCKS = {
+    "getItem": ("GET", "/api/items/{id}", {
+        "default": {"status": 200, "body": {"id": 1}},
+        "error_404": {"status": 404, "body": {"message": "gone"}},
+        "error_500": {"status": 500, "body": {"message": "boom"}}}),
+    "setApproval": ("PUT", "/api/items/{id}/approval", {
+        "default": {"status": 200, "body": {}},
+        **{f"error_{s}": {"status": s, "body": {"message": f"e{s}"}}
+           for s in (401, 403, 404, 409, 429, 500)}}),
+    "getOther": ("GET", "/api/other", {
+        "default": {"status": 200, "body": {}}, "error_500": {"status": 500, "body": {}}}),
+    "postLogout": ("POST", "/api/logout", {"default": {"status": 204}}),
+}
+
+
+def _screen() -> dict:
+    return {
+        "type": "screen_spec",
+        "metadata": {"name": "detail"},
+        "dataFlow": {
+            "viewModel": {"methods": [{"name": "approve"}, {"name": "load"}]},
+            "repositories": [{"name": "DetailRepository", "methods": [
+                {"name": "setApproval", "endpoint": "PUT /api/items/{id}/approval"},
+                {"name": "getItem", "endpoint": "GET /api/items/{id}"},
+                {"name": "getOther", "endpoint": "GET /api/other"},
+                {"name": "localOnly"},
+            ]}],
+        },
+        "branchContracts": {"methods": {"approve": {
+            "branches": [
+                {"when": {"api.setApproval": "default"},
+                 "then": {"api.getItem": "called", "data.status": "approved"}},
+                {"when": {"api.setApproval": "default", "api.getItem": "error_404"},
+                 "then": {"transition": "back"}},
+                {"when": {"api.setApproval": "error_500"},
+                 "alsoStatuses": {"api.setApproval": ["429"]},
+                 "then": {"data.banner": "visible"}},
+                {"when": {"api.setApproval": "error_409"},
+                 "then": {"data.banner": "conflict"}},
+            ],
+            "excludedOutcomes": {"api.getItem": {"500": {
+                "by": "unreachable", "reason": "the item is read before approval"}}},
+        }}},
+    }
+
+
+def _project(root: Path, screen=None, *, platforms=("web", "ios"), mocks=None,
+             openapi=None, app=None, extra_screens=()) -> Path:
+    config = {"spec_directory": "docs/screens/json", "api_directory": "docs/api",
+              "mock": {"swagger": ["docs/api/api.json"], "mockDir": "tests/mocks"}}
+    if platforms is not None:
+        config["platforms"] = list(platforms)
+    _write(root / "jui.config.json", config)
+    _write(root / "docs/api/api.json", openapi or _OPENAPI)
+    for op_id, (method, path, scenarios) in (mocks or _MOCKS).items():
+        _write(root / f"tests/mocks/generated/{op_id}.mock.json", {
+            "source": {"method": method, "path": path, "operationId": op_id},
+            "activeScenario": "default", "scenarios": scenarios})
+    _write(root / "docs/screens/json/detail.spec.json", screen or _screen())
+    for name, spec in extra_screens:
+        _write(root / f"docs/screens/json/{name}.spec.json", spec)
+    if app is not None:
+        _write(root / "docs/screens/json/app_contracts.spec.json", app)
+    return root
+
+
+def _block(report, platform="web"):
+    return next(b for b in report.platforms if b.platform == platform)
+
+
+def _screen_result(report, platform="web", name="detail"):
+    return next(s for s in _block(report, platform).screens if s.spec == name)
+
+
+def _counts(s) -> dict:
+    return {"units": s.units, "required": s.statuses_required, **s.breakdown,
+            "also": s.row_also_statuses, **{f"u_{k}": v for k, v in s.uncovered_breakdown.items()},
+            "outside": sum(s.outside_required.values()), "declared": s.declared}
+
+
+BASELINE = {"units": 2, "required": 12, "row": 5, "unit": 0, "unreachable": 1,
+            "unexpressible": 0, "not_evaluated": 0, "uncovered": 6, "also": 1,
+            "u_partial": 4, "u_default_only": 0, "u_unattributed": 2,
+            "outside": 1, "declared": 13}
+
+
+def _run(root: Path, **kw):
+    return run_coverage(root, **kw)
+
+
+def _diff(before: dict, after: dict) -> dict:
+    return {k: after[k] - before[k] for k in before if after[k] != before[k]}
+
+
+# ------------------------------------------------------------------ baseline ---
+
+def test_the_baseline_counts(tmp_path):
+    report = _run(_project(tmp_path))
+    s = _screen_result(report)
+    assert _counts(s) == BASELINE
+    assert s.contracted_methods == 1 and s.vm_methods == 2
+    assert s.methods_without_endpoint == 1
+    kinds = {(u["method"], u["op"]): (u["kind"], u["statuses"]) for u in s.uncovered}
+    assert kinds == {
+        ("approve", "setApproval"): ("partial", ["401", "403", "404"]),
+        ("approve", "getItem"): ("partial", ["200"]),
+        (None, "getOther"): ("unattributed", ["200", "500"]),
+    }
+    assert _block(report).exit == cc.EXIT_UNCOVERED and _block(report).verdict == "uncovered"
+    assert report.exit == cc.EXIT_UNCOVERED
+
+
+def test_the_text_and_json_carry_the_same_numbers(tmp_path):
+    report = _run(_project(tmp_path))
+    text = "\n".join(cc.format_text(report))
+    assert ("statuses required 12 = row 5 (alsoStatuses 1) + unit 0 + unreachable 1 + "
+            "unexpressible 0 + not-evaluated 0 + uncovered 6") in text
+    assert "units 2  contracted methods 1 of 2" in text
+    data = cc.to_json(report)
+    web = next(p for p in data["platforms"] if p["platform"] == "web")
+    assert web["screens"][0]["breakdown"]["uncovered"] == 6
+    assert web["verdict"] == "uncovered" and data["exit"] == 1
+
+
+# ---------------------------------------------------------------- red-checks ---
+
+def _mutated(tmp_path, mutate) -> dict:
+    spec = _screen()
+    mutate(spec)
+    return _counts(_screen_result(_run(_project(tmp_path, spec))))
+
+
+def test_overlapping_routes_are_info_not_an_error(tmp_path):
+    openapi = copy.deepcopy(_OPENAPI)
+    openapi["paths"]["/api/items/export"] = {"get": {"operationId": "exportItems",
+                                                     "responses": {"200": {}}}}
+    mocks = copy.deepcopy(_MOCKS)
+    mocks["exportItems"] = ("GET", "/api/items/export", {"default": {"status": 200}})
+    spec = _screen()
+    spec["dataFlow"]["repositories"][0]["methods"].append(
+        {"name": "exportItems", "endpoint": "GET /api/items/export"})
+    s = _screen_result(_run(_project(tmp_path, spec, openapi=openapi, mocks=mocks)))
+    assert s.info["route_overlaps"] == 1
+    assert not s.declaration_errors
+    assert any("recorded as 'exportItems'" in note for note in s.notes)
+
+
+def test_i_deleting_the_only_row_for_a_status_uncovers_it(tmp_path):
+    after = _mutated(tmp_path, lambda s: s["branchContracts"]["methods"]["approve"]["branches"].pop(3))
+    assert _diff(BASELINE, after) == {"row": -1, "uncovered": 1, "u_partial": 1}
+
+
+def test_ii_deleting_every_row_that_reaches_an_op_moves_it_to_unattributed(tmp_path):
+    """The (M,E) unit leaves the audit; the bound (generated tests) is the
+    other half of this red-check and is run in test_branch_act_window_and_bound."""
+    def drop(spec):
+        branches = spec["branchContracts"]["methods"]["approve"]["branches"]
+        del branches[0:2]
+        del spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]
+    after = _mutated(tmp_path, drop)
+    assert after["units"] == 1
+    assert after["u_unattributed"] == BASELINE["u_unattributed"] + 3   # getItem 200 404 500
+
+
+def test_iii_renaming_a_scenario_changes_nothing(tmp_path):
+    mocks = copy.deepcopy(_MOCKS)
+    scenarios = mocks["setApproval"][2]
+    scenarios["conflict"] = scenarios.pop("error_409")
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["branches"][3]["when"]["api.setApproval"] = "conflict"
+    s = _screen_result(_run(_project(tmp_path, spec, mocks=mocks)))
+    assert _counts(s) == BASELINE
+
+
+def test_iv_a_second_row_for_the_same_status_is_not_counted_twice(tmp_path):
+    mocks = copy.deepcopy(_MOCKS)
+    mocks["setApproval"][2]["conflict"] = {"status": 409, "body": {}}
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["branches"].append(
+        {"when": {"api.setApproval": "conflict"}, "then": {"data.banner": "conflict"}})
+    with_two = _counts(_screen_result(_run(_project(tmp_path / "two", spec, mocks=mocks))))
+    assert with_two == BASELINE
+    spec["branchContracts"]["methods"]["approve"]["branches"].pop(3)
+    with_one = _counts(_screen_result(_run(_project(tmp_path / "one", spec, mocks=mocks))))
+    assert with_one == BASELINE
+
+
+def test_v_without_branch_contracts_everything_is_unattributed(tmp_path):
+    after = _mutated(tmp_path, lambda s: s.pop("branchContracts"))
+    assert after["units"] == 0 and after["row"] == 0
+    assert after["uncovered"] == after["required"] == after["u_unattributed"]
+    # Each op's statuses once: setApproval 7 + getItem 3 (default outside) + getOther 2.
+    assert after["required"] == 12 and after["outside"] == 1
+
+
+def test_vi_the_route_default_scenario_is_not_a_row(tmp_path):
+    mocks = copy.deepcopy(_MOCKS)
+    method, path, scenarios = mocks["setApproval"]
+    root = _project(tmp_path, mocks=mocks)
+    mock_file = root / "tests/mocks/generated/setApproval.mock.json"
+    data = json.loads(mock_file.read_text())
+    data["activeScenario"] = "error_500"
+    mock_file.write_text(json.dumps(data))
+    assert _counts(_screen_result(_run(root))) == BASELINE
+
+
+def test_vii_not_called_on_the_covering_row_uncovers_its_status(tmp_path):
+    def mute(spec):
+        spec["branchContracts"]["methods"]["approve"]["branches"][3]["then"][
+            "api.setApproval"] = "not-called"
+    after = _mutated(tmp_path, mute)
+    assert _diff(BASELINE, after) == {"row": -1, "uncovered": 1, "u_partial": 1}
+
+
+def test_a_row_that_only_says_the_op_was_reached_answers_nothing(tmp_path):
+    """A `then` with nothing beyond the op's own reach is not an answer: the
+    status would be "covered" by a row that asserts no outcome at all."""
+    def empty(spec):
+        spec["branchContracts"]["methods"]["approve"]["branches"].append(
+            {"when": {"api.setApproval": "error_401"}, "then": {"api.setApproval": "called"}})
+    after = _mutated(tmp_path, empty)
+    assert after == BASELINE
+
+
+def test_ix_a_row_and_an_exclusion_for_one_status_is_an_error(tmp_path):
+    def both(spec):
+        spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]["api.setApproval"] = {
+            "409": {"by": "unit", "reason": "tested in the view model's unit tests"}}
+    spec = _screen()
+    both(spec)
+    report = _run(_project(tmp_path / "same", spec))
+    s = _screen_result(report)
+    assert any("both a row and an excludedOutcomes" in e["message"] for e in s.declaration_errors)
+    assert _block(report).exit == cc.EXIT_UNCOVERED
+
+    # The pair: the row on ios only, the exclusion on web only -> no conflict.
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["branches"][3]["platforms"] = ["ios"]
+    spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]["api.setApproval"] = {
+        "409": {"by": "unit", "reason": "r", "platforms": ["web"]}}
+    report = _run(_project(tmp_path / "split", spec))
+    for platform in ("web", "ios"):
+        assert not _screen_result(report, platform).declaration_errors, platform
+    assert _screen_result(report, "web").breakdown["unit"] == 1
+    assert _screen_result(report, "ios").breakdown["unit"] == 0
+
+
+def test_x_a_use_case_call_names_the_caller_and_changes_no_count(tmp_path):
+    def calls(spec):
+        spec["dataFlow"]["useCases"] = [{"name": "OtherUseCase", "methods": [
+            {"name": "refresh", "calls": ["DetailRepository.getOther"]}]}]
+    spec = _screen()
+    calls(spec)
+    s = _screen_result(_run(_project(tmp_path, spec)))
+    assert _counts(s) == BASELINE
+    other = next(u for u in s.uncovered if u["op"] == "getOther")
+    assert other["callers"] == ["OtherUseCase.refresh"]
+
+
+def test_xi_a_range_key_answers_only_what_the_numbers_leave(tmp_path):
+    openapi = copy.deepcopy(_OPENAPI)
+    openapi["paths"]["/api/items/{id}"]["get"]["responses"]["4XX"] = {}
+    mocks_a = copy.deepcopy(_MOCKS)
+    mocks_a["getItem"][2]["error_418"] = {"status": 418, "body": {}}
+    a = _screen_result(_run(_project(tmp_path / "a", openapi=openapi, mocks=mocks_a)))
+    item_a = next(u for u in a.uncovered if u["op"] == "getItem")
+    assert "4XX" in item_a["statuses"]                      # (A) a 418 scenario exists
+    b = _screen_result(_run(_project(tmp_path / "b", openapi=openapi)))
+    item_b = next(u for u in b.uncovered if u["op"] == "getItem")
+    assert "4XX" not in item_b["statuses"]                  # (B) only the numbers
+    assert b.outside_required["na_no_scenario"] == 1
+    assert a.breakdown["row"] == b.breakdown["row"] == BASELINE["row"]   # 404 stays a row
+
+
+def test_xii_adding_a_status_to_also_statuses_answers_it(tmp_path):
+    def more(spec):
+        spec["branchContracts"]["methods"]["approve"]["branches"][2]["alsoStatuses"][
+            "api.setApproval"].append("403")
+    after = _mutated(tmp_path, more)
+    assert _diff(BASELINE, after) == {"row": 1, "also": 1, "uncovered": -1, "u_partial": -1}
+
+
+def test_xiii_a_response_path_the_status_body_lacks_is_not_evaluated(tmp_path):
+    mocks = copy.deepcopy(_MOCKS)
+    mocks["setApproval"][2]["error_429"] = {"status": 429, "body": {}}   # no `message`
+
+    def ref(spec):
+        spec["branchContracts"]["methods"]["approve"]["branches"][2]["then"][
+            "data.bannerText"] = "@response.message"
+    spec = _screen()
+    ref(spec)
+    report = _run(_project(tmp_path, spec, mocks=mocks))
+    s = _screen_result(report)
+    assert _diff(BASELINE, _counts(s)) == {"row": -1, "also": -1, "not_evaluated": 1}
+    assert any("[+429 via error_429]" in e["message"] for e in s.not_evaluated)
+
+
+def test_xvi_arrangement_decides_whether_two_answers_conflict(tmp_path):
+    def with_explicit_429(same_arrangement: bool):
+        spec = _screen()
+        branches = spec["branchContracts"]["methods"]["approve"]["branches"]
+        row = {"when": {"api.setApproval": "error_429"}, "then": {"data.banner": "slow"}}
+        if not same_arrangement:
+            row["when"]["data.retrying"] = True
+        branches.append(row)
+        return spec
+    same = _screen_result(_run(_project(tmp_path / "same", with_explicit_429(True))))
+    assert any("two answers to one question" in e["message"] for e in same.declaration_errors)
+    differs = _screen_result(_run(_project(tmp_path / "differs", with_explicit_429(False))))
+    assert not differs.declaration_errors
+    assert differs.info["also_statuses_arrange_differs"] == 1
+
+
+def test_xix_unreached_ops_need_a_row_on_the_platform(tmp_path):
+    spec = _screen()
+    spec["branchContracts"]["unreachedOps"] = {"api.getOther": {"reason": "the parent calls it"}}
+    # Without a row on web the exclusion would be stale there — another error.
+    del spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]
+    for branch in spec["branchContracts"]["methods"]["approve"]["branches"]:
+        branch["platforms"] = ["ios"]
+    report = _run(_project(tmp_path / "a", spec))
+    web = _screen_result(report, "web")
+    assert any("no row of this screen is active on web" in e["message"]
+               for e in web.declaration_errors)
+    ios = _screen_result(report, "ios")
+    assert not ios.declaration_errors
+    assert ios.outside_required["unreached_op"] == 2
+    # The pair: limited to ios, the declaration is not read on web at all.
+    spec["branchContracts"]["unreachedOps"]["api.getOther"]["platforms"] = ["ios"]
+    web = _screen_result(_run(_project(tmp_path / "b", spec)), "web")
+    assert not web.declaration_errors
+
+
+def test_xx_a_platform_no_screen_exists_on_is_empty(tmp_path):
+    spec = _screen()
+    spec["metadata"]["platforms"] = ["ios"]
+    report = _run(_project(tmp_path, spec))
+    web = _block(report, "web")
+    assert web.exit == cc.EXIT_PASS and web.verdict == "empty"
+    s = _screen_result(report, "web")
+    # setApproval 7 + getItem 4 (default included) + getOther 2.
+    assert s.platform_excluded and s.outside_required["na_platform_excluded"] == 13
+
+
+# ------------------------------------------------------------ app, and exits ---
+
+_APP = {"type": "app_contracts_spec", "metadata": {"name": "app", "description": "d"},
+        "unitContracts": [{"target": "ApiClient", "cases": [{"name": "request_on401_logsOut"}]}],
+        "apiOutcomeRules": [{"id": "logout", "statuses": ["401"], "sideCalls": ["postLogout"],
+                             "verifiedBy": ["request_on401_logsOut"], "reason": "r"}]}
+
+
+def test_a_resolvable_side_call_is_no_error(tmp_path):
+    report = _run(_project(tmp_path, app=_APP))
+    assert report.app_errors == [] and report.rules == 1
+
+
+def test_an_unknown_or_synthesized_side_call_is_an_error(tmp_path):
+    app = copy.deepcopy(_APP)
+    app["apiOutcomeRules"][0]["sideCalls"] = ["noSuchOperation"]
+    report = _run(_project(tmp_path / "unknown", app=app))
+    assert "no operation in mock.swagger" in report.app_errors[0]["message"]
+    assert report.exit == cc.EXIT_UNCOVERED
+
+    openapi = copy.deepcopy(_OPENAPI)
+    del openapi["paths"]["/api/logout"]["post"]["operationId"]
+    from jsonui_test_cli.mock.openapi import _fallback_operation_id
+    app["apiOutcomeRules"][0]["sideCalls"] = [_fallback_operation_id("post", "/api/logout")]
+    report = _run(_project(tmp_path / "synth", app=app, openapi=openapi))
+    assert "synthesized" in report.app_errors[0]["message"]
+
+
+@pytest.mark.parametrize("breakage, reason", [
+    (lambda root: (root / "jui.config.json").write_text(json.dumps(
+        {"spec_directory": "docs/screens/json",
+         "mock": {"swagger": ["docs/api/api.json"], "mockDir": "tests/mocks"}})), "platforms"),
+    (lambda root: (root / "docs/api/api.json").unlink(), "does not resolve"),
+    (lambda root: (root / "tests/mocks").rename(root / "tests/elsewhere"), "mockDir"),
+])
+def test_what_stops_it_from_starting(tmp_path, breakage, reason):
+    root = _project(tmp_path)
+    breakage(root)
+    with pytest.raises(CannotStart, match=reason):
+        _run(root)
+
+
+def test_the_same_route_in_two_documents_stops_it(tmp_path):
+    root = _project(tmp_path)
+    _write(root / "docs/api/second.json", _OPENAPI)
+    config = json.loads((root / "jui.config.json").read_text())
+    config["mock"]["swagger"].append("docs/api/second.json")
+    (root / "jui.config.json").write_text(json.dumps(config))
+    with pytest.raises(CannotStart, match="declared by both"):
+        _run(root)
+
+
+def test_a_clean_screen_passes(tmp_path):
+    openapi = {"openapi": "3.0.0", "paths": {"/api/items/{id}": {"get": {
+        "operationId": "getItem", "responses": {"200": {}, "404": {}}}}}}
+    spec = _screen()
+    spec["dataFlow"]["repositories"][0]["methods"] = [
+        {"name": "getItem", "endpoint": "GET /api/items/{id}"}]
+    spec["branchContracts"]["methods"] = {"approve": {"branches": [
+        {"when": {"api.getItem": "default"}, "then": {"data.status": "ok"}},
+        {"when": {"api.getItem": "error_404"}, "then": {"transition": "back"}}]}}
+    report = _run(_project(tmp_path, spec, openapi=openapi))
+    assert _block(report).exit == cc.EXIT_PASS and _block(report).verdict == "pass"
+    assert _counts(_screen_result(report))["required"] == 2
+
+
+def _clean(extra_api_endpoints=(), extra_methods=()):
+    """The clean screen (exit 0), with endpoints added to its dataFlow."""
+    openapi = {"openapi": "3.0.0", "paths": {
+        "/api/items/{id}": {"get": {"operationId": "getItem", "responses": {"200": {}, "404": {}}}},
+        "/api/tags": {"get": {"operationId": "getTags", "responses": {"200": {}, "403": {}}}}}}
+    mocks = {"getItem": _MOCKS["getItem"],
+             "getTags": ("GET", "/api/tags", {"default": {"status": 200, "body": {}},
+                                                  "error_403": {"status": 403, "body": {}}})}
+    spec = _screen()
+    spec["dataFlow"]["repositories"][0]["methods"] = [
+        {"name": "getItem", "endpoint": "GET /api/items/{id}"}, *extra_methods]
+    spec["dataFlow"]["apiEndpoints"] = [{"method": "GET", "path": "/api/items/{id}"},
+                                        *extra_api_endpoints]
+    spec["branchContracts"]["methods"] = {"approve": {"branches": [
+        {"when": {"api.getItem": "default"}, "then": {"data.status": "ok"}},
+        {"when": {"api.getItem": "error_404"}, "then": {"transition": "back"}}]}}
+    return spec, openapi, mocks
+
+
+def test_xxiii_c_an_endpoint_only_in_api_endpoints_is_named_and_unmeasured(tmp_path):
+    """Design v4.8 §2.2 / §4 #34: `apiEndpoints` alone routes nothing, so a call
+    to the endpoint is `(unmatched)` in every generated test. Coverage names it
+    as an E and keeps the verdict off `pass` — the "0 uncovered" it would print
+    otherwise is a count that never looked at this endpoint."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/tags"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    s = _screen_result(report)
+    assert s.na_endpoints["unbound"] == 1
+    assert s.unbound_endpoints == ["GET /api/tags"]
+    assert any("GET /api/tags is in dataFlow.apiEndpoints" in n for n in s.notes)
+    assert _counts(s)["required"] == 2 and s.breakdown["uncovered"] == 0
+    assert _block(report).exit == cc.EXIT_UNMEASURED and _block(report).verdict == "unmeasured"
+    assert "unbound endpoint 1" in "\n".join(cc.format_text(report))
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["screens"][0]["na_endpoints"]["unbound"] == 1
+    assert web["screens"][0]["unbound_endpoints"] == ["GET /api/tags"]
+
+
+def test_xxiii_c_control_binding_the_endpoint_brings_it_into_the_count(tmp_path):
+    """The pair: the same endpoint as a repository method's endpoint is an
+    operation like any other — no longer unbound, its statuses are required,
+    and with no row reaching it they are unattributed."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/tags"}],
+                                  [{"name": "getTags", "endpoint": "GET /api/tags"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    s = _screen_result(report)
+    assert s.na_endpoints["unbound"] == 0 and s.unbound_endpoints == []
+    assert _counts(s)["required"] == 4
+    assert s.uncovered_breakdown["unattributed"] == 2
+    assert _block(report).exit == cc.EXIT_UNCOVERED
+
+
+def test_xxiii_c_boundary_a_renamed_path_variable_is_the_same_endpoint(tmp_path):
+    """Matched by route: `{item_id}` in apiEndpoints and `{id}` in the
+    method's endpoint name one route, so nothing is unbound and the screen
+    passes as it did without the extra line."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/items/{item_id}"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    assert _screen_result(report).na_endpoints["unbound"] == 0
+    assert _block(report).exit == cc.EXIT_PASS
+
+
+def _two_screens(tmp_path):
+    """The shape a face was misread on: an unbound endpoint on an earlier
+    screen, none on the LAST one — whose line sits right above the block's
+    exit line. `detail` (the baseline, exit 1) sorts before `zulu`."""
+    detail = _screen()
+    detail["dataFlow"]["apiEndpoints"] = [{"method": "GET", "path": "/api/tags"}]
+    zulu = _screen()
+    zulu["metadata"]["name"] = "zulu"
+    return _run(_project(tmp_path, detail, extra_screens=[("zulu", zulu)]))
+
+
+def test_the_block_total_is_the_sum_of_its_screens_not_the_last_one(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    screens = [s for s in block.screens if not s.platform_excluded]
+    assert [s.spec for s in screens] == ["detail", "zulu"]
+    assert [s.na_endpoints["unbound"] for s in screens] == [1, 0]   # the last one is 0
+    assert block.na_totals["unbound"] == {"count": 1, "screens": 1}
+    text = cc.format_text(report)
+    total = [l for l in text if l.startswith("[platform=web] total n/a")]
+    assert total == ["[platform=web] total n/a(no mock) 0 (screens 0) · n/a(not in OpenAPI) 0 "
+                     "(screens 0) · n/a(unbound endpoint) 1 (screens 1) · n/a(non-HTTP) 0 (screens 0)"]
+    # The documented name finds it: a search for n/a(unbound endpoint) hits
+    # the total, where the per-screen spelling alone would have found nothing.
+    assert any("n/a(unbound endpoint) 1" in l for l in text)
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["totals"]["na_endpoints"]["unbound"] == sum(
+        s["na_endpoints"]["unbound"] for s in web["screens"]) == 1
+
+
+def test_uncovered_is_a_floor_when_the_exit_3_side_is_also_there(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    assert block.exit == cc.EXIT_UNCOVERED
+    assert block.floor == {"unbound": 1}
+    text = cc.format_text(report)
+    assert ("[platform=web] uncovered is a floor: n/a(unbound endpoint) 1 — not evaluated, "
+            "so more may be uncovered") in text
+    assert "uncovered is a floor on web" in text[-1]
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["floor"] == {"unbound": 1}
+
+
+def test_no_floor_when_exit_1_has_nothing_unevaluated_beside_it(tmp_path):
+    report = _run(_project(tmp_path))                     # the baseline: exit 1, nothing unmeasured
+    block = _block(report)
+    assert block.exit == cc.EXIT_UNCOVERED and block.floor is None
+    assert not any("uncovered is a floor" in l for l in cc.format_text(report))
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["floor"] is None
+
+
+def test_no_floor_when_the_block_is_exit_3(tmp_path):
+    """Exit 3 already says it: nothing uncovered, something not evaluated."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/tags"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    assert _block(report).exit == cc.EXIT_UNMEASURED and _block(report).floor is None
+    assert not any("uncovered is a floor" in l for l in cc.format_text(report))
+
+
+def test_the_command_line_exits_with_the_composed_code(tmp_path):
+    root = _project(tmp_path)
+    done = subprocess.run(
+        [sys.executable, "-m", "jsonui_test_cli.cli", "contracts", "coverage", "--json"],
+        cwd=root, capture_output=True, text=True,
+        env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"})
+    assert done.returncode == 1, done.stderr
+    assert json.loads(done.stdout)["exit"] == 1
+    broken = subprocess.run(
+        [sys.executable, "-m", "jsonui_test_cli.cli", "contracts", "coverage"],
+        cwd=tmp_path / "docs", capture_output=True, text=True,
+        env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"})
+    assert broken.returncode == 2 and "cannot start" in broken.stderr
+
+
+# -------------------------------------- alsoStatuses copies and the ops they did not expand ---
+#
+# Reported by a consumer face on 1.8.117: a row that arranges one op and widens
+# ANOTHER with alsoStatuses was a declaration error ("status 200 of <the first
+# op> is answered by 3 rows with the same arrangement, one of them an
+# alsoStatuses copy"), while generate and the generated tests were fine. The
+# copy only substitutes the scenario of the op it expands (§2.3.3); for every
+# other op it IS the original row, so it is not a second answer there. The
+# consumer's exits were to drop the arrangement (not possible when the other
+# op's scenario is a non-default one the flow needs) or to spell each status as
+# its own row.
+
+def _two_op_spec(also_on_row2: bool = True, extra_row=None) -> dict:
+    """Row 2 arranges setApproval=default and serves getItem=error_404."""
+    spec = _screen()
+    approve = spec["branchContracts"]["methods"]["approve"]
+    approve.pop("excludedOutcomes")     # getItem 500 becomes answerable; no row/exclusion clash
+    if also_on_row2:
+        approve["branches"][1]["alsoStatuses"] = {"api.getItem": ["500"]}
+    if extra_row is not None:
+        approve["branches"].append(extra_row)
+    return spec
+
+
+def _two_answer_errors(s) -> list:
+    return [e["message"] for e in s.declaration_errors if "two answers to one question" in e["message"]]
+
+
+def test_a_copy_is_not_a_second_answer_for_the_op_it_did_not_expand(tmp_path):
+    # The reported shape (①②): the copy expands getItem; setApproval=default is
+    # only arranged. Red on 1.8.117 with "status 200 of setApproval …".
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec())))
+    assert _two_answer_errors(s) == []
+
+
+def test_a_non_default_arrangement_beside_the_expanded_op_is_not_a_second_answer(tmp_path):
+    # The shape with no escape hatch (③): the arranged op's scenario is not its
+    # default (409), so the consumer cannot drop it without losing the path.
+    row = {"when": {"api.setApproval": "error_409", "api.getItem": "error_404"},
+           "alsoStatuses": {"api.getItem": ["500"]},
+           "then": {"data.banner": "conflict"}}
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec(also_on_row2=False, extra_row=row))))
+    assert _two_answer_errors(s) == []
+
+
+def test_a_copy_still_collides_on_the_op_it_expanded(tmp_path):
+    # The control that keeps the fix from being "copies never collide": an
+    # explicit row serving getItem=error_500 under the same arrangement as the
+    # copy (setApproval=default) is two answers to one question for getItem 500.
+    row = {"when": {"api.setApproval": "default", "api.getItem": "error_500"},
+           "then": {"transition": "back"}}
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec(extra_row=row))))
+    errors = _two_answer_errors(s)
+    assert len(errors) == 1 and "status 500 of getItem" in errors[0], errors
+
+
+def test_the_copy_still_answers_the_status_it_expanded(tmp_path):
+    # Restricting the copy must not cost the coverage it exists for: against the
+    # same spec without the alsoStatuses, the only difference is getItem 500
+    # moving from uncovered to a row (an alsoStatuses one).
+    without = _counts(_screen_result(_run(_project(tmp_path / "a", _two_op_spec(also_on_row2=False)))))
+    with_copy = _counts(_screen_result(_run(_project(tmp_path / "b", _two_op_spec()))))
+    assert _diff(without, with_copy) == {"row": 1, "also": 1, "uncovered": -1, "u_partial": -1}
+
+
+# ------------------------------- a repositories / useCases method's own `platforms` ---
+#
+# Reported by a consumer face on 1.8.117: an iOS-only method (Apple Sign In)
+# declared `platforms: ["ios"]`, and coverage still counted its endpoint's
+# statuses on android and web, as unattributed (7 + 7). In the fixture getOther
+# is the endpoint no row reaches: 2 statuses (200, 500), unattributed.
+
+def _other_scoped(platforms, *, drop=False, also_use_case=False, extra_row=None) -> dict:
+    spec = _screen()
+    methods = spec["dataFlow"]["repositories"][0]["methods"]
+    other = next(m for m in methods if m.get("name") == "getOther")
+    if drop:
+        methods.remove(other)
+    elif platforms is not None:
+        other["platforms"] = platforms
+    if also_use_case:
+        spec["dataFlow"]["useCases"] = [{"name": "OtherUseCase", "methods": [
+            {"name": "fetchOther", "endpoint": "GET /api/other"}]}]
+    if extra_row is not None:
+        spec["branchContracts"]["methods"]["approve"]["branches"].append(extra_row)
+    return spec
+
+
+def _both(tmp_path, spec) -> tuple:
+    report = _run(_project(tmp_path, spec))
+    return (_counts(_screen_result(report, "web")), _counts(_screen_result(report, "ios")),
+            _screen_result(report, "web"))
+
+
+def test_a_method_scoped_to_ios_is_not_counted_on_web(tmp_path):
+    # A: the reported shape.
+    web, ios, s = _both(tmp_path, _other_scoped(["ios"]))
+    assert _diff(BASELINE, web) == {"required": -2, "uncovered": -2, "u_unattributed": -2,
+                                    "outside": 2}
+    assert s.outside_required["na_platform_excluded"] == 2
+    assert _diff(BASELINE, ios) == {}
+
+
+def test_widening_the_method_to_every_platform_counts_it_again(tmp_path):
+    # B: the control the report used — ignored platforms and honoured platforms
+    # agree here, so this alone proves nothing; it pins the other side of A.
+    web, ios, _ = _both(tmp_path, _other_scoped(["ios", "web"]))
+    assert _diff(BASELINE, web) == {} and _diff(BASELINE, ios) == {}
+
+
+def test_the_count_comes_from_the_method(tmp_path):
+    # C: positive control — without the method, the endpoint is not declared at
+    # all, on either platform.
+    web, ios, _ = _both(tmp_path, _other_scoped(None, drop=True))
+    expected = {"required": -2, "uncovered": -2, "u_unattributed": -2, "declared": -2}
+    assert _diff(BASELINE, web) == expected and _diff(BASELINE, ios) == expected
+
+
+def test_an_empty_list_reads_as_every_platform_like_the_generator(tmp_path):
+    # Boundary: `jui generate project` keeps a method with `platforms: []` in
+    # every platform's protocol, so coverage must not drop its endpoint.
+    web, ios, _ = _both(tmp_path, _other_scoped([]))
+    assert _diff(BASELINE, web) == {} and _diff(BASELINE, ios) == {}
+
+
+def test_another_method_on_the_platform_keeps_the_endpoint_counted(tmp_path):
+    # The endpoint is scoped away only when EVERY method declaring it is.
+    web, _, _ = _both(tmp_path, _other_scoped(["ios"], also_use_case=True))
+    assert _diff(BASELINE, web) == {}
+
+
+def test_a_row_on_web_reaching_an_ios_only_endpoint_is_named(tmp_path):
+    row = {"when": {"api.getOther": "error_500"}, "then": {"data.banner": "other"}}
+    web, _, s = _both(tmp_path, _other_scoped(["ios"], extra_row=row))
+    assert s.outside_required["na_platform_excluded"] == 2
+    assert any("reaches api.getOther on web" in n and "n/a(platform-excluded)" in n
+               for n in s.notes), s.notes
+
+
+# ------------------------------------------------ the block's own denominator ---
+#
+# The block printed its n/a counts and its exit, and nothing it was measured
+# against: units and statuses required existed only per screen (design §2.2
+# puts them on the same line). The totals are computed once, checked for
+# conservation in the code, and read by both printers.
+
+import re as _re
+
+_TOTAL_LINE = _re.compile(
+    r"^\[platform=(\w+)\] total units (\d+) · statuses required (\d+) = row (\d+) \+ unit (\d+) "
+    r"\+ unreachable (\d+) \+ unexpressible (\d+) \+ not-evaluated (\d+) \+ uncovered (\d+) "
+    r"\(partial (\d+) \+ default-only (\d+) \+ unattributed (\d+)\)$")
+
+
+def _text_totals(text) -> dict:
+    out = {}
+    for line in text:
+        m = _TOTAL_LINE.match(line)
+        if m:
+            keys = ("units", "statuses_required", "row", "unit", "unreachable", "unexpressible",
+                    "not_evaluated", "uncovered", "partial", "default_only", "unattributed")
+            out[m.group(1)] = dict(zip(keys, map(int, m.groups()[1:])))
+    return out
+
+
+def _flat(totals: dict) -> dict:
+    flat = {k: v for k, v in totals.items() if isinstance(v, int)}
+    flat.update(totals["uncovered_breakdown"])
+    return flat
+
+
+def test_the_block_totals_carry_the_denominator(tmp_path):
+    report = _run(_project(tmp_path))
+    t = _block(report).totals
+    assert (t["units"], t["contracted_methods"], t["statuses_required"]) == (2, 1, 12)
+    assert [t[k] for k in cc.BREAKDOWN_KEYS] == [5, 0, 1, 0, 0, 6]          # 12
+    assert t["uncovered_breakdown"] == {"partial": 4, "default_only": 0, "unattributed": 2}
+    assert sum(t["outside_required"].values()) == 1
+    assert ("[platform=web] total units 2 · statuses required 12 = row 5 + unit 0 + unreachable 1 "
+            "+ unexpressible 0 + not-evaluated 0 + uncovered 6 (partial 4 + default-only 0 + "
+            "unattributed 2)") in cc.format_text(report)
+
+
+def test_the_block_totals_are_the_sum_of_the_screens(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    active = [s for s in block.screens if not s.platform_excluded]
+    assert len(active) == 2
+    assert block.totals["units"] == sum(s.units for s in active) == 4
+    assert block.totals["statuses_required"] == sum(s.statuses_required for s in active) == 24
+
+
+def _with_exclusions() -> dict:
+    """unit 2 (setApproval 401, 403), unexpressible 1 (404), unreachable 1."""
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]["api.setApproval"] = {
+        "401": {"by": "unit", "reason": "r"}, "403": {"by": "unit", "reason": "r"},
+        "404": {"by": "unexpressible", "reason": "r"}}
+    return spec
+
+
+@pytest.mark.parametrize("specimen", ["baseline", "two_op", "exclusions"])
+def test_the_text_and_the_json_totals_agree_on_every_key(tmp_path, specimen):
+    # The control: two printers, one object. Every key, every platform. Three
+    # specimens because a swap of two buckets that are EQUAL in a specimen
+    # prints the same line: across these, every pair of buckets differs in at
+    # least one (baseline: unreachable 1 vs unit / unexpressible / not-evaluated
+    # 0; exclusions: unit 2 vs unexpressible 1 vs not-evaluated 0).
+    spec = {"baseline": _screen, "two_op": _two_op_spec, "exclusions": _with_exclusions}[specimen]()
+    report = _run(_project(tmp_path, spec))
+    text = cc.format_text(report)
+    from_text = _text_totals(text)
+    data = cc.to_json(report)
+    assert set(from_text) == {p["platform"] for p in data["platforms"]}
+    for block in data["platforms"]:
+        flat = _flat(block["totals"])
+        assert {k: flat[k] for k in from_text[block["platform"]]} == from_text[block["platform"]]
+    required = sum(p["totals"]["statuses_required"] for p in data["platforms"])
+    assert any(l.startswith(f"exit {data['exit']} (composed 2 > 1 > 3 > 0) statuses required {required}")
+               for l in text)
+
+
+@pytest.mark.parametrize("name, keep", [
+    ("BREAKDOWN_KEYS", lambda keys: tuple(k for k in keys if k != "unreachable")),
+    ("UNCOVERED_KEYS", lambda keys: tuple(k for k in keys if k != "unattributed")),
+    ("OUTSIDE_KEYS", lambda keys: tuple(k for k in keys if k != "na_default_response")),
+])
+def test_a_bucket_the_totals_forget_stops_the_run(tmp_path, monkeypatch, name, keep):
+    # The mutation: drop one key from a totals list. The baseline has 1
+    # unreachable, 2 unattributed and 1 default response, so each drop is a gap.
+    monkeypatch.setattr(cc, name, keep(getattr(cc, name)))
+    with pytest.raises(cc.CoverageTotalsError, match="the totals do not close"):
+        _run(_project(tmp_path))
+
+
+def test_the_command_prints_no_table_when_the_totals_do_not_close(tmp_path, monkeypatch, capsys):
+    import argparse
+    from jsonui_test_cli import cli
+    root = _project(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(cc, "BREAKDOWN_KEYS", tuple(k for k in cc.BREAKDOWN_KEYS if k != "unreachable"))
+    code = cli.cmd_contracts_coverage(argparse.Namespace(platform=None, screen=None, as_json=False))
+    out, err = capsys.readouterr()
+    assert code == cc.EXIT_CANNOT_START and out == "" and "the totals do not close" in err
+
+
+def test_the_totals_close_with_both_other_fixes_moving_the_counts(tmp_path):
+    # 4f: do the three coverage fixes change each other's numbers? A copy beside
+    # an arranged op, and a method scoped away from web, in one project.
+    spec = _two_op_spec()
+    other = next(m for m in spec["dataFlow"]["repositories"][0]["methods"] if m.get("name") == "getOther")
+    other["platforms"] = ["ios"]
+    report = _run(_project(tmp_path, spec))                       # would raise if a law broke
+    web, ios = _block(report, "web"), _block(report, "ios")
+    assert web.totals["outside_required"]["na_platform_excluded"] == 2
+    assert ios.totals["outside_required"]["na_platform_excluded"] == 0
+    assert ios.totals["statuses_required"] - web.totals["statuses_required"] == 2
+    assert web.totals["uncovered_breakdown"]["unattributed"] == 0
+    assert not any("two answers to one question" in e["message"]
+                   for b in (web, ios) for s in b.screens for e in s.declaration_errors)
+
+
+# ------------------------------------------- side routes are not endpoints ---
+
+def test_a_side_route_adds_nothing_the_screen_must_cover(tmp_path):
+    """P2e(d): the screen does not declare logout; the rule makes the generator
+    serve it as a side route. It is admitted, not required — every count but
+    the admission info is what it is without the app spec."""
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["branches"].append(
+        {"when": {"api.setApproval": "error_401"}, "then": {"data.banner": "signed-out"}})
+    without = _screen_result(_run(_project(tmp_path / "a", copy.deepcopy(spec))))
+    with_rule = _screen_result(_run(_project(tmp_path / "b", copy.deepcopy(spec), app=_APP)))
+    assert _counts(with_rule) == _counts(without)
+    # The 401 row is the one test the rule admits logout in — counted now that
+    # the side route exists (before P2e(d) it resolved to nothing on this screen).
+    assert with_rule.info["side_calls_admitted"] == 1
+    assert without.info["side_calls_admitted"] == 0

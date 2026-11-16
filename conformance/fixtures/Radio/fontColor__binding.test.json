@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/fontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.fontColor (binding)",
+    "description": "Conformance fixture for 'fontColor' on Radio (section: Radio, class: visual). Value under test: \"@{boundFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontColor__binding",
+      "description": "Conformance fixture for 'fontColor' on Radio (section: Radio, class: visual). Value under test: \"@{boundFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_fontColor__binding"
+        }
+      ]
+    }
+  ]
+}

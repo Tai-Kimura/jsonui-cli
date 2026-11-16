@@ -1,0 +1,802 @@
+"""Local API mock server + control-panel host.
+
+Bound to 127.0.0.1 only. Serves mock responses under the swagger paths and an
+admin API under /__jsonui__/. Because it can run shell commands (/__jsonui__/run),
+it defends against DNS-rebinding / CSRF:
+  - Host header must be 127.0.0.1:PORT or localhost:PORT.
+  - Every /__jsonui__/ mutation requires the per-boot admin token.
+  - CORS is wide-open for mock API paths only; admin is same-origin.
+"""
+
+from __future__ import annotations
+
+import errno
+import json
+import os
+from datetime import datetime, timezone
+import re
+import secrets
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlparse, parse_qs
+
+from .generate import route_match_order
+from .body_file import body_file_path, declares_body_file, read_body_file
+from .headers import served_headers
+
+ADMIN_PREFIX = "/__jsonui__"
+#: Seconds a kept-alive connection may sit idle before the server closes it.
+#: Read when the handler class is built, so a test can shorten it.
+IDLE_KEEPALIVE_TIMEOUT = 30
+_MAX_RECORDED = 200
+_PARAM_RE = re.compile(r"\{[^/}]+\}")
+_SAFE_OP_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+@dataclass
+class MockEndpoint:
+    operation_id: str
+    method: str
+    path: str
+    active_scenario: str
+    scenarios: dict
+    file_path: Path
+    regex: "re.Pattern"
+    is_static: bool
+    #: The mock file each scenario came from: a hand-written file overlays
+    #: the generated one per scenario, and a `bodyFile` is relative to the
+    #: file that declares it (mock/body_file.py).
+    scenario_files: dict = field(default_factory=dict)
+
+
+@dataclass
+class MockStore:
+    """In-memory mock state, loaded from <mockDir>/**/*.mock.json."""
+    mock_dir: Path
+    endpoints: list[MockEndpoint] = field(default_factory=list)
+    #: Hand-written files that overlaid a generated mock, for the startup log.
+    overrides: list = field(default_factory=list)
+    _lock: threading.RLock = field(default_factory=threading.RLock)
+
+    @classmethod
+    def load(cls, mock_dir: str | Path) -> "MockStore":
+        store = cls(mock_dir=Path(mock_dir))
+        store.reload()
+        return store
+
+    def reload(self):
+        """Load generated/ as the base and overlay the hand-written mocks.
+
+        A hand-written file carries only the scenarios its tests drive; the
+        routine `empty` / `error_404` variants come from the generated side,
+        so hand-written files stay thin and follow the contract for free.
+        Overlay is per scenario name, and the hand-written `activeScenario`
+        wins when it names one that exists.
+        """
+        from .generate import GENERATED_DIR, route_key
+
+        root = Path(self.mock_dir)
+        merged: dict = {}
+        overrides: list[str] = []
+        # generated first, so the hand-written pass overwrites it.
+        files = sorted(root.rglob("*.mock.json"),
+                       key=lambda f: (GENERATED_DIR not in f.relative_to(root).parts, str(f)))
+        for f in files:
+            try:
+                with open(f, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, json.JSONDecodeError):
+                continue
+            src = data.get("source", {})
+            method = (src.get("method") or "GET").upper()
+            path = src.get("path") or "/"
+            # Grouped on the same normalized route the checker matches on: a
+            # path variable's name is not part of the URL, so a hand-written
+            # `/items/{id}` overlays a generated `/items/{item_id}`. Keyed on
+            # the raw spelling, the two registered as separate endpoints with
+            # identical regexes and the generated one — registered first —
+            # answered every request, so the hand-written mock was loaded,
+            # logged as present, and never served.
+            key = route_key(method, path)
+            scenarios = data.get("scenarios", {}) or {}
+            generated = GENERATED_DIR in f.relative_to(root).parts
+
+            entry = merged.get(key)
+            if entry is None:
+                merged[key] = {
+                    "operation_id": src.get("operationId") or f.stem.replace(".mock", ""),
+                    "method": method,
+                    "path": path,
+                    "scenarios": dict(scenarios),
+                    "scenario_files": {name: f for name in scenarios},
+                    "active": data.get("activeScenario", "default"),
+                    "file_path": f,
+                    "generated": generated,
+                }
+                continue
+            if generated:
+                # Two generated files for one route cannot happen (the tree is
+                # rewritten from the swagger); if it somehow does, first wins.
+                continue
+            # Hand-written overlay.
+            entry["scenarios"].update(scenarios)
+            entry["scenario_files"].update({name: f for name in scenarios})
+            if data.get("activeScenario"):
+                entry["active"] = data["activeScenario"]
+            if src.get("operationId"):
+                entry["operation_id"] = src["operationId"]
+            entry["file_path"] = f
+            entry["generated"] = False
+            overrides.append(str(f.relative_to(root)))
+
+        endpoints: list[MockEndpoint] = []
+        for entry in merged.values():
+            scenarios = entry["scenarios"]
+            active = entry["active"]
+            endpoints.append(MockEndpoint(
+                operation_id=entry["operation_id"],
+                method=entry["method"],
+                path=entry["path"],
+                active_scenario=active if active in scenarios else next(iter(scenarios), "default"),
+                scenarios=scenarios,
+                file_path=entry["file_path"],
+                regex=_path_to_regex(entry["path"]),
+                is_static="{" not in entry["path"],
+                scenario_files=entry["scenario_files"],
+            ))
+        # One order with the generated branch tests (see route_match_order).
+        endpoints.sort(key=lambda e: route_match_order(e.path))
+        with self._lock:
+            self.endpoints = endpoints
+            # Which side won is never left silent — a hand-written mock
+            # quietly shadowing a generated one is the confusing case.
+            self.overrides = sorted(overrides)
+
+    def match(self, method: str, path: str) -> MockEndpoint | None:
+        with self._lock:
+            for ep in self.endpoints:
+                if ep.method == method.upper() and ep.regex.match(path):
+                    return ep
+        return None
+
+    def list_summary(self) -> list[dict]:
+        with self._lock:
+            return [{
+                "operationId": ep.operation_id,
+                "method": ep.method,
+                "path": ep.path,
+                "activeScenario": ep.active_scenario,
+                "scenarios": list(ep.scenarios.keys()),
+            } for ep in self.endpoints]
+
+    def by_id(self, op_id: str) -> MockEndpoint | None:
+        with self._lock:
+            for ep in self.endpoints:
+                if ep.operation_id == op_id:
+                    return ep
+        return None
+
+    def definition(self, op_id: str) -> dict | None:
+        """Full definition (scenario bodies included) for the editor."""
+        ep = self.by_id(op_id)
+        if ep is None:
+            return None
+        with self._lock:
+            return {
+                "operationId": ep.operation_id,
+                "method": ep.method,
+                "path": ep.path,
+                "activeScenario": ep.active_scenario,
+                "scenarios": ep.scenarios,
+            }
+
+    def activate(self, op_id: str, scenario: str) -> bool:
+        with self._lock:
+            ep = next((e for e in self.endpoints if e.operation_id == op_id), None)
+            if ep is None or scenario not in ep.scenarios:
+                return False
+            ep.active_scenario = scenario
+            return True
+
+    def scenario_set(self, mapping: dict) -> dict:
+        """Activate a scenario per operationId. Unknown keys are a failure.
+
+        Answering 200 for a key that matched nothing let a caller checking
+        only `res.ok()` sail past a scenario that never switched — the test
+        then ran against `default` and, when that happened to pass, went
+        green while asserting nothing it meant to.
+        """
+        applied, unknown = {}, []
+        with self._lock:
+            for op_id, scenario in mapping.items():
+                ep = next((e for e in self.endpoints if e.operation_id == op_id), None)
+                if ep is None or scenario not in ep.scenarios:
+                    unknown.append(op_id)
+                else:
+                    ep.active_scenario = scenario
+                    applied[op_id] = scenario
+        return {"applied": applied, "unknown": unknown}
+
+    def reset(self):
+        with self._lock:
+            for ep in self.endpoints:
+                if "default" in ep.scenarios:
+                    ep.active_scenario = "default"
+
+    def write_scenario(self, op_id: str, scenario: str, payload: dict) -> bool:
+        """Persist an edited scenario back to its file."""
+        with self._lock:
+            ep = next((e for e in self.endpoints if e.operation_id == op_id), None)
+            if ep is None:
+                return False
+            ep.scenarios[scenario] = payload
+            ep.scenario_files[scenario] = ep.file_path
+            try:
+                with open(ep.file_path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                data.setdefault("scenarios", {})[scenario] = payload
+                with open(ep.file_path, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, ensure_ascii=False, indent=2)
+                    fh.write("\n")
+            except (OSError, json.JSONDecodeError):
+                return False
+            return True
+
+
+def _path_to_regex(path: str) -> "re.Pattern":
+    escaped = re.escape(path)
+    # re.escape turns {id} into \{id\}; swap each param for a path segment match.
+    pattern = re.sub(r"\\\{[^/}]+\\\}", r"[^/]+", escaped)
+    return re.compile("^" + pattern + "/?$")
+
+
+class RequestLog:
+    def __init__(self, cap: int = _MAX_RECORDED):
+        self._items: list[dict] = []
+        self._cap = cap
+        self._lock = threading.Lock()
+
+    def record(self, entry: dict):
+        with self._lock:
+            self._items.append(entry)
+            if len(self._items) > self._cap:
+                self._items.pop(0)
+
+    def all(self) -> list[dict]:
+        with self._lock:
+            return list(self._items)
+
+
+class RunManager:
+    """Runs a single configured test target at a time, streaming its output."""
+
+    def __init__(self, run_targets: dict, project_root: Path, post_run_hook=None,
+                 contract_log=None):
+        self._targets = run_targets or {}
+        # Request-contract violations recorded while the run was executing
+        # are reported at the end of it and force a non-zero exit — see
+        # mock/contract.py for why they do not fail the request itself.
+        self._contract_log = contract_log
+        self._root = project_root
+        self._lock = threading.Lock()
+        self._proc: subprocess.Popen | None = None
+        self._lines: list[str] = []
+        self._returncode: int | None = None
+        self._running = False
+        self._last_target: str | None = None
+        # Optional callable(target, returncode) invoked after a run finishes
+        # (e.g. `mock serve --artifacts` pulls device artifacts). Hook errors
+        # are logged to the run output, never raised — the server must survive.
+        self._post_run_hook = post_run_hook
+
+    @property
+    def targets(self) -> list[str]:
+        return list(self._targets.keys())
+
+    def read_results(self) -> dict | None:
+        """Read the results JSON (results.schema.json) from the last run target."""
+        with self._lock:
+            target = self._last_target
+        if not target:
+            return None
+        spec = self._targets.get(target, {})
+        rel = spec.get("resultsPath", "jsonui-results.json")
+        cwd = (self._root / spec.get("cwd", ".")).resolve()
+        results_file = (cwd / rel).resolve()
+        if not str(results_file).startswith(str(self._root.resolve())):
+            return None
+        try:
+            with open(results_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def status(self) -> dict:
+        with self._lock:
+            return {"running": self._running, "returncode": self._returncode,
+                    "lineCount": len(self._lines)}
+
+    def lines_since(self, index: int) -> tuple[list[str], int]:
+        with self._lock:
+            return self._lines[index:], len(self._lines)
+
+    def start(self, target: str) -> tuple[bool, str]:
+        if target not in self._targets:
+            return False, f"unknown target '{target}' (allowed: {self.targets})"
+        with self._lock:
+            if self._running:
+                return False, "a run is already in progress"
+            self._running = True
+            self._lines = []
+            self._returncode = None
+            self._last_target = target
+        spec = self._targets[target]
+        cwd = (self._root / spec.get("cwd", ".")).resolve()
+        if not str(cwd).startswith(str(self._root.resolve())):
+            with self._lock:
+                self._running = False
+            return False, "run cwd escapes project root"
+        threading.Thread(target=self._run, args=(target, spec["command"], cwd), daemon=True).start()
+        return True, "started"
+
+    def _run(self, target: str, command: str, cwd: Path):
+        contract_mark = self._contract_log.count() if self._contract_log else 0
+        try:
+            proc = subprocess.Popen(
+                command, shell=True, cwd=str(cwd),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1,
+            )
+            with self._lock:
+                self._proc = proc
+            for line in proc.stdout:
+                with self._lock:
+                    self._lines.append(line.rstrip("\n"))
+            proc.wait()
+            rc = proc.returncode
+        except Exception as e:  # noqa: BLE001 - surface any launch failure to the panel
+            with self._lock:
+                self._lines.append(f"[run error] {e}")
+            rc = 1
+        if self._contract_log is not None:
+            summary = self._contract_log.summary(contract_mark)
+            if summary:
+                with self._lock:
+                    self._lines.extend(summary)
+                # The suite itself may well have passed — that is the point.
+                rc = rc or 1
+        with self._lock:
+            self._running = False
+            self._returncode = rc
+            self._proc = None
+        if self._post_run_hook is not None:
+            try:
+                self._post_run_hook(target, rc)
+            except Exception as e:  # noqa: BLE001 - hook failures must not kill the server
+                with self._lock:
+                    self._lines.append(f"[post-run hook error] {e}")
+
+
+def _panel_html(token: str) -> bytes:
+    """Serve the packaged control panel, injecting the admin token.
+
+    static/panel.html ships as package-data (pyproject: jsonui_test_cli =
+    ["static/*"]) and is read via importlib.resources — never a repo-relative
+    path — so it resolves from an installed wheel/editable install regardless of
+    cwd. The fallback below only fires on a genuinely broken install (missing
+    package-data); it is a degraded stub, not the normal path.
+    """
+    try:
+        from importlib.resources import files
+        raw = (files("jsonui_test_cli") / "static" / "panel.html").read_text("utf-8")
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        raw = ("<!doctype html><title>JsonUI Mock</title>"
+               "<h1>JsonUI Mock Server</h1>"
+               "<p>Control panel not yet installed (Phase 2).</p>"
+               "<p>Admin token: <code>__JSONUI_TOKEN__</code></p>")
+    return raw.replace("__JSONUI_TOKEN__", token).encode("utf-8")
+
+
+class _MockHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer that says so when it runs out of descriptors.
+
+    socketserver swallows an accept() failure (`except OSError: return`), so
+    a server whose descriptors are exhausted stops answering while its
+    process stays alive — from a client that is indistinguishable from a
+    dead server, and it was reported as one ("the mock server dies mid-run",
+    2026-09-03, hundreds of ECONNREFUSED/ECONNRESET with the process still
+    running). One line on stderr is the difference between a diagnosis and a
+    version hunt. Said once: the condition repeats per accept.
+    """
+
+    _descriptors_exhausted_reported = False
+
+    def get_request(self):
+        try:
+            return super().get_request()
+        except OSError as e:
+            if (e.errno in (errno.EMFILE, errno.ENFILE)
+                    and not self._descriptors_exhausted_reported):
+                self._descriptors_exhausted_reported = True
+                print(
+                    "mock server: out of file descriptors — cannot accept new "
+                    "connections (the process is still running; clients will see "
+                    "connection refused/reset). Raise the descriptor limit "
+                    "(`ulimit -n`) or find what is holding connections open.",
+                    file=sys.stderr, flush=True,
+                )
+            raise
+
+
+class MockServer:
+    def __init__(self, store: MockStore, run_manager: RunManager, port: int = 8790,
+                 contract=None, contract_log=None, swagger=None):
+        self.store = store
+        self.run = run_manager
+        self.port = port
+        self.started_at = datetime.now(timezone.utc).isoformat()
+        self.token = secrets.token_urlsafe(24)
+        self.requests = RequestLog()
+        self.contract = contract
+        self.contract_log = contract_log
+        # `.resolve()`, matching what `identity` does to projectRoot: on
+        # macOS /var is a symlink to /private/var, so an unresolved root here
+        # produced a `swagger` path that did not start with the
+        # `projectRoot` beside it — two spellings of one directory, in the
+        # one payload whose job is comparison. Caught by running the server
+        # for real; the unit arms passed because pytest hands out an
+        # already-resolved tmp_path.
+        root = (Path(run_manager._root).resolve()
+                if getattr(run_manager, "_root", None) else None)
+        self.swagger = [
+            str(root / source) if (root is not None and not Path(source).is_absolute())
+            else str(source)
+            for source in (swagger or [])
+        ]
+        self._httpd: ThreadingHTTPServer | None = None
+        #: Set while `serve_forever` is inside the loop. `shutdown()` waits
+        #: for that loop to stop, so calling it on a server that only ever
+        #: bound blocks forever — waiting for something that never started.
+        #: Hit while writing the tests for this endpoint; a bound-but-never-
+        #: served server is exactly what a unit test makes.
+        self._serving = threading.Event()
+
+    def identity(self) -> dict:
+        """Who this server is — enough for a caller to tell it apart from
+        another project's mock on the same port.
+
+        A health check that only sees HTTP 200 learns that *a* mock answered,
+        not *whose*. Measured 2026-09-04: one lane's server failed to bind
+        (the port was taken), its health check passed on the control panel's
+        200, and five tests ran against another project's corpus. The failures
+        looked like the change under test.
+
+        `mockDir` is the answer to "which corpus", and `projectRoot` to "which
+        project"; `pid` is the answer to "my process", which the other two
+        cannot give when a second run of the SAME project takes the port.
+        Unauthenticated on purpose: a caller asking "are you mine?" does not
+        have this server's token when the answer is no. Carries no secret —
+        never the admin token.
+        """
+        return {
+            "pid": os.getpid(),
+            "projectRoot": str(Path(self.run._root).resolve()),
+            "mockDir": str(Path(self.store.mock_dir).resolve()),
+            # The swagger this corpus was generated from, anchored to the
+            # project root: "api/openapi.yaml" is the same string in every
+            # project, so as a bare relative path it cannot distinguish the
+            # two servers this endpoint exists to distinguish.
+            "swagger": self.swagger,
+            # How many endpoints are actually loaded. `mockDir` says which
+            # tree was read; this says whether it had anything in it, which
+            # is the difference between "the wrong corpus" and "an empty
+            # one" — a server with 0 endpoints 404s every request, and that
+            # reads as a broken app rather than a mock pointed nowhere.
+            "endpointCount": len(self.store.endpoints),
+            "port": self.port,
+            "startedAt": self.started_at,
+        }
+
+    def bind(self):
+        """Bind the listening socket now so the real port is known (port 0 = ephemeral)."""
+        handler = _make_handler(self)
+        self._httpd = _MockHTTPServer(("127.0.0.1", self.port), handler)
+        self.port = self._httpd.server_address[1]
+        return self.port
+
+    def serve_forever(self):
+        if self._httpd is None:
+            self.bind()
+        self._serving.set()
+        try:
+            self._httpd.serve_forever()
+        finally:
+            self._serving.clear()
+
+    def shutdown(self):
+        """Stop serving and release the port.
+
+        `ThreadingHTTPServer.shutdown()` blocks until the serve loop exits,
+        so calling it when no loop was ever started hangs forever. Closing
+        the socket is enough in that case, and is what actually frees the
+        port. (A shutdown racing a serve_forever that has not yet set the
+        flag closes the socket under the starting loop; that is a test-only
+        shape, and it ends in an exception rather than a hang.)
+        """
+        if self._httpd:
+            if self._serving.is_set():
+                self._httpd.shutdown()
+            self._httpd.server_close()
+            self._httpd = None
+
+
+def _host_ok(host: str, port: int) -> bool:
+    if not host:
+        return False
+    allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    # A bare host with the default port omitted is also acceptable.
+    return host in allowed or host in {"127.0.0.1", "localhost"}
+
+
+def _make_handler(server: "MockServer"):
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        #: Seconds a kept-alive connection may sit idle before the server
+        #: closes it. HTTP/1.1 keeps connections open, and each one holds a
+        #: thread and a file descriptor for as long as it lives. Nothing
+        #: closed an idle one — BaseHTTPRequestHandler.timeout is None — so a
+        #: client that abandons connections rather than closing them (a
+        #: browser reloading between tests) left one thread + one descriptor
+        #: behind each time. Measured 2026-09-03: exactly linear, no
+        #: reclamation, and at the descriptor limit the server stopped
+        #: accepting anything while its process stayed alive — reported by a
+        #: consumer as "the mock server dies mid-run", after a scenario
+        #: switch, only in the full chain (a single spec never reached the
+        #: ceiling). http.server turns the read timeout into
+        #: `close_connection`, which is the ordinary end of a keep-alive: a
+        #: client that wants another request opens another connection.
+        #:
+        #: 30s is above any pause a driver takes between requests on one
+        #: connection and far below the length of a suite, so the descriptors
+        #: in use track the last 30 seconds of traffic instead of the whole
+        #: run. It does NOT bound a slow RESPONSE: a scenario's `delayMs`
+        #: sleeps before the write, and the timeout applies per socket
+        #: operation.
+        timeout = IDLE_KEEPALIVE_TIMEOUT
+
+        def log_message(self, *args):
+            pass  # keep stdout clean; panel shows requests
+
+        # -- helpers ----------------------------------------------------
+        def _send(self, status, body=b"", content_type="application/json", cors=False, headers=None):
+            if isinstance(body, (dict, list)):
+                body = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            elif isinstance(body, str):
+                body = body.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            for name, value in (headers or {}).items():   # a scenario's own (mock/headers.py)
+                self.send_header(name, value)
+            if cors:
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "*")
+                if headers:
+                    # A page on another origin reads only the safelisted headers
+                    # (Content-Type and a few) unless these are named.
+                    self.send_header("Access-Control-Expose-Headers", ", ".join(headers))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def _read_body(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            if not length:
+                return None
+            raw = self.rfile.read(length)
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                return raw.decode("utf-8", "replace")
+
+        def _admin_authorized(self) -> bool:
+            if self.headers.get("X-JsonUI-Token") == server.token:
+                return True
+            # EventSource (SSE) cannot set headers, so accept ?token= as a fallback.
+            token_q = parse_qs(urlparse(self.path).query).get("token", [None])[0]
+            return token_q == server.token
+
+        # -- verbs ------------------------------------------------------
+        def do_OPTIONS(self):
+            self._send(204, cors=True)
+
+        def do_HEAD(self):
+            self.do_GET()
+
+        def do_GET(self):
+            self._dispatch("GET")
+
+        def do_POST(self):
+            self._dispatch("POST")
+
+        def do_PUT(self):
+            self._dispatch("PUT")
+
+        def do_DELETE(self):
+            self._dispatch("DELETE")
+
+        def do_PATCH(self):
+            self._dispatch("PATCH")
+
+        def _dispatch(self, method):
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if not _host_ok(self.headers.get("Host", ""), server.port):
+                self._send(403, {"error": "bad host"})
+                return
+            if path == ADMIN_PREFIX + "/identity":
+                # Before the token gate: see MockServer.identity.
+                self._send(200, server.identity())
+                return
+            if path == ADMIN_PREFIX + "/panel":
+                self._send(200, _panel_html(server.token), content_type="text/html")
+                return
+            if path.startswith(ADMIN_PREFIX):
+                self._admin(method, path, parsed)
+                return
+            self._mock(method, path, parsed)
+
+        # -- admin API --------------------------------------------------
+        def _admin(self, method, path, parsed):
+            if not self._admin_authorized():
+                self._send(401, {"error": "admin token required"})
+                return
+            sub = path[len(ADMIN_PREFIX):]
+
+            if sub == "/mocks" and method == "GET":
+                self._send(200, server.store.list_summary())
+            elif sub == "/scenario-set" and method == "POST":
+                body = self._read_body() or {}
+                result = server.store.scenario_set(body.get("mocks", body))
+                # 422, not 200: a caller that only checks res.ok() must not
+                # be told a scenario switched when it did not.
+                self._send(422 if result["unknown"] else 200, result)
+            elif sub == "/reset" and method == "POST":
+                server.store.reset()
+                self._send(200, {"ok": True})
+            elif sub == "/reload" and method == "POST":
+                server.store.reload()
+                self._send(200, {"ok": True})
+            elif sub == "/requests" and method == "GET":
+                self._send(200, server.requests.all())
+            elif sub == "/contract-violations" and method == "GET":
+                log = server.contract_log
+                self._send(200, [
+                    {"method": v.method, "path": v.path,
+                     "operationId": v.operation_id, "problems": v.problems}
+                    for v in (log.all() if log else [])
+                ])
+            elif sub == "/run/status" and method == "GET":
+                self._send(200, {**server.run.status(), "targets": server.run.targets})
+            elif sub == "/run/results" and method == "GET":
+                results = server.run.read_results()
+                self._send(200 if results is not None else 404, results or {"error": "no results"})
+            elif sub == "/run/stream" and method == "GET":
+                self._sse_run(parsed)
+            elif sub == "/run" and method == "POST":
+                body = self._read_body() or {}
+                ok, msg = server.run.start(body.get("target", ""))
+                self._send(200 if ok else 409, {"ok": ok, "message": msg})
+            elif re.match(r"^/mocks/[^/]+/activate$", sub) and method == "POST":
+                op_id = sub.split("/")[2]
+                body = self._read_body() or {}
+                ok = server.store.activate(op_id, body.get("scenario", ""))
+                self._send(200 if ok else 404, {"ok": ok})
+            elif re.match(r"^/mocks/[^/]+$", sub) and method == "GET":
+                op_id = sub.split("/")[2]
+                definition = server.store.definition(op_id)
+                self._send(200 if definition else 404, definition or {"error": "not found"})
+            elif re.match(r"^/mocks/[^/]+$", sub) and method == "PUT":
+                op_id = sub.split("/")[2]
+                if not _SAFE_OP_ID.match(op_id):
+                    self._send(400, {"error": "invalid operationId"})
+                    return
+                body = self._read_body() or {}
+                ok = server.store.write_scenario(
+                    op_id, body.get("scenario", ""), body.get("payload", {}))
+                self._send(200 if ok else 404, {"ok": ok})
+            else:
+                self._send(404, {"error": f"unknown admin route {method} {sub}"})
+
+        def _sse_run(self, parsed):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            index = 0
+            try:
+                while True:
+                    lines, index = server.run.lines_since(index)
+                    for line in lines:
+                        self.wfile.write(f"data: {line}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                    status = server.run.status()
+                    if not status["running"] and index >= status["lineCount"]:
+                        self.wfile.write(
+                            f"event: done\ndata: {status['returncode']}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        break
+                    time.sleep(0.2)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        # -- mock responses ---------------------------------------------
+        def _mock(self, method, path, parsed):
+            body = self._read_body()
+            ep = server.store.match(method, path)
+            server.requests.record({
+                "method": method,
+                "path": path,
+                "query": parse_qs(parsed.query),
+                "body": _mask(body),
+                "matched": ep.operation_id if ep else None,
+            })
+            if ep is None:
+                self._send(404, {"error": "no mock for this route", "path": path}, cors=True)
+                return
+            scenario = ep.scenarios.get(ep.active_scenario, {})
+            # Contract check on what the app SENT. Recorded, never enforced:
+            # a 422 here would turn "the implementation is wrong" into "this
+            # screen should show an error" in every test that touches it.
+            if (server.contract and server.contract_log is not None
+                    and not scenario.get("skipRequestValidation")):
+                problems = server.contract.check(
+                    method, ep.path, parse_qs(parsed.query), body)
+                if problems:
+                    from .contract import RequestViolation
+                    server.contract_log.record(RequestViolation(
+                        method=method, path=ep.path,
+                        operation_id=ep.operation_id, problems=problems,
+                    ))
+            delay = scenario.get("delayMs")
+            if delay:
+                time.sleep(min(delay, 30000) / 1000.0)
+            status = scenario.get("status", 200)
+            ctype = scenario.get("contentType", "application/json")
+            payload = scenario.get("body")
+            headers = served_headers(scenario)
+            if payload is None and declares_body_file(scenario):
+                # The file's bytes, read per request so an edit to it is
+                # served without a reload (mock/body_file.py).
+                source = ep.scenario_files.get(ep.active_scenario, ep.file_path)
+                payload = read_body_file(source, scenario)
+                if payload is None:
+                    self._send(500, {"error": "the scenario's bodyFile cannot be read",
+                                     "bodyFile": scenario.get("bodyFile"),
+                                     "path": str(body_file_path(source, scenario))},
+                               cors=True)
+                    return
+            if payload is None:
+                self._send(status, b"", content_type=ctype, cors=True, headers=headers)
+            else:
+                self._send(status, payload, content_type=ctype, cors=True, headers=headers)
+
+    return Handler
+
+
+def _mask(body):
+    """Redact obvious secrets from recorded request bodies."""
+    if isinstance(body, dict):
+        return {k: ("***" if k.lower() in {"password", "token", "authorization", "secret"}
+                    else _mask(v)) for k, v in body.items()}
+    if isinstance(body, list):
+        return [_mask(v) for v in body]
+    return body

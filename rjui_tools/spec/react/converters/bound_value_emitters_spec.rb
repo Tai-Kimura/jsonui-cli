@@ -1,0 +1,399 @@
+# frozen_string_literal: true
+
+require 'spec_helper'
+require 'react/converters/base_converter'
+require 'react/converters/view_converter'
+require 'react/converters/label_converter'
+require 'react/converters/button_converter'
+require 'react/converters/image_converter'
+require 'react/converters/slider_converter'
+require 'react/converters/switch_converter'
+require 'react/converters/text_view_converter'
+require 'react/converters/text_field_converter'
+require 'react/converters/collection_converter'
+require 'react/converters/blur_converter'
+require 'react/converters/network_image_converter'
+
+# The bound-value emitter series (plan 49 lane A).
+#
+# A Tailwind class is a compile-time string and cannot carry a value that only
+# exists at runtime. Every defect plan 41 classified as bound-literal-leak /
+# bound-uncompilable / bound-frozen was that one mistake in a different place.
+# These pins hold the two halves of the fix: the binding reaches a CSS property
+# (or a JSX expression), and the STATIC form is untouched.
+RSpec.describe 'bound value emitters' do
+  # The assertions below are TypeScript's (a TypeScript project, declared). A
+  # JavaScript project writes none of them — a .jsx does not parse `as`
+  # (spec/react/javascript_mode_output_parses_spec.rb); until jsonui-cli 1.9.0
+  # they were written whatever the project was.
+  let(:config) { { 'use_tailwind' => true, 'typescript' => true } }
+
+  def convert(node, klass)
+    klass.new(node, config).convert_node(2)
+  end
+
+  def view(attrs)
+    convert({ 'type' => 'View' }.merge(attrs), RjuiTools::React::Converters::ViewConverter)
+  end
+
+  def label(attrs)
+    convert({ 'type' => 'Label', 'text' => 'x' }.merge(attrs), RjuiTools::React::Converters::LabelConverter)
+  end
+
+  describe 'the leak family — a binding must never reach a class name' do
+    it 'sends a bound fontSize to the inline style instead of text-[@{v}px]' do
+      out = label('fontSize' => '@{size}')
+      expect(out).not_to include('@{')
+      expect(out).to include('fontSize: `' + RjuiTools::React::TailwindMapper.font_size_css('data.size', bound: true) + '`')
+    end
+
+    it 'sends a bound cornerRadius to borderRadius instead of rounded-[@{v}px]' do
+      out = view('cornerRadius' => '@{r}')
+      expect(out).not_to include('@{')
+      expect(out).to include('borderRadius: `${data.r}px`')
+    end
+
+    it 'sends a bound spacing to gap instead of gap-@{v}' do
+      out = view('orientation' => 'horizontal', 'spacing' => '@{gap}')
+      expect(out).not_to include('@{')
+      expect(out).to include('gap: `${Number(data.gap) / 16}rem`')
+    end
+  end
+
+  describe 'the frozen family — Ruby truthiness must not decide a runtime flag' do
+    it 'does not bake mx-auto for a bound centerHorizontal' do
+      out = label('centerHorizontal' => '@{c}')
+      expect(out).not_to include('mx-auto')
+      expect(out).to include("marginInline: data.c ? 'auto' : undefined")
+    end
+
+    it 'does not bake overflow-hidden for a bound clipToBounds' do
+      out = view('clipToBounds' => '@{clip}')
+      expect(out).not_to include('overflow-hidden')
+      expect(out).to include("overflow: data.clip ? 'hidden' : undefined")
+    end
+
+    it 'does not freeze a bound weight to flex-none via to_f' do
+      out = view('weight' => '@{w}')
+      expect(out).not_to include('flex-none')
+      expect(out).to include('flexGrow: data.w')
+    end
+
+    # The static spelling is `flex: 1 1 0%`; a bound weight that sets only
+    # flexGrow keeps the declared width as its basis and splits the leftover
+    # (ticket rjui-bound-weight-keeps-the-declared-width-as-a-basis).
+    it 'grows a bound weight from a zero basis, and keeps the basis for a weight of 0' do
+      out = view('weight' => '@{w}', 'width' => 200)
+      expect(out).to include('flexBasis: Number(data.w) > 0 ? 0 : undefined')
+      expect(out).to include('min-w-0 min-h-0')
+    end
+
+    it 'does not freeze a bound lineSpacing to a 1.0 multiplier via to_f' do
+      out = label('lineSpacing' => '@{s}', 'fontSize' => 16)
+      # 16 is text-base, whose own line the spacing is added to.
+      expect(out).to include('lineHeight: `calc(var(--text-base--line-height, 1.5) * 1em + ${Number(data.s)}px)`')
+    end
+
+    it 'lets a bound Collection lazy still reach the none shape' do
+      out = convert({ 'type' => 'Collection', 'id' => 'c', 'lazy' => '@{mode}' },
+                    RjuiTools::React::Converters::CollectionConverter)
+      expect(out).to include("overflowY: data.mode === 'none' ? 'visible' : 'auto'")
+    end
+  end
+
+  describe 'the uncompilable family — the emit has to be a program' do
+    # `step` is deliberately absent: the SSoT declares it `number` with no
+    # `binding`, so the typed read drops a bound value before the converter
+    # ever sees one. The emitter is still on that call site, which costs
+    # nothing and is already correct if the declaration ever gains `binding`.
+    it 'emits a bound Slider bound as a JSX expression, not min={@{v}}' do
+      out = convert({ 'type' => 'Slider', 'minimum' => '@{lo}', 'maximum' => '@{hi}', 'step' => 5 },
+                    RjuiTools::React::Converters::SliderConverter)
+      expect(out).not_to include('@{')
+      expect(out).to include('min={data.lo}')
+      expect(out).to include('max={data.hi}')
+      expect(out).to include('step={5}')
+    end
+
+    it 'does not raise when autoShrink meets a bound minimumScaleFactor' do
+      expect { label('autoShrink' => true, 'minimumScaleFactor' => '@{f}', 'fontSize' => 16) }
+        .not_to raise_error
+    end
+  end
+
+  describe 'state colours — the one family the inline style cannot take directly' do
+    it 'routes a bound tapBackground through a custom property the variant reads back' do
+      out = convert({ 'type' => 'Button', 'text' => 'Go', 'tapBackground' => '@{c}' },
+                    RjuiTools::React::Converters::ButtonConverter)
+      expect(out).not_to include('@{')
+      expect(out).to include('hover:bg-[var(--jui-tap-bg)]')
+      expect(out).to include('active:bg-[var(--jui-tap-bg)]')
+      expect(out).to include("'--jui-tap-bg': ColorManager.cssColor(data.c)")
+    end
+
+    it 'asserts React.CSSProperties so a custom property does not fail the consumer tsc' do
+      out = convert({ 'type' => 'Button', 'text' => 'Go', 'tapBackground' => '@{c}' },
+                    RjuiTools::React::Converters::ButtonConverter)
+      expect(out).to include('as React.CSSProperties')
+    end
+
+    it 'routes a bound TextField hintColor through the placeholder variant' do
+      out = convert({ 'type' => 'TextField', 'hintColor' => '@{c}' },
+                    RjuiTools::React::Converters::TextFieldConverter)
+      expect(out).not_to include('@{')
+      expect(out).to include('placeholder-[var(--jui-hint-color)]')
+    end
+
+    it 'gives the Switch track and knob their own inline colour' do
+      out = convert({ 'type' => 'Switch', 'thumbTintColor' => '@{t}', 'onTintColor' => '@{on}' },
+                    RjuiTools::React::Converters::SwitchConverter)
+      expect(out).not_to include('bg-[@{')
+      expect(out).to include('peer-checked:bg-[var(--jui-switch-on)]')
+      expect(out).to include('backgroundColor: ColorManager.cssColor(data.t)')
+    end
+  end
+
+  describe 'enum values that need translating at runtime' do
+    it 'maps a bound contentMode to object-fit rather than freezing on contain' do
+      out = convert({ 'type' => 'Image', 'src' => 'a.png', 'contentMode' => '@{m}' },
+                    RjuiTools::React::Converters::ImageConverter)
+      expect(out).not_to include('@{')
+      expect(out).to include("objectFit: (({ 'fit': 'contain'")
+      # Keyed by each declared spelling and looked up as written (1.9.0):
+      # AspectFill is a key, a lowercased one is not.
+      expect(out).to include("'AspectFill': 'cover'").and include('[String(data.m)]')
+      expect(out).not_to include('toLowerCase()')
+      expect(out).not_to include("'aspectfill':")
+    end
+
+    # Most CSS properties are unions of string literals in React.CSSProperties,
+    # so a runtime string is TS2322 there. The assertion is written in terms of
+    # the property's own type so it tracks the React types instead of restating
+    # a union that would drift. Found by lane D running the bound fixtures
+    # through the host's tsc — codegen-effect cannot see it, because the probe
+    # only asks whether `@{` survived, never whether the emit typechecks.
+    it 'asserts a bound textAlign into the property type' do
+      out = label('textAlign' => '@{a}')
+      expect(out).to include("textAlign: (data.a) as React.CSSProperties['textAlign']")
+    end
+
+    it 'asserts a bound objectFit into the property type' do
+      out = convert({ 'type' => 'Image', 'src' => 'a.png', 'contentMode' => '@{m}' },
+                    RjuiTools::React::Converters::ImageConverter)
+      expect(out).to include("as React.CSSProperties['objectFit']")
+    end
+
+    # NetworkImage takes contentMode as a PROP and derives its own object-fit
+    # from it; NetworkImageProps has no `style` at all, so writing one there is
+    # TS2322 on the element.
+    it 'leaves a bound NetworkImage contentMode to the prop, not an inline style' do
+      out = convert({ 'type' => 'NetworkImage', 'src' => 'a.png', 'contentMode' => '@{m}' },
+                    RjuiTools::React::Converters::NetworkImageConverter)
+      expect(out).not_to include('objectFit')
+      expect(out).to include("as React.ComponentProps<typeof NetworkImage>['contentMode']")
+    end
+
+    # A bound colour writes a `--jui-*` key, which React.CSSProperties does not
+    # admit — every converter's style renderer has to assert. Six of them had
+    # hand-copied the render loop and four copies had lost the assertion.
+    it 'asserts React.CSSProperties wherever a custom property is written' do
+      [[{ 'type' => 'TextField', 'hintColor' => '@{c}' }, RjuiTools::React::Converters::TextFieldConverter],
+       [{ 'type' => 'TextView', 'hintColor' => '@{c}' }, RjuiTools::React::Converters::TextViewConverter],
+       [{ 'type' => 'Label', 'text' => 'x', 'highlightColor' => '@{c}', 'selected' => '@{s}' },
+        RjuiTools::React::Converters::LabelConverter]].each do |node, klass|
+        expect(convert(node, klass)).to include('as React.CSSProperties'), "#{node['type']} lost the assertion"
+      end
+    end
+  end
+
+  describe 'presence-only attributes that now read their value' do
+    it 'maps every declared TextView resize value to its own utility' do
+      { 'none' => 'resize-none', 'both' => 'resize', 'horizontal' => 'resize-x', 'vertical' => 'resize-y' }
+        .each do |value, utility|
+          out = convert({ 'type' => 'TextView', 'resize' => value },
+                        RjuiTools::React::Converters::TextViewConverter)
+          expect(out).to include(utility), "resize: #{value.inspect} should emit #{utility}"
+        end
+    end
+  end
+
+  # The orchestrator's specificity question (plan 49 A adjudication): an inline
+  # style always beats a class, so when a static class and a bound inline touch
+  # the SAME CSS property the binding wins — for that property only. That is the
+  # intended reading (the side that declared the binding wins) and it is pinned
+  # here because it is the one place the two halves of the fix meet.
+  describe 'a static class and a bound inline on the same property' do
+    it 'keeps the static shorthand class and lets the bound side override one edge' do
+      out = view('padding' => 8, 'topPadding' => '@{t}')
+
+      expect(out).to include('p-[0.5rem]')
+      expect(out).to include('paddingTop: `${Number(data.t) / 16}rem`')
+    end
+  end
+
+  # The border ruling, pinned so it is not re-derived a fourth time.
+  #
+  # The PAIR requests a border; neither half does on its own, and there is no
+  # default border colour. The ruling is a 2026-08-03 USER ruling recorded in
+  # shared/core/attribute_semantics.json (`semantics.border`), whose five
+  # `observable` entries `jui conformance gate --cross-effect` checks against
+  # control_diff — so making any single declaration draw turns the next 3PF
+  # measure red. `borderStyle`'s `"default": "solid"` in
+  # attribute_definitions.json is the trap that has produced three reversals:
+  # it proves style is a modifier, not that width is the summoner.
+  describe 'border — the pair requests it, neither half does' do
+    it 'draws when width and colour are both declared' do
+      out = view('borderWidth' => 2, 'borderColor' => '#FF0000')
+      # Drawn over the content, inside the box (user ruling B, 2026-10-05).
+      expect(out).to include('after:border-[length:2px]')
+      expect(out).to include('after:border-[#FF0000]')
+    end
+
+    it 'draws nothing for a width with no colour — there is no default border colour' do
+      expect(view('borderWidth' => 2)).not_to include('border')
+    end
+
+    it 'draws nothing for a colour with no width' do
+      expect(view('borderColor' => '#FF0000')).not_to include('border')
+    end
+
+    it 'draws nothing for a style alone — it decorates a border, it never summons one' do
+      expect(view('borderStyle' => 'dashed')).not_to include('border')
+    end
+  end
+
+  # The four align* spellings were consumed ONLY by
+  # `overlay_position_classes`, the absolute path. A flow child had a center*
+  # path and no align* path at all, so the declaration reached nothing — which
+  # is why plan 41 measured `alignBottom` / `alignRight` as C0 unread-spelling
+  # AND all four as C1 bound-dropped: there was no code for the binding to be
+  # dropped in.
+  #
+  # An auto margin is the flow answer, the same one center* already uses: in
+  # flexbox an auto margin absorbs free space on EITHER axis, so this needs no
+  # parent-orientation. The OPPOSITE-edge margin does the pushing.
+  describe 'align* on a flow child' do
+    {
+      'alignTop' => 'mb-auto', 'alignBottom' => 'mt-auto',
+      'alignLeft' => 'me-auto', 'alignRight' => 'ms-auto'
+    }.each do |attribute, utility|
+      it "maps a static #{attribute} to #{utility}" do
+        expect(view(attribute => true)).to include(utility)
+      end
+    end
+
+    it 'gives the four edges four different answers' do
+      outputs = %w[alignTop alignBottom alignLeft alignRight].map { |a| view(a => true) }
+      expect(outputs.uniq.length).to eq(4)
+    end
+
+    {
+      'alignTop' => 'marginBottom', 'alignBottom' => 'marginTop',
+      'alignLeft' => 'marginInlineEnd', 'alignRight' => 'marginInlineStart'
+    }.each do |attribute, property|
+      it "decides a bound #{attribute} at runtime rather than baking it" do
+        out = view(attribute => '@{v}')
+        expect(out).to include("#{property}: data.v ? 'auto' : undefined")
+        expect(out).not_to include('-auto"'), 'baked the class for a runtime value'
+      end
+    end
+  end
+
+  # `effectStyle` is declared on `common`, not just on Blur, but only
+  # BlurConverter read it — so a plain View declaring a material got nothing.
+  # The vocabulary now lives in BaseConverter, which is also what stops the
+  # component that OWNS the concept and the common spelling from answering
+  # differently.
+  describe 'effectStyle on a component that is not Blur' do
+    # The vocabulary has two halves: the THICKNESS names (ultraThin … chrome)
+    # carry a blur radius, the APPEARANCE names (light / dark / extraLight /
+    # prominent) carry only a tint and take the default radius. That split is
+    # what BlurConverter already did; it is preserved, not invented.
+    it 'emits the material a declared style asks for' do
+      out = view('effectStyle' => 'Dark')
+      expect(out).to include("backdropFilter: 'blur(10px)'")
+      expect(out).to include("backgroundColor: 'rgba(0, 0, 0, 0.5)'")
+    end
+
+    it 'gives the appearance names their own tint at the default radius' do
+      tints = %w[Light Dark Prominent].map { |s| view('effectStyle' => s)[/backgroundColor: '([^']+)'/, 1] }
+      expect(tints.uniq.length).to eq(3)
+      expect(%w[Light Dark Prominent].map { |s| view('effectStyle' => s)[/blur\((\d+)px\)/, 1] }).to all(eq('10'))
+    end
+
+    it 'gives the thickness vocabulary distinct blur radii' do
+      radii = %w[UltraThin Thin Regular Thick Chrome].map do |style|
+        view('effectStyle' => style)[/blur\((\d+)px\)/, 1]
+      end
+      expect(radii).to eq(%w[4 8 12 16 20])
+    end
+
+    it 'leaves Blur to its own richer builder' do
+      out = convert({ 'type' => 'Blur', 'effectStyle' => 'Dark' },
+                    RjuiTools::React::Converters::BlurConverter)
+      expect(out.scan('backdropFilter').length).to eq(1), 'base and Blur both emitted'
+      expect(out).to include("rgba(0, 0, 0, 0.5)")
+    end
+
+    # A Blur with no declared style falls back to `regular`, whose radius is
+    # 12 — NOT the 10 the unrecognised-value fallback uses. Dropping that row
+    # while moving the table into BaseConverter silently moved every default
+    # Blur from 12px to 10px; the fixture diff caught it.
+    it 'keeps the regular default at 12, distinct from the unknown fallback' do
+      out = convert({ 'type' => 'Blur' }, RjuiTools::React::Converters::BlurConverter)
+      expect(out).to include('blur(12px)')
+    end
+  end
+
+  # `alphabet` / `asciiCapable` is an explicit request for a text keyboard;
+  # `default` is "whatever the platform picks", which on the web IS the
+  # absence of an inputMode. Collapsing both onto the same output made two
+  # declared values indistinguishable.
+  describe 'the text-keyboard vocabulary' do
+    it 'emits inputMode for an explicit alphabet keyboard' do
+      out = convert({ 'type' => 'TextField', 'input' => 'alphabet' },
+                    RjuiTools::React::Converters::TextFieldConverter)
+      expect(out).to include('inputMode="text"')
+    end
+
+    it 'emits no inputMode for default' do
+      out = convert({ 'type' => 'TextField', 'input' => 'default' },
+                    RjuiTools::React::Converters::TextFieldConverter)
+      expect(out).not_to include('inputMode')
+    end
+
+    it 'distinguishes keyboardType default from asciiCapable on TextView' do
+      a = convert({ 'type' => 'TextView', 'keyboardType' => 'default' },
+                  RjuiTools::React::Converters::TextViewConverter)
+      b = convert({ 'type' => 'TextView', 'keyboardType' => 'asciiCapable' },
+                  RjuiTools::React::Converters::TextViewConverter)
+      expect(a).not_to eq(b)
+      expect(b).to include('inputMode="text"')
+    end
+  end
+
+  # The other half of the contract, and the reason the change is safe: a value
+  # with no binding in it takes the byte-identical path it always took.
+  describe 'static values are untouched' do
+    it 'still maps a numeric fontSize to a class and emits no bound style' do
+      out = label('fontSize' => 16)
+      expect(out).to include('text-base')
+      # The only inline style is the font provider's spread (P1: every text
+      # goes through Configuration.Font.resolve), not a bound fontSize.
+      expect(out[/style=\{\{(.*?)\}\}/, 1].to_s.strip).to eq('...Configuration.Font.resolve({ size: 16, italic: false })')
+    end
+
+    it 'still maps a numeric cornerRadius and spacing to classes' do
+      out = view('cornerRadius' => 8, 'orientation' => 'horizontal', 'spacing' => 4)
+      expect(out).to include('rounded-lg')
+      expect(out).to include('gap-[0.25rem]')
+      expect(out).not_to include('style={{')
+    end
+
+    it 'still bakes mx-auto for a literal centerHorizontal' do
+      out = label('centerHorizontal' => true)
+      expect(out).to include('mx-auto')
+      expect(out).not_to include('marginInline')
+    end
+  end
+end

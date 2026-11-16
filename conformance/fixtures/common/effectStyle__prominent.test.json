@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/effectStyle__prominent.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.effectStyle (prominent)",
+    "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Prominent\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "effectStyle__prominent",
+      "description": "Conformance fixture for 'effectStyle' on View (section: common, class: visual). Value under test: \"Prominent\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_effectStyle__prominent"
+        }
+      ]
+    }
+  ]
+}

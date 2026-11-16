@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/minimumDate__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.minimumDate (static)",
+    "description": "Conformance fixture for 'minimumDate' on SelectBox (section: SelectBox, class: visual). Value under test: \"2020-01-01\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "minimumDate__static",
+      "description": "Conformance fixture for 'minimumDate' on SelectBox (section: SelectBox, class: visual). Value under test: \"2020-01-01\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_minimumDate__static"
+        }
+      ]
+    }
+  ]
+}

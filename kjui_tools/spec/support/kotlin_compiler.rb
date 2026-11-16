@@ -1,0 +1,405 @@
+# frozen_string_literal: true
+
+require 'open3'
+require 'tmpdir'
+
+# Compile emitted Kotlin from the suite.
+#
+# `dev-guide/release/compile-emitted-kotlin.sh` says it plainly: the Kotlin
+# emitter is the only one of the three whose output no check on this machine
+# ever compiled — `tsc --noEmit` and `swiftc` run in the suites, and nothing
+# answers for Kotlin. That script is a release procedure and covers only the
+# branch-test runtime, so the DATA MODEL emitter had no compiler behind it at
+# all. What that costs is measured: `map_to_kotlin_type('Object')` returned
+# `"Object"` and `format_default_value` returned a Ruby Hash, so the emitted
+# line was
+#
+#     var profile: Object = {"name"=>"Grace"}
+#
+# — neither half Kotlin — and every unit example was green, because they
+# asserted the emitted TEXT.
+#
+# There is no `kotlinc` on PATH here. The compiler is taken from the Gradle
+# cache the way the release script takes it, and the example SKIPS (visibly,
+# in the count) when that cache is absent, rather than passing.
+module KotlinCompiler
+  module_function
+
+  # GRADLE_USER_HOME is Gradle's own override of ~/.gradle; CI fills a cache
+  # at the default place with .github/scripts/fetch_kotlin_compiler_jars.sh.
+  GRADLE_HOME = ENV.fetch('GRADLE_USER_HOME') { File.join(Dir.home, '.gradle') }
+
+  # The versions CI compiles with, read from the one list that fetches them
+  # (the fetch script's `jars=(...)`: group, artifact, version, sha256).
+  # Until 1.9.10 the harness took the NEWEST jar in the cache instead — on a
+  # developer machine kotlin-compiler-embeddable 2.4.20 where CI pins 2.1.0,
+  # so a local arm type-checked against a compiler CI never uses — and found
+  # it with `Dir.glob(caches/**)` on every call: 13.4s over a 42G cache,
+  # ~130 calls a suite (ticket kjui-spec-kotlinc-harness-globs-the-whole-
+  # gradle-cache-and-picks-the-newest-compiler). A jar is now looked up in
+  # its own directory, at the pinned version, once per process.
+  FETCH_SCRIPT = File.expand_path('../../../.github/scripts/fetch_kotlin_compiler_jars.sh', __dir__)
+  FETCH_HINT = 'bash .github/scripts/fetch_kotlin_compiler_jars.sh (puts the pinned jars in the Gradle cache)'
+
+  def pinned_versions(script = FETCH_SCRIPT)
+    return {} unless File.file?(script)
+
+    File.read(script)[/^jars=\((.*?)^\)/m, 1].to_s.scan(/"([^"\s]+) ([^"\s]+) ([^"\s]+) [0-9a-f]{64}"/)
+        .to_h { |group, artifact, version| [[group, artifact], version] }
+  end
+
+  PINNED = pinned_versions.freeze
+
+  # The warnings arms' compiler (the fetch script's `warnings_jars=(...)`): the Kotlin of an app built with
+  # allWarningsAsErrors, whose warnings 2.1.0 does not all report.
+  def pinned_warnings_versions(script = FETCH_SCRIPT)
+    return {} unless File.file?(script)
+
+    File.read(script)[/^warnings_jars=\((.*?)^\)/m, 1].to_s.scan(/"([^"\s]+) ([^"\s]+) ([^"\s]+) [0-9a-f]{64}"/)
+        .to_h { |group, artifact, version| [[group, artifact], version] }
+  end
+
+  WARNINGS_PINNED = pinned_warnings_versions.freeze
+
+  def warnings_jar(group, artifact)
+    @warnings_jars ||= {}
+    key = [group, artifact]
+    return @warnings_jars[key] if @warnings_jars.key?(key)
+
+    @warnings_jars[key] = resolve(group, artifact, pinned: WARNINGS_PINNED)
+  end
+
+  WARNINGS_COMPILER = [%w[org.jetbrains.kotlin kotlin-compiler-embeddable], %w[org.jetbrains.kotlin kotlin-stdlib],
+                       %w[org.jetbrains.kotlin kotlin-script-runtime], %w[org.jetbrains.kotlin kotlin-daemon-embeddable]].freeze
+
+  # nil when the warnings compiler is all there, else what is missing.
+  def warnings_unavailable_reason
+    missing = WARNINGS_COMPILER.reject { |g, a| warnings_jar(g, a) }
+    return nil if missing.empty?
+
+    "the warnings compiler is not in the Gradle cache at #{WARNINGS_PINNED.values.uniq.join(', ')}: " \
+      "#{missing.map { |g, a| "#{g}:#{a}" }.join(', ')} — fetch: #{FETCH_HINT}"
+  end
+
+  def warnings_compiler_classpath
+    (WARNINGS_COMPILER.map { |g, a| warnings_jar(g, a) } +
+     [jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'), jar('org.jetbrains', 'annotations')]).compact.join(':')
+  end
+
+  # The jar of `artifact` at its pinned version under `home`'s module cache,
+  # or nil: an exact version, never the newest present (2.4.20 beside 2.1.0
+  # is not 2.1.0, and 1.9 sorts after 1.10 as a string).
+  def resolve(group, artifact, home: GRADLE_HOME, pinned: PINNED)
+    version = pinned[[group, artifact]]
+    return nil unless version
+
+    dir = File.join(home, 'caches', 'modules-2', 'files-2.1', group, artifact, version)
+    Dir.glob(File.join(dir, '*', "#{artifact}-#{version}.jar")).min
+  end
+
+  # resolve, once per process for the cache this run reads.
+  def jar(group, artifact)
+    @jars ||= {}
+    key = [group, artifact]
+    return @jars[key] if @jars.key?(key)
+
+    @jars[key] = resolve(group, artifact)
+  end
+
+  def compiler_jar
+    jar('org.jetbrains.kotlin', 'kotlin-compiler-embeddable')
+  end
+
+  def compiler_version
+    PINNED[%w[org.jetbrains.kotlin kotlin-compiler-embeddable]]
+  end
+
+  # The compiler's own classpath — one place, for compile, run and the specs
+  # that drive K2JVMCompiler themselves.
+  def compiler_classpath
+    [compiler_jar,
+     jar('org.jetbrains.kotlin', 'kotlin-stdlib'),
+     jar('org.jetbrains.kotlin', 'kotlin-reflect'),
+     jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'),
+     jar('org.jetbrains', 'annotations'),
+     jar('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+  end
+
+  # Printed once, the first time a run asks whether it can compile, so a
+  # local run and CI's say which compiler their arms used.
+  def announce
+    return if @announced
+
+    @announced = true
+    warn "[kotlinc] kotlin-compiler-embeddable #{compiler_version} (#{compiler_jar}) on #{java_bin}"
+  end
+
+  HOMEBREW_JAVA = '/opt/homebrew/opt/openjdk@17/bin/java'
+  # The JDKs the pinned compiler (kotlin-compiler-embeddable 2.1.0) is
+  # measured on: 17 on the release machine, 21 on Linux (2026-09-28).
+  ACCEPTED_JAVA_MAJORS = (17..21).freeze
+
+  # The `java` a compile runs on, in this order:
+  #   1. KOTLINC_JAVA — an explicit path, taken as given (CI sets it to the
+  #      setup-java JDK);
+  #   2. Homebrew's openjdk@17 — the release machine. Its Android Studio JBR
+  #      on PATH is Java 25 and `/usr/libexec/java_home -v 17` answers 21, so
+  #      neither PATH nor java_home is asked;
+  #   3. JAVA_HOME, when its `release` file names a major in
+  #      ACCEPTED_JAVA_MAJORS (a JAVA_HOME pointing at that JBR is refused).
+  def java_bin
+    return @java_bin if defined?(@java_bin)
+
+    candidates = [explicit_java, HOMEBREW_JAVA, java_home_java].compact
+    @java_bin = candidates.find { |c| File.executable?(c) }
+  end
+
+  def explicit_java
+    path = ENV.fetch('KOTLINC_JAVA', '')
+    path.empty? ? nil : path
+  end
+
+  def java_home_java
+    home = ENV.fetch('JAVA_HOME', '')
+    return nil if home.empty?
+
+    release = File.join(home, 'release')
+    version = File.exist?(release) && File.read(release)[/^JAVA_VERSION="(\d+)/, 1]
+    version && ACCEPTED_JAVA_MAJORS.cover?(version.to_i) ? File.join(home, 'bin', 'java') : nil
+  end
+
+  # A JVM started while JAVA_TOOL_OPTIONS (or JDK_JAVA_OPTIONS) is set writes
+  # "Picked up JAVA_TOOL_OPTIONS: …" to stderr before anything else, so an arm
+  # that reads the merged output of an emitted `main` finds that line too.
+  # Drop it; it is the JVM's, not the program's.
+  JVM_NOTICE = /^(?:NOTE: )?Picked up (?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS):.*\R?/.freeze
+
+  def strip_jvm_notices(text)
+    text.to_s.gsub(JVM_NOTICE, '')
+  end
+
+  # Open3.capture2e on `java_bin`, with the JVM's notices dropped from the
+  # merged output (an arm that parses a `main`'s lines would otherwise read
+  # "Picked up JAVA_TOOL_OPTIONS: …" as one of them).
+  def java_capture2e(*args)
+    out, status = Open3.capture2e(java_bin, *args)
+    [strip_jvm_notices(out), status]
+  end
+
+  # Raised instead of a skip when KJUI_REQUIRE_KOTLINC=1 (CI's kjui leg sets
+  # it once it has fetched the compiler): a leg that is meant to compile must
+  # not go back to pending without anyone seeing it.
+  class Unavailable < StandardError; end
+
+  # nil when a compile can be attempted; otherwise why it cannot.
+  def unavailable_reason
+    reason = find_unavailable_reason
+    if reason && ENV['KJUI_REQUIRE_KOTLINC'] == '1'
+      raise Unavailable, "KJUI_REQUIRE_KOTLINC=1 and the Kotlin compiler is unavailable: #{reason}"
+    end
+
+    reason
+  end
+
+  def find_unavailable_reason
+    unless java_bin
+      return 'no JDK 17 at /opt/homebrew/opt/openjdk@17, no KOTLINC_JAVA, ' \
+             "no JAVA_HOME with Java #{ACCEPTED_JAVA_MAJORS.min}-#{ACCEPTED_JAVA_MAJORS.max}"
+    end
+    return "no pinned versions read from #{FETCH_SCRIPT}" if PINNED.empty?
+
+    missing = ([%w[org.jetbrains.kotlin kotlin-compiler-embeddable]] + REQUIRED).reject { |g, a| jar(g, a) }
+    if missing.any?
+      return "not in the Gradle cache at the pinned version: " \
+             "#{missing.map { |g, a| "#{g}:#{a}:#{PINNED[[g, a]]}" }.join(', ')} — fetch: #{FETCH_HINT}"
+    end
+
+    announce
+    nil
+  end
+
+  REQUIRED = [
+    %w[org.jetbrains.kotlin kotlin-stdlib],
+    %w[org.jetbrains.kotlin kotlin-reflect],
+    %w[org.jetbrains annotations],
+    %w[org.jetbrains.kotlinx kotlinx-coroutines-core-jvm]
+  ].freeze
+
+  Result = Struct.new(:success, :errors) do
+    def success?
+      success
+    end
+  end
+
+  # Libraries a source may compile against beyond the stdlib, by name — for
+  # emitted code that calls them for real (the Dynamic wrappers read Gson).
+  LIBRARIES = { gson: %w[com.google.code.gson gson] }.freeze
+
+  # KotlinJsonUI 2.44.0's test bridge (library core/TestBridge.kt), as far as
+  # generated code names it — the signatures, transcribed, not the behaviour.
+  # Compiled beside any source that names it, in the library's own package:
+  # every Data class kjui writes calls JsonUITestValue (fully qualified), so
+  # each arm that compiles a Data file would otherwise carry a copy. Only
+  # then: an arm that stubs the library as `object com { ... }` in its own
+  # file conflicts with a package `com`. An arm that asks what the bridge
+  # DOES supplies its own judge (spec/compose/test_bridge_code_spec.rb).
+  TEST_BRIDGE_STUBS = <<~KOTLIN
+    package com.kotlinjsonui.core
+
+    data class RejectedKey(val key: String, val reason: String)
+    sealed interface TestValueVerdict {
+        data class Accepted(val value: Any?) : TestValueVerdict
+        data class Rejected(val reason: String) : TestValueVerdict
+    }
+    object JsonUITestValue {
+        fun applyAll(
+            values: Map<String, Any?>,
+            declared: Map<String, String>,
+            update: ((Map<String, Any?>) -> Unit)?,
+            resolve: (key: String, accepted: Any?) -> TestValueVerdict = { _, v -> TestValueVerdict.Accepted(v) }
+        ): List<RejectedKey> = emptyList()
+        fun resolveColor(accepted: Any?, declaredClass: String, colorOf: (String) -> Any?): TestValueVerdict =
+            TestValueVerdict.Accepted(accepted)
+        fun snapshot(values: Map<String, Any?>, declared: Map<String, String>): Map<String, Any?> = values
+    }
+  KOTLIN
+  TEST_BRIDGE_STUBS_FILE = 'KotlinJsonUITestBridgeStubs.kt'
+
+  def with_test_bridge_stubs(source, files)
+    named = ([source] + files.values).any? { |text| text.match?(/com\.kotlinjsonui\.core\.(JsonUITestValue|RejectedKey|TestValueVerdict)\b/) }
+    named ? { TEST_BRIDGE_STUBS_FILE => TEST_BRIDGE_STUBS }.merge(files) : files
+  end
+
+  # `files`: further sources compiled with it, by file name — for a stub that
+  # must live in its own package, so that an emit naming it without its
+  # import does not resolve (a single file has one package, so a stub beside
+  # the emit would be found whether or not the emit imports it).
+  # `warnings_as_errors`: compile as an app with allWarningsAsErrors does (-Werror), and report each warning as an
+  # error — a warning in emitted code fails such an app's build (ticket
+  # kjui-collection-reorder-id-redundant-tostring-fails-warnings-as-errors).
+  def compile(source, libraries: [], files: {}, test_bridge_stubs: true, warnings_as_errors: false)
+    stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annots   = jar('org.jetbrains', 'annotations')
+    coroutin = jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+
+    # The compiler's own classpath and the compiled file's target classpath
+    # are different sets; conflating them fails inside the compiler with
+    # NoClassDefFoundError instead of a diagnostic about the source.
+    compiler_cp = compiler_classpath
+    extra       = libraries.map { |lib| jar(*LIBRARIES.fetch(lib)) }
+    target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
+    if warnings_as_errors
+      compiler_cp = warnings_compiler_classpath
+      target_cp = ([warnings_jar('org.jetbrains.kotlin', 'kotlin-stdlib'), annots, coroutin] + extra).compact.join(':')
+    end
+
+    Dir.mktmpdir('kjui_kotlin') do |dir|
+      file = File.join(dir, 'Emitted.kt')
+      File.write(file, source)
+      sources = test_bridge_stubs ? with_test_bridge_stubs(source, files) : files
+      others = sources.map do |name, text|
+        path = File.join(dir, name)
+        File.write(path, text)
+        path
+      end
+      out, err, = Open3.capture3(
+        java_bin, '-cp', compiler_cp,
+        'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+        '-no-stdlib', '-cp', target_cp, '-d', File.join(dir, 'out'), *(warnings_as_errors ? ['-Werror'] : []), file, *others
+      )
+      text = "#{out}\n#{err}"
+      marker = warnings_as_errors ? /error:|warning:/ : /error:/
+      errors = text.lines.select { |l| l.match?(marker) }.map(&:strip)
+      Result.new(errors.empty?, errors)
+    end
+  end
+
+  Run = Struct.new(:success, :errors, :output) do
+    def success?
+      success
+    end
+  end
+
+  # Compiles `source` (a file with a top-level `fun main()`) and runs it on
+  # the JVM: for an arm that asks what emitted code DOES — a gate that calls
+  # when it is open and not when it is shut — not only that it type-checks.
+  # `libraries` as for compile (LIBRARIES): on the compile and the run
+  # classpath both.
+  def run(source, libraries: [], files: {}, test_bridge_stubs: true)
+    stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
+    reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
+    annots   = jar('org.jetbrains', 'annotations')
+    coroutin = jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    compiler_cp = compiler_classpath
+    extra       = libraries.map { |lib| jar(*LIBRARIES.fetch(lib)) }
+    target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
+
+    Dir.mktmpdir('kjui_kotlin_run') do |dir|
+      file = File.join(dir, 'Emitted.kt')
+      File.write(file, source)
+      sources = test_bridge_stubs ? with_test_bridge_stubs(source, files) : files
+      others = sources.map do |name, text|
+        path = File.join(dir, name)
+        File.write(path, text)
+        path
+      end
+      out_dir = File.join(dir, 'out')
+      out, err, = Open3.capture3(
+        java_bin, '-cp', compiler_cp,
+        'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+        '-no-stdlib', '-cp', target_cp, '-d', out_dir, file, *others
+      )
+      errors = "#{out}\n#{err}".lines.select { |l| l.include?('error:') }.map(&:strip)
+      return Run.new(false, errors, '') unless errors.empty?
+
+      stdout, stderr, status = Open3.capture3(java_bin, '-cp', "#{out_dir}:#{target_cp}", 'EmittedKt')
+      Run.new(status.success?, status.success? ? [] : [strip_jvm_notices(stderr).strip], stdout)
+    end
+  end
+end
+
+RSpec::Matchers.define :compile_as_kotlin do |*libraries|
+  match do |source|
+    # Skipped, not passed and not failed. Recorded BEFORE raising, as `skip`
+    # itself does: a bare raise ends the example as PASSED, which is how an
+    # unavailable compiler would otherwise look identical to a green one.
+    if (reason = KotlinCompiler.unavailable_reason)
+      message = "compile_as_kotlin: #{reason}; this example runs where the Gradle cache carries Kotlin"
+      example = RSpec.current_example
+      RSpec::Core::Pending.mark_skipped!(example, message) if example
+      raise RSpec::Core::Pending::SkipDeclaredInExample, message
+    end
+    if @werror && (reason = KotlinCompiler.warnings_unavailable_reason)
+      message = "compile_as_kotlin.with_warnings_as_errors: #{reason}"
+      raise KotlinCompiler::Unavailable, message if ENV['KJUI_REQUIRE_KOTLINC'] == '1'
+
+      example = RSpec.current_example
+      RSpec::Core::Pending.mark_skipped!(example, message) if example
+      raise RSpec::Core::Pending::SkipDeclaredInExample, message
+    end
+    missing = libraries.reject { |lib| KotlinCompiler.jar(*KotlinCompiler::LIBRARIES.fetch(lib)) }
+    unless missing.empty?
+      message = "compile_as_kotlin: not in the Gradle cache at the pinned version: #{missing.join(', ')} — fetch: #{KotlinCompiler::FETCH_HINT}"
+      raise KotlinCompiler::Unavailable, message if ENV['KJUI_REQUIRE_KOTLINC'] == '1'
+
+      example = RSpec.current_example
+      RSpec::Core::Pending.mark_skipped!(example, message) if example
+      raise RSpec::Core::Pending::SkipDeclaredInExample, message
+    end
+
+    @result = KotlinCompiler.compile(source, libraries: libraries, files: @files || {}, warnings_as_errors: @werror || false)
+    @result.success?
+  end
+
+  # `expect(src).to compile_as_kotlin.alongside('Stubs.kt' => text)`
+  chain(:alongside) { |files| @files = files }
+
+  # `expect(src).to compile_as_kotlin.with_warnings_as_errors`: -Werror, as an app with allWarningsAsErrors builds it.
+  chain(:with_warnings_as_errors) { @werror = true }
+
+  failure_message do |source|
+    "expected the emitted Kotlin to compile, but got:\n" \
+      "#{@result.errors.map { |e| "  #{e}" }.join("\n")}\n\nSource:\n#{source}"
+  end
+end

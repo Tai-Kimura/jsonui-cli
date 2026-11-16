@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/endMargin__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.endMargin (static)",
+    "description": "Conformance fixture for 'endMargin' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "endMargin__static",
+      "description": "Conformance fixture for 'endMargin' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_endMargin__static"
+        }
+      ]
+    }
+  ]
+}

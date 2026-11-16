@@ -1,0 +1,23 @@
+name = "edge-router"
+main = "src/index.ts"
+
+kv_namespaces = [{ binding = "SESSIONS", id = "0123abcd" }]
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "assets"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edge-db"
+database_id = "11111111-2222-3333-4444-555555555555"
+
+[[services]]
+binding = "AUTH"
+service = "auth-worker"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[ai]
+binding = "AI"

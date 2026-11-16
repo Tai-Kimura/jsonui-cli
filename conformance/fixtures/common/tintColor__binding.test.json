@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/tintColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.tintColor (binding)",
+    "description": "Conformance fixture for 'tintColor' on View (section: common, class: visual). Value under test: \"@{boundTintColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "tintColor__binding",
+      "description": "Conformance fixture for 'tintColor' on View (section: common, class: visual). Value under test: \"@{boundTintColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_tintColor__binding"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3517 @@
+"""jui build command — build all platforms."""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import json
+import re
+import shutil
+import os
+import subprocess
+import tempfile
+import sys
+import time
+from pathlib import Path
+
+from ..core.screen_identity import is_layout_path
+from ..core.config_manager import ConfigManager
+from ..core.generated_marker import json_marker
+from ..core.image_converter import ImageConverter, ImageOutputs, same_name_drawables
+from ..core import image_modes
+from ..core.layout_variant import (
+    INLINE_ONLY_CLASSES,
+    VALID_VARIANT_CLASSES,
+    is_variant,
+    split_variant,
+    variant_struct_stem,
+)
+from ..core.impl_updater import (
+    atomic_write_text,
+    ensure_kotlin_import,
+    ensure_kotlin_inheritance,
+    ensure_swift_inheritance,
+    extract_expected_labels_from_swift_sig,
+    extract_swift_method_labels,
+    inject_kotlin_override,
+    inject_kotlin_var_override,
+)
+from ..core.method_extractor import ExtractionError
+from ..core.platform_resolver import PlatformResolver
+from ..core.protocol_sync import (
+    collect_protocol_members,
+    list_impl_method_names,
+    list_impl_narrowed_methods,
+    list_impl_narrowed_vars,
+    list_impl_var_names,
+)
+from ..core.spec_extractor import ScreenSpec, extract_screen_spec
+from ..core.spec_validator import (
+    SpecValidationError,
+    emit_warnings,
+    validate_screen_spec,
+)
+
+
+
+#: The layout-root key that whitelists a file's distribution targets. The
+#: spelling is the canon's (`shared/core/platform_semantics.json` →
+#: `layoutRootPlatforms.attribute`), and an arm holds the two equal; before
+#: this name the literal appeared three times below and nothing tied it to
+#: the declaration, so the canon could rename the key and this command would
+#: keep reading the old one in silence.
+ROOT_PLATFORMS_KEY = "platforms"
+
+def register_build_command(subparsers: argparse._SubParsersAction) -> None:
+    """Register the build subcommand."""
+    build_parser = subparsers.add_parser("build", aliases=["b"], help="Build all platforms")
+    build_parser.add_argument("--clean", action="store_true", help="Clean build (regenerate all)")
+    build_parser.add_argument("--ios-only", action="store_true", help="Build iOS only")
+    build_parser.add_argument("--android-only", action="store_true", help="Build Android only")
+    build_parser.add_argument("--web-only", action="store_true", help="Build Web only")
+    # The MCP tool takes `platform: "ios" | "android" | "web"`, so anyone who
+    # met that interface first writes `--platform web` here and gets exit 2.
+    # That is not only a typo: a build stopped by an unknown argument leaves
+    # every output exactly as it was, which reads as a successful no-op —
+    # one project compared manifest checksums across two such runs, found
+    # them identical, and nearly recorded "no churn" from a tool that had
+    # not run. One concept, two spellings, and the failure mode of guessing
+    # wrong is invisible.
+    build_parser.add_argument(
+        "--platform", choices=["ios", "android", "web"], default=None,
+        help="Build one platform (same vocabulary as the MCP jui_build tool; "
+             "equivalent to --ios-only / --android-only / --web-only)")
+    build_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        dest="allow_partial",
+        help=(
+            "Exit 0 even when some screens failed to generate. Without it a "
+            "failed stage fails the command: an exit-0 run that quietly "
+            "dropped a screen ships a tree with a hole in it, and a CI that "
+            "gates on the exit code goes green over it."
+        ),
+    )
+    build_parser.add_argument(
+        "--lint-strings",
+        action="store_true",
+        help="Print localize findings as build warnings (jui lint-strings); "
+             "the build's exit code does not change — run `jui lint-strings` "
+             "alone to fail on them (also: \"lint\": {\"strings\": true} in "
+             "jui.config.json)",
+    )
+
+
+
+class _StageClock:
+    """Where a build's time goes, said while it is going there.
+
+    Through 1.8.110 a build printed nothing between its stages, and several of
+    them print nothing of their own: on a three-platform face the scans and
+    the manifest record ran for over a minute after the last platform tool
+    had finished, with no line on screen and the prompt not back (reported
+    2026-09-23, with the process at 100% CPU and no child). A reader cannot
+    tell a slow stage from a hung one, and cannot say which stage is slow
+    without a profiler.
+
+    So each stage says when it starts, and the build ends with the time each
+    one took. The table closes: the rows plus the time between them add up
+    to the total, so a stage that is not wrapped shows up as a gap rather
+    than as nothing. It is printed ABOVE the coverage and closing lines, so
+    the last lines of a build are the ones they always were.
+
+    The wording avoids the four warning shapes the build's warning count
+    greps for (see the lint-strings comment in `cmd_build`): these lines are
+    progress, and a count that includes them would be wrong by the number of
+    stages.
+    """
+
+    PREFIX = "[jui build]"
+
+    def __init__(self) -> None:
+        self.rows: list[tuple[str, float]] = []
+        self._started = time.perf_counter()
+
+    @contextlib.contextmanager
+    def stage(self, label: str, *, announce: bool = True):
+        # flush: stdout is block-buffered when piped, and the platform tools
+        # write to the same descriptor — an unflushed line would surface
+        # after their output, or only when the build ends.
+        if announce:
+            print(f"{self.PREFIX} {label} ...", flush=True)
+        started = time.perf_counter()
+        try:
+            yield
+        except BaseException:
+            self.rows.append((f"{label} (did not finish)",
+                              time.perf_counter() - started))
+            raise
+        self.rows.append((label, time.perf_counter() - started))
+
+    def summary_lines(self) -> list[str]:
+        total = time.perf_counter() - self._started
+        timed = sum(seconds for _label, seconds in self.rows)
+        lines = [f"{self.PREFIX} time by stage ({total:.1f}s in total):"]
+        lines += [f"  {seconds:6.1f}s  {label}" for label, seconds in self.rows]
+        lines.append(f"  {max(total - timed, 0.0):6.1f}s  (between stages)")
+        return lines
+
+    def print_summary(self) -> None:
+        print()
+        for line in self.summary_lines():
+            print(line)
+        sys.stdout.flush()
+
+
+def _report_toolchain_sync(config_mgr) -> None:
+    r"""Say so when this project's vendored tools are not this CLI's version.
+
+    🚨 `jui build` is the FIRST STAGE OF THE DELIVERY SCRIPT, and until
+    2026-09-08 it was the one command that never asked. The rule lived inside
+    `jsonui_test_cli` with a single production caller, so a face could be
+    measured like this and read it as agreement:
+
+        sync-meta 1.8.54 / running CLI 1.8.55
+        `jui build`  EXIT 0, warnings 0, tree diff 0
+
+    ⚠️ That `warnings 0` did not mean "not split" — it meant the split was
+    never looked at. Reported by the delivery lane, who was baking artifacts
+    in exactly that state.
+
+    Printed to STDERR, like every other build warning.
+
+    🚨 CORRECTED 2026-09-09. This used to say the line was "NOT counted
+    toward the zero-warnings gate", and reasoned from that. It named a tally
+    THAT DOES NOT EXIST: `jui build` keeps no warning count and exits 0 with
+    fifty of them, which the rulebook states about itself — "the build does
+    not count for you … the gate is you reading the output". The gate is the
+    rulebook's own expression, and that expression matches this line:
+
+        grep -iE 'warning \[|warning:|\[warn|⚠'      -> matches `WARNING [`
+
+    So this line IS counted, by the only thing that counts. It is an accepted
+    warning: write the number and the reason, which is what Invariant 1 asks
+    for, rather than reading a promise here that it costs nothing. The
+    user-visible text below already said as much — "(then re-run this gate)"
+    — and the two disagreed inside one function.
+
+    ⚠️ And the reason given for not counting it only ever covered part of the
+    population. "A split is a normal intermediate state" is true between
+    `bootstrap` (every face at once) and `jui sync_tool` (per-face). It is
+    NOT true of a face that was left behind: one was measured three releases
+    back, warning from before that bootstrap ran and after it. Those are not
+    mid-transition. They are just old, and the line is the only thing saying
+    so.
+
+    🚫 Not downgraded to `NOTE [toolchain]:` to make the expression miss it.
+    The sibling line below defines NOTE as "a gap in the record, not a
+    version split", and this is exactly a version split — the message says so
+    itself: the project "builds with one toolchain and is validated by
+    another". Changing the spelling to escape the gate is a change toward the
+    dangerous side.
+
+      * The channel. A face may diff `jui build` output; the delivery lane
+        confirmed it does not, and explicitly said it does not know about
+        other faces. stderr is where warnings already go, so a stdout diff is
+        unaffected either way — which is what makes adding this line safe
+        without first surveying every face.
+
+    Silent when the rule cannot be loaded, rather than claiming agreement: a
+    tree synced without `shared/` has not measured anything.
+    """
+    import sys
+    try:
+        from ..core import shared_core
+        # 🚨 NOT `jui_cli.__version__` — that is the package literal "0.1.0"
+        # and never moves. Comparing a 1.8.x stamp against it would warn on
+        # every project on every build, which is a false alarm loud enough to
+        # teach people to stop reading build warnings. `toolchain_version()`
+        # is what `jui --version` answers with, and it is the value the stamp
+        # is written from, so the two sides are the same quantity.
+        from ..version import toolchain_version
+    except ImportError:
+        return
+    _running = toolchain_version()
+    rule = shared_core.load("toolchain_sync")
+    if rule is None:
+        return
+    try:
+        root = config_mgr.project_root
+    except AttributeError:
+        return
+    for message in rule.sync_meta_mismatches(root, _running):
+        print(f"WARNING [toolchain]: {message}", file=sys.stderr)
+    # Platforms the comparison SKIPPED because they carry no stamped version.
+    # Their silence is indistinguishable from agreement, so it gets a line of
+    # its own — NOTE rather than WARNING, because a missing stamp is a gap in
+    # the record, not a version split.
+    unstamped = getattr(rule, "unstamped_platforms", lambda _r: [])(root)
+    if unstamped:
+        print(f"NOTE [toolchain]: {len(unstamped)} platform(s) carry no stamped "
+              f"version ({', '.join(unstamped)}), so the comparison SKIPPED "
+              f"them — not a statement that they are in step.", file=sys.stderr)
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    # One vocabulary from here down: the alias sets the flags every step
+    # already reads, so no call site has to know both spellings.
+    _apply_platform_alias(args)
+
+    """Execute jui build."""
+    config_mgr = ConfigManager()
+    if not config_mgr.exists():
+        print("ERROR: jui.config.json not found. Run 'jui init' first.")
+        return 1
+
+    from ..core.spec_kind import missing_table_error
+    missing = missing_table_error("jui build")
+    if missing:
+        print(missing)
+        return 1
+
+    config = config_mgr.load()
+    platforms = config.get("platforms", {})
+    # A platform asked for by name that this config does not have is an
+    # ERROR. It used to build nothing and say "successfully" with rc 0 — on a
+    # submodule that was not initialised, `cd bar && jui build --platform ios`
+    # walks up to the superproject's config and reports 0 generated files as
+    # success (ticket jui-platform-asked-by-name-and-absent-from-config-exits-0).
+    from ..core.config_manager import absent_platform_message, named_platforms
+    absent = absent_platform_message(named_platforms(args), config_mgr.path, platforms)
+    if absent:
+        print(f"ERROR: {absent}")
+        return 1
+    clean = ["--clean"] if args.clean else []
+    failed = []
+    clock = _StageClock()
+
+    with clock.stage("toolchain check"):
+        _report_toolchain_sync(config_mgr)
+
+    # 🚨 A `document_tools_path` that points at nothing is a property of the
+    # CONFIG, not of one command, and until now the only place that said so
+    # was `jui generate` (config_manager's importer has exactly one caller).
+    # Measured 2026-09-08 across every config on this machine: 3 of 11 set the
+    # key and ALL THREE point at a directory that does not exist — and those
+    # three faces run `jui build`, not `jui generate`. The report existed and
+    # could not reach the population it was written for.
+    #
+    # ⚠️ `applied=False` because THIS command does not prepend the path. The
+    # present-and-used half would be a false statement here; only the broken
+    # half is command-independent. Reporting the wrong half from the wrong
+    # command is the same shape as describing a face from a version string
+    # that no longer names what runs.
+    import sys as _sys
+    for _note in config_mgr.document_tools_path_notes(applied=False):
+        print(f"NOTE [tools]: {_note}", file=_sys.stderr)
+
+    # Hard gate for responsive variant files (home@regular.json) — refuse
+    # to distribute/build while the v1 variant contract is violated
+    # (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3).
+    with clock.stage("responsive variant check"):
+        variants_ok = _check_variant_constraints(config_mgr)
+    if variants_ok is False:
+        return 1
+
+    # Hard gate: an inline responsive block's width conditions are spelled as
+    # such, not mixed with size classes, and never overlap
+    # (jui-responsive-width-threshold-conditions, user ruling 2026-10-13).
+    with clock.stage("responsive width check"):
+        widths_ok = _check_responsive_width_conditions(config_mgr)
+    if widths_ok is False:
+        return 1
+
+    # Hard gate: a ScrollView's orientation and horizontalScroll do not
+    # disagree, as written, with its style, or under a responsive key
+    # (jui-scrollview-horizontalscroll-false-disagrees, user ruling 2026-10-14).
+    with clock.stage("scrollview axis check"):
+        axes_ok = _check_scrollview_axes(config_mgr)
+    if axes_ok is False:
+        return 1
+
+    # Hard gate: each face's tool reads the Layouts and Styles from where this
+    # build distributes them (platform_dirs.py; ticket
+    # 2026-10-23-jui-init-ios-layouts-dir-not-where-sjui-reads). Otherwise it
+    # builds from a folder nothing writes — "Layouts directory not found", or
+    # an older copy, silently.
+    with clock.stage("platform layouts dir agreement"):
+        from ..core.platform_dirs import disagreements
+        built = {p: c for p, c in platforms.items()
+                 if not (getattr(args, "ios_only", False) and p != "ios")
+                 and not (getattr(args, "android_only", False) and p != "android")
+                 and not (getattr(args, "web_only", False) and p != "web")}
+        dir_problems = disagreements(config_mgr.project_root, built)
+    if dir_problems:
+        print("\nERROR [platform dirs]:")
+        for line in dir_problems:
+            print(f"  - {line}")
+        return 1
+
+    # Hard gate: no two nodes under one id once includes expand (design U8).
+    with clock.stage("layout id uniqueness"):
+        ids_ok = _check_layout_id_uniqueness(config_mgr, platforms)
+    if ids_ok is False:
+        return 1
+
+    # Localize scan (opt-in). Findings are PRINTED as build warnings and
+    # do NOT change the exit code: this command has no warning tally and no
+    # path that fails on one. To fail on findings, run `jui lint-strings`
+    # separately — it exits 2. The flag-off path never imports the linter.
+    #
+    # This comment used to say the findings "gate" via a zero-warnings
+    # invariant. No such invariant exists in this repository (no CI step
+    # greps the build output, no tally is kept); the rule of that name lives
+    # in the agents' rulebook and binds an agent's workflow, not this
+    # process's exit code. A consumer read the old wording as a mechanism
+    # here and told another lane the build would gate.
+    #
+    # "PRINTED" is what a consumer then translates into a grep, so the
+    # spellings matter. A build prints warnings in FOUR shapes, and no
+    # single naive pattern catches them all:
+    #
+    #     WARNING [<origin>]: ...   the common one (this call site, and most others)
+    #     warning: ...              older emitters
+    #     ⚠ / ⚠️  ...               the Ruby tools
+    #     \e[33m[WARN]\e[0m ...     rjui_tools/lib/core/logger.rb — ANSI FIRST on the line
+    #
+    # Counting them:
+    #
+    #     jui build 2>&1 | grep -iE 'warning \[|warning:|\[warn|⚠' \
+    #                    | grep -vic 'warnings found'
+    #
+    # The second filter drops the build's OWN summary line,
+    # `[WARN] Validation warnings found: N`, which goes through the same
+    # logger and would otherwise be counted as one more finding than there
+    # are. Measured on a log holding two findings plus that line: 3 without
+    # the filter, 2 with it.
+    #
+    # ⚠ The filter is a heuristic, and its failure direction is to UNDER-count:
+    # a finding whose own message contains "warnings found" is dropped with
+    # the summary line. Measured: a single finding reading
+    # `WARNING [lint-strings]: 3 warnings found in …` counts 0, not 1. Nothing
+    # emitted today has that shape, but a future message could, so treat the
+    # number as a floor rather than an exact count.
+    #
+    # Each half of that is load-bearing, measured against one line of each
+    # shape plus three lines of prose that must not count:
+    #
+    #     grep -c 'warning:'                 1 — case-sensitive, so only the lowercase shape
+    #     grep -c '^\[WARN'                  0 — the ANSI escape sits before the bracket
+    #     grep -icE 'warning:|\[WARN|⚠'      3 — misses `WARNING [origin]:`, the COMMONEST
+    #     grep -icE 'warn|⚠'                 4 — but also matches "no warnings" in prose
+    #     the expression above               4, and 0 on the prose
+    #
+    # (On a whole distributed tree `grep -c 'warning:'` returns 0, because
+    # the lowercase shape is rare there — a different measurement from the
+    # four-line sample above, and worth not conflating with it.)
+    #
+    # Site counts in one distributed tree were WARNING: 19 / ⚠ 13 /
+    # warning: 2 / [WARN 1 — indicative only, since the number moves with
+    # how the scan defines a "print site".
+    if _lint_strings_enabled(config, args):
+        from .lint_strings_cmd import run_for_build
+
+        with clock.stage("lint-strings"):
+            for line in run_for_build(config_mgr):
+                print(f"  WARNING [lint-strings]: {line}")
+
+    # Snapshot BEFORE the first step that writes anything — distribution
+    # included, not only the platform tools.
+    #
+    # The window has to span the whole build. Opening it after distribution
+    # made the baseline a mid-run state: distribution copies the authored
+    # layout over the platform's copy, the platform tool normalises it
+    # back, and the two moments being compared were "just overwritten" and
+    # "normalised again". Content genuinely differed across that pair, so
+    # every build recorded the same files as written — 89 of them on a real
+    # project, every run, with identical bytes at the start and the end of
+    # each. The comparison was right; the pair it compared was wrong.
+    from ..core import generation_manifest
+    from ..version import toolchain_version
+    gen_run = generation_manifest.GenerationRun(
+        project_root=config_mgr.project_root,
+        version=toolchain_version(),
+    )
+    with clock.stage("scan generated files (before build)"):
+        _paths, _roots = _generated_scan(config_mgr)
+        gen_run.observe(_paths, roots=_roots)
+
+    # Where the platform tools leave stages that failed while their build
+    # carried on. Each of them is a separate process and names its own at
+    # its own terminus, which still sits above everything printed here —
+    # and here is the bottom a reader looks at. Naming the file rather than
+    # having the tools guess a path keeps the two sides from disagreeing
+    # about where it is.
+    #
+    # The directory is this run's and is removed when the run ends (the
+    # `finally` below): one was left in the temp dir per build until 1.9.30.
+    _stage_ledger_dir = Path(tempfile.mkdtemp(prefix="jui-build-"))
+    _stage_ledger = _stage_ledger_dir / "stage-failures.json"
+    _stage_env_before = os.environ.get("JUI_STAGE_FAILURES")
+    os.environ["JUI_STAGE_FAILURES"] = str(_stage_ledger)
+
+    # A relative constraint names a sibling (ticket jui-relative-constraint-
+    # target-not-a-sibling). Not a hard gate: the platforms are still
+    # generated, and the build exits 1 at its end (_exit_for_incomplete), as
+    # the images stage's ERROR does — so it runs once the ledger is there.
+    with clock.stage("relative constraint targets"):
+        _check_relative_constraint_targets(config_mgr, platforms)
+
+    def _halt(code: int) -> int:
+        """Record what this run wrote, then return `code`.
+
+        A build that writes generated files and then fails leaves the disk
+        holding this version's output and the record holding the previous
+        run's. Both halves behave correctly on their own — the failed run
+        recorded nothing because it stopped, and the next successful run
+        records nothing because the bytes no longer change — so the
+        mismatch is stable until something edits those files again.
+        Measured downstream: a manifest stamped one build's timestamp over
+        another build's contents.
+
+        The record is of writes, not of successes; a version that wrote
+        those bytes wrote them whether or not the run went on to finish.
+
+        BOOTSTRAP IS OFF HERE, and it does not switch itself off. That
+        rule records a file with no entry on the grounds that this run
+        produced exactly those bytes, which a halted run cannot say — and
+        it fires on the absence of a record, not on having written, so a
+        run that stopped before writing anything would otherwise claim
+        every unrecorded file in the project. A content change inside the
+        window is the only direct evidence a halted run has.
+        """
+        with clock.stage("scan generated files (after build)"):
+            halted, halted_roots = _generated_scan(config_mgr)
+        with clock.stage("record generation manifest"):
+            _record_generation(config_mgr, gen_run, halted, roots=halted_roots, bootstrap=False)
+        # Printed even though the build failed: a record nobody is told
+        # about is the same as no record when the next reader tries to
+        # explain a version stamp. The success line is not printed — the
+        # build did not succeed.
+        clock.print_summary()
+        print()
+        print(generation_manifest.coverage_line(gen_run))
+        _print_stage_failures(_stage_failures(_stage_ledger))
+        return code
+
+    # EVERY EXIT RECORDS, INCLUDING THE ONES THAT ARE NOT RETURNS.
+    #
+    # The four `return _halt(1)` sites cover the failures this function
+    # decides on. They do not cover the ones it is handed: a §3.3 invariant
+    # is a raised ValueError, a canonical-mark or parent-spec problem is a
+    # raised error that `cli.py` catches and formats OUTSIDE this function,
+    # and an exception leaves through none of those four returns.
+    #
+    # Measured, both ways. In a fixture, a stage that writes a generated
+    # file and then raises leaves no manifest at all. On a real face, a
+    # build printed its formatted ERROR and then neither the manifest block
+    # nor the success line, and three DTO files it had just rewritten kept
+    # a version two releases old — the same shape this guard exists to end,
+    # arriving through the one door that was not wired.
+    #
+    # Counting the returns was the mistake: "all four are wired" was true
+    # and the exits were five.
+    try:
+        # Distribute shared assets to each platform before build
+        with clock.stage("distribute layouts"):
+            _distribute_layouts(config_mgr, platforms, args)
+        with clock.stage("distribute styles"):
+            _distribute_styles(config_mgr, platforms, args)
+        with clock.stage("distribute resources"):
+            _distribute_resources(config_mgr, platforms, args)
+        with clock.stage("distribute images"):
+            images_ok = _distribute_images(config_mgr, config, platforms, args)
+        if images_ok is False:
+            return _halt(1)
+        with clock.stage("distribute hotload config"):
+            _distribute_hotload_config(config_mgr, platforms, args)
+
+        # Sync swagger-derived DTO + Domain scaffold files. Halts on §3.3
+        # invariants (oneOf, multi-file $ref, direct self-ref, etc.) so the
+        # downstream platform builds never see a broken model.
+        with clock.stage("API model sync"):
+            models_ok = _sync_api_models(config_mgr, platforms, args)
+        if models_ok is False:
+            return _halt(1)
+
+        # Converter scaffolding is an explicit, one-time author action — run
+        # `jui g converter --from <spec>` (or `--all --skip-existing`) yourself
+        # when you add or change a `docs/components/json/*.component.json`. We
+        # used to auto-run that here, but it surprised users (every build
+        # touched extension/ directories) and blocked non-interactive callers
+        # (MCP, CI) on the downstream generators that still prompt. See
+        # (The ticket this used to point at, `2026-04-23-jui-build-auto-converter-removed`,
+        # is not in this tree — `docs/` is gitignored, so a cited path can outlive
+        # its file with nothing to notice. The reasoning above is the whole of it.)
+
+        # Sync ViewModel Protocol / Base files from spec.event_handlers + Impl
+        # markers. Hard error if any spec-declared handler has no matching Impl
+        # function — catches drift before the platform build starts.
+        # Both of the next two need every spec. Parsing them twice also
+        # printed every per-spec NOTE twice — but only on projects that
+        # declare an isolated Embed, because the gate below returns before
+        # it loads anything when there are none. Two faces reported 6 lines
+        # and 2 lines for the same feature and neither number was wrong.
+        with clock.stage("load screen specs"):
+            all_specs = _load_all_specs(config_mgr)
+
+        with clock.stage("ViewModel protocol sync"):
+            synced = _sync_viewmodel_protocols(
+                config_mgr, config, platforms, args, specs=all_specs)
+        if synced is False:
+            return _halt(1)
+
+        # The UseCase layer had no counterpart, so a spec-declared method
+        # reached neither protocol nor compiler. Same specs, same platforms.
+        with clock.stage("UseCase protocol sync"):
+            synced = _sync_usecase_protocols(
+                config_mgr, config, platforms, args, specs=all_specs)
+        if synced is False:
+            return _halt(1)
+
+        # And the layer below it, which had no counterpart either.
+        with clock.stage("Repository protocol sync"):
+            synced = _sync_repository_protocols(
+                config_mgr, config, platforms, args, specs=all_specs)
+        if synced is False:
+            return _halt(1)
+
+        # A screen whose spec is gone leaves its protocols behind: the three
+        # syncs above walk the specs that exist (ticket
+        # jui-build-leaves-orphan-protocol-and-kjui-view-after-screen-removal).
+        with clock.stage("orphan protocol prune"):
+            _prune_orphan_protocols(config_mgr, platforms, args, specs=all_specs)
+
+        # Hard gate for navigationMode:"isolated" — the embedded screen's spec
+        # must not declare present-type transitions (sheet/modal/dialog/dismiss).
+        with clock.stage("isolated embed check"):
+            embeds_ok = _check_isolated_embed_constraints(config_mgr, specs=all_specs)
+        if embeds_ok is False:
+            return _halt(1)
+
+        should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
+        should_build_android = "android" in platforms and not args.ios_only and not args.web_only
+        should_build_web = "web" in platforms and not args.ios_only and not args.android_only
+
+        # The `--- Building … ---` header already says a platform tool has
+        # started, so these stages are timed without a second line.
+        if should_build_ios:
+            ios_root = config_mgr.project_root / platforms["ios"]["root"]
+            # Where a tap may not land on iOS (core/small_tap_info.py): INFO,
+            # not counted with the warnings, the exit code or the stages.
+            _print_small_tap_info(config_mgr)
+            # A reorderable Collection's two drags below iOS 27 (core/reorder_info.py): INFO too.
+            _print_reorder_info(config_mgr, platforms["ios"])
+            print(f"\n--- Building iOS ({ios_root}) ---", flush=True)
+            with clock.stage("iOS: sjui build", announce=False):
+                if not _run_tool(["sjui", "build"] + clean, ios_root):
+                    failed.append("ios")
+
+        if should_build_android:
+            android_root = config_mgr.project_root / platforms["android"]["root"]
+            print(f"\n--- Building Android ({android_root}) ---", flush=True)
+            with clock.stage("Android: kjui build", announce=False):
+                if not _run_tool(["kjui", "build"] + clean, android_root):
+                    failed.append("android")
+
+        if should_build_web:
+            web_root = config_mgr.project_root / platforms["web"]["root"]
+            print(f"\n--- Building Web ({web_root}) ---", flush=True)
+            with clock.stage("Web: rjui build", announce=False):
+                if not _run_tool(["rjui", "build"] + clean, web_root):
+                    failed.append("web")
+
+        if failed:
+            print(f"\nERROR: Build failed for: {', '.join(failed)}")
+            return _halt(1)
+
+        # Re-read after the build: a run can create files that did not exist to
+        # be observed, and can leave others exactly as they were.
+        print(flush=True)
+        with clock.stage("scan generated files (after build)"):
+            present, present_roots = _generated_scan(config_mgr)
+        with clock.stage("record generation manifest"):
+            _record_generation(config_mgr, gen_run, present, roots=present_roots)
+        clock.print_summary()
+        print()
+        print(generation_manifest.coverage_line(gen_run))
+
+        # "Build completed successfully" is the identical sentence whether a
+        # run produced every file or none: `jui verify` had the same shape
+        # until it started naming its denominator, and doing so revealed that
+        # five projects had been verifying nothing at all. An exit code cannot
+        # tell those apart — a crash is caught by it, a silent zero is not.
+        #
+        # It names the denominator only. This line carried both numbers, and a
+        # number that depends on the record's state does not belong beside one
+        # that depends on the project's shape — the split above exists for
+        # that reason, and repeating the pair here would put it back. What
+        # this run did to the record is two lines up, where a reader looking
+        # for it will find it named as such.
+        # Read before the closing line is chosen, not after it is
+        # printed. A platform tool can finish having skipped work — one
+        # bad layout does not stop the other seventeen — and this said
+        # "completed successfully" directly above the report of what had
+        # not completed. Same shape as a launcher discarding an exit code,
+        # one level up: the failure was on screen and the last line
+        # contradicted it.
+        incomplete = _stage_failures(_stage_ledger)
+        # The same `tracked` the coverage head printed two lines up — read
+        # from the ledger's claims, not re-counted here, so the two lines
+        # cannot disagree. (This line used to count a local `present_keys`;
+        # when that variable went, a Ruby spec driving the real CLI caught
+        # the NameError that the Python suites, which stop short of this
+        # path, did not.)
+        tracked = gen_run.claims()["summary"]["tracked"]
+        if incomplete:
+            print(f"\nBuild finished — {tracked} tracked "
+                  f"generated file(s); {len(incomplete)} stage(s) did not "
+                  f"complete")
+        else:
+            print(f"\nBuild completed successfully — {tracked} "
+                  f"tracked generated file(s)")
+        _print_stage_failures(incomplete)
+        # A stage that did not complete is a screen that is not there. The
+        # closing line said so from 1.8.15, and the exit code still said 0
+        # — so a CI gating on the exit code shipped the hole, which is what
+        # a consumer measured on 1.8.42: `[ERROR]` four times, zero screens
+        # generated, exit 0.
+        #
+        # Same judgment `jsonui-doc generate html` already makes, and the
+        # same opt-out name: a partial tree is a failure unless the caller
+        # says otherwise.
+        return _exit_for_incomplete(incomplete, args)
+    except BaseException:
+        # Record what this run wrote, then let it fail as it would have.
+        # Nothing about the failure changes — the exception is re-raised
+        # untouched and the exit code is whatever it was going to be.
+        try:
+            _halt(1)
+        except Exception:
+            pass
+        raise
+    finally:
+        # Every exit has read the ledger by now (the closing line, or _halt).
+        # The variable is put back too: a caller running builds in-process
+        # would otherwise hand the next build a path that no longer exists.
+        shutil.rmtree(_stage_ledger_dir, ignore_errors=True)
+        if _stage_env_before is None:
+            os.environ.pop("JUI_STAGE_FAILURES", None)
+        else:
+            os.environ["JUI_STAGE_FAILURES"] = _stage_env_before
+
+
+def _recorded_versions(manifest: dict) -> dict:
+    """How many entries carry each version, straight from what was saved.
+
+    This was in no output at all: a reader wanting to know which versions
+    the entries carry had to parse the JSON, and three faces instead read
+    the running version off the summary line and took it for this. Two of
+    them reported a defect on that reading and one wrote it into its own
+    ledger as an independent fact and committed on it.
+    """
+    counts: dict = {}
+    for entry in (manifest.get("files") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("version") or "unknown"
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def _exit_for_incomplete(incomplete: list, args) -> int:
+    """The exit code for a build that left stages unfinished.
+
+    Separate and callable so the arms exercise THIS, not a restatement of
+    it. The bug being fixed is precisely that a printed line and an exit
+    code disagreed, so a test that reads the printed line proves nothing.
+
+    Missing `allow_partial` fails closed: other entry points construct their
+    own args (the MCP tool, older callers), and the safe reading of "the
+    caller never heard of this flag" is that it did not ask for a partial
+    tree.
+    """
+    if not incomplete:
+        return 0
+    if getattr(args, "allow_partial", False):
+        print(
+            f"[WARNING] --allow-partial: exiting 0 with {len(incomplete)} "
+            f"stage(s) incomplete"
+        )
+        return 0
+    print(
+        f"[ERROR] exit 1: {len(incomplete)} stage(s) did not complete. "
+        f"Pass --allow-partial to accept a partial tree."
+    )
+    return 1
+
+
+def _note_stage_failure(stage: str, message: str) -> None:
+    """Add a stage that did not complete to this build's ledger (``JUI_STAGE_FAILURES``).
+
+    The entry the platform tools write (shared/core/stage_failures.rb), for
+    a failure found in jui itself that does not stop the build: the closing
+    block names it and the build exits 1 (`_exit_for_incomplete`). Without
+    the variable (a caller outside `cmd_build`) only the printed line says it.
+    """
+    path = os.environ.get("JUI_STAGE_FAILURES")
+    if not path:
+        return
+    ledger = Path(path)
+    entries = _stage_failures(ledger)
+    entries.append({"stage": stage, "message": message})
+    try:
+        ledger.write_text(json.dumps(entries), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _stage_failures(ledger: Path) -> list:
+    """What the platform tools left behind, or an empty list."""
+    try:
+        entries = json.loads(ledger.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(entries, list):
+        return []
+    return [e for e in entries if isinstance(e, dict)]
+
+
+def _print_stage_failures(entries: list) -> None:
+    """Name stages a platform tool could not complete, after everything else.
+
+    Those tools log at their own terminus, which on a real run is dozens of
+    lines above this — one measured build put the colours failure at line
+    13 of 46 and ended with a success line. A reader who scrolls to the
+    bottom saw only the success, which is the whole reason the failure went
+    unnoticed for as long as it did.
+
+    Silent when nothing failed, so a healthy build's output is unchanged
+    and no downstream baseline moves.
+    """
+    if not entries:
+        return
+    print(f"\n{len(entries)} stage(s) did not complete; the build carried "
+          f"on without them:")
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        print(f"  - {entry.get('stage', '?')}: {entry.get('message', '')}")
+
+
+def _record_generation(config_mgr, gen_run, present, *, roots=None, bootstrap=True):  # -> GenerationRun
+    """Decide what this run changed in the record, and save it.
+
+    THE ORDER IS THE CONTRACT, which is why it is one function instead of
+    four lines at the call site. Two things here key the same entries: the
+    lookup that decides which files have no record yet, and the migration
+    inside `save` that renames entries whose spelling the normaliser
+    changed. Built separately, they drifted — the lookup read the file raw,
+    so every entry awaiting migration looked like a file that had never
+    been recorded, the bootstrap rule fired on all of them, and `save`
+    stamped the current version over versions it had just migrated
+    correctly. Measured on a real project: 327 of 537 entries re-stamped,
+    with the counts right and `dropped 0`, so no number in the summary
+    moved. The versions are the one thing this record exists to keep.
+
+    Both sides now come from `load_migrated`, and a build cannot use one
+    without the other.
+
+    `roots` is the scan's directories AFTER the run. The first scan cannot
+    name a directory the run has yet to create, so in a new worktree whose
+    output dirs are gitignored every file this build wrote counted as outside
+    the declared roots (342 on one face, 0 on the next build, with nothing
+    changed but the directories being there).
+    """
+    from ..core import generation_manifest
+
+    if roots is not None:
+        gen_run.add_roots(roots)
+    # The record describes the tree after the run, as `tracked` and the roots do.
+    gen_run.observe_after(present)
+    known = set(generation_manifest.load_migrated(config_mgr.project_root))
+    gen_run.written(present, known=known, bootstrap=bootstrap)
+    # Observed here, at the point it is measured — not computed at the print
+    # site. The ledger counts; this hands it the files.
+    gen_run.note_distributed(_distributed_files(config_mgr))
+    # The ledger carries the keys, the breakdown is derived from them inside
+    # `save`, and what `save` learns against the previous record comes back
+    # onto the ledger. Nothing is passed by number. The ledger is what a
+    # caller gets back — the manifest dict is a projection of it.
+    # A receiver that pinned the clock and misspelled the value would
+    # otherwise get wall-clock stamps with nothing saying so; `shared/core`
+    # has no warning channel, so the build prints on its behalf. stderr,
+    # in the shape the gate counts (see the four shapes above).
+    problem = generation_manifest.source_date_epoch_problem()
+    if problem:
+        print(f"WARNING [manifest]: {problem}", file=sys.stderr)
+    generation_manifest.save(gen_run, generated_by="jui build")
+    return gen_run
+
+
+def _generated_scan(config_mgr) -> tuple[list, list]:
+    """`_generated_paths`, plus WHICH DIRECTORIES the walk covered.
+
+    The second value is what the ledger records as the scan's roots, so the
+    manifest can say where its claim stands instead of leaving a reader to
+    reconcile a bare total against their own tree. Same walk, same paths;
+    the directory set is the one `rglob` ran over.
+    """
+    paths, roots = _generated_paths_and_roots(config_mgr)
+    return paths, roots
+
+
+def _generated_paths(config_mgr) -> list:
+    """Every generated file the manifest can speak about (paths only)."""
+    return _generated_paths_and_roots(config_mgr)[0]
+
+
+def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
+    """Every generated file the manifest can speak about.
+
+    Reuses `lint-generated`'s two collections rather than defining a third
+    idea of "generated": a second list would drift, and the answer would
+    depend on which one a reader consulted.
+
+    BOTH are needed, measured rather than assumed. `_collect_targets` finds
+    distributed layout JSON and directories literally named `Generated`;
+    `_view_targets` finds the per-screen `*GeneratedView.{kt,swift}` files —
+    which are exactly the ones a defective release rewrites. On a real
+    project the first returned 0 and the second 850, so taking only the
+    first would have produced an empty manifest that never said so.
+
+    Two corrections a downstream face measured on 1.8.7 (web):
+
+    CASE. `rglob("Generated")` matches a directory named `generated` on a
+    case-insensitive filesystem and hands back a path spelled the way the
+    PATTERN is, not the way the disk is — `src/Generated/…` for a tree that
+    is really `src/generated/…`. Every entry then names a path that exists
+    on macOS and on no case-sensitive filesystem, so a consumer asking the
+    manifest about a real file gets "not recorded" forever, and the check
+    looks like it ran. Paths are canonicalised against the filesystem
+    before they are recorded.
+
+    ASSETS. `_collect_targets` filters to source extensions, because a
+    marker banner can only live in a source file — the right rule for the
+    gate that reads banners, the wrong one for a record of what a run
+    wrote. A generator that emits `theme.css` into a generated tree wrote
+    it just as much. Inside a directory already identified as generated,
+    every file counts.
+    """
+    from .lint_generated_cmd import _collect_targets, _view_targets
+
+    paths: set = set()
+    # Kept apart from `paths`: the view files' PARENTS become declared
+    # roots below, and only these files say where the view dirs are.
+    view_paths: set = set()
+    try:
+        view_paths = set(_view_targets(config_mgr))
+    except Exception:
+        pass
+    paths |= view_paths
+    try:
+        paths.update(path for _kind, path in _collect_targets(config_mgr))
+    except Exception:
+        pass
+
+    # Everything inside a generated tree, whatever its extension.
+    #
+    # The starting points are the generated directories THEMSELVES, found
+    # by name on disk, not the parents of files something else already
+    # found. Widening from those parents can only reach directories that
+    # already contain a discovered file, so anything sitting directly in
+    # `src/generated/` is invisible when the discovery below it happens one
+    # level down.
+    #
+    # It also stops the answer depending on the interpreter. The collection
+    # this leaned on globs for a directory literally named `Generated`, and
+    # whether that matches `generated` is not a property of the project:
+    #
+    #   case-sensitive filesystem           never matches
+    #   case-insensitive fs, Python 3.12    does not match  (measured)
+    #   case-insensitive fs, Python 3.14    matches         (measured)
+    #
+    # Same machine, same tree, same pattern. So one face recorded 444 files
+    # and another 454 for the same project, and the difference was which
+    # python3 was on PATH — nothing a reader of this code, or of the
+    # project, could see. (3.13 is untested, and a container will not
+    # settle it: the version only shows on a case-insensitive filesystem,
+    # and a Linux image gives a case-sensitive one, where the glob misses
+    # under every version. A green there would read as agreement.) Walking
+    # and comparing names ourselves takes the question away rather than
+    # answering it per environment.
+    from .lint_generated_cmd import _layout_distribution_dirs
+
+    # The roots are every directory the record can claim files under: the
+    # `generated` trees, the parents of generated files, AND the layout
+    # distribution dirs — the same declaration `_collect_targets` reads the
+    # layout JSON from. A root missing here is a file the manifest lists
+    # under no declared root (`outsideDeclaredRoots`), which is the record
+    # saying its scan was declared short, not that the file is wrong.
+    #
+    # 🚨 TWO USES OF ONE SET, AND ONLY ONE APPLIES TO THE LAYOUT DIRS. A
+    # `generated` tree is walked for PATHS too — every file in it is the
+    # generator's (the assets rule above). A layout distribution dir is not
+    # that kind of tree: it holds hand-placed files (`Resources/.gitkeep`)
+    # and resources the lint collection deliberately skips. 1.8.74 added the
+    # layout dirs to the walked set and the walk claimed five such files on
+    # one face as "generated by jui build" (reported 2026-09-11, the same
+    # evening). The layout dirs are DECLARED roots: their paths come from
+    # `_collect_targets`, never from this walk.
+    walked: set = set()
+    for directory in _generated_tree_roots(config_mgr) | {
+        p.parent for p in list(paths) if _is_generated_dir(p.parent)
+    }:
+        walked.add(directory)
+        try:
+            paths.update(f for f in directory.rglob("*") if f.is_file())
+        except OSError:
+            continue
+    declared: set = set(_layout_distribution_dirs(config_mgr))
+
+    # The per-screen view dirs are DECLARED roots too, for the same reason
+    # and under the same restriction. `_view_targets` finds
+    # `View/<screen>/<Screen>GeneratedView.swift` and `views/<screen>/….kt`,
+    # and neither parent is named `generated`, so through 1.8.75 every such
+    # file was recorded and then counted outside every declared root: on
+    # two mobile faces `outsideDeclaredRoots` was exactly the number of
+    # GeneratedView files (88 and 200, reported 2026-09-12) — a constant
+    # that would have hidden any root really missing. The parent holds the
+    # hand-written `<Screen>View.swift` beside the generated one, so it is
+    # declared and never walked; the files under it that are the build's
+    # come from `_view_targets`, nothing else.
+    declared |= {p.parent for p in view_paths}
+
+    from ..core.generation_manifest import listing_memo, real_case
+
+    # Pruned on the RESULT, not only on the walk's starting points. The
+    # other set of starting points is the parent of each file the lint
+    # collection found, and that collection globs for `Generated` — so on
+    # a case-insensitive filesystem it hands back `tests/unit/Generated`,
+    # which is not equal to anything spelled the way the disk spells it and
+    # slipped past a prune that compared strings. Sixteen branch tests came
+    # through that way on one face after the walk had already been fixed.
+    # Canonicalising first is what makes the comparison mean anything.
+    # Compared after resolving BOTH sides. `real_case` fixes spelling and
+    # does not follow symlinks, while the owned set is resolved — so under
+    # a symlinked temp directory one side said /var and the other
+    # /private/var and nothing ever matched. The real faces have no symlink
+    # on that path, so only a fixture caught it.
+    owned = _test_owned_trees(config_mgr)
+
+    def _owned_elsewhere(path) -> bool:
+        try:
+            probe = path.resolve()
+        except OSError:
+            probe = path
+        # A set, built once per path: `in probe.parents` rebuilds every
+        # parent for every tree it is compared against.
+        parents = set(probe.parents)
+        return any(probe == tree or tree in parents for tree in owned)
+
+    # One listing memo for the whole result: every path here was found on
+    # disk moments ago and nothing writes between them (see `real_case`).
+    listings = listing_memo()
+    canon = sorted({c for c in (real_case(p, listings=listings) for p in paths)
+                   if not _owned_elsewhere(c)})
+    roots = sorted({real_case(d, listings=listings) for d in walked | declared}, key=str)
+    return canon, roots
+
+
+def _generated_tree_roots(config_mgr) -> set:
+    """Every directory named `generated`, found on disk under a platform root.
+
+    Matched case-insensitively and by walking, rather than by globbing for
+    one spelling: a glob for `Generated` finds `generated` on a
+    case-insensitive filesystem and finds nothing on a case-sensitive one,
+    which made the manifest's denominator depend on the machine. Excluded
+    directory names are pruned during the walk, so this does not descend
+    into `node_modules` or a build output — the same list the lint
+    collection uses, including a project's own additions.
+    """
+    from .lint_generated_cmd import DEFAULT_EXCLUDED_DIR_NAMES, _platform_roots
+    from .sync_tool_cmd import PLATFORM_TO_TOOL
+
+    # The vendored tool trees are pruned too. `rjui_tools/lib/core/generated`
+    # is the TOOL's own source, sitting inside the project because that is
+    # how the toolchain is distributed; 33 of its files are not files this
+    # project's build generated, and a record claiming otherwise is worse
+    # than one that omits them. The old collection missed this tree only by
+    # accident — it filters to source extensions and those files are Ruby —
+    # so widening to every extension is exactly what exposes it. Names come
+    # from the sync map rather than a second list here.
+    excluded = set(DEFAULT_EXCLUDED_DIR_NAMES) | set(PLATFORM_TO_TOOL.values())
+    try:
+        config = config_mgr.load()
+        lint_cfg = config.get("lint") if isinstance(config, dict) else None
+        if isinstance(lint_cfg, dict):
+            excluded |= set(lint_cfg.get("exclude_dir_names") or [])
+    except Exception:
+        pass
+
+    owned_elsewhere = _test_owned_trees(config_mgr)
+    found: set = set()
+    for platform_root in _platform_roots(config_mgr):
+        if platform_root is None or not platform_root.exists():
+            continue
+        for dirpath, dirnames, _filenames in os.walk(platform_root):
+            dirnames[:] = [d for d in dirnames if d not in excluded]
+            for name in dirnames:
+                if name.lower() != "generated":
+                    continue
+                tree = Path(dirpath) / name
+                if any(tree == owned or owned in tree.parents
+                       for owned in owned_elsewhere):
+                    continue
+                found.add(tree)
+    return found
+
+
+def _test_owned_trees(config_mgr) -> set:
+    """Generated trees a DIFFERENT command writes.
+
+    The record says which version wrote each file, so it must not name
+    files this command does not write. Widening the walk to every tree
+    called `generated` reached two that the test tooling owns — the mocks
+    under the declared `mock.mockDir`, and the branch tests it defaults to
+    — and the rule that records a file with no entry yet then stamped them
+    with the running version. Measured: 215 and 16 on one face, 53 and 10
+    on another, 14 on a third, against zero writes into a test tree from
+    this command or the platform builds it shells out to.
+
+    Keeping them would mean rewriting what the record claims, and a weaker
+    claim is worse here: the number would still read as provenance.
+
+    WHY ONE TREE GOT IN AND ANOTHER DID NOT, since the prune is otherwise
+    hard to reconstruct later. Two independent factors, measured on three
+    faces:
+
+    1. IS IT UNDER A PLATFORM ROOT. Both the walk and the lint collection
+       start there, so a test tree that is a SIBLING of the platform root
+       is never reachable. One face declares `root: "."` and has both trees
+       inside; another declares `root: "web"` and keeps its mocks beside
+       it, so those 67 files were never recorded; a third keeps its mocks
+       outside three app roots, so this prune is a no-op for it.
+    2. WHICH ROUTE REACHES IT. There are three, and only one of them
+       filters by extension — a summary that mentions only that one reads
+       as "no .json ever enters", which a face with 33 recorded .json files
+       contradicts.
+
+         a. Layout JSON under the declared `layoutsDir`, collected by its
+            own branch. Extension-independent: those 33 are all here.
+         b. `_scan_code_tree`, under directories named `Generated` and the
+            four subdirectory names beside it. Source extensions only, so
+            `.ts` branch tests entered and `.json` mocks did not.
+         c. The walk added in 1.8.11, which takes every file in a generated
+            tree whatever it is. This is where the mocks came from.
+
+       That is why branch tests carry 1.8.10 and mocks carry 1.8.12: (b)
+       had been claiming the first since before (c) existed.
+
+    So "another command wrote it" was never what decided; reachability and
+    which route arrives were. Both trees are pruned here by ownership,
+    which is the property that actually matters.
+    """
+    # Through the shared loader, not a literal here: a fallback list would
+    # be the second copy this declaration exists to prevent, and it would
+    # be the copy that goes stale. A tool tree synced without `shared/`
+    # simply prunes nothing extra, which is the pre-existing behaviour.
+    from ..core import shared_core
+
+    keys = shared_core.load("config_keys")
+    owned_relatives = list(getattr(keys, "TEST_OWNED_GENERATED", ()) or ())
+
+    try:
+        config = config_mgr.load() or {}
+    except Exception:
+        config = {}
+    mock = config.get("mock") if isinstance(config, dict) else None
+    relatives = list(owned_relatives)
+    if isinstance(mock, dict) and mock.get("mockDir"):
+        relatives.append(f"{mock['mockDir']}/generated")
+
+    bases = [config_mgr.project_root]
+    bases += [r for r in _platform_roots_safe(config_mgr) if r is not None]
+    owned = set()
+    for base in bases:
+        for rel in relatives:
+            try:
+                owned.add((Path(base) / rel).resolve())
+            except OSError:
+                continue
+    return owned
+
+
+def _platform_roots_safe(config_mgr) -> list:
+    from .lint_generated_cmd import _platform_roots
+
+    try:
+        return list(_platform_roots(config_mgr))
+    except Exception:
+        return []
+
+
+def _is_generated_dir(directory) -> bool:
+    """Is this directory part of a generated tree, by its own name?"""
+    return any(part.lower() == "generated" for part in Path(directory).parts)
+
+
+def _run_tool(cmd: list[str], cwd: Path) -> bool:
+    """Run a platform tool, handling missing executables gracefully."""
+    from ..core.tool_resolver import tool_command
+
+    tool_name = cmd[0]
+    extra = None
+    if tool_name == "rjui":
+        # Design U8: whether web prefixes the ids inside an include is decided
+        # HERE, once, from INCLUDE_ID_PREFIX_GATE_FROM; rjui only follows it
+        # (run standalone it keeps the old spelling and says so).
+        from ..core.layout_facts import INCLUDE_ID_PREFIX_UNREADABLE, include_id_prefix_env
+        decision = include_id_prefix_env()
+        if decision == "unavailable":
+            print(f"  {INCLUDE_ID_PREFIX_UNREADABLE}")
+            return False
+        extra = {"JSONUI_INCLUDE_ID_PREFIX": decision}
+    actual_cmd, env = tool_command(cmd, cwd, extra=extra)
+
+    try:
+        result = subprocess.run(actual_cmd, cwd=cwd, env=env)
+        return result.returncode == 0
+    except FileNotFoundError:
+        print(f"  WARNING: '{tool_name}' not found (searched local and PATH) — skipping")
+        return False
+
+
+def _prune_orphans(
+    dest_dir: Path,
+    valid_rel_paths: set,
+    skip_prefixes: set,
+) -> int:
+    """Remove *.json files in *dest_dir* that are not in *valid_rel_paths*.
+
+    Skips top-level subdirectories listed in *skip_prefixes* (e.g. Resources,
+    Styles) so platform-specific resources aren't deleted.
+    """
+    if not dest_dir.exists():
+        return 0
+    removed = 0
+    for dest_file in dest_dir.rglob("*.json"):
+        rel = dest_file.relative_to(dest_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        if rel not in valid_rel_paths:
+            dest_file.unlink()
+            removed += 1
+    # Clean up empty directories
+    for subdir in sorted(dest_dir.rglob("*"), reverse=True):
+        if subdir.is_dir() and subdir != dest_dir and not any(subdir.iterdir()):
+            try:
+                subdir.rmdir()
+            except OSError:
+                pass
+    return removed
+
+
+def _lint_strings_enabled(config: dict, args: argparse.Namespace) -> bool:
+    """``jui build --lint-strings`` or ``"lint": {"strings": true}``.
+
+    Kept inline (not imported from lint_strings_cmd) so the default build
+    path never loads the linter module at all.
+    """
+    if getattr(args, "lint_strings", False):
+        return True
+    lint_cfg = config.get("lint") or {}
+    return isinstance(lint_cfg, dict) and bool(lint_cfg.get("strings"))
+
+
+def _normalize_layouts_enabled(config_mgr: ConfigManager) -> bool:
+    """``jui.config.json`` → ``"build": {"normalizeLayouts": ...}``.
+
+    Default is TRUE (L1-canonicalized distribution) since renderer SSoT
+    phase 14: verified against a real consumer (byte-identical generated
+    code, intended layout diffs only) and the conformance suite (L0 vs L1
+    status-identical). ``"normalizeLayouts": false`` is the escape hatch
+    for byte-identical-to-legacy distribution.
+    """
+    config = config_mgr.load()
+    build_cfg = config.get("build") or {}
+    if isinstance(build_cfg, dict) and "normalizeLayouts" in build_cfg:
+        return bool(build_cfg.get("normalizeLayouts"))
+    return True
+
+
+def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> None:
+    """Copy Layout JSON from shared layouts/ to each platform.
+
+    If a Layout file contains ``platform`` overrides they are resolved
+    for the target platform before writing.
+
+    When normalizeLayouts is enabled (default since SSoT phase 14; set
+    ``"build": {"normalizeLayouts": false}`` in ``jui.config.json`` to opt out), the distributed copies are L1-canonicalized
+    (alias → canonical attribute rewrite + ``$jui`` marker). The shared
+    source files under ``layouts_directory`` are NEVER rewritten — the
+    authoring surface stays L0.
+    """
+    layouts_src = config_mgr.layouts_directory
+    if not layouts_src.exists():
+        return
+
+    canonicalizer = None
+    if _normalize_layouts_enabled(config_mgr):
+        # Lazy import — the normalizer is never loaded on flag-off builds.
+        from ..core.normalizer import Canonicalizer
+        from ..core.normalizer.alias_table import AliasTable
+
+        alias_table = AliasTable.from_file()
+        if alias_table.is_empty():
+            # Stamping L1 markers WITHOUT alias rewriting corrupts
+            # consumers on the canonical-only path (they skip alias
+            # fallbacks trusting the marker) — refuse to normalize.
+            print(
+                "  WARNING [normalize]: attribute_definitions.json not "
+                "found near the installed jui_tools — distributing RAW "
+                "(L0) layouts instead of a marker-only pass"
+            )
+        else:
+            canonicalizer = Canonicalizer(alias_table)
+            print(
+                "normalizeLayouts enabled: distributing "
+                "L1-canonicalized layouts"
+            )
+
+    for platform, pconfig in platforms.items():
+        if args.ios_only and platform != "ios":
+            continue
+        if args.android_only and platform != "android":
+            continue
+        if args.web_only and platform != "web":
+            continue
+
+        layouts_rel = pconfig.get("layoutsDir")
+        if not layouts_rel:
+            continue
+
+        dest_dir = config_mgr.project_root / pconfig["root"] / layouts_rel
+        resolver = PlatformResolver(platform)
+        count = 0
+        # This platform's own component types are left as written: a project
+        # component named as a type synonym or an alias section (ProgressBar,
+        # EditText) is drawn by its own converter, which reads its attributes
+        # as the layout spells them.
+        platform_canonicalizer = None
+        if canonicalizer is not None:
+            from ..core.app_component_types import app_component_types
+
+            platform_canonicalizer = Canonicalizer(
+                alias_table.with_app_types(
+                    app_component_types(platform, config_mgr.project_root / pconfig["root"])
+                )
+            )
+
+        # Determine which subdirectories to skip (handled separately)
+        styles_src = config_mgr.styles_directory
+        skip_prefixes = {"Resources"}
+        if styles_src.exists() and layouts_src in styles_src.parents:
+            skip_prefixes.add(styles_src.relative_to(layouts_src).parts[0])
+
+        shared_rel_paths: set[Path] = set()
+        for src_file in sorted(layouts_src.rglob("*.json")):
+            rel = src_file.relative_to(layouts_src)
+            if rel.parts[0] in skip_prefixes:
+                continue
+
+            data = json.loads(src_file.read_text())
+
+            # Respect platforms whitelist on the layout root (e.g.
+            # "platforms": ["ios"] limits this file to iOS only). Variant
+            # files (home@regular.json) inherit the base layout's whitelist
+            # — the variant gate forbids them declaring their own.
+            allowed_platforms = data.get(ROOT_PLATFORMS_KEY) if isinstance(data, dict) else None
+            variant_base, variant_cls = split_variant(src_file.stem)
+            if variant_cls is not None:
+                base_path = src_file.with_name(variant_base + ".json")
+                if base_path.exists():
+                    try:
+                        base_json = json.loads(base_path.read_text())
+                        allowed_platforms = (
+                            base_json.get(ROOT_PLATFORMS_KEY) if isinstance(base_json, dict) else None
+                        )
+                    except json.JSONDecodeError:
+                        allowed_platforms = None
+            if isinstance(allowed_platforms, list) and platform not in allowed_platforms:
+                continue
+
+            shared_rel_paths.add(rel)
+
+            # Strip platforms metadata from the output — it's a build directive,
+            # not a runtime attribute.
+            if isinstance(data, dict) and ROOT_PLATFORMS_KEY in data:
+                data = {k: v for k, v in data.items() if k != ROOT_PLATFORMS_KEY}
+
+            # Resolve platform-specific overrides
+            if PlatformResolver.has_platform_key(data):
+                data = resolver.resolve_tree(data)
+
+            # L1 canonicalization (opt-in). Applies only to the
+            # distributed platform-side copy; ``layouts_src`` is L0.
+            if platform_canonicalizer is not None and isinstance(data, dict):
+                data, norm_warnings = platform_canonicalizer.canonicalize(
+                    data, source=rel.as_posix()
+                )
+                for warning in norm_warnings:
+                    print(f"  WARNING [normalize]: {warning}")
+
+            # Inject the @generated marker *at distribution time* — the
+            # per-platform copy is the truly auto-generated artifact (the
+            # shared source in layouts_directory is user-editable).
+            if isinstance(data, dict):
+                data.pop("_generated", None)  # drop any leftover from older builds
+                marker_source = f"{config_mgr.layouts_directory.name}/{rel.as_posix()}"
+                data = {
+                    "_generated": json_marker(
+                        source=marker_source,
+                        generator="jui build",
+                    ),
+                    **data,
+                }
+
+            dest = dest_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+            count += 1
+
+        # Remove platform-side layouts that no longer exist in shared layouts.
+        # Only preserve Resources/ (platform-generated files like colors.json);
+        # Styles/ under Layouts/ is legacy placement — safe to prune.
+        prune_skip = {"Resources"}
+        removed = _prune_orphans(dest_dir, shared_rel_paths, prune_skip)
+
+        print(f"Distributed {count} layout(s) → {platform}" + (f" (removed {removed} orphan(s))" if removed else ""))
+
+
+def _style_alias_table(config_mgr: ConfigManager):
+    """The alias table Styles are normalized with, or None when Layouts are
+    distributed raw (``normalizeLayouts: false``, or no definitions)."""
+    if not _normalize_layouts_enabled(config_mgr):
+        return None
+    from ..core.normalizer.alias_table import AliasTable
+
+    table = AliasTable.from_file()
+    return None if table.is_empty() else table
+
+
+def _normalized_style(src_file: Path, rel: Path, alias_table):
+    """The Style's distributed copy with its aliases rewritten, warned as a
+    Layout's are -- or None to copy the file as written (nothing to rewrite,
+    normalization off, or not a JSON object).
+
+    Until 2.5.13 Styles were copied as written, so an alias in a Style
+    reached the converters unwarned (and, before the converters resolved
+    them, drew as the default). A Style carries no ``type`` as a rule:
+
+    - with a ``type``, it goes through the Layout canonicalizer (attribute,
+      value and component aliases), warned as a Layout's are: an attribute
+      alias is rewritten without a warning, a value or component alias with
+      one;
+    - without one, only value aliases are rewritten. An attribute alias
+      cannot be told without the type: ``contentDescription`` is ``alt`` on
+      an Image and ``accessibilityLabel`` elsewhere, and ``value``, ``text``
+      or ``tint`` are real attributes on other components.
+
+    No ``$jui`` marker: it is the root of a Layout's, and a Style's keys are
+    merged into the node that names it.
+    """
+    if alias_table is None:
+        return None
+    try:
+        data = json.loads(src_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    source = f"Styles/{rel.as_posix()}"
+    if isinstance(data.get("type"), str):
+        from ..core.normalizer import Canonicalizer
+
+        result, warnings = Canonicalizer(alias_table).canonicalize(
+            data, source=source, add_marker=False
+        )
+    else:
+        aliases = alias_table.value_aliases_any_section()
+        result, warnings = dict(data), []
+        for key, value in data.items():
+            canonical = aliases.get(key, {}).get(value) if isinstance(value, str) else None
+            if canonical is not None:
+                warnings.append(
+                    f"{source}: [style] '{key}: {value}' is an alias spelling of "
+                    f"'{canonical}' — rewrote the value"
+                )
+                result[key] = canonical
+    for warning in warnings:
+        print(f"  WARNING [normalize]: {warning}")
+    # Rewritten is what CHANGED, not what was warned. An attribute alias is
+    # rewritten without a warning, as in a Layout (`alpha` → `opacity` is an
+    # accepted spelling); deciding on the warnings dropped that rewrite, and a
+    # typed Style with attribute aliases only reached the converters as
+    # written — `Unknown attribute`, and the value was gone.
+    return result if result != data else None
+
+
+def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None:
+    """Copy Styles/ to each platform at the same level as Layouts/.
+
+    Aliases are rewritten in the copies, warned, as in Layouts
+    (`_normalized_style`); a Style with nothing to rewrite is copied as
+    written.
+    """
+    styles_src = config_mgr.styles_directory
+    if not styles_src.exists():
+        return
+    alias_table = _style_alias_table(config_mgr)
+
+    for platform, pconfig in platforms.items():
+        if args.ios_only and platform != "ios":
+            continue
+        if args.android_only and platform != "android":
+            continue
+        if args.web_only and platform != "web":
+            continue
+
+        layouts_rel = pconfig.get("layoutsDir")
+        if not layouts_rel:
+            continue
+
+        # Styles/ sits alongside Layouts/, not inside it
+        layouts_dest = config_mgr.project_root / pconfig["root"] / layouts_rel
+        styles_dest = layouts_dest.parent / "Styles"
+        count = 0
+        platform_table = alias_table
+        if alias_table is not None:
+            from ..core.app_component_types import app_component_types
+
+            # this platform's own component types as written (see _distribute_layouts)
+            platform_table = alias_table.with_app_types(
+                app_component_types(platform, config_mgr.project_root / pconfig["root"])
+            )
+
+        shared_rel_paths: set[Path] = set()
+        for src_file in sorted(styles_src.rglob("*.json")):
+            rel = src_file.relative_to(styles_src)
+            shared_rel_paths.add(rel)
+            dest = styles_dest / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            normalized = _normalized_style(src_file, rel, platform_table)
+            if normalized is None:
+                shutil.copy2(src_file, dest)
+            else:
+                with open(dest, "w", encoding="utf-8") as f:
+                    json.dump(normalized, f, indent=2, ensure_ascii=False)
+                    f.write("\n")
+            count += 1
+
+        removed = _prune_orphans(styles_dest, shared_rel_paths, set())
+
+        if count or removed:
+            suffix = f" (removed {removed} orphan(s))" if removed else ""
+            print(f"Distributed {count} style(s) → {platform}{suffix}")
+
+
+def _distribute_strings_into(src_file, dest) -> int:
+    """Distribute strings.json by COPY: the face copy is the shared copy's
+    bytes, and this build's extraction adds what the face's layouts derive.
+
+    Until 1.9.10 this MERGED: sections the shared copy declares were
+    overwritten and sections only the face copy had were kept — "a section
+    deleted from the SSoT whose layout is also gone will now survive here
+    forever", as the merge's own note said. The face copy is gitignored, so
+    two checkouts of one commit built different tracked string resources: a
+    section removed from the shared strings.json stayed in strings.xml,
+    Localizable.strings and the web StringManager on the machine that had
+    built it before (ticket face-strings-json-keeps-a-section-the-shared-
+    copy-removed). The merge existed because the face extractors append
+    sections from the layouts and a plain copy reverted them; each extractor
+    now derives them from EVERY layout on every build (sjui included, which
+    extracted from the changed files only), so the copy reverts nothing a
+    build does not put back.
+
+    Written only on a change, so an unchanged file keeps its mtime. Returns
+    the number of sections distributed."""
+    text = src_file.read_text(encoding="utf-8")
+    sections = json.loads(text)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if dest.read_text(encoding="utf-8") == text:
+            return len(sections)
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
+    dest.write_text(text, encoding="utf-8")
+    return len(sections)
+
+
+def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> None:
+    """Copy Resources/ (strings, colors, etc.) into each platform's Layouts/Resources/."""
+    # Resources live inside layouts_directory/Resources/
+    resources_src = config_mgr.layouts_directory / "Resources"
+
+    # Also copy strings_file if configured separately
+    strings_src = config_mgr.strings_file
+
+    for platform, pconfig in platforms.items():
+        if args.ios_only and platform != "ios":
+            continue
+        if args.android_only and platform != "android":
+            continue
+        if args.web_only and platform != "web":
+            continue
+
+        layouts_rel = pconfig.get("layoutsDir")
+        if not layouts_rel:
+            continue
+
+        resources_dest = config_mgr.project_root / pconfig["root"] / layouts_rel / "Resources"
+        count = 0
+
+        # Copy all files from shared Resources/
+        if resources_src.exists():
+            for src_file in sorted(resources_src.rglob("*")):
+                if src_file.is_dir():
+                    continue
+                rel = src_file.relative_to(resources_src)
+                dest = resources_dest / rel
+                if src_file.name == "strings.json":
+                    _distribute_strings_into(src_file, dest)
+                    count += 1
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dest)
+                count += 1
+
+        # Copy strings_file if it's configured separately (not inside Resources/)
+        if strings_src and strings_src.exists():
+            if not resources_src.exists() or resources_src not in strings_src.parents:
+                dest = resources_dest / "strings.json"
+                _distribute_strings_into(strings_src, dest)
+                count += 1
+
+        if count:
+            print(f"Distributed {count} resource(s) → {platform}")
+
+
+_NSC_BEGIN = "<!-- BEGIN kjui hotload IPs (managed by jui build — do not edit) -->"
+_NSC_END = "<!-- END kjui hotload IPs -->"
+
+
+def _android_hotload_ips(client_ip: str) -> list[str]:
+    """IPs that need cleartext permission for kjui hotload.
+
+    Always includes the emulator loopback (10.0.2.2) and local loopbacks;
+    adds the dev-machine LAN IP when it's a real non-loopback address.
+    """
+    base = ["10.0.2.2", "localhost", "127.0.0.1"]
+    if client_ip and client_ip not in base and client_ip not in ("0.0.0.0", ""):
+        base.append(client_ip)
+    return base
+
+
+def _render_nsc_managed_block(ips: list[str], indent: str = "        ") -> str:
+    lines = [indent + _NSC_BEGIN]
+    for ip in ips:
+        lines.append(f'{indent}<domain includeSubdomains="true">{ip}</domain>')
+    lines.append(indent + _NSC_END)
+    return "\n".join(lines)
+
+
+def _extract_user_domains_outside_markers(content: str) -> set[str]:
+    """Return `<domain>` text values that live outside the kjui managed
+    block. Used to avoid duplicate entries that would crash Android's NSC
+    parser (``10.0.2.2 has already been specified``).
+    """
+    import re
+
+    stripped = re.sub(
+        re.escape(_NSC_BEGIN) + r".*?" + re.escape(_NSC_END),
+        "",
+        content,
+        flags=re.DOTALL,
+    )
+    values = re.findall(r"<domain[^>]*>([^<]+)</domain>", stripped)
+    return {v.strip() for v in values if v.strip()}
+
+
+def _filter_managed_ips(ips: list[str], user_domains: set[str]) -> list[str]:
+    """Drop any managed IPs the user already declared outside the block.
+
+    Empty result is allowed — the managed block still carries BEGIN/END
+    markers so subsequent builds can locate it, but emits no `<domain>`
+    entries when the user has them all.
+    """
+    return [ip for ip in ips if ip not in user_domains]
+
+
+def _fresh_nsc_xml(ips: list[str]) -> str:
+    block = _render_nsc_managed_block(ips, indent="        ")
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<network-security-config>\n'
+        '    <!-- Allow cleartext traffic for hot reload development server -->\n'
+        '    <domain-config cleartextTrafficPermitted="true">\n'
+        f"{block}\n"
+        '    </domain-config>\n'
+        '\n'
+        '    <!-- Default configuration for production -->\n'
+        '    <base-config cleartextTrafficPermitted="false">\n'
+        '        <trust-anchors>\n'
+        '            <certificates src="system" />\n'
+        '        </trust-anchors>\n'
+        '    </base-config>\n'
+        '</network-security-config>\n'
+    )
+
+
+def _resolve_android_debug_res_xml(platform_root: Path) -> Path:
+    """Resolve the Android debug-variant ``res/xml`` directory for the
+    given platform root, honoring Gradle module layout.
+
+    Mirrors ``compose_setup.rb``:
+        source_dir = kjui.config.json ``source_directory`` (default ``src/main``)
+        debug_dir  = source_dir.replace('/main', '/debug', 1)
+        target     = platform_root / debug_dir / 'res' / 'xml'
+
+    Examples:
+        source_directory = "app/src/main" → platform_root / "app/src/debug/res/xml"
+        source_directory = "src/main"     → platform_root / "src/debug/res/xml"
+    """
+    source_dir = "src/main"
+    kjui_config = platform_root / "kjui.config.json"
+    if kjui_config.exists():
+        try:
+            with open(kjui_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            cfg_source = data.get("source_directory")
+            if cfg_source:
+                source_dir = cfg_source
+        except (OSError, json.JSONDecodeError):
+            pass
+    debug_dir = source_dir.replace("/main", "/debug", 1)
+    return platform_root / debug_dir / "res" / "xml"
+
+
+def _sync_android_network_security(platform_root: Path, client_ip: str) -> None:
+    """Sync the kjui-managed cleartext domain list into the Android debug
+    variant's ``network_security_config.xml``.
+
+    Strategy (matches bug kjui-hotload-android-cleartext-sync, C 案):
+
+    - If the file exists and contains the managed-block markers, rewrite
+      only the content between them.
+    - If the file exists but has no markers, insert a managed block at
+      the top of the first ``<domain-config cleartextTrafficPermitted="true">``
+      (creating one if absent). User-added ``<domain>`` entries elsewhere
+      are preserved.
+    - If the file does not exist, create it from the scaffold template.
+
+    Target path: ``<platform_root>/<source_dir with main→debug>/res/xml/network_security_config.xml``
+    (resolved from kjui.config.json ``source_directory``; defaults to
+    ``src/main`` when the file is missing, matching compose_setup.rb).
+    """
+    import re
+
+    target = _resolve_android_debug_res_xml(platform_root) / "network_security_config.xml"
+    ips = _android_hotload_ips(client_ip)
+
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_fresh_nsc_xml(ips), encoding="utf-8")
+        print(f"Created Android network_security_config.xml with kjui managed block "
+              f"({target.relative_to(platform_root)})")
+        return
+
+    content = target.read_text(encoding="utf-8")
+    user_domains = _extract_user_domains_outside_markers(content)
+    managed_ips = _filter_managed_ips(ips, user_domains)
+    dropped = [ip for ip in ips if ip in user_domains]
+
+    # Case 1: markers exist → rewrite between them (preserve surrounding indent)
+    if _NSC_BEGIN in content and _NSC_END in content:
+        pattern = re.compile(
+            r"([ \t]*)" + re.escape(_NSC_BEGIN) + r".*?" + re.escape(_NSC_END),
+            re.DOTALL,
+        )
+        match = pattern.search(content)
+        if match:
+            indent = match.group(1)
+            new_block = _render_nsc_managed_block(managed_ips, indent=indent)
+            new_content = pattern.sub(lambda _: new_block, content, count=1)
+            if new_content != content:
+                target.write_text(new_content, encoding="utf-8")
+                if managed_ips:
+                    print(f"Synced Android network_security_config.xml managed block "
+                          f"(IPs: {', '.join(managed_ips)})")
+                else:
+                    print("Synced Android network_security_config.xml managed block "
+                          "(empty — user already declares all hotload IPs)")
+                if dropped:
+                    print(f"  Skipped {', '.join(dropped)} — already present outside managed block")
+            return
+
+    # Case 2: no markers → inject into cleartext domain-config (creating one if absent)
+    cleartext_open_re = re.compile(
+        r"(<domain-config[^>]*cleartextTrafficPermitted\s*=\s*\"true\"[^>]*>)",
+        re.IGNORECASE,
+    )
+    open_match = cleartext_open_re.search(content)
+    if open_match:
+        insertion_indent = "        "
+        block = "\n" + _render_nsc_managed_block(managed_ips, indent=insertion_indent)
+        new_content = (
+            content[: open_match.end()] + block + content[open_match.end():]
+        )
+        target.write_text(new_content, encoding="utf-8")
+        if managed_ips:
+            print(f"Injected kjui managed block into {target.relative_to(platform_root)} "
+                  f"(IPs: {', '.join(managed_ips)})")
+        else:
+            print(f"Injected empty kjui managed block into {target.relative_to(platform_root)} "
+                  "(user already declares all hotload IPs)")
+        if dropped:
+            print(f"  Skipped {', '.join(dropped)} — already present outside managed block")
+        return
+
+    # Case 3: no cleartext domain-config at all — create one before </network-security-config>
+    closing_re = re.compile(r"</network-security-config>", re.IGNORECASE)
+    close_match = closing_re.search(content)
+    if close_match:
+        block = _render_nsc_managed_block(managed_ips, indent="        ")
+        insertion = (
+            "    <!-- Allow cleartext traffic for hot reload development server -->\n"
+            "    <domain-config cleartextTrafficPermitted=\"true\">\n"
+            f"{block}\n"
+            "    </domain-config>\n\n"
+        )
+        new_content = content[: close_match.start()] + insertion + content[close_match.start():]
+        target.write_text(new_content, encoding="utf-8")
+        if managed_ips:
+            print(f"Added cleartext domain-config + kjui managed block to "
+                  f"{target.relative_to(platform_root)} (IPs: {', '.join(managed_ips)})")
+        else:
+            print(f"Added cleartext domain-config + empty kjui managed block to "
+                  f"{target.relative_to(platform_root)} (user already declares all hotload IPs)")
+        if dropped:
+            print(f"  Skipped {', '.join(dropped)} — already present outside managed block")
+        return
+
+    # Malformed file — leave it alone but tell the user
+    print(f"WARNING: {target} has no </network-security-config> — skipping hotload IP sync. "
+          f"Add <domain> entries for {', '.join(ips)} manually.")
+
+
+def _resolve_hotload_client_ip(config_path: Path) -> str:
+    """Read client.ip from the just-distributed hotload config, falling
+    back to the dev-machine's detected LAN IP when empty."""
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return ""
+    ip = (raw.get("client") or {}).get("ip") or ""
+    if ip:
+        return ip
+    from ..hotloader.config_loader import _detect_local_ip
+    return _detect_local_ip()
+
+
+def _distribute_hotload_config(
+    config_mgr: ConfigManager, platforms: dict, args
+) -> None:
+    """Copy ``docs/hotload/config.json`` into each platform's runtime
+    bundle location as ``hotloader.json``.
+
+    - iOS: ``<platform_root>/<layoutsDir>/Resources/hotloader.json`` —
+      lands inside the app bundle since SwiftJsonUI treats the
+      ``Layouts/Resources`` tree as a bundle resource.
+    - Android: ``<platform_root>/<layoutsDir>/../hotloader.json`` —
+      the assets root (typically ``src/main/assets/``) so
+      KotlinJsonUI's ``HotLoaderConfigReader`` can load it via
+      ``AssetManager.open``.
+    - Web is not a hotload target; skipped.
+
+    Auto-generates ``docs/hotload/config.json`` with defaults when the
+    project doesn't have one yet — this matches what
+    ``docs/hotload/README.md`` and consumer-side migration plans promise
+    ("auto-generated if missing"). Skipping auto-generate when no
+    iOS/Android platforms are configured (web-only project).
+    """
+    has_native = any(
+        platform in ("ios", "android")
+        and not (platform == "ios" and args.android_only)
+        and not (platform == "android" and args.ios_only)
+        and not args.web_only
+        for platform in platforms
+    )
+    src = config_mgr.project_root / "docs" / "hotload" / "config.json"
+    if not src.exists():
+        if not has_native:
+            return
+        # Lazy import so build doesn't require aiohttp/watchdog just to write
+        # the file — config_loader.write_default_config only touches the JSON.
+        from ..hotloader.config_loader import write_default_config
+        src = write_default_config(config_mgr.project_root)
+        print(f"Created hotload config: {src.relative_to(config_mgr.project_root)}")
+
+    for platform, pconfig in platforms.items():
+        if args.ios_only and platform != "ios":
+            continue
+        if args.android_only and platform != "android":
+            continue
+        if args.web_only and platform != "web":
+            continue
+        if platform == "web":
+            # web uses HMR, no hotload config needed
+            continue
+
+        layouts_rel = pconfig.get("layoutsDir")
+        if not layouts_rel:
+            continue
+
+        platform_root = config_mgr.project_root / pconfig["root"]
+        if platform == "ios":
+            dest = platform_root / layouts_rel / "Resources" / "hotloader.json"
+        else:  # android
+            # layoutsDir points at "src/main/assets/Layouts"; assets root
+            # is its parent, and hotloader.json sits there so it loads
+            # via AssetManager.open("hotloader.json").
+            dest = platform_root / layouts_rel / ".." / "hotloader.json"
+            dest = dest.resolve()
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        print(f"Distributed hotload config → {platform}")
+
+        if platform == "android":
+            client_ip = _resolve_hotload_client_ip(src)
+            _sync_android_network_security(platform_root, client_ip)
+
+
+def _sync_api_models(
+    config_mgr: ConfigManager,
+    platforms: dict,
+    args,
+) -> bool:
+    """Emit swagger-derived DTO + Domain scaffold for each enabled platform.
+
+    Returns True on success / no-op (no swagger files), False on a fatal
+    schema error (callers should abort the build).
+
+    Per platform behavior:
+
+    - iOS: full implementation in Phase 1 — DTOs are regenerated, Domain
+      scaffolds emitted only when absent, orphan DTOs pruned.
+    - Android / Web: planners arrive in Phase 2 / 3 — until then they are
+      silently skipped (no warning) so consumers can adopt the iOS portion
+      first.
+    """
+    from ..core.api_model_sync import (
+        apply_plan,
+        collect_docs,
+        has_planner,
+        plan_for,
+        planners_for,
+    )
+    from ..core.openapi_loader import OpenAPILoadError
+
+    try:
+        docs = collect_docs(config_mgr)
+    except OpenAPILoadError as e:
+        print(f"\nERROR [api-model]: {e}")
+        return False
+
+    if not docs:
+        return True
+
+    # Report filter activity (v2 plan §2.5). Aggregated across all docs;
+    # in practice consumers have one swagger file, so the per-doc breakdown
+    # is overkill.
+    filtered_out = sorted({n for doc in docs for n in doc.filtered_out})
+    if filtered_out:
+        preview = ", ".join(filtered_out[:8])
+        more = f", ... (+{len(filtered_out) - 8} more)" if len(filtered_out) > 8 else ""
+        print(
+            f"[api-codegen] filtered out {len(filtered_out)} schema(s) not "
+            f"reachable from configured paths/schemas: {preview}{more}"
+        )
+
+    selected_platforms = planners_for(args)
+    total_dto = 0
+    total_scaffold = 0
+    total_pruned = 0
+
+    for platform in selected_platforms:
+        if platform not in platforms:
+            continue
+        if not has_planner(platform):
+            continue  # Phase 2 / 3 placeholder
+        pconfig = platforms[platform]
+        try:
+            plan = plan_for(platform, config_mgr, pconfig, docs)
+        except OpenAPILoadError as e:
+            print(f"\nERROR [api-model:{platform}]: {e}")
+            return False
+        dto_written, scaffold_written, pruned = apply_plan(plan, prune_orphans=True)
+        total_dto += dto_written
+        total_scaffold += scaffold_written
+        total_pruned += pruned
+
+    if total_dto or total_scaffold or total_pruned:
+        suffix_parts = []
+        if total_dto:
+            suffix_parts.append(f"{total_dto} DTO file(s)")
+        if total_scaffold:
+            suffix_parts.append(f"{total_scaffold} new domain scaffold(s)")
+        if total_pruned:
+            suffix_parts.append(f"pruned {total_pruned} orphan(s)")
+        print("API model sync: " + ", ".join(suffix_parts))
+
+    return True
+
+
+# The one wrapper every `jui` command reads — see core/spec_kind.py for why
+# there is exactly one.
+from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
+
+
+def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
+    """Load every ``*.spec.json`` under the project's spec directory.
+
+    Applies ``ParentSpecMerger`` to parent specs and skips files referenced
+    as sub-specs. Mirrors the logic in ``generate_cmd._cmd_generate_project``
+    so the sync operates on the same merged specs the scaffold generation did.
+    """
+    from ..core.parent_spec_merger import ParentSpecMerger
+
+    spec_dir = config_mgr.spec_directory
+    if not spec_dir.exists():
+        return []
+    spec_files = sorted(spec_dir.glob("*.spec.json"))
+    if not spec_files:
+        return []
+
+    sub_spec_paths: set[Path] = set()
+    for sf in spec_files:
+        try:
+            head = json.loads(sf.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if head.get("type") != "screen_parent_spec":
+            continue
+        for entry in head.get("subSpecs", []) or []:
+            ref = entry.get("file")
+            if not ref:
+                continue
+            resolved = (sf.parent / ref).resolve()
+            if resolved.exists():
+                sub_spec_paths.add(resolved)
+
+    merger = ParentSpecMerger(spec_dir=spec_dir)
+    results: list[tuple[Path, ScreenSpec]] = []
+    for sf in spec_files:
+        if sf.resolve() in sub_spec_paths:
+            continue
+        try:
+            spec_data = json.loads(sf.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        # ⚠️ Asked before anything is built from this file. Without it a spec
+        # that describes NO screen was loaded as one and `extract_screen_spec`
+        # took `metadata.name` — an app's display name — as a screen name. A
+        # consumer face got a protocol named from an app display name that
+        # carried a hyphen and a space: invalid Swift AND invalid Kotlin, on
+        # both platforms, under an @generated header, with `jui build`
+        # reporting "updated 2 protocol(s)" and exiting 0. Both trees compile
+        # those directories unconditionally, so the next build after `jui
+        # build` failed.
+        #
+        # Same table as `jui verify` reads, from `shared/core/spec_types.py`,
+        # deliberately not a second literal — this defect and the verify one
+        # are the same missing knowledge reached by two paths, and a copy here
+        # would guarantee a third.
+        describes_screen = _describes_a_screen(spec_data.get("type"))
+        if describes_screen is False:
+            continue
+        if describes_screen is None:
+            # Neither guess is safe: built, it can emit an identifier from a
+            # field that is not a screen name; skipped, a real screen loses its
+            # protocol silently. Skipped and SAID, so the run names what it
+            # declined to build rather than differing from a clean run only in
+            # what is absent.
+            print(
+                f"\nWARNING: {sf.name} has type "
+                f"{spec_data.get('type')!r}, which this build does not know. "
+                f"Nothing was generated from it. If it describes a screen, "
+                f"this build is older than the tool that wrote it "
+                f"(`jui sync_tool`)."
+            )
+            continue
+        if spec_data.get("type") == "screen_parent_spec":
+            merge_result = merger.merge_from_file(sf)
+            if merge_result.has_conflicts:
+                # First-write-wins is already applied by ParentSpecMerger.merge, so
+                # merge_result.spec is usable. Warn so the user can investigate, but
+                # don't drop the parent — its sub-specs still need ViewModelProtocol
+                # sync etc. Mirrors `jui g project` behavior so the two commands
+                # stay symmetric.
+                print(
+                    f"\nWARNING: parent_spec merge conflicts in {sf.name} "
+                    f"(kept first-write-wins):"
+                )
+                for c in merge_result.conflicts:
+                    print(f"  {c.path}: {c.message}")
+            spec_data = merge_result.spec
+        results.append((sf, extract_screen_spec(spec_data, sf)))
+    return results
+
+
+# Transition/action vocabulary that presents OUTSIDE the embed's bounds.
+# iOS sheets present on the parent window, so "a modal visually contained
+# in the embed" is not implementable — parity would break, hence the hard
+# error for screens hosted inside an isolated embed. Matched defensively
+# against several free-form spec keys (transitions are list[dict] with no
+# fixed schema).
+_PRESENT_LIKE = re.compile(
+    r"^(present|sheet|modal|dialog|fullscreencover|bottomsheet|dismiss)$",
+    re.IGNORECASE,
+)
+_PRESENT_KEYS = ("type", "style", "presentation", "mode", "action")
+
+
+def _walk_embed_nodes(node):
+    """Yield every Embed dict inside a layout JSON tree."""
+    if isinstance(node, dict):
+        if node.get("type") == "Embed":
+            yield node
+        for value in node.values():
+            yield from _walk_embed_nodes(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _walk_embed_nodes(item)
+
+
+def _spec_present_like_entries(spec: ScreenSpec) -> list[str]:
+    """Describe present-type transitions declared by a spec (empty = none)."""
+    found: list[str] = []
+    for idx, transition in enumerate(spec.transitions or []):
+        if not isinstance(transition, dict):
+            continue
+        for key in _PRESENT_KEYS:
+            value = transition.get(key)
+            if isinstance(value, str) and _PRESENT_LIKE.match(value):
+                found.append(f"transitions[{idx}].{key}='{value}'")
+    return found
+
+
+def _check_isolated_embed_constraints(
+    config_mgr: ConfigManager, specs: list | None = None
+) -> bool:
+    """Hard gate: screens hosted in an isolated Embed must not present.
+
+    Scans every layout for ``Embed`` nodes with ``navigationMode:"isolated"``
+    and rejects the build when the embedded screen's spec declares a
+    present-type transition (sheet/modal/dialog/dismiss/...). Returns False
+    on violation (build aborts), True otherwise.
+    """
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+
+    isolated_targets: dict[str, list[str]] = {}
+    for layout_path in sorted(layouts_dir.rglob("*.json")):
+        if not is_layout_path(layout_path, layouts_dir):
+            continue
+        try:
+            layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for embed in _walk_embed_nodes(layout):
+            if embed.get("navigationMode") != "isolated":
+                continue
+            screen = embed.get("screen")
+            if isinstance(screen, str) and screen:
+                isolated_targets.setdefault(screen, []).append(
+                    layout_path.name
+                )
+
+    if not isolated_targets:
+        return True
+
+    def _snake_to_pascal(name: str) -> str:
+        return "".join(part.capitalize() for part in name.split("_"))
+
+    errors: list[str] = []
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    for screen, host_layouts in sorted(isolated_targets.items()):
+        pascal = _snake_to_pascal(screen)
+        spec = next(
+            (
+                s
+                for _sf, s in specs
+                if s.name in (pascal, screen)
+                or Path(s.layout_file or "").stem == screen
+            ),
+            None,
+        )
+        if spec is None:
+            continue  # no spec — nothing to check (layout-only screens)
+        for entry in _spec_present_like_entries(spec):
+            errors.append(
+                f"'{screen}' is hosted in an isolated Embed "
+                f"({', '.join(sorted(set(host_layouts)))}) but its spec "
+                f"declares {entry}. Present-type transitions are forbidden "
+                f"inside navigationMode:\"isolated\" — iOS sheets present on "
+                f"the parent window, so visual containment cannot be "
+                f"guaranteed cross-platform. Use the params callback escape "
+                f"hatch and present from the host screen instead."
+            )
+
+    if errors:
+        print("\nERROR [embed-isolated]:")
+        for line in errors:
+            print(f"  - {line}")
+        return False
+    return True
+
+
+_BINDING_ROOT_RE = re.compile(r"@\{\s*!?\s*([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _binding_roots(tree) -> set[str]:
+    """Collect the root identifiers of every ``@{...}`` binding expression
+    in a layout tree (dot paths, ``??`` defaults and negation all start
+    with a plain root identifier)."""
+    roots: set[str] = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+        elif isinstance(node, str):
+            for match in _BINDING_ROOT_RE.finditer(node):
+                roots.add(match.group(1))
+
+    walk(tree)
+    return roots
+
+
+def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
+    """Layouts-relative stems (posix, no extension) referenced as
+    Collection cell/header/footer layouts by any spec — either an explicit
+    ``layoutFile`` (legacy ``layout``) or the ``<rootId>_cell`` default — and,
+    for an entry with ``generateCellLayout``, the ``<collection id>_<kind>``
+    file `jui g project` writes for it (spec_extractor.slot_layout_ref; until
+    jsonui-cli 1.9.0 that name was missing here, so a generated cell layout without a
+    layoutFile was read as a screen root)."""
+    stems: set[str] = set()
+    spec_dir = config_mgr.spec_directory
+    if not spec_dir.exists():
+        return stems
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key in ("cell", "header", "footer"):
+                entry = node.get(key)
+                if isinstance(entry, dict):
+                    layout_ref = entry.get("layoutFile") or entry.get("layout")
+                    if isinstance(layout_ref, str) and layout_ref:
+                        stems.add(layout_ref.removesuffix(".json"))
+                    else:
+                        root = entry.get("root")
+                        root_id = root.get("id") if isinstance(root, dict) else None
+                        if root_id:
+                            stems.add(f"{root_id}_cell")
+                        if entry.get("generateCellLayout"):
+                            stems.add(f"{node.get('id', 'collection')}_{key}")
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    # rglob, not glob: a split screen keeps its Collections in sub-specs under
+    # `<spec_directory>/<parent>/`, and a cell declared only there was not a
+    # cell here (no consumer declared one as of 2026-09-25; the variant check
+    # below reads this set to tell cell layouts from screen roots).
+    for spec_file in sorted(spec_dir.rglob("*.spec.json")):
+        try:
+            walk(json.loads(spec_file.read_text()))
+        except json.JSONDecodeError:
+            continue
+    return stems
+
+
+def _check_responsive_width_conditions(config_mgr: ConfigManager) -> bool:
+    """Hard gate for ``minWidth:N`` / ``maxWidth:N`` in inline ``responsive``
+    blocks (core/responsive_width_gate.py): layouts and styles, before a file
+    is written."""
+    from ..core.responsive_width_gate import directory_errors
+
+    errors = directory_errors([config_mgr.layouts_directory, config_mgr.styles_directory])
+    if not errors:
+        return True
+    print("\nERROR [responsive]: a responsive block whose width conditions do not "
+          "give one answer at every width:")
+    for line in errors:
+        print(f"  - {line}")
+    return False
+
+
+def _print_small_tap_info(config_mgr: ConfigManager) -> None:
+    """The INFO lines for small tappable elements on a build that builds iOS (core/small_tap_info.py)."""
+    from ..core.small_tap_info import directory_lines
+
+    for line in directory_lines(config_mgr.layouts_directory, config_mgr.styles_directory):
+        print(line)
+
+
+def _print_reorder_info(config_mgr: ConfigManager, ios_config: dict) -> None:
+    """The INFO lines for reorderable Collections on a build that builds iOS (core/reorder_info.py)."""
+    from ..core.reorder_info import directory_lines
+
+    for line in directory_lines(config_mgr.layouts_directory, config_mgr.styles_directory,
+                                config_mgr.project_root, ios_config):
+        print(line)
+
+
+def _check_scrollview_axes(config_mgr: ConfigManager) -> bool:
+    """Hard gate for a ScrollView whose ``orientation`` and ``horizontalScroll``
+    say opposite axes (core/scrollview_axis_gate.py): layouts and styles,
+    before a file is written."""
+    from ..core.scrollview_axis_gate import RULE, directory_errors
+
+    errors = directory_errors(config_mgr.layouts_directory, config_mgr.styles_directory)
+    if not errors:
+        return True
+    print(f"\nERROR [scrollview]: a ScrollView whose orientation and horizontalScroll "
+          f"disagree ({RULE}):")
+    for line in errors:
+        print(f"  - {line}")
+    return False
+
+
+def _check_layout_id_uniqueness(config_mgr: ConfigManager, platforms) -> bool:
+    """Hard gate: every layout's ids are unique once includes expand (U8).
+
+    An include's id prefixes the ids inside it (`hero` + `type_badge` ->
+    `heroTypeBadge`), so two spellings can meet: `type_badge` and
+    `typeBadge` in one partial, `hero` + `card_type_badge` beside
+    `hero_card` + `type_badge`, one partial included twice under one id.
+    The runtime and every driver find an element by its id as written, so
+    a test would reach one of them and never know about the other. Read with
+    `jui_cli.core.layout_facts` — the one expander the spec validator and
+    coverage read — per platform the project builds (all three when it
+    declares none).
+    """
+    from ..core.layout_facts import duplicate_ids
+    from ..core.platform_resolver import VALID_PLATFORMS
+
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+    targets = [p for p in VALID_PLATFORMS if not platforms or p in platforms]
+    styles_dir = styles_src if styles_src.exists() else layouts_dir
+
+    errors: list[str] = []
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        name = rel.with_suffix("").as_posix()
+        for platform, dups in duplicate_ids(name, targets, layouts_dir=layouts_dir,
+                                            styles_dir=styles_dir).items():
+            for element, count in sorted(dups.items()):
+                errors.append(f"{rel.as_posix()} ({platform}): '{element}' is the id of "
+                              f"{count} nodes once includes expand")
+    if not errors:
+        return True
+    print("ERROR [layout-ids]: an id must name one element — the runtime and every "
+          "driver find an element by its id, so a test would reach only one of these. "
+          "Rename one of each (an include's id prefixes the ids inside it: "
+          "`hero` + `type_badge` -> `heroTypeBadge`):")
+    for line in errors:
+        print(f"  - {line}")
+    return False
+
+
+def _check_relative_constraint_targets(config_mgr: ConfigManager, platforms) -> list:
+    """Name every relative constraint whose target is not a sibling.
+
+    align*OfView / align*View / alignCenter*View place an element against
+    another child of the same container. A target that is not one was a
+    different thing on each face (2.5.25: Compose did not compile for seven
+    of eight such shapes, SwiftUI dropped the constraint, the web found a
+    sibling's child and moved an element that names itself out of its
+    frame) and nothing said so. Read per platform the project builds, with
+    the includes expanded as the codegen expands them
+    (`jui_cli.core.relative_targets`). Each finding is an ERROR line and one
+    stage that did not complete; the build goes on and exits 1 at its end.
+    """
+    from ..core.platform_resolver import VALID_PLATFORMS
+    from ..core.relative_targets import constraint_target_findings, included_stems
+
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return []
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+    targets = [p for p in VALID_PLATFORMS if not platforms or p in platforms]
+    styles_dir = styles_src if styles_src.exists() else layouts_dir
+
+    names = []
+    trees = {}
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        name = rel.with_suffix("").as_posix()
+        names.append(name)
+        try:
+            trees[name] = json.loads(src_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    included = included_stems(trees)
+
+    by_finding: dict = {}
+    for name in names:
+        for platform in targets:
+            for finding in constraint_target_findings(name, platform, layouts_dir=layouts_dir,
+                                                      styles_dir=styles_dir,
+                                                      included=name in included):
+                by_finding.setdefault(finding, []).append(platform)
+    if not by_finding:
+        return []
+    lines = [f.line(["all"] if ps == targets else ps) for f, ps in by_finding.items()]
+    print("ERROR [relative-constraints]: a relative constraint (align*OfView / align*View / "
+          "alignCenter*View) places an element against another child of the same container. "
+          "These name something else — on Android the generated Compose does not compile, on "
+          "iOS and the web the constraint is dropped or lands elsewhere:")
+    for line in lines:
+        print(f"  - {line}")
+    _note_stage_failure("layouts: relative constraints",
+                        f"{len(lines)} relative constraint(s) name something that is not a sibling")
+    return lines
+
+
+def _check_variant_constraints(config_mgr: ConfigManager) -> bool:
+    """Hard gate for responsive variant files (``home@regular.json``).
+
+    v1 contract (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3):
+    single-size-class suffix vocabulary, base file required, ``data`` /
+    ``platforms`` stay base-canonical, every variant binding root must be
+    declared in the base ``data`` section, screen-root layouts only, and
+    no collision with the reserved ``<base>_<class>_variant`` stem.
+    """
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+
+    layout_files: dict[Path, Path] = {}
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        layout_files[rel] = src_file
+
+    if not any(is_variant(rel.stem) for rel in layout_files):
+        return True
+
+    cell_stems = _spec_cell_layout_stems(config_mgr)
+    cell_basenames = {stem.rsplit("/", 1)[-1] for stem in cell_stems}
+    errors: list[str] = []
+
+    for rel in sorted(layout_files):
+        base, cls = split_variant(rel.stem)
+        if cls is None:
+            continue
+        name = rel.as_posix()
+
+        if cls == "tablet":
+            errors.append(
+                f"{name}: unknown size class '@tablet' — did you mean "
+                f"'{base}@regular.json'?"
+            )
+            continue
+        if cls in INLINE_ONLY_CLASSES:
+            errors.append(
+                f"{name}: '@{cls}' is not a v1 variant suffix — orientation "
+                f"splits stay in the layout's inline 'responsive' attribute "
+                f"(file variants accept @compact / @medium / @regular)"
+            )
+            continue
+        if cls not in VALID_VARIANT_CLASSES:
+            errors.append(
+                f"{name}: unknown variant size class '@{cls}' "
+                f"(valid: @compact, @medium, @regular)"
+            )
+            continue
+        if not base or is_variant(base):
+            errors.append(
+                f"{name}: malformed variant name — expected a single "
+                f"'<base>@<sizeClass>.json'"
+            )
+            continue
+
+        base_rel = rel.with_name(base + ".json")
+        base_file = layout_files.get(base_rel)
+        if base_file is None:
+            errors.append(
+                f"{name}: orphan variant — base layout "
+                f"'{base_rel.as_posix()}' does not exist"
+            )
+            continue
+
+        try:
+            data = json.loads(layout_files[rel].read_text())
+        except json.JSONDecodeError as exc:
+            errors.append(f"{name}: invalid JSON ({exc})")
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        if "data" in data:
+            errors.append(
+                f"{name}: variant files must not declare a 'data' section — "
+                f"the data contract is base-canonical (declare it in "
+                f"'{base_rel.as_posix()}')"
+            )
+        if "platforms" in data:
+            errors.append(
+                f"{name}: variant files must not declare 'platforms' — the "
+                f"whitelist is inherited from the base layout"
+            )
+
+        try:
+            base_data = json.loads(base_file.read_text())
+        except json.JSONDecodeError:
+            base_data = {}
+        if not isinstance(base_data, dict):
+            base_data = {}
+
+        if base_data.get("partial") is True:
+            errors.append(
+                f"{name}: variants are only supported for screen-root "
+                f"layouts (base is 'partial: true')"
+            )
+        base_posix = base_rel.with_suffix("").as_posix()
+        if base_posix in cell_stems or base in cell_basenames:
+            errors.append(
+                f"{name}: variants are only supported for screen-root "
+                f"layouts (base is a Collection cell layout)"
+            )
+
+        declared = {
+            entry.get("name")
+            for entry in base_data.get("data", [])
+            if isinstance(entry, dict)
+        }
+        missing = sorted(r for r in _binding_roots(data) if r not in declared)
+        if missing:
+            errors.append(
+                f"{name}: binding reference(s) not declared in the base "
+                f"'data' section: {', '.join(missing)}"
+            )
+
+        collision_rel = rel.with_name(variant_struct_stem(base, cls) + ".json")
+        if collision_rel in layout_files:
+            errors.append(
+                f"{name}: layout '{collision_rel.as_posix()}' collides with "
+                f"the generated variant view name — rename one of them"
+            )
+
+    if errors:
+        print("\nERROR [variant]: responsive variant-file constraint violation(s):")
+        for line in errors:
+            print(f"  - {line}")
+        return False
+    return True
+
+
+def _format_label_sig(name: str, labels: list[tuple[str, str]]) -> str:
+    """Render ``func name(label internal, _ internal, name)`` — omits types
+    for a compact drift report."""
+    parts = []
+    for label, internal in labels:
+        if label == internal:
+            parts.append(f"{internal}:")
+        elif label == "_":
+            parts.append(f"_ {internal}:")
+        else:
+            parts.append(f"{label} {internal}:")
+    return f"func {name}({', '.join(parts)})"
+
+
+def _vm_subdir_for(spec: ScreenSpec) -> str:
+    if spec.layout_file and "/" in spec.layout_file:
+        return "/".join(spec.layout_file.split("/")[:-1])
+    return ""
+
+
+def _platform_generator(project_root, platform: str, pconfig: dict, type_mapper):
+    """The generator for one platform, rooted where that platform lives.
+
+    ONE definition, because two of them diverged. The UseCase sync grew its
+    own copy that rooted at the project instead of at
+    `project_root / pconfig["root"]`, so every path it computed pointed at a
+    file that does not exist — and since it only rewrites files that DO
+    exist, it skipped everything and returned success. Nothing printed,
+    exit 0, and the symptom was identical to the defect it had just fixed.
+    A second copy of a path rule is a second path rule.
+    """
+    from ..generators.android_generator import AndroidGenerator
+    from ..generators.ios_generator import IosGenerator
+    from ..generators.web_generator import WebGenerator
+
+    root = project_root / pconfig["root"]
+    if platform == "ios":
+        return IosGenerator(root, pconfig, type_mapper)
+    if platform == "android":
+        return AndroidGenerator(root, pconfig, type_mapper)
+    if platform == "web":
+        return WebGenerator(root, pconfig, type_mapper)
+    return None
+
+
+def _ensure_impl_imports(platform: str, impl_path: Path, lines: list[str], args) -> bool:
+    """Add to a UseCase / Repository Impl the import lines a fresh one would carry
+    (ticket jui-g-project-new-screen-stubs-do-not-compile): the scaffold is written
+    once, by `jui g project`, before the API sync has written the models it names,
+    so it never got their imports — the Protocol does, regenerated every build.
+    Only import lines are added; nothing else in the author's file changes. A line
+    is added only for a name the file's body uses: an old Impl may hold some of
+    the spec's methods only, and the rest would be unused imports its linter
+    reports (measured on a consumer: 38 of 108 lines).
+    Returns whether the file changed (written unless --dry-run)."""
+    from ..core.impl_updater import (ensure_kotlin_import, ensure_ts_imports, import_line_name,
+                                     kotlin_has_simple_name, name_used_in_body)
+    if not lines or not impl_path.exists():
+        return False
+    try:
+        current = impl_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    lines = [line for line in lines if (name := import_line_name(line)) and name_used_in_body(current, name)]
+    if platform == "android":
+        updated = current
+        for line in lines:
+            fqn = line[len("import "):].strip() if line.startswith("import ") else ""
+            if fqn and not kotlin_has_simple_name(updated, fqn):
+                updated = ensure_kotlin_import(updated, fqn)
+    elif platform == "web":
+        updated = ensure_ts_imports(current, lines)
+    else:
+        return False
+    if updated == current:
+        return False
+    if not getattr(args, "dry_run", False):
+        impl_path.write_text(updated, encoding="utf-8")
+    return True
+
+
+def _unloaded_spec_files(config_mgr: ConfigManager) -> list[str]:
+    """Spec files `_load_all_specs` skipped for a reason other than "not a screen": unreadable JSON, or a type
+    this build does not know. Their screens are absent from the loaded set without having been deleted."""
+    spec_dir = config_mgr.spec_directory
+    if not spec_dir.exists():
+        return []
+    unloaded = []
+    for sf in sorted(spec_dir.glob("*.spec.json")):
+        try:
+            data = json.loads(sf.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            unloaded.append(sf.name)
+            continue
+        if not isinstance(data, dict) or _describes_a_screen(data.get("type")) is None:
+            unloaded.append(sf.name)
+    return unloaded
+
+
+def _prune_orphan_protocols(config_mgr: ConfigManager, platforms: dict, args, specs: list | None = None) -> list:
+    """Delete the ViewModel / Repository / UseCase protocols (iOS, Android) whose spec is gone.
+
+    The rule is core/protocol_orphans.py's: a file goes only when it is where and as the generator writes that
+    kind, carries the generator's banner for its own name, and no loaded spec gives its path. Skipped, and said,
+    when a spec file could not be loaded; skipped when none was.
+    """
+    from ..core import protocol_orphans
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.type_mapper import TypeMapper
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return []
+    unloaded = _unloaded_spec_files(config_mgr)
+    if unloaded:
+        print(f"  note: orphan protocols were not pruned: {len(unloaded)} spec file(s) could not be loaded "
+              f"({', '.join(unloaded[:5])}{'...' if len(unloaded) > 5 else ''}), so a protocol whose spec is "
+              f"only unreadable would look deleted")
+        return []
+    aggregator = RepositoryAggregator()
+    for spec_file, screen_spec in specs:
+        aggregator.add_spec(spec_file.name, screen_spec)
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError:
+        return []   # the syncs above already reported it
+
+    screens = [(spec.name, _vm_subdir_for(spec)) for _sf, spec in specs]
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+    dry_run = bool(getattr(args, "dry_run", False))
+    removed = []
+    for platform, pconfig in platforms.items():
+        if getattr(args, "ios_only", False) and platform != "ios":
+            continue
+        if getattr(args, "android_only", False) and platform != "android":
+            continue
+        if getattr(args, "web_only", False) and platform != "web":
+            continue
+        generator = _platform_generator(config_mgr.project_root, platform, pconfig, type_mapper)
+        if generator is None:
+            continue
+        kinds = protocol_orphans.kinds_for(
+            platform, generator, screens=screens,
+            repositories=aggregated.repositories.keys(), use_cases=aggregated.use_cases.keys())
+        removed += protocol_orphans.sweep(kinds, dry_run=dry_run)
+    if removed:
+        root = config_mgr.project_root
+        head = "Would prune" if dry_run else "Pruned"
+        print(f"{head} {len(removed)} generated protocol file(s) whose spec is gone:")
+        for path in removed:
+            try:
+                shown = path.relative_to(root)
+            except ValueError:
+                shown = path
+            print(f"  - {shown}")
+    return removed
+
+
+def _sync_usecase_protocols(
+    config_mgr: ConfigManager,
+    config: dict,
+    platforms: dict,
+    args,
+    specs: list | None = None,
+) -> bool:
+    """Regenerate UseCase protocol files from `dataFlow.useCases`.
+
+    `jui build` synced the ViewModel protocols and nothing else, so a method
+    added to `dataFlow.useCases[].methods` reached the generated code only if
+    someone re-ran `jui g project` — and that command REFUSES to overwrite an
+    existing protocol, so in practice it never arrived at all. The declaration
+    sat in the spec, the implementation carried `override`, and Android failed
+    to compile with `overrides nothing`; iOS accepted it, because a Swift type
+    can implement a method the protocol does not declare. One spec edit, one
+    face broken, and the spec-is-the-source-of-truth rule quietly not holding
+    for this one layer.
+
+    The protocol file is fully derived, so regenerating it gives the rule the
+    ticket asks for without a merge step: a method added to the spec appears,
+    a method removed disappears, and `platforms` is honoured because the
+    aggregate is filtered per platform before rendering — the same filter the
+    scaffold uses.
+
+    OWNERSHIP IS CHECKED, NOT ASSUMED. A file is rewritten only when it
+    carries the `@generated` banner this tool writes. Anything else is left
+    alone and reported: the scaffold warns rather than overwrites when a
+    protocol has drifted, so a consumer may be holding a hand-edited file
+    there, and silently overwriting it is the one outcome worse than the
+    defect being fixed.
+    """
+    from ..core.generated_marker import SENTINEL
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.type_mapper import TypeMapper
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return True
+
+    aggregator = RepositoryAggregator()
+    for spec_file, screen_spec in specs:
+        aggregator.add_spec(spec_file.name, screen_spec)
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError as e:
+        print(f"ERROR: use case aggregation failed: {e}")
+        return False
+    if not aggregated.use_cases:
+        return True
+
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+
+    def _for_platform(definition, platform: str):
+        # A method with no `platforms` runs everywhere, which is the default
+        # the scaffold applies; kept identical so the two paths cannot drift.
+        from dataclasses import replace
+        kept = [m for m in definition.methods
+                if not m.platforms or platform in m.platforms]
+        return replace(definition, methods=kept)
+
+    writes = impl_writes = 0
+    unowned: list[str] = []
+    refused: list[str] = []
+    for platform, pconfig in platforms.items():
+        generator = _platform_generator(
+            config_mgr.project_root, platform, pconfig, type_mapper)
+        if generator is None:
+            continue
+        impl_imports = getattr(generator, "usecase_impl_imports", None)
+        if callable(impl_imports):
+            for uc_name, uc_def in aggregated.use_cases.items():
+                filtered = _for_platform(uc_def, platform)
+                if filtered.methods and _ensure_impl_imports(
+                        platform, generator.usecase_impl_path(uc_name), impl_imports(uc_name, filtered), args):
+                    impl_writes += 1
+        if not getattr(generator, "has_separate_protocol", True):
+            continue
+        for uc_name, uc_def in aggregated.use_cases.items():
+            filtered = _for_platform(uc_def, platform)
+            if not filtered.methods:
+                continue
+            path = generator.usecase_protocol_path(uc_name)
+            if not path.exists():
+                # SYNC, NOT CREATE. Creating is `jui g project`'s job, and
+                # doing it here would be actively wrong on a project that
+                # spells its methods as signature strings: the spec parser
+                # puts the WHOLE string in `name`
+                # (`fetchPnl(month?: string): Promise<PnlResponse>`), so a
+                # rendered protocol reads
+                # `func fetchPnl(month?: string): Promise<PnlResponse>()
+                # async throws` — a file that cannot compile, in a project
+                # that has no protocol files today and therefore no symptom.
+                # Measured 2026-09-07: one face declares 129 methods that way.
+                continue
+            content = generator.generate_usecase_protocol(uc_name, filtered)
+            unportable = _unportable_types(type_mapper, platform, path)
+            if unportable:
+                refused.extend(unportable)
+                continue
+            try:
+                current = path.read_text(encoding="utf-8")
+            except OSError as e:
+                print(f"WARNING: could not read {path}: {e}")
+                continue
+            if SENTINEL not in current:
+                unowned.append(str(path))
+                continue
+            if current == content:
+                continue
+            if getattr(args, "dry_run", False):
+                writes += 1
+                continue
+            path.write_text(content, encoding="utf-8")
+            writes += 1
+
+    for path in unowned:
+        print(f"WARNING: {path} has no @generated banner — UseCase protocol "
+              f"left untouched; the spec's declarations are NOT reaching it")
+    if refused:
+        _print_unportable(refused)
+        return False
+    if writes or impl_writes:
+        print(f"UseCase protocol sync: updated {writes} protocol(s), {impl_writes} impl file(s)")
+    return True
+
+
+def _sync_repository_protocols(
+    config_mgr: ConfigManager,
+    config: dict,
+    platforms: dict,
+    args,
+    specs: list | None = None,
+) -> bool:
+    """Regenerate Repository protocol files from `dataFlow.repositories`.
+
+    The same hole as the UseCase layer, one layer down. `jui build` grew a
+    ViewModel sync, then a UseCase sync; the Repository protocol has a
+    `repository_protocol_path` on all three generators and nothing that
+    calls it, so a method added to `dataFlow.repositories[].methods` reached
+    the generated protocol only by re-running `jui g project` — which
+    refuses to overwrite an existing protocol, so in practice never.
+
+    Found while fixing the aggregator: closing one layer is what made the
+    next one visible. The UseCase fix and its tests were both about use
+    cases, so neither the change nor its arms could see that the layer
+    beside it was still open.
+
+    Everything else matches `_sync_usecase_protocols` deliberately, down to
+    the ownership check: a file is rewritten only when it carries the
+    `@generated` banner, and anything else is reported and left alone.
+    """
+    from ..core.generated_marker import SENTINEL
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.type_mapper import TypeMapper
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return True
+
+    aggregator = RepositoryAggregator()
+    for spec_file, screen_spec in specs:
+        aggregator.add_spec(spec_file.name, screen_spec)
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError as e:
+        print(f"ERROR: repository aggregation failed: {e}")
+        return False
+    if not aggregated.repositories:
+        return True
+
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+
+    def _for_platform(definition, platform: str):
+        # A method with no `platforms` runs everywhere, which is the default
+        # the scaffold applies; kept identical so the two paths cannot drift.
+        from dataclasses import replace
+        kept = [m for m in definition.methods
+                if not m.platforms or platform in m.platforms]
+        return replace(definition, methods=kept)
+
+    writes = impl_writes = 0
+    unowned: list[str] = []
+    refused: list[str] = []
+    for platform, pconfig in platforms.items():
+        generator = _platform_generator(
+            config_mgr.project_root, platform, pconfig, type_mapper)
+        if generator is None:
+            continue
+        impl_imports = getattr(generator, "repository_impl_imports", None)
+        if callable(impl_imports):
+            for repo_name, repo_def in aggregated.repositories.items():
+                filtered = _for_platform(repo_def, platform)
+                if filtered.methods and _ensure_impl_imports(
+                        platform, generator.repository_impl_path(repo_name), impl_imports(repo_name, filtered), args):
+                    impl_writes += 1
+        if not getattr(generator, "has_separate_protocol", True):
+            continue
+        for repo_name, repo_def in aggregated.repositories.items():
+            filtered = _for_platform(repo_def, platform)
+            if not filtered.methods:
+                continue
+            path = generator.repository_protocol_path(repo_name)
+            if not path.exists():
+                # SYNC, NOT CREATE. Creating is `jui g project`'s job, and
+                # doing it here would be actively wrong on a project that
+                # spells its methods as signature strings: the spec parser
+                # puts the WHOLE string in `name`
+                # (`fetchPnl(month?: string): Promise<PnlResponse>`), so a
+                # rendered protocol reads
+                # `func fetchPnl(month?: string): Promise<PnlResponse>()
+                # async throws` — a file that cannot compile, in a project
+                # that has no protocol files today and therefore no symptom.
+                # Measured 2026-09-07: one face declares 129 methods that way.
+                continue
+            content = generator.generate_repository_protocol(repo_name, filtered)
+            unportable = _unportable_types(type_mapper, platform, path)
+            if unportable:
+                refused.extend(unportable)
+                continue
+            try:
+                current = path.read_text(encoding="utf-8")
+            except OSError as e:
+                print(f"WARNING: could not read {path}: {e}")
+                continue
+            if SENTINEL not in current:
+                unowned.append(str(path))
+                continue
+            if current == content:
+                continue
+            if getattr(args, "dry_run", False):
+                writes += 1
+                continue
+            path.write_text(content, encoding="utf-8")
+            writes += 1
+
+    for path in unowned:
+        print(f"WARNING: {path} has no @generated banner — Repository protocol "
+              f"left untouched; the spec's declarations are NOT reaching it")
+    if refused:
+        _print_unportable(refused)
+        return False
+    if writes or impl_writes:
+        print(f"Repository protocol sync: updated {writes} protocol(s), {impl_writes} impl file(s)")
+    return True
+
+
+def _unportable_types(type_mapper, platform: str, path) -> list[str]:
+    """The spec types the protocol just rendered for *platform* that came out
+    as no type of its language (TypeMapper.take_unportable), one line each
+    naming *path*. The file is then not written: it would not compile, and
+    the build said nothing while Gradle failed on `List<String: String>?`
+    (ticket kjui-spec-swift-dictionary-type-emits-invalid-kotlin)."""
+    return [f"[{platform}] {path}: {line}" for line in type_mapper.take_unportable(platform)]
+
+
+def _print_unportable(lines: list[str]) -> None:
+    print("\nERROR [protocol-sync]:")
+    for line in lines:
+        print(f"  - {line}")
+
+
+def _narrowed_var_fix(platform: str, var) -> str:
+    """The declaration the protocol accepts for a spec var the Impl narrowed:
+    a read-only member may keep its setter private, a settable one may not.
+
+    Kotlin prohibits a private setter on an OPEN property, and an `override`
+    in an open class is open: `override var X … private set` compiles in the
+    generated ViewModel only because that class is final. The text names the
+    `final override` spelling for an Impl the consumer made open."""
+    sig = var.signature
+    if platform == "ios":
+        if "{ get set }" in sig:
+            return f"write `var {var.name}` — the protocol declares {{ get set }}"
+        return f"write `private(set) var {var.name}` to keep the setter private"
+    if "StateFlow<" in sig:
+        return (f"write `override val {var.name}: StateFlow<…>` over a private "
+                f"MutableStateFlow — the protocol declares a StateFlow")
+    if sig.lstrip().startswith("var "):
+        return f"write `override var {var.name}` — the protocol declares a setter"
+    return (f"write `override var {var.name} … private set` (or `override val "
+            f"{var.name}`) to keep the setter private — in an open class, "
+            f"`final override var {var.name} … private set`, since Kotlin "
+            f"prohibits a private setter on an open property")
+
+
+def _sync_viewmodel_protocols(
+    config_mgr: ConfigManager,
+    config: dict,
+    platforms: dict,
+    args,
+    specs: list | None = None,
+) -> bool:
+    """Regenerate Protocol/Base files + patch Impl inheritance/override.
+
+    Returns True on success, False on any hard error (invalid spec,
+    spec→Impl drift, marker extraction failure) — callers should abort the
+    build when False.
+    """
+    from ..core.type_mapper import TypeMapper
+    from ..generators.android_generator import AndroidGenerator
+    from ..generators.ios_generator import IosGenerator
+    from ..generators.web_generator import WebGenerator, owns_viewmodel_base
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return True
+
+    # Validate specs up front — invalid platforms values halt the build
+    # before we've written anything.
+    validation_failed = False
+    all_warnings = []
+    for _sf, spec in specs:
+        try:
+            all_warnings.extend(validate_screen_spec(spec))
+        except SpecValidationError as e:
+            print(f"\nERROR: {e}")
+            validation_failed = True
+    if validation_failed:
+        return False
+    if all_warnings:
+        emit_warnings(all_warnings)
+
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+
+    # Auto-register swagger-derived schema names so Repository/UseCase
+    # signatures like ``returnType: "User"`` resolve without `jui verify`
+    # warnings. Per plan §9.2 / C5, manual entries in
+    # `.jsonui-type-map.json` always win — `register_schemas` skips
+    # shadowed names and returns them for info-level reporting.
+    try:
+        from ..core.api_model_sync import collect_docs as _collect_api_docs
+        api_docs = _collect_api_docs(config_mgr)
+    except Exception:
+        api_docs = []
+    if api_docs:
+        schema_names = [
+            schema.name
+            for doc in api_docs
+            for schema in doc.schemas
+        ] + [
+            enum.name
+            for doc in api_docs
+            for enum in doc.enums
+        ]
+        shadowed = type_mapper.register_schemas(schema_names)
+        if shadowed:
+            preview = ", ".join(shadowed[:5]) + ("..." if len(shadowed) > 5 else "")
+            print(
+                f"  info: {len(shadowed)} swagger schema(s) shadowed by user "
+                f"mapping in .jsonui-type-map.json ({preview})"
+            )
+
+    # Map platform name → (generator_factory, Impl-patch helpers)
+    def _get_gen(platform: str, pconfig: dict):
+        # Delegates so the two syncs cannot root differently again.
+        gen = _platform_generator(
+            config_mgr.project_root, platform, pconfig, type_mapper)
+        if gen is not None:
+            return gen
+        root = config_mgr.project_root / pconfig["root"]
+        if platform == "ios":
+            return IosGenerator(root, pconfig, type_mapper)
+        if platform == "android":
+            return AndroidGenerator(root, pconfig, type_mapper)
+        if platform == "web":
+            return WebGenerator(root, pconfig, type_mapper)
+        return None
+
+    errors: list[str] = []
+    protocol_writes = 0
+    impl_writes = 0
+
+    for platform, pconfig in platforms.items():
+        if args.ios_only and platform != "ios":
+            continue
+        if args.android_only and platform != "android":
+            continue
+        if args.web_only and platform != "web":
+            continue
+        if not owns_viewmodel_base(platform):
+            # rjui_tools generates this platform's ViewModelBase and runs
+            # after us, so writing it here only produced churn and a warning
+            # about a declaration that did not survive. Nothing else in this
+            # loop applies to web — Impl inheritance patching is iOS/Android
+            # only — so the whole iteration is skipped, which also keeps the
+            # file out of the `updated N protocol(s)` count.
+            #
+            # This is the ONLY guard: `_get_gen` deliberately still builds a
+            # WebGenerator, so that removing this line changes behaviour and
+            # a red-check can see it. Letting the factory quietly return None
+            # for web instead gave two defences for one decision, and each
+            # stayed green while the other was broken.
+            continue
+
+        generator = _get_gen(platform, pconfig)
+        if generator is None:
+            continue
+
+        for _sf, spec in specs:
+            subdir = _vm_subdir_for(spec)
+            impl_path = generator.viewmodel_impl_path(spec.name, subdir)
+            proto_path = generator.viewmodel_protocol_path(spec.name, subdir)
+
+            impl_source: str | None = None
+            impl_class = f"{spec.name}ViewModel"
+            impl_method_names: set[str] | None = None
+            impl_var_names: set[str] | None = None
+            if impl_path.exists():
+                try:
+                    impl_source = impl_path.read_text(encoding="utf-8")
+                except OSError as e:
+                    errors.append(
+                        f"[{platform}] could not read Impl {impl_path}: {e}"
+                    )
+                    continue
+                # The class's own members only (ticket
+                # jui-kotlin-override-inserted-on-local-val): a local `val plan`
+                # or a nested type's member is not the Impl declaring `plan`.
+                impl_method_names = list_impl_method_names(impl_source, impl_class, platform)
+                impl_var_names = list_impl_var_names(impl_source, impl_class, platform)
+
+            sync_platform = platform
+            try:
+                sync_result = collect_protocol_members(
+                    spec,
+                    platform=sync_platform,
+                    impl_source=impl_source,
+                    impl_method_names=impl_method_names,
+                    impl_var_names=impl_var_names,
+                    method_signature_builder=getattr(
+                        generator, "_method_proto_signature", None,
+                    ),
+                    var_signature_builder=getattr(
+                        generator, "_var_proto_signature", None,
+                    ),
+                )
+            except ExtractionError as e:
+                errors.append(
+                    f"[{platform}] {spec.name}: marker parse failed in "
+                    f"{impl_path}: {e}"
+                )
+                continue
+
+            kw_fn = "func" if platform == "ios" else "fun"
+            for missing in sync_result.missing_methods_in_impl:
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.methods "
+                    f"declares '{missing}' but no matching {kw_fn} found in Impl. "
+                    f"Add '{kw_fn} {missing}()' or remove from spec."
+                )
+            for missing in sync_result.missing_vars_in_impl:
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.vars "
+                    f"declares '{missing}' but no matching var/val found in Impl. "
+                    f"Add the property declaration or remove from spec."
+                )
+            # The same for a spec method: `private fun X` counted as present,
+            # then became `private override fun X`, which Kotlin refuses;
+            # Swift's `private func X` meets no requirement.
+            narrowed_methods = (list_impl_narrowed_methods(impl_source, platform, impl_class)
+                                if impl_source is not None else {})
+            narrowed_spec_methods = {m.name for m in sync_result.methods
+                                     if m.name in narrowed_methods}
+            for name in sorted(narrowed_spec_methods):
+                fix = (f"write `override fun {name}(…)`" if platform == "android"
+                       else f"write `func {name}(…)` (internal, as the protocol is)")
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.methods "
+                    f"declares '{name}' but the Impl declares it `{narrowed_methods[name]}` — a "
+                    f"protocol member cannot be narrowed; {fix}."
+                )
+            # A spec var the Impl declares with a modifier that narrows its
+            # reader counts as present (the scan accepts `private(set)`), but
+            # it cannot satisfy the protocol: Kotlin refuses the
+            # `private override var` injecting `override` would write, and
+            # Swift's `private var` meets no requirement. Named with the fix
+            # the protocol allows, and left out of the injection below.
+            narrowed = (list_impl_narrowed_vars(impl_source, platform, impl_class)
+                        if impl_source is not None else {})
+            narrowed_spec_vars = {v.name: v for v in sync_result.vars if v.name in narrowed}
+            for name, var in sorted(narrowed_spec_vars.items()):
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.vars "
+                    f"declares '{name}' but the Impl declares it `{narrowed[name]}` — a "
+                    f"protocol member cannot be narrowed; {_narrowed_var_fix(platform, var)}."
+                )
+
+            # Swift: external-label drift between Protocol signature and Impl.
+            # Kotlin and TS don't have external labels, so this is iOS-only.
+            if platform == "ios" and impl_source is not None:
+                for method in sync_result.methods:
+                    expected = extract_expected_labels_from_swift_sig(
+                        method.signature
+                    )
+                    actual = extract_swift_method_labels(
+                        impl_source, method.name, impl_class
+                    )
+                    if actual is None:
+                        continue  # missing_methods_in_impl already reported
+                    if expected != actual:
+                        errors.append(
+                            f"[ios] {impl_path}: '{method.name}' "
+                            f"external-label drift. Protocol expects "
+                            f"{_format_label_sig(method.name, expected)}, "
+                            f"Impl declares "
+                            f"{_format_label_sig(method.name, actual)}. "
+                            f"Align the Impl signature or set "
+                            f"\"label\" on the spec param "
+                            f"(e.g. `{{\"name\": \"x\", \"type\": \"T\", \"label\": \"_\"}}`)."
+                        )
+
+            # Protocol / Base file.
+            content = generator.generate_viewmodel_protocol(
+                spec,
+                impl_source=impl_source,
+                sync_result=sync_result,
+            )
+            # A type the platform has no spelling for is not written: the
+            # file would not compile (_unportable_types).
+            unportable = _unportable_types(type_mapper, platform, proto_path)
+            if unportable:
+                errors.extend(unportable)
+                continue
+            if atomic_write_text(proto_path, content):
+                protocol_writes += 1
+
+            # Impl-side inheritance + (Kotlin) override injection.
+            if impl_source is not None and platform in ("ios", "android"):
+                protocol_name = f"{spec.name}ViewModelProtocol"
+                try:
+                    if platform == "ios":
+                        updated = ensure_swift_inheritance(
+                            impl_source, f"{spec.name}ViewModel", protocol_name,
+                        )
+                    else:
+                        updated = ensure_kotlin_inheritance(
+                            impl_source, f"{spec.name}ViewModel", protocol_name,
+                        )
+                        # Impl and Protocol live in sibling packages
+                        # (viewmodel(s) vs viewmodel.protocol), so adding the
+                        # protocol to the inheritance list also requires an
+                        # explicit `import` — otherwise kotlinc reports
+                        # `Unresolved reference`.
+                        proto_fqn_fn = getattr(
+                            generator, "viewmodel_protocol_fqn", None,
+                        )
+                        if callable(proto_fqn_fn):
+                            updated = ensure_kotlin_import(
+                                updated, proto_fqn_fn(spec.name),
+                            )
+                        # The types the Protocol names (its Data class, an app
+                        # type such as Screen, a model the API sync wrote after
+                        # `jui g project`): the scaffold was written before
+                        # they existed and has no import for them.
+                        type_imports = getattr(generator, "viewmodel_impl_imports", None)
+                        if callable(type_imports):
+                            from ..core.impl_updater import kotlin_has_simple_name, name_used_in_body
+                            for line in type_imports(spec):
+                                fqn = line[len("import "):].strip()
+                                if (name_used_in_body(updated, fqn.rsplit(".", 1)[-1])
+                                        and not kotlin_has_simple_name(updated, fqn)):
+                                    updated = ensure_kotlin_import(updated, fqn)
+                        method_names = [m.name for m in sync_result.methods
+                                        if m.name not in narrowed_spec_methods]
+                        # `data` is hard-coded on the Protocol's first line
+                        # (matching the Compose `StateFlow<XData>` convention)
+                        # so the existing Impl declaration needs `override`
+                        # too — otherwise kotlinc warns
+                        # "data hides member of supertype".
+                        var_names = ["data"] + [v.name for v in sync_result.vars
+                                                if v.name not in narrowed_spec_vars]
+                        updated = inject_kotlin_override(updated, method_names, impl_class)
+                        updated = inject_kotlin_var_override(updated, var_names, impl_class)
+                except ValueError as e:
+                    errors.append(
+                        f"[{platform}] {impl_path}: {e}"
+                    )
+                    continue
+                if atomic_write_text(impl_path, updated):
+                    impl_writes += 1
+
+        # Findings raised while emitting (e.g. a var the generated Base can
+        # only declare with `!`). Same channel as the localize findings
+        # above: printed to stderr, exit code unchanged. `emit_warnings`
+        # only formats and prints (spec_validator.py) — nothing counts these
+        # or fails on them.
+        emit_warnings(getattr(generator, "warnings", []))
+
+    if errors:
+        print("\nERROR [protocol-sync]:")
+        for line in errors:
+            print(f"  - {line}")
+        return False
+
+    if protocol_writes or impl_writes:
+        print(
+            f"Protocol sync: updated {protocol_writes} protocol(s), "
+            f"{impl_writes} impl file(s)"
+        )
+    return True
+
+
+def _distribute_images(
+    config_mgr: ConfigManager,
+    config: dict,
+    platforms: dict,
+    args,
+) -> bool:
+    """Convert SVGs in images_directory and distribute to each platform.
+
+    - iOS:     *.xcassets/{name}.imageset/ (PDF, or the one PNG/JPEG the SVG
+               only wraps, + Contents.json)
+    - Android: res/drawable/{name}.xml    (Vector Drawable), or
+               drawable-nodpi/{name}.png|jpg|webp (the one picture it wraps),
+               or drawable-xxhdpi/{name}.png (an SVG with a picture and more)
+    - Web:     public/images/{name}.svg   (copy as-is)
+
+    ``{name}.{mode}.svg`` is a colour mode's own picture (core/image_modes.py):
+    ``{name}__{mode}`` on iOS and Android, the file as it is on the web, and
+    the table each generator reads beside colors.json (image_modes.json).
+    False: a mode's picture the build cannot draw; nothing was written.
+    """
+    images_src = config_mgr.images_directory
+    svg_files = sorted(images_src.rglob("*.svg")) if images_src.exists() else []
+
+    modes = image_modes.read_modes(config_mgr.layouts_directory / "Resources" / "colors.json")
+    images, variants, mode_errors = image_modes.split(svg_files, modes)
+    if mode_errors:
+        print("\nERROR [image-modes]:")
+        for line in mode_errors:
+            print(f"  - {line}")
+        return False
+    # (picture, the name it is written as): each image under its own name,
+    # each mode's picture as {name}__{mode}.
+    pictures = [(path, None) for _, path in sorted(images.items())] + [
+        (path, image_modes.asset_name(name, mode))
+        for name, by_mode in sorted(variants.items())
+        for mode, path in sorted(by_mode.items())
+    ]
+
+    # What jui wrote for each image last time (Android; an iOS set names its
+    # own files in Contents.json), so a stale file is removed only if it was
+    # jui's (ticket jui-ios-imageset-stale-removal-deletes-unowned-1x).
+    outputs = ImageOutputs.load(config_mgr.project_root)
+    built: list[str] = []
+
+    for platform, pconfig in platforms.items():
+        if args.ios_only and platform != "ios":
+            continue
+        if args.android_only and platform != "android":
+            continue
+        if args.web_only and platform != "web":
+            continue
+
+        platform_root = config_mgr.project_root / pconfig["root"]
+        count = 0
+        raster_count = 0
+        if pconfig.get("layoutsDir"):
+            image_modes.write_table(platform_root / pconfig["layoutsDir"] / "Resources", variants)
+        if not pictures:
+            continue
+
+        if platform == "ios":
+            # Find *.xcassets directory
+            xcassets_dir = pconfig.get("xcassetsDir", "")
+            if xcassets_dir:
+                dest = platform_root / xcassets_dir
+            else:
+                # Auto-detect
+                candidates = list(platform_root.rglob("*.xcassets"))
+                if not candidates:
+                    print(f"  WARNING: No .xcassets found in {platform_root} — skipping iOS images")
+                    continue
+                dest = candidates[0]
+
+            for svg, name in pictures:
+                result = ImageConverter.convert_ios(svg, dest, name)
+                if result:
+                    count += 1
+
+        elif platform == "android":
+            drawable_dir = pconfig.get("drawableDir", "")
+            if drawable_dir:
+                dest = platform_root / drawable_dir
+            else:
+                dest = platform_root / "app" / "src" / "main" / "res" / "drawable"
+
+            written = {}
+            for svg, name in pictures:
+                result = ImageConverter.convert_android(svg, dest, name, outputs=outputs)
+                if result:
+                    count += 1
+                    written[result.name.split(".", 1)[0]] = (svg.name, result)
+                    # Pictures land in the sibling drawable-nodpi/ (as they
+                    # are) or drawable-xxhdpi/ (drawn as a PNG)
+                    if result.parent.name.startswith(("drawable-nodpi", "drawable-xxhdpi")):
+                        raster_count += 1
+            # What else in res/drawable*/ has a written name: an earlier
+            # build's output the record does not name stays (ticket
+            # jui-android-drawable-same-name-two-extensions-after-first-record).
+            # The ERROR does not stop the build — iOS and web are still
+            # generated — and is a stage that did not complete, so the
+            # build exits 1 at its end as any such stage does
+            # (_exit_for_incomplete).
+            for level, line, summary in same_name_drawables(dest.parent, written):
+                print(line)
+                if level == "ERROR":
+                    _note_stage_failure("images: android", summary)
+            built.append("android")
+
+        elif platform == "web":
+            web_images_dir = pconfig.get("imagesDir", "")
+            if web_images_dir:
+                dest = platform_root / web_images_dir
+            else:
+                dest = platform_root / "public" / "images"
+
+            for svg, _ in pictures:
+                result = ImageConverter.convert_web(svg, dest)
+                if result:
+                    count += 1
+
+        if count:
+            if platform == "android" and raster_count:
+                vector_count = count - raster_count
+                print(
+                    f"Converted {count} image(s) → {platform} "
+                    f"({vector_count} vector + {raster_count} raster)"
+                )
+            else:
+                print(f"Converted {count} image(s) → {platform}")
+    if built:
+        outputs.save(built)
+    return True
+
+
+def _distributed_files(config_mgr) -> list | None:
+    """The files the build DISTRIBUTED, for the ledger to count.
+
+    Counts the layouts and resources placed under each platform's
+    `layoutsDir`, which is what "distributed" means here. It used to walk
+    the whole platform root, which on a web project means node_modules and
+    build output: 52,038 files reported beside a manifest scope of 454.
+    A denominator that wrong is worse than none — the line exists to stop a
+    reader inventing the scope, and a number off by two orders of magnitude
+    invites exactly that, which is the misreading it was added to prevent.
+
+    Returns the FILES, not a count: the ledger derives the number, so the
+    print site cannot be handed one it did not observe. None = not counted.
+    """
+    # A config manager that cannot load is "not counted", not a crash: this
+    # now runs inside `_record_generation` for every build, including the
+    # halted path, and a record is better than none there.
+    load = getattr(config_mgr, "load", None)
+    config = load() if callable(load) else None
+    platforms = config.get("platforms") if isinstance(config, dict) else None
+    if not isinstance(platforms, dict):
+        return None
+    found: list = []
+    try:
+        for pconfig in platforms.values():
+            if not isinstance(pconfig, dict):
+                continue
+            root, layouts_rel = pconfig.get("root"), pconfig.get("layoutsDir")
+            if not root or not layouts_rel:
+                continue
+            layouts = config_mgr.project_root / root / layouts_rel
+            if not layouts.is_dir():
+                continue
+            found.extend(f for f in layouts.rglob("*") if f.is_file())
+    except OSError:
+        return None
+    return found
+
+
+def _tracked_scope(present_keys: list[str]) -> dict:
+    """Where the tracked files live, counted per top-level directory.
+
+    `tracked: 223` on its own is a number a reader cannot reconcile with
+    their own tree, and one who tried got 127 by hand against a reported 223
+    with no way to find the difference. The breakdown says which directories
+    the number came from, so a disagreement points at a place.
+
+    The rule lives in `shared/core/generation_manifest.tracked_scope` since
+    2026-09-10, because a second producer (`jsonui-doc generate html`) had no
+    breakdown to pass and passed none — and `save()` wrote `{}` over this
+    command's. One rule, two callers; this wrapper stays for the callers that
+    import it by this name.
+    """
+    from ..core import generation_manifest
+    return generation_manifest.tracked_scope(present_keys)
+
+
+def _apply_platform_alias(args) -> None:
+    """Fold `--platform X` into the `--X-only` flag the code already uses.
+
+    Kept as an alias rather than a replacement: the `--*-only` spellings are
+    in scripts and habits, and breaking them to fix a mismatch would trade
+    one wrong guess for another.
+    """
+    platform = getattr(args, "platform", None)
+    if not platform:
+        return
+    setattr(args, f"{platform}_only", True)

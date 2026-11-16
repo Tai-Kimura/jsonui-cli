@@ -1,0 +1,311 @@
+# frozen_string_literal: true
+
+require 'json'
+require_relative '../../core/config_manager'
+require_relative '../../core/logger'
+require_relative '../../core/string_manager_core'
+
+module RjuiTools
+  module React
+    module Helpers
+      module StringManagerHelper
+        # An identifier that could be a strings.json key: letters, digits and
+        # underscores, with the trailing underscore the extractor's 31-char
+        # truncation can leave ("foo_bar_baz_qux_quux_corge_gra_").
+        #
+        # UPPERCASE IS PART OF THE SPELLING. It used to be lowercase-only,
+        # copied from the extractor's should_extract_string? skip — but the
+        # two ask different questions. The extractor asks "is this prose or an
+        # identifier?"; a resolver asks "does the SSoT declare this?", and
+        # `strings.json` keys are minted by hand as often as by the extractor.
+        # A key with one capital ("bullet_scrollEnabled") failed this and was
+        # emitted as its own name: the identifier reached two published docsite
+        # pages as body text, with `jui build` and `lint-strings` both green
+        # (2/2 such keys on that face were broken, the 1986 lowercase ones fine).
+        KEY_SPELLING = /\A[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*_?\z/
+
+        # Does this text LOOK like a strings.json key? A shape question, and
+        # only ever used as one — whether a key resolves is decided by
+        # membership in strings.json (`convert_string_key`), never by spelling.
+        def string_key?(text)
+          return false unless text.is_a?(String)
+          return false if text.empty?
+
+          text_without_quotes = text.gsub(/^["']|["']$/, '')
+
+          # Skip binding expressions (@{...})
+          return false if text_without_quotes.match?(/^@\{.*\}$/)
+
+          # Skip if it contains spaces (regular text)
+          return false if text_without_quotes.include?(' ')
+
+          text_without_quotes.match?(KEY_SPELLING)
+        end
+
+        # Resolve a strings.json key to `{StringManager.currentLanguage.<camelCase>}`.
+        #
+        # MEMBERSHIP DECIDES, NOT SPELLING — the ruling this face already
+        # states one method down (get_text_with_string_manager) and the one
+        # sjui's resolver and kjui's find_string_key implement: both call
+        # their lookup unconditionally. This face alone gated the lookup on
+        # `string_key?` first, so a declared key whose spelling the gate
+        # disliked was never looked up at all; widening the gate would leave
+        # the third spelling of the same rule in place, so the gate is gone
+        # instead. The cheap structural exclusions stay: a binding is not a
+        # key, and neither is empty text.
+        #
+        # Returns nil when the text doesn't resolve to any strings.json
+        # namespace. Callers must handle nil — the old behavior (silently
+        # falling back to `{StringManager.currentLanguage.<camelCase>}`
+        # whether or not the key was registered) produced runtime `undefined`
+        # for identifiers like "bash" / "yaml" / "shell" that look like
+        # snake_case but are not translations.
+        def convert_string_key(text, warnings: true)
+          return nil unless text.is_a?(String)
+
+          text_without_quotes = text.gsub(/^["']|["']$/, '')
+          return nil if text_without_quotes.empty?
+          return nil if text_without_quotes.match?(/^@\{.*\}$/)
+
+          lookup_string_manager_key(text_without_quotes, warnings: warnings)
+        end
+
+        # Rewrite JSON-encoded string values that look like strings.json
+        # keys and resolve to a known namespace entry. Used by the custom
+        # component scaffold's array-literal path so layouts like
+        # `items: [{label: "toc_row_targets"}]` emit
+        # `items={[{"label":StringManager.currentLanguage.xxx}]}`.
+        #
+        # Only VALUES preceded by `:` are considered — JSON object keys are
+        # untouched, and array-of-plain-strings literals are preserved as-is.
+        # An identifier that isn't present in strings.json (e.g. `id: "a"`,
+        # `anchor: "section_contract"`) falls through unchanged: lookup is
+        # the safety gate that keeps non-translatable fields from being
+        # turned into dangling StringManager references.
+        def rewrite_json_string_values(json_str)
+          return json_str unless json_str.is_a?(String)
+
+          json_str.gsub(/:\s*"([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*_?)"/) do |match|
+            key = Regexp.last_match(1)
+            resolved = lookup_string_manager_key(key)
+            next match unless resolved
+
+            # `resolved` is `{StringManager.currentLanguage.xxx}` with outer
+            # braces. Inside a JS object literal we want the raw expression,
+            # so strip the braces.
+            ": #{resolved[1..-2]}"
+          end
+        end
+
+        # Display text as the StringManager reference the strings.json gives
+        # it: the declared key, else the text a key holds (by
+        # lookup_string_manager_by_value — the shared resolver, the lookup
+        # sjui and kjui make), else nil. Through jsonui-cli 1.9.7 Label,
+        # Button and the other display-text paths (convert_text_binding,
+        # text_runtime_expression) and the converter scaffold looked the key
+        # up only, so a layout text iOS and Android localized was drawn as
+        # written here (ticket rjui-display-text-is-not-looked-up-by-the-
+        # text-a-key-holds, ruling 2026-10-03).
+        def resolve_display_text(text)
+          return nil unless text.is_a?(String)
+
+          convert_string_key(text) ||
+            (text.match?(/@\{[^}]+\}/) || text.empty? ? nil : lookup_string_manager_by_value(text))
+        end
+
+        # Get text with StringManager resolution
+        def get_text_with_string_manager(text_content)
+          return text_content unless text_content.is_a?(String)
+
+          text_without_quotes = text_content.gsub(/^["']|["']$/, '')
+
+          # Check if it's a binding (starts with @{)
+          return text_content if text_without_quotes.match?(/^@\{.*\}$/)
+
+          # A text that IS a declared strings.json key resolves as that key,
+          # before the value reverse-lookup: membership in the SSoT is what
+          # makes something a key, not how it is spelled. A legacy poison
+          # entry whose VALUE is another key's raw spelling hijacked the
+          # value lookup on the sjui face (downstream login screen, 2026-08-09);
+          # `convert_string_key` returns nil for unregistered keys, so this
+          # is membership-gated and cannot mint dangling references.
+          if (resolved = convert_string_key(text_without_quotes))
+            return resolved
+          end
+
+          # Then, try to find by value in strings.json
+          result = lookup_string_manager_by_value(text_without_quotes)
+          return result if result
+
+          text_content
+        end
+
+        private
+
+        # Lookup by value (e.g., "AppFinder" -> StringManager.currentLanguage.loginSampleApp)
+        # through JsonUIShared::StringManagerCore.resolve_string_reference,
+        # the one sjui and kjui call: the layout's own sections first, a
+        # string or any language of a per-language value. Until jsonui-cli
+        # 1.9.8 this face had its own scan — file order, a per-language
+        # value's FIRST language only — so the same text could land on
+        # another section's key, or on none, depending on the file.
+        def lookup_string_manager_by_value(text)
+          strings_data = load_strings_json
+          return nil if strings_data.nil? || strings_data.empty?
+
+          resolved = JsonUIShared::StringManagerCore.resolve_string_reference(strings_data, text, own_namespaces)
+          return nil if resolved.nil?
+
+          "{#{string_manager_reference("#{resolved['namespace']}_#{resolved['key']}")}}"
+        end
+
+        # Lookup by key in strings.json, matching sjui behavior:
+        # 1. Check if text matches "file_key" pattern (e.g., "login_forgot_password")
+        # 2. Check current JSON file's keys first (e.g., "title" in file "sales")
+        # 3. Check all other files as fallback
+        def lookup_string_manager_key(text, warnings: true)
+          strings_data = load_strings_json
+          return nil if strings_data.nil? || strings_data.empty?
+
+          # Phase 1: Check "file_key" pattern across all files
+          strings_data.each do |file_name, file_strings|
+            next unless file_strings.is_a?(Hash)
+
+            if text.start_with?("#{file_name}_")
+              key = text.sub(/^#{Regexp.escape(file_name)}_/, '')
+              if file_strings.key?(key)
+                full_key = "#{file_name}_#{key}"
+                return "{#{string_manager_reference(full_key)}}"
+              end
+            end
+          end
+
+          # Phase 2: bare key — ONLY within sections this layout owns (the
+          # basename and relative-path spellings from the generator). The
+          # prefixed form above names its section explicitly, so a foreign
+          # hit there is a deliberate reference; a BARE key hitting a foreign
+          # section is a collision, not a reference — the same ruling the
+          # sjui/kjui resolvers carry. The old "all other files as fallback"
+          # phase resolved a cell's bare key through whatever section
+          # happened to declare it (asymmetric-resolution filing, 2026-08-11).
+          own_namespaces.each do |namespace|
+            file_strings = strings_data[namespace]
+            next unless file_strings.is_a?(Hash)
+
+            if file_strings.key?(text)
+              full_key = "#{namespace}_#{text}"
+              return "{#{string_manager_reference(full_key)}}"
+            end
+          end
+
+          report_foreign_bare_key(text, strings_data) if warnings
+          nil
+        end
+
+        # The sections the layout being generated owns. Falls back to the
+        # single legacy spelling when the generator predates
+        # `_current_namespaces`.
+        def own_namespaces
+          return [] unless @config
+
+          @config['_current_namespaces'] ||
+            [@config['_current_json_name']].compact
+        end
+
+        # A bare key declared ONLY under sections this layout does not own is
+        # a broken reference under the own-section canon — warn so `jui
+        # build`'s zero-warning invariant gates it (sjui/kjui emit the same
+        # warning from their resolvers).
+        def report_foreign_bare_key(text, strings_data)
+          return unless strings_data.is_a?(Hash)
+          # KEY_SPELLING, not the old lowercase-only copy: a foreign key with
+          # a capital used to fail this guard too, so the one case where the
+          # raw identifier still reaches the screen was also the one case
+          # nothing warned about.
+          return unless text.is_a?(String) && text.match?(KEY_SPELLING)
+
+          own = own_namespaces
+          foreign = strings_data.map do |namespace, entries|
+            namespace if entries.is_a?(Hash) && entries.key?(text) && !own.include?(namespace)
+          end.compact
+          return if foreign.empty?
+
+          Core::Logger.warn(
+            "Bare key #{text.inspect} is declared only in foreign strings.json " \
+            "section(s) #{foreign.join(', ')} — a bare key resolves within the " \
+            "layout's own sections (#{own.join(' / ')}). Use the fully-qualified " \
+            "'<section>_<key>' spelling for a deliberate cross-section reference, " \
+            "or register the key under the layout's own section (jsonui-localize)."
+          )
+        end
+
+        def load_strings_json
+          @strings_json_cache ||= begin
+            config = Core::ConfigManager.load_config
+            layouts_dir = config['layouts_directory'] || 'Layouts'
+            strings_file = File.join(layouts_dir, 'Resources', 'strings.json')
+
+            if File.exist?(strings_file)
+              JSON.parse(File.read(strings_file, encoding: 'UTF-8'))
+            else
+              {}
+            end
+          rescue JSON::ParserError, TypeError
+            {}
+          end
+        end
+
+        # The property name the GENERATED StringManager actually exposes for a
+        # `<namespace>_<key>` entry — `createCamelCaseProxy` in
+        # build_command.rb, character for character:
+        #
+        #   key.replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase())
+        #
+        # Only the character after an underscore is upper-cased; the rest of
+        # each segment is left alone. `to_camel_case` below splits on "_" and
+        # `capitalize`s, which also LOWER-cases the rest of every segment — the
+        # same answer for an all-lowercase key, a different one as soon as a
+        # key carries a capital or a trailing underscore. Measured against the
+        # generated proxy (node, 2026-09-04):
+        #
+        #   guides_bullet_scrollEnabled -> $s.guidesBulletScrollEnabled  resolves
+        #                               -> $s.guidesBulletScrollenabled  undefined
+        #   login_..._apply_for_        -> $s.loginFooBarBazQuxQuuxCorgeGra_  resolves
+        #                               -> $s.loginFooBarBazQuxQuuxCorgeGra   undefined
+        #
+        # So emitting the `capitalize` spelling for either shape produces a
+        # reference the runtime does not have: the page renders nothing where
+        # the string should be. (The proxy also keeps the raw snake spelling,
+        # which is why nothing here needs to quote it.)
+        # `StringManager.currentLanguage.<accessor>`, or with brackets when the
+        # accessor is not a name a dot can take — a key with `-` or a space
+        # (`icon-label_description` → `…Icon-labelDescription`) read as a
+        # subtraction. The StringManager's map carries the same camelCase
+        # spelling under either access.
+        JS_IDENTIFIER_NAME = /\A[\p{L}\p{Nl}$_][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$\u200C\u200D]*\z/.freeze
+
+        def string_manager_reference(full_key)
+          accessor = string_manager_accessor(full_key)
+          if accessor.match?(JS_IDENTIFIER_NAME)
+            "StringManager.currentLanguage.#{accessor}"
+          else
+            "StringManager.currentLanguage[#{JSON.generate(accessor)}]"
+          end
+        end
+
+        def string_manager_accessor(full_key)
+          full_key.gsub(/_([a-z0-9])/) { Regexp.last_match(1).upcase }
+        end
+
+        # Convert snake_case to camelCase (ViewModel property names — NOT
+        # StringManager accessors; see string_manager_accessor).
+        def to_camel_case(snake_str)
+          parts = snake_str.split('_')
+          return snake_str if parts.empty?
+
+          parts.first + parts[1..].map(&:capitalize).join
+        end
+      end
+    end
+  end
+end

@@ -1,0 +1,251 @@
+# frozen_string_literal: true
+
+require 'json'
+require_relative 'style_loader'
+require_relative '../core/include_data_map'
+
+module SjuiTools
+  module SwiftUI
+    # Module for expanding includes inline with ID prefix support
+    module IncludeExpander
+      module_function
+
+      # The layouts ROOT every include path resolves from — top level and
+      # nested alike (design U8, 2026-09-25). The Python normalizer, rjui and
+      # both dynamic runtimes read include paths from the root, and the
+      # layouts measured on the consumer faces are written that way (all 3
+      # nested references resolve from the root, none from the including
+      # file's directory — which this expander used, so a screen or partial in
+      # a subdirectory failed with "Include file not found"). Set by the
+      # entry points that know the root; unset, a path resolves from
+      # base_dir as before.
+      class << self
+        attr_accessor :layouts_root
+      end
+
+      # Convert snake_case to camelCase
+      # e.g., "header1_title_label" -> "header1TitleLabel"
+      def to_camel_case(str)
+        return str unless str.include?('_')
+        parts = str.split('_')
+        parts[0] + parts[1..].map(&:capitalize).join
+      end
+
+      # Combine prefix and name in camelCase
+      # e.g., prefix="header1", name="title" -> "header1Title"
+      # e.g., prefix="header1", name="title_label" -> "header1TitleLabel"
+      def combine_with_prefix(prefix, name)
+        return name unless prefix
+        # Convert name to camelCase first, then capitalize first letter
+        camel_name = to_camel_case(name)
+        prefix + camel_name.sub(/^[a-z]/) { |c| c.upcase }
+      end
+
+      # Process includes in JSON data, expanding them inline with ID prefixes
+      # @param json_data [Hash] The JSON data to process
+      # @param base_dir [String] Base directory for resolving include paths
+      # @param id_prefix [String, nil] Optional ID prefix to apply
+      # @param layouts_root [String, nil] The root include paths resolve from
+      # @return [Hash] The processed JSON with includes expanded
+      def process_includes(json_data, base_dir, id_prefix = nil, layouts_root = IncludeExpander.layouts_root)
+        return json_data unless json_data.is_a?(Hash)
+
+        # includeがある場合、ファイルを読み込んでインライン展開する
+        if json_data['include']
+          include_node = json_data
+          include_file_path = File.join(layouts_root || base_dir, "#{json_data['include']}.json")
+          unless File.exist?(include_file_path)
+            raise "Include file not found: #{include_file_path}"
+          end
+
+          # include先のJSONを読み込む
+          include_content = File.read(include_file_path)
+          included_json = JSON.parse(include_content)
+
+          # スタイルを適用
+          included_json = StyleLoader.load_and_merge(included_json)
+
+          # include元のidをプレフィックスとして使用 (キャメルケースで結合)
+          include_id = json_data['id']
+          new_prefix = if id_prefix && include_id
+                         combine_with_prefix(id_prefix, include_id)
+                       elsif include_id
+                         to_camel_case(include_id)
+                       else
+                         id_prefix
+                       end
+
+          # A constraint between two elements of this partial names its target
+          # by the id the partial wrote; the element's id gets this include's
+          # prefix below, so the target gets it too — before the include
+          # node's own attributes are merged in, which name the including
+          # layout's elements and stay as written (jsonui-cli ticket
+          # rjui-include-root-sibling-constraint-dropped, row D4; held by
+          # shared/core/include_constraint_targets_fixture.json).
+          prefix_constraint_targets(included_json, new_prefix, declared_ids(included_json)) if new_prefix
+
+          # include元のプロパティ（id, include以外）をマージ
+          # dataやshared_dataもマージ対象
+          json_data.each do |key, value|
+            next if ['include', 'id'].include?(key)
+            if key == 'data' || key == 'shared_data'
+              # data/shared_dataはマージ
+              included_json[key] ||= []
+              included_json[key] = included_json[key] + value if value.is_a?(Array)
+            else
+              # その他のプロパティは上書き
+              included_json[key] = value
+            end
+          end
+
+          # IDプレフィックスを適用して再帰処理
+          json_data = apply_id_prefix(included_json, new_prefix)
+          # The include node's maps over the including layout's data
+          # (shared_data, then data — JsonUIShared::IncludeDataMap). Read
+          # off the include node as written: its values are bindings in the
+          # including layout's scope, not this include's. Until jsonui-cli
+          # 1.9.6 an object map was dropped here.
+          json_data = JsonUIShared::IncludeDataMap.apply!(
+            json_data, JsonUIShared::IncludeDataMap.of(include_node),
+            ->(name) { new_prefix ? combine_with_prefix(new_prefix, name) : name }
+          )
+          json_data = process_includes(json_data, layouts_root || File.dirname(include_file_path),
+                                       new_prefix, layouts_root)
+          return json_data
+        end
+
+        # IDプレフィックスがある場合、現在の要素のidに適用 (キャメルケースで結合)
+        if id_prefix && json_data['id']
+          json_data['id'] = combine_with_prefix(id_prefix, json_data['id'])
+        end
+
+        # childの処理 (childrenもサポート)
+        child_key = json_data['child'] ? 'child' : (json_data['children'] ? 'children' : nil)
+        if child_key
+          if json_data[child_key].is_a?(Array)
+            json_data[child_key] = json_data[child_key].map { |child| process_includes(child, base_dir, id_prefix, layouts_root) }
+          else
+            json_data[child_key] = process_includes(json_data[child_key], base_dir, id_prefix, layouts_root)
+          end
+
+          # childrenをchildに正規化 (後の処理で一貫性を保つため)
+          if child_key == 'children'
+            json_data['child'] = json_data['children']
+            json_data.delete('children')
+          end
+        end
+
+        json_data
+      end
+
+      # The attributes that name another element of the same container as a
+      # constraint's target (common.json align*OfView / align*View /
+      # alignCenter*View).
+      CONSTRAINT_TARGET_KEYS = %w[
+        alignTopOfView alignBottomOfView alignLeftOfView alignRightOfView
+        alignTopView alignBottomView alignLeftView alignRightView
+        alignCenterVerticalView alignCenterHorizontalView
+      ].freeze
+
+      # The ids a partial declares itself: its elements' ids, not the ids
+      # inside a partial it includes (those get that include's prefix) and
+      # not an include node's id (a prefix, not an element).
+      def declared_ids(node, ids = [])
+        case node
+        when Hash
+          return ids if node['include']
+
+          ids << node['id'] if node['id'].is_a?(String)
+          kids = node['child'] || node['children']
+          declared_ids(kids, ids) if kids
+        when Array
+          node.each { |n| declared_ids(n, ids) }
+        end
+        ids
+      end
+
+      # Prefixes each constraint target in *node* that names one of *ids*,
+      # the way the ids themselves are prefixed. An include node's own
+      # attributes are read (they land on its root); the partial it names is
+      # not entered.
+      def prefix_constraint_targets(node, prefix, ids)
+        case node
+        when Hash
+          CONSTRAINT_TARGET_KEYS.each do |key|
+            target = node[key]
+            node[key] = combine_with_prefix(prefix, target) if target.is_a?(String) && ids.include?(target)
+          end
+          return node if node['include']
+
+          kids = node['child'] || node['children']
+          prefix_constraint_targets(kids, prefix, ids) if kids
+        when Array
+          node.each { |n| prefix_constraint_targets(n, prefix, ids) }
+        end
+        node
+      end
+
+      # IDプレフィックスを全要素に適用し、data定義と@{}参照も更新する
+      def apply_id_prefix(json_data, prefix)
+        return json_data unless json_data.is_a?(Hash) && prefix
+
+        # data定義のnameにプレフィックスを付与 (キャメルケースで結合)
+        prefix_data_names(json_data, prefix)
+
+        # 全ての文字列値の@{}参照にプレフィックスを付与
+        json_data = transform_bindings(json_data, prefix)
+
+        json_data
+      end
+
+      # data定義のnameにプレフィックスを再帰的に付与する
+      def prefix_data_names(json_data, prefix)
+        return unless json_data.is_a?(Hash)
+
+        if json_data['data'].is_a?(Array)
+          json_data['data'] = json_data['data'].map do |data_item|
+            if data_item.is_a?(Hash) && data_item['name']
+              data_item = data_item.dup
+              data_item['name'] = combine_with_prefix(prefix, data_item['name'])
+            end
+            data_item
+          end
+        end
+
+        # 子要素のdata定義も再帰的に処理
+        child_data = json_data['child'] || json_data['children']
+        if child_data.is_a?(Array)
+          child_data.each { |child| prefix_data_names(child, prefix) }
+        elsif child_data.is_a?(Hash)
+          prefix_data_names(child_data, prefix)
+        end
+      end
+
+      # @{}参照にプレフィックスを付与する (キャメルケースで結合)
+      def transform_bindings(data, prefix)
+        case data
+        when Hash
+          data.each do |key, value|
+            data[key] = transform_bindings(value, prefix)
+          end
+        when Array
+          data.map! { |item| transform_bindings(item, prefix) }
+        when String
+          # @{variableName} を @{prefixVariableName} に変換 (キャメルケース)
+          # ただし @{this.xxx} や @{item.xxx} は変換しない
+          data.gsub(/@\{([^}]+)\}/) do |match|
+            var_name = $1
+            if var_name.include?('.')
+              # this.xxx や item.xxx はそのまま
+              match
+            else
+              "@{#{combine_with_prefix(prefix, var_name)}}"
+            end
+          end
+        else
+          data
+        end
+      end
+    end
+  end
+end

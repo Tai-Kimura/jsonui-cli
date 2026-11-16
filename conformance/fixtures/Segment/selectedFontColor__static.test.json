@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Segment/selectedFontColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Segment.selectedFontColor (static)",
+    "description": "Conformance fixture for 'selectedFontColor' on Segment (section: Segment, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Segment"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedFontColor__static",
+      "description": "Conformance fixture for 'selectedFontColor' on Segment (section: Segment, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Segment_selectedFontColor__static"
+        }
+      ]
+    }
+  ]
+}

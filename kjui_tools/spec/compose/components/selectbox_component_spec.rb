@@ -1,0 +1,740 @@
+# frozen_string_literal: true
+
+require_relative '../../support/font_provider_stub'
+
+require 'core/bind_fold'
+require 'compose/components/selectbox_component'
+require 'compose/components/container_component'
+require 'compose/helpers/modifier_builder'
+require 'compose/helpers/resource_resolver'
+
+RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
+  let(:required_imports) { Set.new }
+
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    # Clear data definitions before each test
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  describe '.generate' do
+    context 'standard SelectBox' do
+      it 'generates basic SelectBox component' do
+        json_data = { 'type' => 'SelectBox' }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('SelectBox(')
+        expect(required_imports).to include(:selectbox_component)
+      end
+
+      it 'maps 4-element paddings as [top, right, bottom, left] to contentPadding' do
+        json_data = { 'type' => 'SelectBox', 'paddings' => [1, 2, 3, 4] }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include(
+          'contentPadding = PaddingValues(start = 4.dp, top = 1.dp, end = 2.dp, bottom = 3.dp)'
+        )
+      end
+
+      # The three faces' rule (ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height): SelectBoxDefaults
+      # 12 / 0 / 12 / 0, then padding, then paddings, then each side's key; a side nothing writes keeps the default.
+      it 'writes the content padding side by side, a side nothing writes keeping the default' do
+        pad = lambda do |extra|
+          described_class.generate({ 'type' => 'SelectBox' }.merge(extra), 0, required_imports)[/contentPadding = PaddingValues\([^)]*\)/]
+        end
+        expect(pad.call({})).to be_nil
+        expect(pad.call('paddings' => [0, 16])).to eq('contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 0.dp)')
+        expect(pad.call('paddingTop' => 4)).to eq('contentPadding = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 0.dp)')
+        expect(pad.call('padding' => 8, 'paddingLeft' => 20)).to eq('contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)')
+        expect(pad.call('paddingLeft' => 20, 'paddingStart' => 6)).to eq('contentPadding = PaddingValues(start = 6.dp, top = 0.dp, end = 12.dp, bottom = 0.dp)')
+        # A date select takes the same (DateSelectBox's contentPadding).
+        date = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', 'paddingTop' => 4 }, 0, required_imports)
+        expect(date).to include('DateSelectBox(')
+        expect(date).to include('contentPadding = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 0.dp)')
+      end
+
+      it 'generates SelectBox with static options array' do
+        json_data = {
+          'type' => 'SelectBox',
+          'items' => ['Option 1', 'Option 2', 'Option 3']
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('options = listOf(')
+        expect(result).to include('Option 1')
+        expect(result).to include('Option 2')
+      end
+
+      it 'generates SelectBox with items array' do
+        json_data = {
+          'type' => 'SelectBox',
+          'items' => ['A', 'B', 'C']
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('options = listOf(')
+      end
+
+      it 'generates SelectBox with hash options' do
+        json_data = {
+          'type' => 'SelectBox',
+          'items' => [
+            { 'value' => '1', 'label' => 'First' },
+            { 'value' => '2', 'label' => 'Second' }
+          ]
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('First')
+        expect(result).to include('Second')
+      end
+
+      it 'generates SelectBox with dynamic options binding' do
+        json_data = {
+          'type' => 'SelectBox',
+          'items' => '@{availableOptions}'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('options = data.availableOptions')
+      end
+
+      it 'generates SelectBox with selectedItem binding' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectedItem' => '@{selectedValue}',
+          'items' => ['A', 'B']
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('value = data.selectedValue')
+        expect(result).to include('onValueChange')
+      end
+
+      it 'generates SelectBox with bind attribute' do
+      # `bind` reaches the component folded (JsonUIShared::BindFold at the
+      # dispatch, ComposeBuilder#generate_component); the component reads no bind.
+        json_data = JsonUIShared::BindFold.fold({
+          'type' => 'SelectBox',
+          'bind' => '@{choice}',
+          'items' => ['A', 'B']
+        })
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('value = data.choice')
+      end
+
+      it 'generates SelectBox with hint' do
+        json_data = {
+          'type' => 'SelectBox',
+          'hint' => 'Select an option'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('placeholder = "Select an option"')
+      end
+
+      it 'generates SelectBox with placeholder' do
+        json_data = {
+          'type' => 'SelectBox',
+          'placeholder' => 'Choose one'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('placeholder = "Choose one"')
+      end
+
+      # Spec canonical `prompt` is the primary key, with hint/placeholder as
+      # aliases. The codegen must accept all three and prefer prompt when
+      # multiple are set.
+      it 'generates SelectBox with prompt (canonical primary key)' do
+        json_data = {
+          'type' => 'SelectBox',
+          'prompt' => 'Choose one'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('placeholder = "Choose one"')
+      end
+
+      it "passes a list sheet's words, and no doneButtonText: a list's sheet has no such button" do
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'sheetTitle' => 'Pick a store',
+                                             'cancelButtonText' => 'Back', 'doneButtonText' => 'Apply' }, 0, required_imports)
+        expect(result).to include('sheetTitle = "Pick a store"', 'cancelButtonText = "Back"')
+        expect(result).not_to include('doneButtonText')
+      end
+
+      it "passes a date sheet's three words" do
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'selectItemType' => 'Date', 'sheetTitle' => 'When',
+                                             'cancelButtonText' => 'Back', 'doneButtonText' => 'Apply' }, 0, required_imports)
+        expect(result).to include('DateSelectBox(', 'sheetTitle = "When"', 'cancelButtonText = "Back"', 'doneButtonText = "Apply"')
+      end
+
+      it 'reads a strings.json key as prompt does: the two words come out the same' do
+        allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:process_text).and_call_original
+        allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:process_text)
+          .with('pick_a_store', anything).and_return('stringResource(R.string.pick_a_store)')
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'prompt' => 'pick_a_store',
+                                             'sheetTitle' => 'pick_a_store', 'cancelButtonText' => 'pick_a_store' }, 0, required_imports)
+        expect(result).to include('placeholder = stringResource(R.string.pick_a_store)',
+                                  'sheetTitle = stringResource(R.string.pick_a_store)',
+                                  'cancelButtonText = stringResource(R.string.pick_a_store)')
+      end
+
+      it 'says nothing of the words when they are absent: the library has its own' do
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's' }, 0, required_imports)
+        expect(result).not_to match(/sheetTitle|cancelButtonText|doneButtonText/)
+      end
+
+      it 'prefers prompt over hint and placeholder when multiple are present' do
+        json_data = {
+          'type' => 'SelectBox',
+          'prompt' => 'from prompt',
+          'hint' => 'from hint',
+          'placeholder' => 'from placeholder'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('placeholder = "from prompt"')
+        expect(result).not_to include('"from hint"')
+        expect(result).not_to include('"from placeholder"')
+      end
+
+      it 'does not read the undeclared disabled key' do
+        json_data = {
+          'type' => 'SelectBox',
+          'disabled' => true
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).not_to include('enabled = false')
+      end
+
+      it 'generates SelectBox with enabled false' do
+        json_data = {
+          'type' => 'SelectBox',
+          'enabled' => false
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('enabled = false')
+      end
+
+      it 'generates SelectBox with background color' do
+        json_data = {
+          'type' => 'SelectBox',
+          'background' => '#FFFFFF'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('backgroundColor')
+      end
+
+      it 'generates SelectBox with borderColor' do
+        json_data = {
+          'type' => 'SelectBox',
+          'borderColor' => '#000000'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('borderColor')
+      end
+
+      it 'generates SelectBox with fontColor' do
+        json_data = {
+          'type' => 'SelectBox',
+          'fontColor' => '#333333'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('textColor')
+      end
+
+      it 'generates SelectBox with hintColor' do
+        json_data = {
+          'type' => 'SelectBox',
+          'hintColor' => '#999999'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('hintColor')
+      end
+
+      it 'generates SelectBox with cornerRadius' do
+        json_data = {
+          'type' => 'SelectBox',
+          'cornerRadius' => 8
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('cornerRadius = 8')
+      end
+
+      it 'generates SelectBox with cancelButtonBackgroundColor' do
+        json_data = {
+          'type' => 'SelectBox',
+          'cancelButtonBackgroundColor' => '#FF0000'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('cancelButtonBackgroundColor')
+      end
+
+      it 'generates SelectBox with cancelButtonTextColor' do
+        json_data = {
+          'type' => 'SelectBox',
+          'cancelButtonTextColor' => '#FFFFFF'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('cancelButtonTextColor')
+      end
+    end
+
+    # SSoT SelectBox.caretAttributes — a cross-platform object since 1.8.101
+    # (UIKit-only before). Present: the face draws the caret itself; absent:
+    # the native arrow and every existing baseline stay where they are.
+    context 'caretAttributes' do
+      let(:fixture_caret) do
+        # The `SelectBox/caretAttributes__static` fixture value, verbatim.
+        { 'width' => 32, 'height' => 32, 'tintColor' => '#FF0000',
+          'background' => '#00AA00', 'rightMargin' => 24 }
+      end
+
+      it 'emits nothing when the object is absent, so the picture does not move' do
+        result = described_class.generate({ 'type' => 'SelectBox', 'items' => %w[One Two] }, 0, required_imports)
+        expect(result).not_to include('caret =')
+        expect(required_imports).not_to include(:selectbox_caret)
+      end
+
+      it 'hands the fixture object to the library as a SelectBoxCaret' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One Two Three], 'caretAttributes' => fixture_caret }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include(
+          'caret = SelectBoxCaret(width = 32, height = 32, ' \
+          'tintColor = Color(android.graphics.Color.parseColor("#FF0000")), ' \
+          'background = Color(android.graphics.Color.parseColor("#00AA00")), ' \
+          'rightMargin = 24),'
+        )
+        expect(required_imports).to include(:selectbox_caret)
+      end
+
+      it 'an empty object is still present: the face draws its own caret with the defaults' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => {} }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('caret = SelectBoxCaret(),')
+      end
+
+      it 'resolves src as a drawable name, the way Image resolves its src' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => { 'src' => 'My-Arrow.png', 'rightMargin' => 12 } }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('caret = SelectBoxCaret(painter = painterResource(id = R.drawable.my_arrow), rightMargin = 12),')
+        expect(required_imports).to include(:painter_resource, :r_class)
+      end
+
+      it 'leaves a key of the wrong type out rather than emitting it as 0' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => { 'width' => '32', 'rightMargin' => 24 } }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('caret = SelectBoxCaret(rightMargin = 24),')
+      end
+
+      # ticket kjui-date-selectbox-caret-attributes-not-emitted: KotlinJsonUI's DateSelectBox draws the same
+      # closed-state caret as SelectBox (caret: SelectBoxCaret?, since 2.5.36), as SwiftJsonUI's date SelectBoxView and
+      # the web date input do; the Date branch dropped the object, so the app's picture never reached Android.
+      it 'is passed to a date picker too, every key of it' do
+        caret = fixture_caret.merge('src' => 'ic_calendar_gold')
+        json_data = { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'caretAttributes' => caret }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('DateSelectBox(')
+        expect(result).to include(
+          'caret = SelectBoxCaret(painter = painterResource(id = R.drawable.ic_calendar_gold), width = 32, height = 32, ' \
+          'tintColor = Color(android.graphics.Color.parseColor("#FF0000")), ' \
+          'background = Color(android.graphics.Color.parseColor("#00AA00")), rightMargin = 24),'
+        )
+        expect(required_imports).to include(:selectbox_caret, :painter_resource)
+        # absent: nothing, as on a list SelectBox (the library's own chevron stays)
+        plain = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date' }, 0, Set.new)
+        expect(plain).not_to include('caret =')
+      end
+
+      it 'does not touch a SelectBox whose caretAttributes is not an object' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => 'nope' }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).not_to include('caret =')
+      end
+
+      # One broad arm (spec/support/kotlin_compiler.rb): the fixture call,
+      # with its modifier chain, is well-typed against a stub universe.
+      # ⚠️ The SelectBoxCaret / SelectBox stubs below are a hand transcription
+      # of library/.../SelectBox.kt, so this proves the emit is Kotlin — not
+      # that it matches the library. That second half is the codegen
+      # conformance host, which compiles the generated code against the real
+      # library (KotlinJsonUI conformance-host/scripts/generate_codegen_host.rb).
+      it 'emits a call that compiles, caret included' do
+        json_data = {
+          'type' => 'SelectBox', 'id' => 'target', 'width' => 200, 'height' => 'wrapContent',
+          'items' => %w[One Two Three], 'caretAttributes' => fixture_caret
+        }
+        result = described_class.generate(json_data, 1, required_imports)
+        expect(<<~KOTLIN).to compile_as_kotlin
+          #{FontProviderStub::FONT}
+          #{FontProviderStub::SIZE}
+          annotation class Composable
+          class Color(val argb: Int) { companion object { val Unspecified = Color(0) } }
+          object android { object graphics { object Color { fun parseColor(s: String): Int = 0 } } }
+          class Painter
+          class Dp(val value: Float)
+          val Int.dp: Dp get() = Dp(toFloat())
+          class SemanticsScope { var testTagsAsResourceId: Boolean = false }
+          // The runtime's state holder, as androidx.compose.runtime declares it:
+          // a static selection seeds the box's own state (Helpers::StaticSeed).
+          interface MutableState<T> { var value: T }
+          fun <T> mutableStateOf(v: T): MutableState<T> = object : MutableState<T> { override var value = v }
+          inline fun <T> remember(calculation: () -> T): T = calculation()
+          operator fun <T> MutableState<T>.getValue(thisObj: Any?, property: kotlin.reflect.KProperty<*>): T = value
+          operator fun <T> MutableState<T>.setValue(thisObj: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
+          object Modifier {
+              fun testTag(tag: String): Modifier = this
+              fun semantics(block: SemanticsScope.() -> Unit): Modifier = this
+              fun requiredWidth(width: Dp): Modifier = this
+              fun wrapContentHeight(): Modifier = this
+          }
+          // transcribed from library/src/main/kotlin/com/kotlinjsonui/components/SelectBox.kt
+          data class SelectBoxCaret(
+              val painter: Painter? = null,
+              val width: Int? = null,
+              val height: Int? = null,
+              val tintColor: Color? = null,
+              val background: Color? = null,
+              val rightMargin: Int = 0
+          )
+          @Composable
+          fun SelectBox(
+              value: String,
+              onValueChange: (String) -> Unit, resolvedFont: Any? = null,
+              options: List<String>,
+              modifier: Modifier = Modifier,
+              caret: SelectBoxCaret? = null
+          ) {}
+          @Composable
+          fun Host() {
+          #{result}
+          }
+        KOTLIN
+      end
+    end
+
+    context 'DateSelectBox' do
+      # A Date SelectBox's value is its selectedDate alone (the orchestrator's ruling,
+      # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
+      # it fell back to selectedItem / selectedValue / selectedIndex / bind,
+      # which sjui never read.
+      it 'reads and writes its value from selectedDate alone' do
+        %w[selectedItem selectedValue selectedIndex bind].each do |other|
+          result = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', other => '@{other}' }, 0, required_imports)
+          expect(result).not_to include('data.other'), other
+          expect(result).not_to include('"other" to'), other
+          expect(result).to include('value = '), other
+        end
+        %w[selectedItem selectedValue].each do |other|
+          result = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', other => '2026-01-01' }, 0, required_imports)
+          expect(result).not_to include('"2026-01-01"'), other
+        end
+        both = described_class.generate(
+          { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '@{day}', 'selectedItem' => '@{other}' }, 0, required_imports
+        )
+        expect(both).to include('value = data.day,')
+        expect(both).to include('viewModel.updateData(mapOf("day" to newValue))')
+        expect(both).not_to include('data.other')
+        static = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '2026-01-01' }, 0, required_imports)
+        expect(static).to include('"2026-01-01"')
+      end
+
+      it 'generates DateSelectBox for date type' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('DateSelectBox(')
+        expect(required_imports).to include(:date_selectbox_component)
+      end
+
+      it 'generates DateSelectBox with datePickerMode' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerMode' => 'date'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('datePickerMode = "date"')
+      end
+
+      it 'generates DateSelectBox with datePickerStyle' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'datePickerStyle' => 'wheels'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('datePickerStyle = "wheels"')
+      end
+
+      it 'generates DateSelectBox with dateFormat' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'dateFormat' => 'yyyy-MM-dd'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('dateFormat = "yyyy-MM-dd"')
+      end
+
+      it 'generates DateSelectBox with dateStringFormat' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'dateStringFormat' => 'MM/dd/yyyy'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('dateFormat = "MM/dd/yyyy"')
+      end
+
+      it 'generates DateSelectBox with minuteInterval' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'minuteInterval' => 15
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('minuteInterval = 15')
+      end
+
+      it 'generates DateSelectBox with minimumDate' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'minimumDate' => '2020-01-01'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('minimumDate = "2020-01-01"')
+      end
+
+      it 'generates DateSelectBox with maximumDate' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date',
+          'maximumDate' => '2030-12-31'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('maximumDate = "2030-12-31"')
+      end
+
+      it 'adds fillMaxWidth for date picker by default' do
+        json_data = {
+          'type' => 'SelectBox',
+          'selectItemType' => 'Date'
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('.fillMaxWidth()')
+      end
+    end
+  end
+
+  describe '.indent' do
+    it 'returns text unchanged for level 0' do
+      result = described_class.send(:indent, 'text', 0)
+      expect(result).to eq('text')
+    end
+
+    it 'adds indentation for level 1' do
+      result = described_class.send(:indent, 'text', 1)
+      expect(result).to eq('    text')
+    end
+  end
+
+  describe 'event handler invocation' do
+    it 'generates invoke() without arguments when handler type is () -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '(() -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'SelectBox',
+        'id' => 'countrySelect',
+        'selectedItem' => '@{country}',
+        'items' => ['USA', 'Japan', 'UK'],
+        'onValueChange' => '@{onSelectionChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onSelectionChange?.invoke()')
+      expect(result).not_to include('invoke("countrySelect"')
+    end
+
+    it 'generates invoke(viewId, value) when handler type is (Event) -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Event) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'SelectBox',
+        'id' => 'countrySelect',
+        'selectedItem' => '@{country}',
+        'items' => ['USA', 'Japan', 'UK'],
+        'onValueChange' => '@{onSelectionChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
+    end
+
+    it 'generates invoke(viewId, value) when handler type is (String, String) -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, String) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'SelectBox',
+        'id' => 'languageSelect',
+        'items' => ['English', 'Japanese'],
+        'onValueChange' => '@{onSelectionChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onSelectionChange?.invoke("languageSelect", newValue)')
+    end
+
+    it 'includes both viewModel.updateData and handler invocation when both binding and handler exist' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, String) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'SelectBox',
+        'id' => 'countrySelect',
+        'selectedItem' => '@{country}',
+        'items' => ['USA', 'Japan', 'UK'],
+        'onValueChange' => '@{onSelectionChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('viewModel.updateData')
+      expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
+    end
+
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Event) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'SelectBox',
+        'items' => ['A', 'B'],
+        'onValueChange' => '@{onSelectionChange}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onSelectionChange?.invoke("selectBox_0", newValue)')
+    end
+
+    # The payload is the new value of the SELECTION BINDING, as on sjui
+    # (selectbox_converter_spec 'with onValueChange on a bound selectedIndex'):
+    # a bound selectedIndex hands the handler the Int index, not the item
+    # String, so one `((Int) -> Unit)?` declaration compiles on both platforms.
+    context 'with a bound selectedIndex' do
+      let(:json_data) do
+        {
+          'type' => 'SelectBox',
+          'id' => 'countrySelect',
+          'items' => '@{countries}',
+          'selectedIndex' => '@{countryIndex}',
+          'onValueChange' => '@{onSelectionChange}'
+        }
+      end
+
+      it 'passes the Int index, not the item, to an (Int) -> Unit handler' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Int) -> Unit)?' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('val index = data.countries.indexOf(newValue)')
+        expect(result).to include('viewModel.updateData(mapOf("countryIndex" to index))')
+        expect(result).to include('data.onSelectionChange?.invoke(index)')
+        expect(result).not_to include('invoke(newValue)')
+      end
+
+      it 'passes viewId + Int index to a (String, Int) -> Unit handler' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, Int) -> Unit)?' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('data.onSelectionChange?.invoke("countrySelect", index)')
+      end
+    end
+
+    # Without a handler the pick of a bound selectedIndex is written back as the INDEX
+    # too — the item String went into the Int and the generated updateData dropped it
+    # (ticket selectbox-selected-item-binding-is-read-once, measured on an emulator).
+    it 'writes the index back for a bound selectedIndex with no handler' do
+      json_data = { 'type' => 'SelectBox', 'items' => %w[pp qq], 'selectedIndex' => '@{idx}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val index = listOf("pp", "qq").indexOf(newValue)')
+      expect(result).to include('viewModel.updateData(mapOf("idx" to index))')
+      expect(result).not_to include('mapOf("idx" to newValue)')
+    end
+
+    it 'still passes the item String when selectedItem is bound' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, String) -> Unit)?' }
+      }
+      json_data = {
+        'type' => 'SelectBox',
+        'id' => 'countrySelect',
+        'items' => ['USA', 'Japan'],
+        'selectedItem' => '@{country}',
+        'onValueChange' => '@{onSelectionChange}'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('viewModel.updateData(mapOf("country" to newValue))')
+      expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
+      expect(result).not_to include('val index')
+    end
+  end
+end
+
+# An enum value is its declared spelling, case and all (1.9.0): a spelling
+# declared in no case is drawn as no declared value is — the default — on
+# every path, as the validator names it. The two values the ruling names:
+# View.orientation declares `horizontal`, SelectBox.selectItemType `Date`.
+RSpec.describe 'kjui: an enum value is its declared spelling, case and all' do
+  let(:required_imports) { Set.new }
+
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  def layout_of(orientation)
+    KjuiTools::Compose::Components::ContainerComponent.generate({ 'type' => 'View', 'orientation' => orientation }, 0, required_imports)[:layout_type]
+  end
+
+  def select_box(item_type)
+    KjuiTools::Compose::Components::SelectBoxComponent.generate({ 'type' => 'SelectBox', 'selectItemType' => item_type }, 0, required_imports)
+  end
+
+  it "orientation: 'horizontal' is a Row; 'Horizontal' is not" do
+    expect(layout_of('horizontal')).to eq('Row')
+    expect(layout_of('Horizontal')).not_to eq('Row')
+  end
+
+  it "selectItemType: 'Date' is a date picker; 'date' is not" do
+    expect(select_box('Date')).to include('DateSelectBox(')
+    expect(select_box('date')).not_to include('DateSelectBox(')
+  end
+end
+
+# The alias `datetime` reaches DateSelectBox by its canonical spelling, the
+# one it reads: until 2.5.13 it was passed as written and drew a date-only
+# picker (a Style reaches the converter without `jui build`'s normalizer).
+RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent, 'datePickerMode alias' do
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  it 'passes datetime as dateAndTime' do
+    draw = ->(v) { described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'selectItemType' => 'Date', 'datePickerMode' => v }, 0, Set.new) }
+    expect(draw.call('datetime')).to include('datePickerMode = "dateAndTime"')
+    # The same but for the resolved font's name, numbered per file (P1).
+    same = ->(c) { c.gsub(/resolved_selectbox\d+/, 'resolved_selectbox') }
+    expect(same.call(draw.call('datetime'))).to eq(same.call(draw.call('dateAndTime')))
+  end
+end

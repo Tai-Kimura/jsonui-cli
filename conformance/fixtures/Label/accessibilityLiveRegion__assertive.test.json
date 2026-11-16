@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/accessibilityLiveRegion__assertive.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.accessibilityLiveRegion (assertive)",
+    "description": "Conformance fixture for 'accessibilityLiveRegion' on Label (section: Label, class: visual). Value under test: \"assertive\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "accessibilityLiveRegion__assertive",
+      "description": "Conformance fixture for 'accessibilityLiveRegion' on Label (section: Label, class: visual). Value under test: \"assertive\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_accessibilityLiveRegion__assertive"
+        }
+      ]
+    }
+  ]
+}

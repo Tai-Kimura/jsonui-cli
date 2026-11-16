@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Collection__flow-sections-cells-only.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection__flow-sections-cells-only",
+    "description": "Control for the flow section header / footer fixture: the same flow Collection and the same data, its two sections declaring cells only.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Collection__flow-sections-cells-only",
+      "description": "Control for the flow section header / footer fixture: the same flow Collection and the same data, its two sections declaring cells only.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_Collection__flow-sections-cells-only"
+        }
+      ]
+    }
+  ]
+}

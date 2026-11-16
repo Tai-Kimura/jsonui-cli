@@ -1,0 +1,307 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/screen-test.schema.json",
+  "title": "JsonUI Screen Test",
+  "description": "Schema for single-screen UI test cases (1:1 mapping with layout JSON)",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reference to this schema"
+    },
+    "type": {
+      "const": "screen",
+      "description": "Test type identifier"
+    },
+    "source": {
+      "type": "object",
+      "description": "Source files this test is based on",
+      "properties": {
+        "layout": {
+          "type": "string",
+          "description": "Path to the JsonUI layout file (e.g., 'Layouts/Login.json'). Provenance metadata: it is displayed in the generated docs but never opened, so no base directory applies and any spelling is accepted. Contrast 'document', which IS opened and therefore has a defined base."
+        },
+        "document": {
+          "type": "string",
+          "description": "Path to the specification document file (e.g., 'docs/screens/login.html' or 'docs/screens/login.md'). Used for linking from Mermaid flow diagrams. Resolved from the doc generator's INPUT DIRECTORY (or its parent) — a different base from 'layout', because this value also becomes the page's location inside the generated site and the URL the diagram links to. Write it as a forward path from the input directory or the project root; a '../'-leading value cannot work, since the page would land outside the output directory."
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Test metadata",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable test name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of what this test covers"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when this test was generated"
+        },
+        "generatedBy": {
+          "type": "string",
+          "description": "Agent or tool that generated this test"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags for filtering tests (e.g., ['smoke', 'regression'])"
+        },
+        "entry_screen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mark this screen as an entry point (e.g., splash, login). Entry screens are positioned on the left in Mermaid flow diagrams."
+        },
+        "group": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "Group name(s) for Mermaid diagram. Can be a string or array. When array, the screen appears in multiple group tabs."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "platform": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ios",
+            "android",
+            "web",
+            "all"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android",
+              "web"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      ],
+      "default": "all",
+      "description": "Target platform(s) for this test"
+    },
+    "orientation": {
+      "x-requires-driver": {
+        "android": "1.12.0",
+        "ios": "1.12.0",
+        "web": "1.12.0"
+      },
+      "type": "string",
+      "enum": ["portrait", "landscape"],
+      "description": "Orientation this file runs in, applied once when the run starts. Overrides the project-wide default in jui.config.json `test.orientation`; a `setOrientation` step still wins for the rotation it performs, so the order is step > this field > config default. Declared in the file rather than resolved at install time because one installed bundle is shared by every lane — phone and tablet run the same files against different devices — so a value baked in per file could only be right for one of them."
+    },
+    "embeddedIn": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*#[a-z][a-zA-Z0-9]*$",
+      "description": "Run this screen test inside a parent screen's `Embed` region. Format: 'ParentScreen#regionId' where ParentScreen is the parent screen name (PascalCase) and regionId is the Embed node's `id` attribute in the parent layout (camelCase). When set, the test runner mounts the parent screen first and asserts the screen-under-test renders into the matching Embed slot. Navigation assertions target the parent's NavController/Router (v1 supports `delegate` mode only). See jsonui-cli/docs/plans/2026-05-11-embed-feature.md §11.1."
+    },
+    "initialState": {
+      "x-requires-driver": {
+        "android": "1.17.0",
+        "ios": "1.15.0",
+        "web": "1.15.0"
+      },
+      "type": "object",
+      "description": "Values put into the Data of the screen under test (the screen id of source.layout) when the app is launched for this file, before its first case. Keys are that screen's Data names (the layout's `data` section), top level only, case-sensitive; no dot notation, and ViewModel properties outside `data` cannot be set. Each value must fit the Data's class (String: string; Int: an integral number within 32 bits, 2.0 accepted; Double/Float/CGFloat: any number; Bool: boolean only; Color: string; typed arrays element by element; null only for a class ending in `?`); closures, CollectionDataSource and Visibility cannot be set. The app applies it once, the first time the screen appears after launch, and reports what it applied; the driver fails the file's cases (setup) when the app did not confirm it or rejected a key — a library older than SwiftJsonUI 10.30.0 / KotlinJsonUI 2.44.0, or a build with the screen-marker gate closed, confirms nothing. Values an API provides are made with `mocks`. An empty `viewModel` is the same as none. Spec: specs/2026-07-08-advanced-test-features.md §10.",
+      "properties": {
+        "viewModel": {
+          "type": "object",
+          "description": "Data name -> value for the screen under test",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "launch": {
+      "x-requires-driver": {
+        "web": "1.15.0"
+      },
+      "$ref": "actions.schema.json#/definitions/launch"
+    },
+    "mocks": {
+      "$ref": "actions.schema.json#/definitions/mocksScenarioMap"
+    },
+    "screenReady": {
+      "x-requires-driver": {
+        "web": "1.8.4"
+      },
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["auto", "marker", "networkidle", "none"]
+        },
+        {
+          "type": "object",
+          "required": ["marker"],
+          "additionalProperties": false,
+          "properties": {
+            "marker": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Screen id whose marker to wait for instead of the one derived from source.layout"
+            }
+          }
+        }
+      ],
+      "description": "How this file decides the page is ready, overriding the runner's project-wide screenReadyStrategy. Needed by tests whose expected outcome is that the screen does NOT render — a permission refusal shown in its place, an expired session redirecting to login — for which waiting on the screen's own marker can only time out. 'none' skips the gate (the test's first step does the waiting); { marker } waits for where it lands instead, keeping a positive readiness condition; 'auto' / 'marker' / 'networkidle' are the project-wide gates applied to this file alone."
+    },
+    "caseIsolation": {
+      "x-requires-driver": {
+        "android": "1.16.0",
+        "ios": "1.14.0",
+        "web": "1.14.0"
+      },
+      "type": "string",
+      "enum": ["shared", "reopen"],
+      "default": "shared",
+      "description": "Whether the cases of this file share one screen state. 'shared' (the default, and what an absent key means): the screen is opened once, setup runs once, every case runs in the state the previous case left — its scroll position, the screen it navigated to — and teardown runs once, so the order of the cases matters. 'reopen': before EACH case the screen is opened afresh — web goes back to the URL the page was on when the file started (file mocks re-applied, screenReady gate awaited), iOS relaunches the app with the file's launch / mocks, Android relaunches the app with the file's launch / mocks — then setup runs; teardown runs after each case. A case gated out by skip / platform / responsive opens nothing; each retry attempt re-opens. Read for screen test files run directly; a flow that references a case runs it inside the flow and ignores this. An older driver ignores the key and runs the file as 'shared'."
+    },
+    "setup": {
+      "type": "array",
+      "description": "Steps run before the cases. With caseIsolation 'shared' (the default) they run ONCE per file, before the first case — not before each case. With caseIsolation 'reopen' they run before each case, after the screen is re-opened. A setup failure fails the cases it was run for (every case under 'shared', that one case under 'reopen'); teardown still runs.",
+      "items": {
+        "$ref": "actions.schema.json#/definitions/step"
+      }
+    },
+    "teardown": {
+      "type": "array",
+      "description": "Steps run after the cases. With caseIsolation 'shared' (the default) they run ONCE per file, after the last case — not after each case. With caseIsolation 'reopen' they run after each case. Teardown runs even when setup or the case failed; a teardown failure is recorded as an extra 'teardown' result.",
+      "items": {
+        "$ref": "actions.schema.json#/definitions/step"
+      }
+    },
+    "cases": {
+      "type": "array",
+      "description": "Test cases for this screen",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Test case name"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this test case verifies"
+          },
+          "descriptionFile": {
+            "type": "string",
+            "description": "Path to external description JSON file (relative to test file)"
+          },
+          "skip": {
+            "type": "boolean",
+            "default": false,
+            "description": "Skip this test case"
+          },
+          "platform": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ios",
+                  "android",
+                  "web",
+                  "all"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "ios",
+                    "android",
+                    "web"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            ],
+            "description": "Override platform for this specific case"
+          },
+          "responsive": {
+            "$ref": "actions.schema.json#/definitions/responsive",
+            "description": "Run this case only when the current size matches (named size-class bucket or size constraint, resolved at runtime; unmet gates skip the case). ANDs with case-level platform"
+          },
+          "initialState": {
+            "x-requires-driver": {
+              "android": "1.17.0",
+              "ios": "1.15.0",
+              "web": "1.15.0"
+            },
+            "type": "object",
+            "description": "This case's initialState, merged over the file's key by key (shallow: a value here replaces the file's value for that key whole; null replaces it too). Needs caseIsolation 'reopen' — under 'shared' the screen is opened once, before the first case, so a case-level initialState cannot be delivered: validate error, and the driver fails this case (setup). Same keys and value rules as the file-level initialState.",
+            "properties": {
+              "viewModel": {
+                "type": "object",
+                "description": "Data name -> value for the screen under test",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "args": {
+            "type": "object",
+            "description": "Default argument values for @{varName} substitution (overridable by flow file-reference args)",
+            "additionalProperties": true
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "actions.schema.json#/definitions/step"
+            },
+            "description": "Test steps (actions and assertions)"
+          }
+        },
+        "required": [
+          "name",
+          "steps"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "type",
+    "source",
+    "metadata",
+    "cases"
+  ],
+  "additionalProperties": false
+}

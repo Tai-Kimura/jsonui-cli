@@ -1,0 +1,398 @@
+# frozen_string_literal: true
+
+require 'swiftui/views/segment_converter'
+
+RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
+  before(:all) do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false
+  end
+
+  after(:all) do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true
+  end
+
+  # A Segment reads no cornerRadius (the requester's ruling 2026-11-16): the common stages wrote
+  # `.cornerRadius`, which clipped a declared background into a rounded rectangle under the
+  # capsule. Fixed or bound, it is written nowhere (a size class's branch reaches the converter
+  # already merged, so the same strip covers it).
+  describe 'a declared cornerRadius' do
+    [4, '@{r}'].each do |radius|
+      it "writes no corner for #{radius.inspect}, with a background too" do
+        code = described_class.new({ 'type' => 'Segment', 'items' => %w[A B], 'background' => '#FF0000', 'cornerRadius' => radius }).convert
+        expect(code).not_to match(/cornerRadius|RoundedRectangle/)
+        expect(code).to include('.pickerStyle(.segmented)')
+      end
+    end
+  end
+
+  # Its border and declared fill follow the segmented control's capsule (the orchestrator's
+  # decision 2026-11-16): a rectangle stroke and a rectangle fill sat square around it.
+  it 'draws a declared border and fill in a capsule' do
+    code = described_class.new({ 'type' => 'Segment', 'items' => %w[A B], 'background' => '#FF0000',
+                                 'borderColor' => '#0000FF', 'borderWidth' => 2, 'cornerRadius' => 4 }).convert
+    expect(code).to include('.clipShape(Capsule())')
+    expect(code).to match(/\.overlay\(\s*Capsule\(\)\s*\.stroke\(/)
+    expect(code).not_to match(/RoundedRectangle|cornerRadius/)
+  end
+
+  it 'clips nothing where no fill is declared' do
+    code = described_class.new({ 'type' => 'Segment', 'items' => %w[A B] }).convert
+    expect(code).not_to include('clipShape')
+  end
+
+  # A wrapContent Segment is as wide as its labels, equal segments, capped at the offered width
+  # (jsonui-cli 2.5.47, the same on every platform; SwiftJsonUI's segmentFitsItsLabels). No width
+  # and no weight is the same. matchParent, a number, a binding and a weight keep their width.
+  describe 'the width a Segment takes' do
+    def code_for(extra)
+      described_class.new({ 'type' => 'Segment', 'items' => %w[A BBBBB CC] }.merge(extra)).convert
+    end
+
+    [{ 'width' => 'wrapContent' }, { 'width' => 'wrap_content' }, {}].each do |extra|
+      it "fits its labels for #{extra.inspect}, before the frame" do
+        code = code_for(extra)
+        expect(code).to include('.segmentFitsItsLabels()')
+        frame = code.index('.frame(')
+        expect(code.index('.segmentFitsItsLabels()')).to be < frame if frame
+      end
+    end
+
+    [{ 'width' => 'matchParent' }, { 'width' => 200 }, { 'width' => '@{w}' }, { 'weight' => 1 },
+     { 'width' => 0, 'widthWeight' => 1 }].each do |extra|
+      it "keeps the given width for #{extra.inspect}" do
+        expect(code_for(extra)).not_to include('segmentFitsItsLabels')
+      end
+    end
+  end
+
+  describe '#convert' do
+    context 'with basic segment' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['Tab 1', 'Tab 2', 'Tab 3']
+        }
+      end
+
+      it 'generates Picker with segmented style' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('Picker(')
+        expect(code).to include('.pickerStyle(.segmented)')
+      end
+
+      it 'includes all items with tags' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('Text("Tab 1").tag(0)')
+        expect(code).to include('Text("Tab 2").tag(1)')
+        expect(code).to include('Text("Tab 3").tag(2)')
+      end
+    end
+
+    context 'with custom id' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'id' => 'my_segment',
+          'items' => ['A', 'B']
+        }
+      end
+
+      it 'uses id in selection binding' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('selectedMySegment')
+      end
+    end
+
+    context 'with selectedIndex binding' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['Option 1', 'Option 2'],
+          'selectedIndex' => '@{tabIndex}'
+        }
+      end
+
+      it 'uses binding for selection' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('$data.tabIndex')
+      end
+    end
+
+    context 'with selectedTabIndex binding' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['First', 'Second'],
+          'selectedTabIndex' => '@{currentTab}'
+        }
+      end
+
+      it 'uses binding for selection' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('$data.currentTab')
+      end
+    end
+
+    context 'with empty items' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => []
+        }
+      end
+
+      it 'generates empty picker' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('Picker(')
+        expect(code).to include('}')
+      end
+    end
+
+    context 'with items containing quotes' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['Say "Hello"', 'Normal']
+        }
+      end
+
+      it 'escapes quotes in items' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('\\"Hello\\"')
+      end
+    end
+
+    context 'with common modifiers' do
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['A', 'B'],
+          'opacity' => 0.5
+        }
+      end
+
+      it 'applies common modifiers' do
+        converter = described_class.new(component)
+        code = converter.convert
+
+        expect(code).to include('.opacity(0.5)')
+      end
+    end
+  end
+
+  describe 'event handler invocation' do
+    before do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
+    end
+
+    it 'calls onValueChange from the choice, after the selection is written' do
+      component = {
+        'type' => 'Segment',
+        'id' => 'tabSegment',
+        'items' => ['Tab1', 'Tab2'],
+        'selectedIndex' => '@{selectedTab}',
+        'onValueChange' => '@{onTabChange}'
+      }
+
+      converter = described_class.new(component)
+      code = converter.convert
+
+      # From the control's own write, after the value — not an `.onChange(of:)`,
+      # which ran after the click and for the view model's writes too.
+      expect(code).to include('set: { newValue in let changed = newValue != $data.selectedTab.wrappedValue; '\
+                              '$data.selectedTab.wrappedValue = newValue; if changed {')
+      expect(code).not_to include('.onChange(of:')
+      expect(code).to include('data.onTabChange?()')
+    end
+
+    it 'generates invoke(viewId, value) when handler type is (String, Int) -> Void' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'onTabChange' => { 'name' => 'onTabChange', 'class' => '((String, Int) -> Void)?' }
+      }
+
+      component = {
+        'type' => 'Segment',
+        'id' => 'tabSegment',
+        'items' => ['Tab1', 'Tab2'],
+        'selectedIndex' => '@{selectedTab}',
+        'onValueChange' => '@{onTabChange}'
+      }
+
+      converter = described_class.new(component)
+      code = converter.convert
+
+      expect(code).to include('data.onTabChange?("tabSegment", newValue)')
+    end
+
+    it 'generates invoke() when handler type is () -> Void' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'onTabChange' => { 'name' => 'onTabChange', 'class' => '(() -> Void)?' }
+      }
+
+      component = {
+        'type' => 'Segment',
+        'id' => 'tabSegment',
+        'items' => ['Tab1', 'Tab2'],
+        'selectedIndex' => '@{selectedTab}',
+        'onValueChange' => '@{onTabChange}'
+      }
+
+      converter = described_class.new(component)
+      code = converter.convert
+
+      # From the control's own write, after the value — not an `.onChange(of:)`,
+      # which ran after the click and for the view model's writes too.
+      expect(code).to include('set: { newValue in let changed = newValue != $data.selectedTab.wrappedValue; '\
+                              '$data.selectedTab.wrappedValue = newValue; if changed {')
+      expect(code).not_to include('.onChange(of:')
+      expect(code).to include('data.onTabChange?()')
+      expect(code).not_to include('onTabChange?("tabSegment"')
+    end
+
+    # No id: the drawn type and the position — on its own, the root `0`; it
+    # was `segment` for every id-less Segment (the orchestrator's ruling, 1.9.0).
+    it 'hands an id-less segment its position as the viewId' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+        'onTabChange' => { 'name' => 'onTabChange', 'class' => '((Event) -> Void)?' }
+      }
+
+      component = {
+        'type' => 'Segment',
+        'items' => ['A', 'B'],
+        'selectedIndex' => '@{selectedTab}',
+        'onValueChange' => '@{onTabChange}'
+      }
+
+      converter = described_class.new(component)
+      code = converter.convert
+
+      expect(code).to include('data.onTabChange?("segment_0", newValue)')
+    end
+
+    # SwiftUI's segmented Picker has no per-state colour modifier, so both the
+    # UIKit runtime and the SwiftUI Dynamic runtime go through
+    # UISegmentedControl.appearance(). The codegen read neither attribute.
+    describe 'selected tint and unselected label' do
+      it 'sets the selected segment tint' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'tintColor' => '#FF0000' }
+        ).convert
+
+        expect(code).to include('UISegmentedControl.appearance()')
+        expect(code).to include('selectedSegmentTintColor')
+      end
+
+      it 'sets the unselected title colour' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('setTitleTextAttributes')
+        expect(code).to include('for: .normal')
+      end
+
+      it 'applies in onAppear, since appearance() is process-wide' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('.onAppear {')
+      end
+
+      it 'emits nothing when neither is set' do
+        code = described_class.new({ 'type' => 'Segment', 'items' => %w[One Two] }).convert
+
+        expect(code).not_to include('UISegmentedControl.appearance()')
+      end
+    end
+
+    # fontColor / selectedFontColor are the label colours; normalColor /
+    # selectedColor are their declared aliases, resolved by the normalizer
+    # before the converter sees the node (contract: semantics.segmentLabelColors).
+    describe 'fontColor / selectedFontColor' do
+      it 'sets the unselected title colour from fontColor' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('setTitleTextAttributes')
+        expect(code).to include('for: .normal')
+      end
+
+      it 'sets the selected title colour from selectedFontColor' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'selectedFontColor' => '#00FF00' }
+        ).convert
+
+        expect(code).to include('for: .selected')
+      end
+
+      it 'gives the selected title fontColor when selectedFontColor is absent' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'fontColor' => '#0000FF' }
+        ).convert
+
+        expect(code).to include('for: .normal')
+        expect(code).to include('for: .selected')
+      end
+
+      it 'reads canonical names only, leaving aliases to the normalizer' do
+        code = described_class.new(
+          { 'type' => 'Segment', 'items' => %w[One Two], 'normalColor' => '#123456' }
+        ).convert
+
+        expect(code).not_to include('123456')
+      end
+    end
+
+    context 'with an object item (undeclared)' do
+      # It reached the screen as `Text("{\"label\"=>\"opt_a\", …}")` —
+      # swiftc parses it, so nothing caught it before the pixels (measured
+      # 2026-09-04). The declaration says static labels and both runtimes
+      # drop a non-primitive element.
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['Tab 1', { 'label' => 'opt_a', 'value' => 'a' }, 'Tab 3']
+        }
+      end
+
+      it 'emits no hash and no entry for it' do
+        code = described_class.new(component).convert
+        expect(code).not_to include('=>')
+        expect(code).not_to include('label')
+        expect(code.scan(/\.tag\(/).length).to eq(2)
+      end
+
+      it 'keeps the remaining tags contiguous' do
+        # The runtimes compact (asStrings / mapNotNull), so a hole here
+        # would put the generated tags out of step with them.
+        code = described_class.new(component).convert
+        expect(code).to include('.tag(0)')
+        expect(code).to include('.tag(1)')
+        expect(code).not_to include('.tag(2)')
+      end
+
+      it 'still emits the declared items' do
+        # The control: dropping one element must not drop the others.
+        code = described_class.new(component).convert
+        expect(code).to include('Tab 1')
+        expect(code).to include('Tab 3')
+      end
+    end
+  end
+end

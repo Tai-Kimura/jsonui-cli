@@ -1,0 +1,421 @@
+# frozen_string_literal: true
+
+require 'compose/components/button_component'
+require 'compose/helpers/modifier_builder'
+require 'compose/helpers/resource_resolver'
+require_relative '../../support/kotlin_compiler'
+require 'set'
+
+RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
+  let(:required_imports) { Set.new }
+
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    # Clear data definitions before each test
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    # These examples call .generate directly, so nothing else marks the file
+    # boundary that compose_builder marks in production. Without this, the
+    # names taken by one example (resolved_button*, buttonInteraction*)
+    # carry into the next and a later example reads `buttonInteraction_2`.
+    described_class.reset_counter!
+  end
+
+  describe '.generate' do
+    # The orchestrator's ruling 2026-09-27, round 17: a Button's text is placed across it by
+    # textAlign, centre by default. The content Row of a Material Button
+    # centres a wrap-width Text, so TextAlign.Start / End drew it in the
+    # middle: the Text takes the button's width when the button has one of its
+    # own (a declared width that is not wrapContent, or a weight) — not a
+    # wrap-width button, which filling would stretch, and not beside an icon.
+    it 'lets textAlign place the text across a button of a width of its own' do
+      text = ->(json) { described_class.generate({ 'type' => 'Button', 'text' => 'Go' }.merge(json), 0, required_imports) }
+      expect(text.({ 'width' => 200, 'textAlign' => 'Left' })).to include('textAlign = TextAlign.Start').and include('modifier = Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 'matchParent', 'textAlign' => 'Right', 'fontSize' => 14 })).to include('modifier = Modifier.fillMaxWidth()')
+      expect(text.({ 'weight' => 1, 'textAlign' => 'Center' })).to include('modifier = Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 'wrapContent', 'textAlign' => 'Left' })).not_to include('fillMaxWidth()')
+      expect(text.({ 'textAlign' => 'Left' })).not_to include('Modifier.fillMaxWidth()')
+      expect(text.({ 'width' => 200 })).not_to include('Modifier.fillMaxWidth()')
+      # Beside an icon the Text itself does not fill: the Row does (round 18).
+      beside = text.({ 'width' => 200, 'textAlign' => 'Left', 'image' => 'ic_x' })
+      expect(beside).not_to include("modifier = Modifier.fillMaxWidth()\n")
+      expect(beside.scan('Modifier.fillMaxWidth()').size).to eq(1)
+    end
+
+    # Round 18 (the orchestrator's ruling 2026-09-27): with an icon, the icon and the text
+    # move together — the Row takes a button's own width and textAlign
+    # arranges the pair, as iOS places the group.
+    it "places an icon button's icon and text together by textAlign" do
+      row = lambda do |json|
+        out = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'image' => 'ic_x', 'width' => 200 }.merge(json), 0, required_imports)
+        out[/Row\((.*?)\) \{/, 1]
+      end
+      expect(row.({ 'textAlign' => 'Left' })).to eq('modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.CenterVertically')
+      expect(row.({ 'textAlign' => 'Right' })).to include('horizontalArrangement = Arrangement.End')
+      expect(row.({ 'textAlign' => 'Center' })).to include('horizontalArrangement = Arrangement.Center')
+      expect(row.({})).to eq('verticalAlignment = Alignment.CenterVertically')
+      expect(row.({ 'textAlign' => 'Left', 'width' => 'wrapContent' })).to eq('verticalAlignment = Alignment.CenterVertically')
+      out = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'image' => 'ic_x', 'width' => 200, 'textAlign' => 'Right' }, 0, required_imports)
+      expect(out.scan('Modifier.fillMaxWidth()').size).to eq(1), out
+    end
+
+    it 'generates basic Button component' do
+      json_data = { 'type' => 'Button', 'text' => 'Click Me' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Button(')
+      expect(result).to include('Click Me')
+    end
+
+    it 'generates Button with onClick handler' do
+      json_data = { 'type' => 'Button', 'text' => 'Submit', 'onclick' => 'handleSubmit' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onClick = { data.handleSubmit?.invoke() }')
+    end
+
+    # canTap gates the handler's call and nothing else: the button stays
+    # an enabled button (attribute_definitions.json common.canTap).
+    describe 'canTap' do
+      let(:open) { described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}' }, 0, Set.new) }
+      # Every button's text resolves through the font provider (P1), under a name numbered per file.
+      def same_names(code) = code.gsub(/resolved_button\d+/, 'resolved_button')
+
+      it 'false leaves the onClick empty, as no handler does' do
+        shut = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => false }, 0, Set.new)
+        expect(same_names(shut)).to eq(same_names(described_class.generate({ 'type' => 'Button', 'text' => 'Go' }, 0, Set.new)))
+      end
+
+      it 'a binding gates the call inside onClick, and changes nothing else' do
+        bound = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => '@{c}' }, 0, Set.new)
+        expect(open).to include('onClick = { data.onTap?.invoke() }')
+        expect(same_names(bound)).to eq(same_names(open.sub('onClick = { data.onTap?.invoke() }', 'onClick = { if ((data.c ?: false)) { data.onTap?.invoke() } }')))
+      end
+
+      it 'the gated onClick compiles' do
+        bound = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => '@{c}' }, 0, Set.new)
+        lambda = bound[/onClick = (\{.*\}),?$/, 1]
+        expect(lambda).to eq('{ if ((data.c ?: false)) { data.onTap?.invoke() } }')
+        expect(<<~KOTLIN).to compile_as_kotlin
+          class Data(val onTap: (() -> Unit)? = null, val c: Boolean? = null)
+          fun click(data: Data): () -> Unit = #{lambda}
+        KOTLIN
+      end
+    end
+
+    it 'generates Button with empty onClick when no handler' do
+      json_data = { 'type' => 'Button', 'text' => 'Test' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('onClick = { }')
+    end
+
+    it 'generates Button with cornerRadius' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'cornerRadius' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('shape = RoundedCornerShape(8.dp)')
+      expect(required_imports).to include(:shape)
+    end
+
+    it 'generates Button with margins' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'margins' => [10, 20, 30, 40] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.padding(')
+    end
+
+    it 'generates Button with width' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'width' => 200 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.requiredWidth(200.dp)')
+    end
+
+    it 'generates Button with height' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'height' => 50 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('.requiredHeight(50.dp)')
+    end
+
+    it 'generates Button with single padding value' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'padding' => 16 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('contentPadding = PaddingValues(16.dp)')
+      expect(required_imports).to include(:button_padding)
+    end
+
+    it 'generates Button with paddings array of 1' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'paddings' => [16] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('contentPadding = PaddingValues(16.dp)')
+    end
+
+    it 'generates Button with paddings array of 2' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'paddings' => [10, 20] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('vertical = 10.dp')
+      expect(result).to include('horizontal = 20.dp')
+    end
+
+    it 'generates Button with paddings array of 3' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'paddings' => [10, 20, 30] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('top = 10.dp')
+      expect(result).to include('horizontal = 20.dp')
+      expect(result).to include('bottom = 30.dp')
+    end
+
+    it 'generates Button with paddings array of 4' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'paddings' => [10, 20, 30, 40] }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('top = 10.dp')
+      expect(result).to include('end = 20.dp')
+      expect(result).to include('bottom = 30.dp')
+      expect(result).to include('start = 40.dp')
+    end
+
+    it 'generates Button with individual padding attributes' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'paddingTop' => 10, 'paddingBottom' => 20 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('contentPadding')
+    end
+
+    it 'does not read the undeclared paddingHorizontal / paddingVertical' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'paddingHorizontal' => 16, 'paddingVertical' => 8 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('horizontal = 16.dp')
+      expect(result).not_to include('vertical = 8.dp')
+      expect(result).to include('contentPadding = PaddingValues(0.dp)')
+    end
+
+    it 'generates Button with background color' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'background' => '#007AFF' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('colors = ButtonDefaults.buttonColors')
+      expect(result).to include('containerColor')
+      expect(required_imports).to include(:button_colors)
+    end
+
+    it 'generates Button with disabledBackground' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'disabledBackground' => '#CCCCCC' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('disabledContainerColor')
+    end
+
+    it 'generates Button with disabledFontColor' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'disabledFontColor' => '#888888' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('disabledContentColor')
+    end
+
+    it 'generates a real pressed-state colour for hilightColor (no more comment)' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'hilightColor' => '#FF0000' }
+      result = described_class.generate(json_data, 0, required_imports)
+      # The pressed state is owned via an InteractionSource; the content
+      # colour follows collectIsPressedAsState instead of a TODO comment.
+      expect(result).to include('remember { MutableInteractionSource() }')
+      expect(result).to include('collectIsPressedAsState()')
+      expect(result).to include('interactionSource = buttonInteraction')
+      expect(result).to include('contentColor = if (buttonPressed)')
+      expect(result).not_to include('// hilightColor')
+      expect(required_imports).to include(:pressed_state)
+    end
+
+    it 'swaps the container colour when pressed for highlightBackground' do
+      json_data = { 'type' => 'Button', 'text' => 'Test',
+                    'background' => '#FFFFFF', 'highlightBackground' => '#DDDDDD' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('containerColor = if (buttonPressed)')
+    end
+
+    it 'generates Button with enabled false' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'enabled' => false }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('enabled = false')
+    end
+
+    it 'generates Button with enabled true' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'enabled' => true }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('enabled = true')
+    end
+
+    it 'generates Button with enabled data binding' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'enabled' => '@{isActive}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('enabled = (data.isActive ?: false)')
+    end
+
+    it 'generates Button with fontSize routed through Configuration.Font.resolve(FontSpec(...))' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'fontSize' => 18 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Configuration.Font.resolve(FontSpec(')
+      expect(result).to include('size = 18.sp')
+      expect(result).to match(/fontSize = jsonUIFontSize\(resolved_button\d+\.size \?: TextUnit\.Unspecified\)/)
+    end
+
+    it 'generates Button with fontColor' do
+      json_data = { 'type' => 'Button', 'text' => 'Test', 'fontColor' => '#FFFFFF' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('contentColor =')
+    end
+
+    it 'generates Text content inside button' do
+      json_data = { 'type' => 'Button', 'text' => 'Submit' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include(') {')
+      expect(result).to include('Text(')
+    end
+
+    it 'uses default text when none provided' do
+      json_data = { 'type' => 'Button' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('Button')
+    end
+  end
+
+  describe '.indent' do
+    it 'returns text unchanged for level 0' do
+      result = described_class.send(:indent, 'text', 0)
+      expect(result).to eq('text')
+    end
+
+    it 'adds indentation for level 1' do
+      result = described_class.send(:indent, 'text', 1)
+      expect(result).to eq('    text')
+    end
+
+    it 'adds indentation for level 2' do
+      result = described_class.send(:indent, 'text', 2)
+      expect(result).to eq('        text')
+    end
+  end
+
+  describe 'event handler invocation' do
+    it 'generates invoke() without arguments when handler type is () -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onClick' => { 'name' => 'onClick', 'class' => '(() -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'Button',
+        'id' => 'submitButton',
+        'text' => 'Submit',
+        'onClick' => '@{onClick}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onClick?.invoke()')
+      expect(result).not_to include('invoke("submitButton"')
+    end
+
+    it 'generates invoke(viewId) when handler type is (Event) -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onClick' => { 'name' => 'onClick', 'class' => '((Event) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'Button',
+        'id' => 'submitButton',
+        'text' => 'Submit',
+        'onClick' => '@{onClick}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      # For click events without value, only viewId should be passed
+      expect(result).to include('data.onClick?.invoke("submitButton")')
+      expect(result).not_to include('invoke("submitButton",')
+    end
+
+    it 'generates invoke(viewId) when handler type is (String) -> Unit' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onClick' => { 'name' => 'onClick', 'class' => '((String) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'Button',
+        'id' => 'cancelButton',
+        'text' => 'Cancel',
+        'onClick' => '@{onClick}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onClick?.invoke("cancelButton")')
+    end
+
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onClick' => { 'name' => 'onClick', 'class' => '((Event) -> Unit)?' }
+      }
+
+      json_data = {
+        'type' => 'Button',
+        'text' => 'Click',
+        'onClick' => '@{onClick}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('data.onClick?.invoke("button_0")')
+    end
+
+    it 'generates error comment for camelCase onClick without binding format' do
+      json_data = {
+        'type' => 'Button',
+        'text' => 'Click',
+        'onClick' => 'handleClick'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('ERROR')
+      expect(result).to include('camelCase events require binding format')
+    end
+  end
+
+  describe 'onLongPress (inner-clickable trap)' do
+    # Button has its own inner clickable that consumes the down event in the
+    # Main pass, so plain detectTapGestures on the outer modifier is starved.
+    # The emit must watch the Initial pass (mirrors dynamic
+    # ModifierBuilder.applyLongPressable) instead of combinedClickable.
+    it 'emits an Initial-pass pointerInput long-press detector on the Button modifier' do
+      json_data = {
+        'type' => 'Button',
+        'id' => 'submit_button',
+        'text' => 'Submit',
+        'onClick' => '@{onSubmit}',
+        'onLongPress' => '@{onSubmitLongPress}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      # Native onClick stays on the Button parameter
+      expect(result).to include('onClick = { data.onSubmit?.invoke() }')
+      # Long press rides the modifier chain with Initial-pass detection
+      expect(result).to include('.pointerInput(data) {')
+      expect(result).to include('awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)')
+      expect(result).to include('withTimeout(viewConfiguration.longPressTimeoutMillis)')
+      expect(result).to include('data.onSubmitLongPress?.invoke()')
+      expect(result).to include('it.consume()')
+      expect(required_imports).to include(:long_press_gesture)
+    end
+
+    it 'emits the long-press detector even without onClick' do
+      json_data = {
+        'type' => 'Button',
+        'text' => 'Hold',
+        'onLongPress' => '@{onHold}'
+      }
+
+      result = described_class.generate(json_data, 0, required_imports)
+
+      expect(result).to include('onClick = { }')
+      expect(result).to include('.pointerInput(data) {')
+      expect(result).to include('data.onHold?.invoke()')
+    end
+
+    it 'does not emit pointerInput without onLongPress' do
+      json_data = { 'type' => 'Button', 'text' => 'Plain', 'onClick' => '@{onTap}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('.pointerInput')
+    end
+  end
+end

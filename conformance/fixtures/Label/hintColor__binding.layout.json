@@ -1,0 +1,34 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "Label",
+      "id": "target",
+      "width": 200,
+      "height": "wrapContent",
+      "hint": "Conformance Hint",
+      "hintAttributes": {
+        "fontSize": 12
+      },
+      "hintColor": "@{boundHintColor}"
+    }
+  ],
+  "data": [
+    {
+      "name": "boundHintColor",
+      "class": "String",
+      "defaultValue": "#FF0000"
+    }
+  ]
+}

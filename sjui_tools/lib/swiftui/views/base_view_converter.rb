@@ -1,0 +1,2429 @@
+# frozen_string_literal: true
+
+require 'set'
+require_relative 'template_helper'
+require_relative '../../core/type_synonyms'
+require_relative '../../core/image_accessibility'
+require_relative '../binding/binding_expression'
+require_relative 'alignment_helper'
+require_relative 'frame_helper'
+require_relative 'color_helper'
+require_relative 'spacing_helper'
+require_relative 'value_expression_helper'
+require_relative 'control_accessibility_modifiers'
+require_relative 'modifier_helper'
+require_relative 'modifier_bag'
+require_relative '../binding/binding_handler_registry'
+require_relative '../../core/attribute_validator'
+require_relative '../../core/tap_accessibility'
+require_relative '../../core/layout_path'
+require_relative '../../core/enum_spelling'
+require_relative '../../core/binding_validator_core'
+require_relative '../../core/string_literals'
+require_relative '../helpers/string_manager_helper'
+require_relative 'responsive_helper'
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      class BaseViewConverter
+        include SjuiTools::SwiftUI::Helpers::StringManagerHelper
+        include TemplateHelper
+        include AlignmentHelper
+        include FrameHelper
+        include ColorHelper
+        include SpacingHelper
+        include ValueExpressionHelper
+        include ControlAccessibilityModifiers
+        include ModifierHelper
+
+        # Class-level validator instance (shared across all converters)
+        @@validator = nil
+        @@validation_enabled = true
+
+        # Enable or disable validation
+        def self.validation_enabled=(enabled)
+          @@validation_enabled = enabled
+        end
+
+        def self.validation_enabled?
+          @@validation_enabled
+        end
+
+        # Per-file normalization state, set by JsonToSwiftUIConverter from
+        # the root `$jui` marker (Core::Normalization.canonicalized?)
+        # before converting a layout. When true, alias attribute
+        # spellings were already rewritten to their canonical names by
+        # `jui build` normalizeLayouts, and converters take the
+        # canonical-only lookup path (see #attr_with_alias). Class-level
+        # for the same reason as validation_enabled: converters are
+        # instantiated per node deep inside helpers without a shared
+        # per-conversion config object.
+        @@layout_normalized = false
+
+        def self.layout_normalized=(normalized)
+          @@layout_normalized = normalized
+        end
+
+        def self.layout_normalized?
+          @@layout_normalized
+        end
+
+        # Per-file: this layout is drawn in a view of its own where a
+        # `userInteractionEnabled` stop can reach it from another layout
+        # (InteractionStopIndex) — a Collection's cell, an Embed's screen, a
+        # TabView tab's view. Its view reads the stop from the environment
+        # (INTERACTION_ENVIRONMENT_DECLARATION), and every tap in it is gated
+        # on it as on a bound flag (tap_gate_condition). Off for every other
+        # layout, which is emitted as it was.
+        @@reads_interaction_environment = false
+        # Per file: the ids of this layout's elements a reorderable Collection picks its rows up by (ReorderHandleIndex).
+        @@reorder_handle_ids = Set.new
+
+        def self.reorder_handle_ids=(value)
+          @@reorder_handle_ids = value || Set.new
+        end
+
+        def self.reorder_handle_ids
+          @@reorder_handle_ids
+        end
+
+        def self.reads_interaction_environment=(value)
+          @@reads_interaction_environment = value ? true : false
+        end
+
+        def self.reads_interaction_environment?
+          @@reads_interaction_environment
+        end
+
+        # The property a view that reads the stop declares, and the name its
+        # taps' gates use (SwiftJsonUI's EnvironmentValues.jsonuiInteractionStopped).
+        INTERACTION_ENVIRONMENT_NAME = 'jsonuiInteractionStopped'
+        INTERACTION_ENVIRONMENT_DECLARATION =
+          "@Environment(\\.jsonuiInteractionStopped) private var #{INTERACTION_ENVIRONMENT_NAME}"
+
+        attr_reader :state_variables, :modifier_bag
+
+        # Injected onto every node under a scrolling container by
+        # JsonToSwiftUIConverter#mark_scrolling_ancestors (one walk from the
+        # root, after includes are expanded) — the same channel as
+        # `parent_orientation`: a converter sees only its own hash.
+        SCROLLING_ANCESTOR_KEY = '_scrolling_ancestor'
+
+        # Set on a node inside a vertical ScrollView, with no node between that
+        # bounds the height (JsonToSwiftUIConverter#mark_open_scroll).
+        IN_OPEN_SCROLL_KEY = '_in_open_scroll'
+        # Set on the ROOT of a layout that some Collection renders as a cell
+        # / header / footer (CollectionCellIndex). Not propagated.
+        COLLECTION_CELL_ROOT_KEY = '_collection_cell_root'
+
+        def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil)
+          @component = component
+          @indent_level = indent_level
+          @action_manager = action_manager
+          @generated_code = []
+          @state_variables = []
+          @binding_registry = binding_registry || SjuiTools::SwiftUI::Binding::BindingHandlerRegistry.new
+          @binding_handler = @binding_registry.get_handler(@component['type'] || 'View')
+          @modifier_bag = ModifierBag.new
+
+          # Note: Validation is now done in json_to_swiftui_converter.rb's validate_json_tree
+          # which properly passes parent_orientation to handle weight validation correctly
+
+          # includeとvariables処理
+          handle_include_and_variables
+        end
+
+        def convert
+          raise NotImplementedError, "Subclasses must implement convert method"
+        end
+
+        def add_line(line)
+          @generated_code << ("    " * @indent_level + line)
+        end
+
+        def add_modifier_line(modifier)
+          add_line "    #{modifier}"
+        end
+
+        # Canonical-name attribute lookup with alias fallback.
+        #
+        # Reads `canonical` from @component first; when absent, each
+        # alias spelling (from attribute_definitions.json `aliases`) is
+        # consulted in order — but only for raw (L0) layouts. For
+        # L1-normalized layouts (`$jui` marker) the normalizer has
+        # already rewritten alias spellings, so the fallback is skipped
+        # entirely and only the canonical name is honored.
+        def attr_with_alias(canonical, *aliases)
+          value = @component[canonical]
+          return value unless value.nil?
+          return nil if self.class.layout_normalized?
+
+          aliases.each do |alias_name|
+            value = @component[alias_name]
+            return value unless value.nil?
+          end
+          nil
+        end
+
+        # Compute the modifier lines apply_modifiers WOULD register for the
+        # supplied attributes, without mutating persistent converter state or
+        # writing anything to @generated_code. Used by the responsive
+        # container path so each branch can emit padding / margin /
+        # background / etc. derived from the branch-merged attrs.
+        #
+        # `exclude_keys` are stripped from the temp attrs before
+        # apply_modifiers runs — used to suppress duplicates with the
+        # frame/center handling that
+        # ResponsiveHelper.build_responsive_modifiers already emits.
+        def collect_modifiers_for(attrs, exclude_keys: [])
+          cleaned = (attrs || {}).dup
+          cleaned.delete('responsive')
+          exclude_keys.each { |k| cleaned.delete(k) }
+          # Stack-line concerns (orientation / spacing) are baked into
+          # build_container_line per branch; they're not modifiers.
+          cleaned.delete('orientation')
+          cleaned.delete('spacing')
+
+          saved_component = @component
+          saved_bag = @modifier_bag
+          saved_code = @generated_code
+
+          @component = cleaned
+          @modifier_bag = ModifierBag.new
+          @generated_code = []
+
+          begin
+            apply_modifiers
+            @modifier_bag.to_lines
+          ensure
+            @component = saved_component
+            @modifier_bag = saved_bag
+            @generated_code = saved_code
+          end
+        end
+
+        protected
+
+        # Get value with binding support
+        def get_binding_value(key, default = nil)
+          value = @component[key]
+          @binding_handler.get_value(value, default)
+        end
+
+        # Check if a value is a binding expression
+        def is_binding?(value)
+          @binding_handler.is_binding?(value)
+        end
+
+        # An attribute that NAMES something the generator has to know — the next
+        # field, a radio group, a screen. A binding has no value at generation
+        # time, and pasted into an identifier it stops the build in Xcode, so it
+        # is reported and the attribute reads as absent.
+        def name_slot(key, value)
+          return value unless is_binding?(value)
+
+          SjuiTools::Core::Logger.warn "[sjui] #{@component['type']} #{@component['id'].inspect}: '#{key}' names a " \
+                                       "field or screen and does not take a binding (#{value}); ignored."
+          nil
+        end
+
+        # A handler named by an event attribute the SSoT declares with a
+        # "string" type (onAppear, onTextChange, a Collection's / TabView's
+        # onValueChange, onItemAppear): the binding '@{name}' or the bare
+        # name, both naming the data's closure. Until jsonui-cli 1.9.6 these
+        # attributes read the binding form only and dropped a bare name with
+        # no report (ticket bare-event-handler-is-dropped-without-a-warning).
+        # A binding-only attribute (onClick, …) does not take a bare name;
+        # the binding validator reports one (binding-bare-event).
+        def handler_reference?(value)
+          is_binding?(value) || (value.is_a?(String) && value.strip.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/))
+        end
+
+        def handler_property(value)
+          extract_binding_property(value) || value.strip
+        end
+
+        # The PATH a binding expression names.
+        # "@{propertyName}"        -> "propertyName"
+        # "@{!propertyName}"       -> "propertyName" (negation stripped)
+        # "@{propertyName ?? 12}"  -> "propertyName" (default stripped)
+        #
+        # Callers paste the result after `data.` / `$data.`, so what they need
+        # is the path and nothing else. The regexp this used to run captured
+        # everything between the braces, which carried the inline default out
+        # with it: `@{gap ?? 12}` produced `$data.gap ?? 12` in a two-way
+        # position and `data.gap ?? 12` unbracketed in a value one. Both are
+        # the canonical parser being bypassed rather than a spelling gap
+        # (plan 49; the same shape as kjui's `process_dimension`), so the
+        # answer comes from `BindingExpression.parse` instead.
+        #
+        # A value that is not a binding is returned unchanged — several
+        # callers pass a name that is already bare.
+        def extract_binding_property(value)
+          return nil unless value.is_a?(String)
+          return value unless SjuiTools::SwiftUI::Binding::BindingExpression.binding?(value)
+
+          SjuiTools::SwiftUI::Binding::BindingExpression.parse(value[2..-2]).path
+        end
+
+        # Check if a binding expression is negated
+        # "@{!propertyName}" -> true
+        # "@{propertyName}" -> false
+        def is_negated_binding?(value)
+          return false unless value.is_a?(String)
+          value =~ /^@\{!.+\}$/
+        end
+
+        # Read-only Swift value expression for a binding.
+        # "@{propertyName}"        -> "data.propertyName"
+        # "@{!propertyName}"       -> "!data.propertyName"
+        # "@{propertyName ?? 12}"  -> "data.propertyName ?? 12" (optional only)
+        #
+        # Routed through the canonical emitter rather than string-building the
+        # `data.` prefix here: negation of an Optional needs the unwrap that
+        # `swift_value_expr` writes, and an inline default on a NON-optional
+        # property is dead code the canonical precedence rule drops.
+        def binding_data_expr(value)
+          return "data.#{value}" unless SjuiTools::SwiftUI::Binding::BindingExpression.binding?(value)
+
+          SjuiTools::SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
+        end
+
+        # Apply binding modifiers into the modifier bag
+        def apply_binding_modifiers
+          skip = []
+          # Skip keys already handled by converter (registered in bag)
+          skip << 'background' if @modifier_bag.key?(:background)
+          # canTap is the tap's gate (tap_gesture_line), never hit testing.
+          skip << 'canTap'
+          skip << 'userInteractionEnabled' if @interaction_gates_registered
+          modifiers = @binding_handler.process_bindings(@component, skip_keys: skip)
+          modifiers.each do |modifier|
+            next unless modifier
+            # Categorize binding modifier into the correct bag key
+            bag_key = categorize_binding_modifier(modifier)
+            if bag_key
+              @modifier_bag.register(bag_key, modifier)
+            else
+              # Unknown modifier - append as component_specific
+              @modifier_bag.append(:component_specific, modifier)
+            end
+          end
+        end
+
+        def handle_include_and_variables
+          # include は変換前に IncludeExpander.process_includes で展開される。
+          # ここに残っている include はメタデータのみを記録する
+          if @component['include']
+            add_line "// Component include should have been expanded by process_includes"
+            add_line "// include: #{@component['include']}"
+
+            if @component['shared_data']
+              add_line "// shared_data: #{@component['shared_data'].to_json}"
+            end
+
+            if @component['data']
+              add_line "// data: #{@component['data'].to_json}"
+            end
+
+            if @component['variables']
+              add_line "// variables: #{@component['variables'].to_json}"
+            end
+          end
+        end
+
+        def indent(&block)
+          @indent_level += 1
+          yield
+          @indent_level -= 1
+        end
+
+        # Component types whose SwiftUI representation is a plain layout
+        # container (HStack/VStack/ZStack/ScrollView wrapper) that does not
+        # become an accessibility element on its own. Keep in sync with
+        # SwiftJsonUI DynamicModifierHelper.accessibilityContainerTypes.
+        # Drawn types only (downcased): a node is looked up by the type it is
+        # drawn as (TypeSynonyms.drawn_type), so an HStack is a view and a
+        # Scroll a scrollview without a spelling of their own here.
+        ACCESSIBILITY_CONTAINER_TYPES = %w[
+          view safeareaview scrollview
+          blur gradientview
+          embed
+        ].freeze
+        # `embed` is here because EmbedContainer is a plain wrapper view: a
+        # bare .accessibilityIdentifier on it is pushed down into the
+        # embedded screen and clobbers the identifier of that screen's root
+        # container (its nearest descendant element) — the embedded root id
+        # then never resolves in XCUITest while pane leaves still do. The
+        # merge-hazard anchor is always emitted for an id-bearing Embed
+        # (its subtree is unknown at codegen time, contribution 0).
+
+        # Component types that are guaranteed to surface at least one
+        # accessibility element of their own when visible (text, controls,
+        # images — an image only with a written alt, image_surely_an_element?).
+        # Used to decide whether a container can ever collapse to a
+        # single accessibility child (the "merge hazard" — see
+        # apply_accessibility_identifier). Types NOT listed here (Collection,
+        # Table, Web, TabView, Include, Embed, DynamicComponent, bare
+        # decorative Views…) may yield zero elements at runtime, so they are
+        # conservatively not counted.
+        # Drawn types only (downcased), as ACCESSIBILITY_CONTAINER_TYPES.
+        CERTAIN_ACCESSIBILITY_ELEMENT_TYPES = %w[
+          label iconlabel button
+          textfield textview
+          image circleimage networkimage
+          switch checkbox radio
+          segment progress slider indicator selectbox
+        ].freeze
+
+        # The handle's own `hidden` (applied inside .collectionReorderHandle, so it is passed): a handle that is not
+        # drawn makes its row fixed (ticket jui-collection-reorder-fixed-row-vs-barrier-row). Invisible and gone come
+        # from the VisibilityWrapper around it. Nothing when the handle declares no hidden.
+        def reorder_handle_hidden_arg
+          hidden = @component['hidden']
+          return 'hidden: true' if hidden == true
+          return "hidden: #{binding_data_expr(hidden)}" if is_binding?(hidden)
+
+          ''
+        end
+
+        def generated_code
+          # Emit all modifiers from the bag in correct order
+          @modifier_bag.emit_all(self)
+
+          # accessibilityIdentifier for UI testing - auto-added for all components with id
+          # ID prefixes from includes are already applied during JSON processing
+          if @component['id'] && !@accessibility_identifier_added
+            apply_accessibility_identifier
+            @accessibility_identifier_added = true
+            # The handle a reorderable Collection picks its rows up by (ticket jui-collection-drag-to-reorder).
+            add_modifier_line ".collectionReorderHandle(#{reorder_handle_hidden_arg})" if @@reorder_handle_ids.include?(@component['id'])
+            apply_outer_disabled
+          elsif collection_cell_root_without_id?
+            apply_collection_cell_root_container
+          end
+          # A text component's fontScaling / maxFontScale, for every font inside it (FontScaling in SwiftJsonUI).
+          apply_font_scaling
+          # Last, on the element the chain formed (ControlAccessibilityModifiers).
+          apply_control_accessibility
+          @generated_code.join("\n")
+        end
+
+        # The components whose text sizes `fontScaling` / `maxFontScale` govern (downcased; aliases included).
+        FONT_SCALING_TYPES = %w[
+          label iconlabel button textfield edittext input textview selectbox
+          switch toggle checkbox check radio
+        ].freeze
+
+        # `.fontScaling(_:maxFontScale:)` when the component declares either (ticket
+        # sjui-label-font-size-ignores-dynamic-type): SwiftJsonUI reads it from the environment for every font the
+        # component draws. Undeclared: nothing, so the app default (SwiftJsonUIConfiguration font.scaling / maxScale)
+        # applies.
+        def apply_font_scaling
+          return unless FONT_SCALING_TYPES.include?(@component['type'].to_s.downcase)
+          scaling = @component['fontScaling']
+          max = @component['maxFontScale']
+          return if scaling.nil? && max.nil?
+          scaling_arg = scaling.nil? ? 'nil' : (scaling == true ? 'true' : 'false')
+          max_arg = max.is_a?(Numeric) ? "CGFloat(#{max})" : 'nil'
+          add_modifier_line ".fontScaling(#{scaling_arg}, maxFontScale: #{max_arg})"
+        end
+
+        # `.disabled` again, OUTSIDE the accessibility element.
+        #
+        # The bag emits `.disabled(...)` before the identifier, and
+        # `apply_accessibility_identifier` then forms the container's
+        # accessibility element ON TOP of it. An element formed outside the
+        # disabled environment never receives the notEnabled trait, so
+        # XCUITest reads the target as enabled while the view really is
+        # disabled.
+        #
+        # Not a deduction: the dynamic face hit this on the same fixture and
+        # wrote the finding down. `DynamicModifierHelper.standardOrder` carries
+        # a second `Stage("disabledOuter")` after `Stage("accessibilityId")`,
+        # annotated "measured: the View-hosted enabled__false conformance
+        # fixture". This mirrors that stage.
+        #
+        # Double application is harmless — `.disabled(true)` is idempotent and
+        # the inner one still governs the subtree's own controls — and this is
+        # NOT a duplicate to be tidied away.
+        #
+        # A responsive container emits its modifiers per size class INSIDE its
+        # `responsiveN` wrapper (ResponsiveHelper.generate_container_function),
+        # so its own bag holds no `:disabled` while the identifier is applied
+        # at the call site, outside the wrapper — and nothing followed the
+        # identifier: XCUITest read the node as enabled while it was disabled
+        # (a View with `responsive` and a bound `enabled`, measured on an iOS
+        # simulator by a UI test). `@outer_disabled` carries the
+        # line for that path.
+        def apply_outer_disabled
+          line = @modifier_bag[:disabled] || @outer_disabled
+          add_modifier_line line if line
+        end
+
+        # A Collection wraps every cell it renders with
+        # `.accessibilityIdentifier("{collectionId}_item_{index}")`. A plain
+        # SwiftUI container is not an accessibility element, so that
+        # identifier is pushed down onto the nearest descendants — the cell
+        # root's own direct children — and they answer to `{id}_item_{N}`
+        # instead of the identifiers they declared.
+        #
+        # A cell root that declares an `id` never had this problem: the
+        # id-bearing path above makes it an explicit container first, and the
+        # wrapper's identifier then lands on the wrapper. That is the whole
+        # discriminator, measured across 8 cells of one consumer: 8/8
+        # explained by "does the cell root declare an id".
+        #
+        # So a cell root becomes a container whether or not it has an id.
+        # WITHOUT an identifier of its own — it has none to emit, and the
+        # wrapper's `{id}_item_{N}` is the address the drivers use.
+        #
+        # Scope is deliberately the cell ROOT only, not every id-less
+        # container: emitting accessibility scaffolding for all of them is
+        # what exhausted a device's main-thread stack once already (see the
+        # DEPTH BUDGET note below).
+        #
+        # WHY THE TWO FACES DIFFER (declared, so it reads as design and not
+        # as drift). Here the container goes on the cell ROOT, which is
+        # possible because `sjui build` sees the whole project and marks the
+        # layouts some Collection renders (CollectionCellIndex) before
+        # conversion. The dynamic renderer has no such pass at the point it
+        # wraps a cell: the cell's JSON is loaded inside DynamicView, so the
+        # root's `id` is not knowable there without reading a file per cell.
+        # It makes the WRAPPER the element instead
+        # (CollectionConverter.buildCellView). Same outcome for the
+        # children; different node carries the container.
+        #
+        # The consequence of that difference is the single-child merge: this
+        # side can compute `accessibility_merge_hazard?` from the root's
+        # declaration and emits the anchor only where it is needed, while
+        # the dynamic side cannot, and an unconditional anchor there would
+        # be the DEPTH BUDGET regression on every cell. Whether dynamic
+        # needs one is left to the conformance fixtures that run through it.
+        def apply_collection_cell_root_container
+          # A root combined into one button (tap_accessibility_lines) is an
+          # element already; a container around it would hide it again.
+          return if combined_tap?
+
+          # The same single-child merge the id path guards against, for the
+          # same reason and by the same means. `.contain` alone is not enough
+          # when the container can end up with fewer than two accessibility
+          # children: SwiftUI collapses it into that single child, and the
+          # WRAPPER's `{id}_item_{N}` then lands on the child after all —
+          # the defect this method exists to remove, surviving in cells with
+          # one child. Found by reading the id path's own hazard check rather
+          # than by a failing test; the arms below pin both sides.
+          # Normally on already, inside the offset and the margins
+          # (apply_accessibility_anchor); here only for a chain that never
+          # reached apply_common_decorations.
+          if accessibility_merge_hazard? && !@accessibility_anchor_registered
+            add_modifier_line ".overlay(alignment: .topLeading) {"
+            indent do
+              add_modifier_line "Color.clear"
+              add_modifier_line "    .frame(width: 0.5, height: 0.5)"
+              add_modifier_line "    .accessibilityElement(children: .ignore)"
+            end
+            add_modifier_line "}"
+          end
+          add_modifier_line ".accessibilityElement(children: .contain)"
+        end
+
+        # The root of a layout some Collection renders as a cell, which
+        # declares no id of its own. The mark is set on the root only, by
+        # JsonToSwiftUIConverter, from the project-wide CollectionCellIndex.
+        def collection_cell_root_without_id?
+          return false unless @component[COLLECTION_CELL_ROOT_KEY] == true
+          return false if @component['id']
+          # Same suppression as the id path: a statically invisible node must
+          # not become an accessibility element.
+          return false if @component['visibility'] == 'invisible' || @component['hidden'] == true
+
+          accessibility_container?
+        end
+
+        # The conformance host's measuring element: `.jsonUIConformanceFrame(id)`
+        # hands the layout box up so the host can draw `frame:<id>` there.
+        # XCUIElement.frame reads what was drawn as accessibility elements,
+        # not the layout box: a background that touches the top paints into
+        # the safe area and reads 62 taller, and a container with no background
+        # reads as the union of its children (measured, ConformanceHost, iOS
+        # 26.5, 2026-10-05).
+        #
+        # Emitted only when the project's sjui config says
+        # `"conformance_frames": true`, which only the conformance host's
+        # codegen writes. An app's generated code is what it was without it,
+        # byte for byte, and builds against a SwiftJsonUI that has no
+        # jsonUIConformanceFrame.
+        # The 0.5pt anchor against the single-child merge, in the bag's
+        # `accessibility_anchor` slot: inside the offset and the margins, the
+        # same box as the conformance frame. A container's id box is the union
+        # of its anchor and its content, so the anchor marks the layout box's
+        # corner. Written with the identifier, outside them, it sat at the
+        # margin's corner and before the offset: a 100-wide View with offsetX
+        # 5 and leftMargin 20 in a vertical stack read an id box 105 wide from
+        # the margin (ticket ios-container-id-box-starts-at-the-anchor-before-
+        # the-offset). For the nodes the id path and the combined tap anchor
+        # (apply_accessibility_identifier, tap_accessibility_lines). Dynamic:
+        # DynamicModifierHelper.applyAccessibilityAnchor.
+        def apply_accessibility_anchor
+          return unless takes_accessibility_anchor?
+
+          indent_str = "    " * (@indent_level + 1)
+          @modifier_bag.register(:accessibility_anchor,
+                                 ".overlay(alignment: .topLeading) {\n#{indent_str}Color.clear\n" \
+                                 "#{indent_str}    .frame(width: 0.5, height: 0.5)\n" \
+                                 "#{indent_str}    .accessibilityElement(children: .ignore)\n#{indent_str[0...-4]}}")
+          @accessibility_anchor_registered = true
+        end
+
+        def takes_accessibility_anchor?
+          return false unless accessibility_merge_hazard?
+          return true if combined_tap?
+          # An id-less cell root (apply_collection_cell_root_container): its
+          # box is what `{collectionId}_item_{N}` names, so its anchor sits
+          # inside its offset and margins like any other id's.
+          return true if collection_cell_root_without_id?
+          return false unless @component['id']
+          return false if @component['visibility'] == 'invisible' || @component['hidden'] == true
+          return false if identifier_placed_inside?
+
+          accessibility_container?
+        end
+
+        def apply_conformance_frame
+          return unless Core::ConfigManager.conformance_frames?
+          return unless @component['id'].is_a?(String) && !@component['id'].empty?
+          return if @component['visibility'] == 'invisible' || @component['hidden'] == true
+
+          @modifier_bag.register(:conformance_frame, ".jsonUIConformanceFrame(#{swift_string_literal(@component['id'])})")
+        end
+
+        # Emit the accessibilityIdentifier for this component, matching the
+        # Dynamic-mode semantics of DynamicModifierHelper.applyAccessibilityId:
+        #
+        # - Statically invisible components must not become accessibility
+        #   elements at all — explicit accessibility containers ignore an
+        #   ancestor's .accessibilityHidden(true), so emitting one here would
+        #   leave an invisible view findable by VoiceOver / UI tests.
+        #   (The library VisibilityWrapper collapses + hides the subtree.)
+        # - Plain SwiftUI containers are not accessibility elements, so a bare
+        #   .accessibilityIdentifier is pushed down onto the nearest descendant
+        #   element — it never surfaces for the container itself and can
+        #   clobber a child's own identifier (e.g. a screen root "root" View
+        #   overwriting the id of the single control inside it). Make the
+        #   container an explicit accessibility container first; this matches
+        #   the UIKit path, where every UIView with an id is queryable by
+        #   XCUITest, and keeps all descendant elements accessible.
+        # - The invisible 0.5pt anchor overlay prevents SwiftUI from merging
+        #   two nested containers when the outer one has exactly one
+        #   accessibility child (the merge drops the inner container's
+        #   identifier): with the anchor the container has at least two
+        #   children, so it is never collapsed into its single child.
+        #
+        # DEPTH BUDGET (device stack-overflow regression, see
+        # docs/bugs report sjui-container-accessibility-anchor-overlay-
+        # stack-overflow-on-device): the anchor overlay adds several
+        # ModifiedContent layers plus an overlay-content subtree to the
+        # screen's single generic body expression. Emitted unconditionally it
+        # is an O(all-containers) depth cost — on a real device (smaller main
+        # thread stack than the simulator) a large screen exhausted the stack
+        # during one DEBUG body evaluation. The merge hazard only exists when
+        # the container can end up with fewer than two accessibility
+        # children, so the anchor is now emitted only for those containers
+        # (accessibility_merge_hazard?); every other id-bearing container
+        # gets just .accessibilityElement(children: .contain) +
+        # .accessibilityIdentifier (2 flat modifier lines).
+        # A composite leaf whose converter puts the id on its INPUT itself
+        # (TextField, TextView) answers true, and no identifier goes on the
+        # composite: SwiftUI hands an identifier on a view that is not an
+        # accessibility element to every element inside it — the clear
+        # button, the styled placeholder, the hint — and hiding those parts
+        # does not hold under an explicit accessibility container (measured,
+        # XCUITest iOS 26.5; ticket
+        # sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+        def identifier_placed_inside?
+          false
+        end
+
+        # The identifier expression for a converter that places it inside
+        # (identifier_placed_inside?), with the same rules as below: none for
+        # a statically invisible view, an empty one while a bound `hidden`
+        # holds.
+        def inner_accessibility_identifier_expr
+          return nil if @component['id'].nil? || @component['visibility'] == 'invisible' || @component['hidden'] == true
+
+          hidden_binding = @component['hidden'] if is_binding?(@component['hidden'])
+          return "#{binding_data_expr(hidden_binding)} ? \"\" : #{swift_string_literal(@component['id'])}" if hidden_binding
+
+          swift_string_literal(@component['id'])
+        end
+
+        def apply_accessibility_identifier
+          # hidden: true is the boolean shorthand for visibility:"invisible"
+          # (space-kept, not drawn, hidden from accessibility) — both static
+          # spellings must suppress the identifier for the same reason.
+          return if @component['visibility'] == 'invisible' || @component['hidden'] == true
+          return if identifier_placed_inside?
+
+          # A tappable combined into one button carries its own element
+          # (tap_accessibility_lines): the identifier lands on it, and the
+          # container — and its anchor — would split it back into children.
+          if accessibility_container? && !combined_tap?
+            # Normally on already, inside the offset and the margins
+            # (apply_accessibility_anchor). Here only for a converter whose
+            # chain never reached apply_common_decorations.
+            if accessibility_merge_hazard? && !@accessibility_anchor_registered
+              add_modifier_line ".overlay(alignment: .topLeading) {"
+              indent do
+                add_modifier_line "Color.clear"
+                add_modifier_line "    .frame(width: 0.5, height: 0.5)"
+                add_modifier_line "    .accessibilityElement(children: .ignore)"
+              end
+              add_modifier_line "}"
+            end
+            add_modifier_line ".accessibilityElement(children: .contain)"
+          end
+          # Third candidate for a BOUND `hidden` (the first two were measured
+          # wrong and reverted). The static spelling returns above and emits no
+          # identifier at all — that is what makes a statically hidden view
+          # unfindable, and the dynamic face does the same thing
+          # (`applyAccessibilityId` returns early for visibility "invisible").
+          #
+          # A binding cannot return early at codegen time, and the two things
+          # tried instead both failed on the host: `.accessibilityHidden` after
+          # the identifier, and collapsing the container with `children:
+          # .ignore`. The library says why — an explicit accessibility
+          # container ignores `.accessibilityHidden` — but collapsing it was
+          # not enough either, and the one difference left against the working
+          # dynamic recipe is that dynamic emits NO IDENTIFIER while hidden.
+          #
+          # A flat modifier chain cannot skip a line conditionally, so the
+          # identifier itself carries the condition: the declared id while
+          # visible, and an empty one while hidden, which no query for the id
+          # matches.
+          hidden_binding = @component['hidden'] if is_binding?(@component['hidden'])
+          if hidden_binding
+            expr = binding_data_expr(hidden_binding)
+            add_modifier_line ".accessibilityIdentifier(#{expr} ? \"\" : #{swift_string_literal(@component['id'])})"
+          else
+            add_modifier_line ".accessibilityIdentifier(#{swift_string_literal(@component['id'])})"
+          end
+        end
+
+        # Whether the container this converter EMITS becomes an accessibility
+        # element on its own. Type is enough for every component whose emitted
+        # shape is fixed, which is what ACCESSIBILITY_CONTAINER_TYPES lists.
+        # A converter whose shape depends on the declaration overrides this
+        # rather than adding its type to that list — the list's own sentence
+        # ("types whose SwiftUI representation is a plain layout container")
+        # would become false for the shapes that do not match.
+        def accessibility_container?
+          ACCESSIBILITY_CONTAINER_TYPES.include?(JsonUIShared::TypeSynonyms.drawn_type(@component['type'] || '').downcase) ||
+            custom_container?
+        end
+
+        # A project's own component (a converter `sjui g converter` scaffolded
+        # into views/extensions) that the layout gives children. Its view draws
+        # them inside a content slot that is no more an accessibility element
+        # than a VStack is, so the bare identifier was pushed down onto them:
+        # measured (XCUITest, iOS 26.5, 2026-09-25, the codegen host) a custom
+        # container with one child had its id found on the child and the
+        # child's own id 0 times; with two, its id twice. The list above names
+        # this tool's types and cannot name a project's. SwiftJsonUI's
+        # DynamicModifierHelper.isCustomContainer answers the same for a
+        # registered adapter. Ticket
+        # sjui-custom-container-takes-its-childrens-identifiers.
+        def custom_container?
+          return false unless self.class.name.to_s.start_with?('SjuiTools::SwiftUI::Views::Extensions::')
+
+          JsonUIShared::TapAccessibility.children(@component).any? { |c| c['type'] || c['include'] }
+        end
+
+        # A container is at risk of the single-child accessibility merge
+        # (which drops the inner element's identifier) only when its subtree
+        # can yield fewer than two accessibility children at runtime. This is
+        # a conservative static approximation: a child contributes only when
+        # it is *guaranteed* to be present and to surface accessibility
+        # elements —
+        #   - statically always visible (no visibility attribute, or the
+        #     literal "visible"; bindings / invisible / gone may vanish)
+        #   - a guaranteed element type (CERTAIN_ACCESSIBILITY_ELEMENT_TYPES)
+        #     contributes 1, an image only with a written alt
+        #     (image_surely_an_element?); an id-bearing container contributes 1 (it becomes
+        #     an explicit accessibility container itself under this same
+        #     rule); an id-less plain container contributes its own
+        #     guaranteed children (they are promoted to the grandparent's
+        #     accessibility children)
+        # Anything uncertain (includes, Collection/Table/Web, data-driven
+        # subtrees) contributes 0, so uncertainty errs toward emitting the
+        # anchor, never toward dropping a needed one.
+        #
+        # Keep in sync with SwiftJsonUI
+        # DynamicModifierHelper.accessibilityMergeHazard.
+        def accessibility_merge_hazard?
+          guaranteed_accessible_child_count(@component) < 2
+        end
+
+        def guaranteed_accessible_child_count(component)
+          child_nodes(component).sum { |c| guaranteed_accessibility_contribution(c) }
+        end
+
+        def child_nodes(component)
+          raw = component['child'] || []
+          nodes = raw.is_a?(Array) ? raw : [raw]
+          # Ignore data declarations ({"data": ...} without type/include)
+          nodes.select { |c| c.is_a?(Hash) && (c['type'] || c['include']) }
+        end
+
+        def guaranteed_accessibility_contribution(child)
+          return 0 if child['include'] # unknown subtree at this stage
+
+          visibility = child['visibility']
+          return 0 if visibility && visibility != 'visible'
+
+          # the child as it is drawn — its type as written would count an
+          # Img as nothing and a Text as a label (type_synonyms.rb)
+          type = JsonUIShared::TypeSynonyms.drawn_type(child['type'] || '').downcase
+          if ACCESSIBILITY_CONTAINER_TYPES.include?(type)
+            # id-bearing container: becomes an explicit accessibility
+            # container (a single element) under apply_accessibility_identifier
+            return 1 if child['id']
+
+            # plain container: its accessible descendants are promoted to the
+            # grandparent's accessibility children (2 is enough — the caller
+            # only compares against 2)
+            return [guaranteed_accessible_child_count(child), 2].min
+          end
+
+          # An image is an element only while its alt keeps it one
+          # (image_surely_an_element?).
+          return image_surely_an_element?(child) ? 1 : 0 if JsonUIShared::ImageAccessibility.image?(child)
+
+          CERTAIN_ACCESSIBILITY_ELEMENT_TYPES.include?(type) ? 1 : 0
+        end
+
+        # An image with no alt is decorative and `.accessibilityHidden(true)`
+        # unless it operates a control, which depends on the tappables around
+        # it; one with alt "", or a bound alt that resolves to "", is hidden
+        # too (shared/core/image_accessibility.rb). Counted as a sure element,
+        # it made a container of a hidden image and one tappable View read as
+        # two children, so the container took no anchor and SwiftUI merged it
+        # into the View: the View's id read the container's box, and from
+        # jsonui-cli 1.9.18 a tap by that id landed on the box's centre, on
+        # the container's own onClick (ticket sjui-a-tappable-elements-
+        # anchor-inside-its-tap-target-moves-the-tap-point-off-it). So only
+        # an alt written as a non-empty string counts; anything else errs
+        # toward the anchor. Dynamic: DynamicModifierHelper
+        # .imageSurelyAnElement, the same rule.
+        def image_surely_an_element?(child)
+          alt = JsonUIShared::ImageAccessibility.alt(child)
+          alt.is_a?(String) && !alt.empty? && !alt.include?('@{')
+        end
+
+        # 共通のモディファイア適用メソッド
+        # The decoration stages a node draws from its common attributes —
+        # opacity (alpha), shadow, clipToBounds, the post-layout offset and
+        # `hidden` — in one place. apply_modifiers calls it, and so do the
+        # converters that assemble their own chain (Button, Label, TextView,
+        # SelectBox): Button drew none of the five, and Label / TextView /
+        # SelectBox no shadow, clip or offset, while every other type and
+        # the other paths draw them. A stage the converter registered itself
+        # is kept (register_unless_exists).
+        def apply_common_decorations
+          # Hands the layout box up to the conformance gate's measuring element,
+          # in the bag's `conformance_frame` slot: inside the offset and the
+          # margins. Here because every converter calls this, including those
+          # that assemble their own chain. Only for the conformance host's
+          # codegen (apply_conformance_frame). Dynamic:
+          # DynamicModifierHelper.applyConformanceFrame.
+          apply_conformance_frame
+          apply_accessibility_anchor
+          # tintColor is the accent of the operable parts — a control's
+          # accent, a link's colour, the cursor (the orchestrator's ruling, 1.9.0) — never
+          # the text colour: SwiftUI's `.tint`. It was drawn only through
+          # apply_modifiers, so a Label's links, a TextView's cursor, a
+          # Button and a SelectBox never took it (a bound one on a Label did,
+          # through apply_binding_modifiers). A TextField's caret tint is its
+          # own and is kept.
+          if @component['tintColor']
+            @modifier_bag.register_unless_exists(:tint_color, ".tint(#{get_swiftui_color(@component['tintColor'])})")
+          end
+
+          alpha_value = attr_with_alias('opacity', 'alpha')
+          if alpha_value
+            @modifier_bag.register_unless_exists(:opacity, opacity_modifier(alpha_value))
+          end
+
+          # 影
+          if @component['shadow']
+            shadow_code = build_shadow_modifier(@component['shadow'])
+            @modifier_bag.register_unless_exists(:shadow, shadow_code) if shadow_code
+          end
+
+          # クリップ
+          # A binding is truthy in Ruby, so this used to clip every
+          # declaration that used one regardless of the property's value. The
+          # bound form is ViewBindingHandler's now — SwiftJsonUI's
+          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
+          # at render time instead of freezing at whatever the generator saw.
+          # A literal keeps emitting `.clipped()`: same view, same bytes.
+          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
+            @modifier_bag.register_unless_exists(:clip_to_bounds, ".clipped()")
+          end
+
+          # effectStyle material (non-Blur nodes). Registered here too so the
+          # converters that assemble their own chain (Label, Button,
+          # SelectBox, ...) draw it; apply_modifiers' apply_glass re-registers
+          # the slot with the material and any glass, material first.
+          if (effect_line = effect_style_line)
+            @modifier_bag.register_unless_exists(:glass, effect_line)
+          end
+
+          # オフセット（offsetX, offsetY）
+          register_offset_modifier
+
+          # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
+          # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
+          # (.hidden() や条件付き削除でスペースを潰さない)
+          hidden_value = @component['hidden']
+          if hidden_value == true
+            @modifier_bag.register_unless_exists(:hidden, ".opacity(0).accessibilityHidden(true)")
+          elsif is_binding?(hidden_value)
+            # Binding: "@{isErrorHidden}" ->
+            #   .opacity(data.isErrorHidden ? 0 : 1).accessibilityHidden(data.isErrorHidden)
+            # Binding: "@{!isVisible}" ->
+            #   .opacity(!data.isVisible ? 0 : 1).accessibilityHidden(!data.isVisible)
+            hidden_expr = binding_data_expr(hidden_value)
+            @modifier_bag.register_unless_exists(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
+          end
+        end
+
+        def apply_modifiers(skip_padding: false, skip_insets: false)
+          # アライメント処理を先に適用
+          apply_center_alignment
+          apply_edge_alignment
+
+          # パディング（内側のスペース）を先に適用
+          apply_padding unless skip_padding
+
+          # サイズ制約とサイズをパディングの後に適用
+          apply_frame_constraints
+          apply_frame_size
+
+          # insetsとinsetHorizontalの処理（Collectionではspacerで処理するためスキップ可能）
+          apply_insets unless skip_insets
+
+          # 背景色（Rectangleの場合はfillで設定済みなのでスキップ）
+          # enabled状態に応じて背景色を変更
+          if @component['enabled'] == false && @component['disabledBackground']
+            # 無効状態の背景色
+            color = get_swiftui_color(@component['disabledBackground'])
+            @modifier_bag.register(:background, ".background(#{color})")
+          elsif @component['disabledBackground'] && is_binding?(@component['enabled']) && !gradient_wins_over_background? && !@modifier_bag.key?(:background)
+            # A bound `enabled` (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces):
+            # the disabled colour while it is false, the base (fixed or bound) while
+            # true — disabled, then pressed, then the base, as Button and the web
+            # draw it. It used to take the base always: only a literal false showed
+            # the disabled colour.
+            disabled = get_swiftui_color(@component['disabledBackground'])
+            @modifier_bag.register(:background, background_line("(#{tap_gate_expr(@component['enabled'])} ? #{background_base_color || 'Color.clear'} : #{disabled})"))
+          elsif gradient_wins_over_background?
+            # `backgroundFill` ruling (2026-08-07): one fill per surface and
+            # the more specific declaration wins, so a declared gradient makes
+            # `background` the fallback rather than a layer underneath it.
+            # Emitting both put `.background(colour)` immediately before
+            # `.background(gradient)` in MODIFIER_ORDER, and SwiftUI lays the
+            # later one further back — the declared gradient never showed.
+            # A pressed colour sits in front of the gradient.
+            @modifier_bag.register(:background, background_line(nil) || "")
+          elsif @component['background'] && !@modifier_bag.key?(:background)
+            bg_value = @component['background']
+            if bg_value.is_a?(String) && bg_value.start_with?('@{')
+              # Binding background - resolve here at the correct position (before margins)
+              bg_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(bg_value[2..-2])
+              @modifier_bag.register(:background, background_line("SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear"))
+            else
+              @modifier_bag.register(:background, background_line(get_swiftui_color(bg_value)))
+            end
+          elsif !@modifier_bag.key?(:background) && pressed_background_color
+            @modifier_bag.register(:background, background_line(nil))
+          end
+
+          # コーナー半径（背景の直後に適用）
+          if @component['cornerRadius']
+            @modifier_bag.register(:corner_radius, ".cornerRadius(#{padding_value(@component['cornerRadius'])})")
+          elsif outline_shape && OUTLINED_FILLS.any? { |key| @component[key] }
+            # A component drawn in a shape of its own (outline_shape) clips a declared fill to it.
+            @modifier_bag.register(:corner_radius, ".clipShape(#{outline_shape})")
+          end
+
+          # ボーダー（cornerRadiusの直後、marginsの前に適用）
+          # Dynamic mode: CommonModifiers.swift line 59
+          if (border_code = border_overlay)
+            @modifier_bag.register(:border, border_code)
+          end
+
+          # マージン（外側のスペース - SwiftUIではpaddingで実装）
+          apply_margins
+
+          # opacity / shadow / clipToBounds / offset / hidden — one home
+          # (apply_common_decorations), which the converters that assemble
+          # their own chain call too.
+          apply_common_decorations
+
+          # Liquid Glass (iOS 26+). Emits ONE call to the library helper, never
+          # an `if #available` here: an availability check in generated code
+          # would be duplicated at every site that declares `glass`, and each
+          # copy asks the RUNNING OS, so the picture would vary by device. The
+          # helper holds the single check (ruling, 2026-09-14).
+          #
+          # `shape` is deliberately NOT resolved here. `rounded(N)` and `rect`
+          # could be, but `capsule` and `circle` depend on the laid-out height,
+          # which codegen does not know — so all four go to the helper as a
+          # value and the mapping stays in one place rather than being split
+          # across two layers by what happens to be statically knowable.
+          apply_glass
+
+          # visibility属性はVisibilityWrapperで処理するので、ここでは何もしない
+          # The actual wrapping happens in the parent view converter
+
+
+          # safeAreaInsetPositions
+          apply_safe_area_insets_to_bag
+
+          # enabled, canTap, userInteractionEnabled
+          register_interaction_gates
+
+          # tagプロパティの適用（TabViewなどで使用）
+          if @component['tag']
+            @modifier_bag.register(:tag, ".tag(#{is_binding?(@component['tag']) ? binding_data_expr(@component['tag']) : @component['tag']})")
+          end
+
+          # classNameプロパティ（SwiftUIではスタイル識別子として記録）
+          if @component['className']
+            add_line "// className: #{@component['className']}"
+          end
+
+          # tintColor（アクセントカラー）
+          #
+          # The bound branch used to emit the property bare — `.tint(data.x)`
+          # — and `.tint()` takes a `Color`. Against the usual String property
+          # naming a colour that is `cannot convert value of type 'String' to
+          # expected argument type 'Color'`, which stopped the whole ios
+          # conformance host on `common/tintColor__binding`. Nothing caught it
+          # earlier because the binding DID reach the output: `codegen-effect`
+          # asks whether it survived, not whether it typechecks.
+          #
+          # `get_swiftui_color` handles both spellings and both data types —
+          # a String property is wrapped in `getColor(for:)`, a Color-typed
+          # one passes through — so the branch goes away with the defect.
+          # tintColor: in apply_common_decorations, with the other stages every
+          # node draws.
+
+          # バインディング関連プロパティ（コメントとして記録）
+          if @component['bindingScript']
+            add_line "// bindingScript: #{@component['bindingScript']}"
+          end
+          if @component['binding_group']
+            add_line "// binding_group: #{@component['binding_group']}"
+          end
+          if @component['binding_id']
+            add_line "// binding_id: #{@component['binding_id']}"
+          end
+          if @component['shared_data']
+            add_line "// shared_data: #{@component['shared_data']}"
+          end
+
+          # indexBelow（Z軸順序の指定）
+          if @component['indexBelow']
+            # indexBelowは指定した他のビューの下に配置することを意味する可能性
+            # SwiftUIではzIndexを使用して相対的な前後関係を制御
+            add_line "// indexBelow: #{@component['indexBelow']} - Place below specified view"
+            # 数値の場合はzIndexとして使用、文字列の場合は他のビューIDを参照
+            if @component['indexBelow'].to_s =~ /^\d+$/
+              @modifier_bag.append(:z_index, ".zIndex(-#{@component['indexBelow'].to_i})")
+            else
+              add_line "// Reference to view ID: #{@component['indexBelow']}"
+              @modifier_bag.append(:z_index, ".zIndex(-1)")  # デフォルトで背面に配置
+            end
+          end
+
+          # indexAbove — the mirror of indexBelow: in front. The view-ID form
+          # degrades to zIndex(+1), a numeric to zIndex(+N) (same degradation
+          # indexBelow ships; a true relative order would need the other
+          # view's resolved z).
+          if @component['indexAbove']
+            if @component['indexAbove'].to_s =~ /^\d+$/
+              @modifier_bag.append(:z_index, ".zIndex(#{@component['indexAbove'].to_i})")
+            else
+              @modifier_bag.append(:z_index, ".zIndex(1)")
+            end
+          end
+
+          # クリックイベント
+          # onClick (camelCase) -> binding format only (@{functionName})
+          # `onclick` (lowercase) names a method directly — no binding — and is
+          # what UIKit wires to a UITapGestureRecognizer selector
+          # (SJUIView: `Selector(onclick)`). It was declared, used in real
+          # layouts, and read by nobody on the SwiftUI path, so every screen
+          # migrating from UIKit lost its taps silently. camelCase wins when
+          # both are present.
+          register_click_lines
+
+          apply_long_press_to_bag
+          apply_pan_to_bag
+          apply_pinch_to_bag
+          apply_highlighted_to_bag
+
+          # Lifecycle events (SwiftUI only)
+          apply_lifecycle_events_to_bag
+
+          # confirmationDialog / alert (iOS 15+)
+          apply_confirmation_dialog_to_bag
+          apply_alert_to_bag
+        end
+
+        # The gates on a view's interaction, static or bound, for every
+        # converter (label_converter calls it too — it builds its own
+        # modifiers, and a Label with a tap used to keep it under
+        # `canTap: false` and ignore a bound `enabled`):
+        #
+        # - `enabled` is `.disabled` (the literal, or the binding negated).
+        #   SwiftUI's `.disabled` also covers interactive descendants, so it
+        #   is the right modifier for a container.
+        # - `userInteractionEnabled` is `.allowsHitTesting` — it stops the
+        #   whole view. (`touchDisabledState` is UIKit's hit-test mode, a mode
+        #   SwiftUI has no peer for; it was read here as "stop everything" for
+        #   any value, "none" too, until jsonui-cli 1.9.0, and the validator
+        #   names it now.) The bound form was ViewBindingHandler's,
+        #   which only the converters that process bindings reach;
+        #   `apply_binding_modifiers` leaves it to this method once it has run.
+        # - `canTap` is not here: it gates the tap's handler, not the view
+        #   (register_click_lines, tap_gesture_line).
+        def register_interaction_gates
+          @interaction_gates_registered = true
+          disabled = disabled_line(@component['enabled'])
+          @modifier_bag.register(:disabled, disabled) if disabled
+
+          register_hit_test_gate
+        end
+
+        # `userInteractionEnabled`: one `.allowsHitTesting`, which the bag
+        # writes outside the view's own gestures (MODIFIER_ORDER). The
+        # converters that build their own modifiers and handle `enabled`
+        # themselves — Button, TextField, TextView — call this alone: they
+        # did not read the flag, and a TextField
+        # read the binding only (ViewBindingHandler). SelectBox builds its own
+        # too, but its view takes no `enabled`: it registers both gates.
+        def register_hit_test_gate
+          @interaction_gates_registered = true
+          gates = []
+          value = @component['userInteractionEnabled']
+          if value == false
+            gates << 'false'
+          elsif is_binding?(value)
+            gates << tap_gate_expr(value)
+          end
+          lines = []
+          unless gates.empty?
+            condition = gates.include?('false') ? 'false' : gates.join(' && ')
+            lines << ".allowsHitTesting(#{condition})"
+            hand_down = interaction_stop_line
+            lines << hand_down if hand_down
+          end
+          stopped_control = stopped_control_line
+          lines << stopped_control if stopped_control
+          return if lines.empty?
+
+          @modifier_bag.register(:allows_hit_testing, lines.size == 1 ? lines.first : lines)
+        end
+
+        # A control a stop holds (TapAccessibility.control?): the hit-test stop
+        # keeps a touch out, and VoiceOver's activation still called its
+        # default action — a Switch inside `userInteractionEnabled: false`
+        # switched (measured, SwiftJsonUI ConformanceHost
+        # -a11yActivationProbe, jsonui-cli 1.9.0). SwiftJsonUI's
+        # `.jsonuiStoppedControl(stopped)` replaces that action by nothing and
+        # reads the control as nothing to operate while it is stopped, and
+        # draws it as it is: `true` for the flag on it or around it, the
+        # bound flags' `false` for a binding, and — in a layout a stop can
+        # reach — the stop handed down, which the modifier reads from the
+        # environment itself. nil for a control no stop can reach.
+        # `items: true` for a control whose items are elements of their own
+        # (stopped_items?).
+        def stopped_control_line
+          return nil unless JsonUIShared::TapAccessibility.control?(@component)
+
+          items = stopped_items? ? 'items: true' : nil
+          return ".jsonuiStoppedControl(#{['true', items].compact.join(', ')})" if JsonUIShared::TapAccessibility.stopped?(@component)
+
+          gates = JsonUIShared::TapAccessibility.interaction_gates(@component).map { |gate| tap_gate_expr(gate) }
+          return ".jsonuiStoppedControl(#{["!(#{gates.join(' && ')})", items].compact.join(', ')})" unless gates.empty?
+          return ".jsonuiStoppedControl(#{items})" if self.class.reads_interaction_environment?
+
+          nil
+        end
+
+        # Whether the control's items are accessibility elements of their own
+        # that the stopped control's treatment does not reach as modifiers on
+        # the control — SegmentConverter says yes (JsonUIStoppedControl
+        # `items`, SwiftJsonUI).
+        def stopped_items?
+          false
+        end
+
+        # A node whose `userInteractionEnabled` is false or bound, holding a
+        # layout drawn in a view of its own (TapAccessibility.hands_stop_down?),
+        # hands the stop down through the environment: `true` for `false`, and
+        # for a binding the stop around it or the binding's `false`. The drawn
+        # view's taps read it (reads_interaction_environment). nil otherwise.
+        def interaction_stop_line
+          return nil unless JsonUIShared::TapAccessibility.hands_stop_down?(@component)
+
+          value = @component['userInteractionEnabled']
+          return '.environment(\.jsonuiInteractionStopped, true)' if value == false
+
+          ".transformEnvironment(\\.jsonuiInteractionStopped) { $0 = $0 || !#{tap_gate_expr(value)} }"
+        end
+
+        # `.disabled` for an `enabled` value: the literal false, or the binding
+        # negated; nil when it does not disable.
+        def disabled_line(enabled)
+          return '.disabled(true)' if enabled == false
+          return nil unless is_binding?(enabled)
+
+          ".disabled(!(#{tap_gate_expr(enabled)}))"
+        end
+
+        def tap_gate_expr(binding)
+          SwiftUI::Binding::BindingExpression.swift_bool_expr(binding[2..-2])
+        end
+
+        # The tap, one rule for every converter (label_converter calls it too:
+        # it builds its own modifiers and had kept only the binding onClick, so
+        # the `onclick` fix above never reached a Label). camelCase wins when
+        # both are present; a Button's tap is its action; a statically
+        # disabled view gets none. A handler names a method
+        # (TapAccessibility.handler?): `""`, `"   "`, `"@{}"`, `[]` and `[""]`
+        # are no tap — they emitted `data.?()`, which is not Swift.
+        #
+        # `canTap` (attribute_definitions common.canTap, the SwiftUI tap gate)
+        # stops the handler's call and nothing else: `false` emits no tap —
+        # and so no button trait — and a binding gates the gesture itself
+        # (tap_gesture_line). It was `.allowsHitTesting`, which stopped the
+        # whole view: a control's own operation (a Switch, a Slider, a
+        # TextField's input) and every control inside a tappable container,
+        # which only `enabled` / `userInteractionEnabled` are for. The
+        # dynamic runtime attaches no tap while the gate is shut and leaves
+        # the view as it is (DynamicEventHelper.applyOnClick).
+        #
+        # `userInteractionEnabled` gates the tap as canTap does (the tap rule,
+        # shared/core/tap_accessibility.rb): `false` on this node or on a node
+        # around it is no tap, and a binding on either gates it (tap_shut?,
+        # tap_gate_condition). The view's own stop stays `.allowsHitTesting`.
+        def register_click_lines
+          return unless tap_registered?
+
+          tap = JsonUIShared::TapAccessibility
+          lines = if tap.handler?(@component['onClick'])
+                    build_on_click_lines(@component['onClick'])
+                  else
+                    build_selector_click_lines(@component['onclick'])
+                  end
+          # The press, for the pressed colour the background slot draws
+          # (pressed_background_color). After the tap gesture, so the tap
+          # fires; a bound gate shuts it with the tap.
+          if pressed_background_color
+            gate = tap_gate_condition
+            lines += [gate ? ".tracksPress(enabled: #{gate})" : '.tracksPress()']
+          end
+          @modifier_bag.register(:on_click, lines)
+        end
+
+        # Whether register_click_lines attaches a tap to this node.
+        def tap_registered?
+          return false if @component['type'] == 'Button'
+          return false if @component['enabled'] == false
+          return false if tap_shut?
+          return false if operation_click_type?
+
+          tap = JsonUIShared::TapAccessibility
+          tap.handler?(@component['onClick']) || tap.handler?(@component['onclick'])
+        end
+
+        # tapBackground is the background while pressed, on every node with a
+        # tap and on a Button (jsonui-cli 1.9.0). A Button draws it in
+        # StateAwareButtonView. On any other node with a tap it is this colour
+        # (a Swift Color expression), drawn by the background slot
+        # (background_line: `.pressedBackground`) while the press tracked
+        # after the tap (`.tracksPress`) holds; nil when the node has no tap.
+        # Both ask this, so a node that draws a pressed colour is exactly a
+        # node that tracks its press.
+        def pressed_background_color
+          return nil if @component['tapBackground'].nil? || !tap_registered?
+
+          get_swiftui_color(@component['tapBackground'])
+        end
+
+        # The background slot for `base` (a Swift Color expression, or nil for
+        # none): the pressed colour replaces it while the node is pressed.
+        # A colour expression for the view's own surface with disabledBackground
+        # taken in: the disabled colour for a literal `enabled: false`, a choice by
+        # the binding for a bound one (disabled, then the base), the base alone
+        # otherwise (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces).
+        def disabled_aware_color(base)
+          disabled = @component['disabledBackground']
+          return base unless disabled
+          return get_swiftui_color(disabled) if @component['enabled'] == false
+          return base unless is_binding?(@component['enabled'])
+
+          "(#{tap_gate_expr(@component['enabled'])} ? #{base || 'Color.clear'} : #{get_swiftui_color(disabled)})"
+        end
+
+        # The base background as a colour expression (fixed or bound), nil when none.
+        def background_base_color
+          bg_value = @component['background']
+          return nil unless bg_value
+          if bg_value.is_a?(String) && bg_value.start_with?('@{')
+            bg_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(bg_value[2..-2])
+            return "(SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear)"
+          end
+          get_swiftui_color(bg_value)
+        end
+
+        def background_line(base)
+          pressed = pressed_background_color
+          return ".pressedBackground(#{pressed}#{base ? ", base: #{base}" : ''})" if pressed
+
+          base ? ".background(#{base})" : nil
+        end
+
+        # `onclick` values are method names, not bindings: a bare string, or an
+        # array of them to call in order. A blank element is not called.
+        def build_selector_click_lines(value)
+          names = JsonUIShared::TapAccessibility.handler_values(value)
+          calls = names.map { |n| "    #{no_value_call(to_camel_case(handler_property(n)))}" }
+          gate = tap_gate_condition
+          if gate
+            return [".gesture(TapGesture().onEnded {"] + calls +
+                   ["}, including: #{gate} ? .all : .subviews)"] + tap_accessibility_lines
+          end
+          [".onTapGesture {"] + calls + ["}"] + tap_accessibility_lines
+        end
+
+        # The tap for one handler call. Under a bound `canTap` the gesture is
+        # masked while the binding is false — `including: .subviews` takes
+        # this view's tap away and leaves its subviews' gestures (a control's
+        # own, a child's tap) as they are.
+        def tap_gesture_line(handler_call)
+          indent_str = "    " * (@indent_level + 1)
+          gate = tap_gate_condition
+          return ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}" unless gate
+
+          ".gesture(TapGesture().onEnded {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}, " \
+            "including: #{gate} ? .all : .subviews)"
+        end
+
+        # The tap is shut: `canTap: false`, or `userInteractionEnabled: false`
+        # on this node or on a node around it (TapAccessibility.stopped?).
+        def tap_shut?
+          @component['canTap'] == false || JsonUIShared::TapAccessibility.stopped?(@component)
+        end
+
+        # The bound gates of the tap as one Swift condition, or nil: a bound
+        # canTap, then each bound userInteractionEnabled — the nodes' around
+        # it, outermost first, then its own (TapAccessibility.interaction_gates).
+        def tap_gate_condition
+          gates = []
+          gates << @component['canTap'] if is_binding?(@component['canTap'])
+          gates.concat(JsonUIShared::TapAccessibility.interaction_gates(@component))
+          conditions = gates.uniq.map { |gate| tap_gate_expr(gate) }
+          # A stop handed down from another layout (a Collection's cell, an
+          # Embed's screen): the environment says so.
+          conditions << "!#{INTERACTION_ENVIRONMENT_NAME}" if self.class.reads_interaction_environment?
+          return nil if conditions.empty?
+
+          conditions.join(' && ')
+        end
+
+        # Types whose declared onClick is not a tap on the view (ticket
+        # control-onclick-is-called-differently-on-every-path; the orchestrator's ruling). A
+        # control — Switch / Toggle, CheckBox, Radio, Segment, Slider,
+        # SelectBox — calls it from its own operation, after its own update
+        # (operation_click_call); a text field does not call it at all, its
+        # tap focuses it. register_click_lines attaches no tap to them: around
+        # a control the tap either never fired (the control's own gesture
+        # wins) or fired beside the operation — a labelled Switch called it
+        # from a tap on its label, which flips nothing, and a Switch, a
+        # Segment, a Slider and a SelectBox never called it from their own
+        # operation (SwiftJsonUI ConformanceHost OnClickProbeUITests). The
+        # same types as kjui_tools' operation_click_call and SwiftJsonUI's
+        # DynamicEventHelper.operationClickTypes.
+        OPERATION_CLICK_TYPES = %w[switch toggle checkbox check radio segment slider selectbox
+                                   textfield edittext input textview].freeze
+
+        def operation_click_type?
+          OPERATION_CLICK_TYPES.include?(@component['type'].to_s.downcase)
+        end
+
+        # The declared onClick of a control, as the statement its operation
+        # runs after its own update (and after onValueChange), or nil: no
+        # handler, or `canTap: false`, or `userInteractionEnabled: false` on it
+        # or on a node around it (tap_shut?). A bound canTap or a bound
+        # userInteractionEnabled gates the call (gated_handler_call); `enabled`
+        # is the operation's, so a disabled control neither operates nor
+        # calls. camelCase wins; every name of an `onclick` array is called, in
+        # order, as the tap called them.
+        def operation_click_call
+          return nil if tap_shut?
+
+          tap = JsonUIShared::TapAccessibility
+          calls = if tap.handler?(@component['onClick'])
+                    if is_binding?(@component['onClick'])
+                      [get_event_handler_invocation(@component['onClick'], view_id, nil)]
+                    else
+                      [get_event_handler_call(@component['onClick'])]
+                    end
+                  elsif tap.handler?(@component['onclick'])
+                    tap.handler_values(@component['onclick']).map { |n| no_value_call(to_camel_case(handler_property(n))) }
+                  end
+          return nil if calls.nil? || calls.empty?
+
+          gated_handler_call(calls.join('; '))
+        end
+
+        # A control's binding that reports the user's operation after each of
+        # the control's own writes: `value_call` (onValueChange, on
+        # `newValue`) when the write changed the value, then `click`
+        # (operation_click_call). The view model's change never goes through
+        # the control's binding, so it reports nothing — the orchestrator's ruling: the
+        # control's update, then onValueChange, then onClick, all from the
+        # user's operation, as kjui calls them. The bound controls observed
+        # the value with `.onChange(of:)` instead, which ran on the next update
+        # — after the click — and for the view model's writes too; the unbound
+        # ones observed `data.<state>`, a property the Data struct does not
+        # have, and did not compile. The binding itself when there is no call.
+        def operation_binding(binding_expr, click, value_call = nil)
+          return binding_expr if click.nil? && value_call.nil?
+
+          body = ["#{binding_expr}.wrappedValue = newValue"]
+          if value_call
+            body.unshift("let changed = newValue != #{binding_expr}.wrappedValue")
+            body << "if changed { #{value_call} }"
+          end
+          body << click if click
+          "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, set: { newValue in #{body.join('; ')} })"
+        end
+
+        # The name a node without an `id` is given where it needs one — its
+        # view-local state, a Radio's value: `<kind>_<path>`, the node's
+        # position in the layout (shared/core/layout_path.rb, stamped on the
+        # include-expanded, style-merged tree before conversion): the same on
+        # every build and unique within the view. The per-kind fixed name it
+        # replaces (`toggle`, `radio`, …) was the same for every id-less node
+        # of a kind, so two of them shared one state or did not compile
+        # (ticket sjui-codegen-state-declarations-collide-by-name). A node
+        # converted on its own, with no tree stamped around it, is its own
+        # root. The path is used as it is: the `_` between its numbers keeps
+        # two positions apart (camelCasing `0_1_11` and `0_11_1` gives `0111`
+        # for both).
+        def position_name(kind)
+          "#{kind}_#{@component[JsonUIShared::LayoutPath::KEY] || '0'}"
+        end
+
+        # The viewId this node's handlers are handed: its id, else its drawn
+        # type and its position (JsonUIShared::LayoutPath.view_id —
+        # `switch_0_1`, `selectBox_0_3`), the name every path gives it (the orchestrator's
+        # ruling, 1.9.0). An id-less node's viewId was a per-kind word that
+        # differed per path — `toggle`, `selectBox`, `textEditor`, `button`,
+        # or `""` — the same for every node of the kind.
+        def view_id
+          JsonUIShared::LayoutPath.view_id(@component)
+        end
+
+        # A handler call that a component makes from its own operation — a
+        # Radio's selection, a CheckBox's value change, an IconLabel's or a
+        # Button's action — gated as the tap is: under a bound `canTap` or a
+        # bound userInteractionEnabled (tap_gate_condition) it runs while the
+        # binding is true. (`canTap: false` or a stopped interaction makes no
+        # call; the caller leaves it out, tap_shut?.) The component's own
+        # operation runs either way.
+        def gated_handler_call(call)
+          gate = tap_gate_condition
+          return call unless gate
+
+          "if #{gate} { #{call} }"
+        end
+
+        # What a screen reader is told about this tap
+        # (shared/core/tap_accessibility.rb, set on the node before conversion):
+        # a button as it is, one button made of its content, or — where it
+        # holds a control of its own — nothing. Measured with XCUITest
+        # (elementType, 2026-09-25): `.onTapGesture` alone is not a button;
+        # `.isButton` under `.contain` makes every child a button; `.combine`
+        # + `.isButton` is one button named by its content.
+        def tap_accessibility_lines
+          case @component[JsonUIShared::TapAccessibility::SHAPE_KEY]
+          when 'button' then [button_trait_line]
+          when 'combine'
+            # The anchor the id path uses, for the same single-child merge:
+            # with one accessible child, `.combine` took the child's own
+            # identifier away (measured: the child's id found 0 times; with
+            # the anchor, or two children, it is found). BEFORE `.combine`,
+            # so the anchor is one of the children it combines: normally on
+            # already, in the bag's accessibility_anchor slot
+            # (apply_accessibility_anchor).
+            anchor = []
+            if accessibility_merge_hazard? && !@accessibility_anchor_registered
+              indent_str = "    " * (@indent_level + 1)
+              anchor << ".overlay(alignment: .topLeading) {\n#{indent_str}Color.clear\n" \
+                        "#{indent_str}    .frame(width: 0.5, height: 0.5)\n" \
+                        "#{indent_str}    .accessibilityElement(children: .ignore)\n#{indent_str[0...-4]}}"
+            end
+            # An id-less combined tap takes its children's identifiers as its
+            # own (measured, XCUITest 2026-09-25): one child's id was found
+            # twice — on the button and on the child — and two children's
+            # were joined ("a-b") on the button. An explicit empty identifier
+            # keeps the button's own; a container with an id gets that id on
+            # the button from the id path instead.
+            own_id = @component['id'] ? [] : ['.accessibilityIdentifier("")']
+            anchor + ['.accessibilityElement(children: .combine)', button_trait_line] + own_id
+          else []
+          end
+        end
+
+        # `.isButton`, or — under a bound canTap or a bound userInteractionEnabled
+        # (tap_gate_condition) — `.isButton` while the gate is open: the dynamic
+        # runtime attaches neither the tap nor its traits while the binding is
+        # false (DynamicEventHelper.applyOnClick), and a tap `.allowsHitTesting`
+        # has shut is not a button to VoiceOver either.
+        def button_trait_line
+          gate = tap_gate_condition
+          return '.accessibilityAddTraits(.isButton)' unless gate
+
+          ".accessibilityAddTraits(#{gate} ? AccessibilityTraits.isButton : [])"
+        end
+
+        def combined_tap?
+          @component[JsonUIShared::TapAccessibility::SHAPE_KEY] == 'combine'
+        end
+
+        # onLongPress — binding-only (`@{handler}`), called as the data
+        # declares it (no_value_call).
+        def apply_long_press_to_bag
+          handler = @component['onLongPress']
+          return if handler.nil?
+          return unless is_binding?(handler)
+
+          prop = extract_binding_property(handler)
+          @modifier_bag.register(:on_long_press, [
+            ".onLongPressGesture {",
+            "    #{no_value_call(prop)}",
+            "}"
+          ])
+        end
+
+        # onPan — binding-only (`@{handler}`), fired repeatedly while the user
+        # drags. simultaneousGesture so it composes with onClick taps and
+        # Button actions; contentShape makes a background-less container
+        # hittable across its full bounds (a transparent SwiftUI view is not).
+        #
+        # Payload: `value.translation` — cumulative CGSize since the gesture
+        # began (the Compose emit accumulates deltas to match). The call shape
+        # follows the declared closure class: () -> Void stays bare, (CGSize)
+        # (optionally after a String id) receives the payload.
+        def apply_pan_to_bag
+          handler = @component['onPan']
+          return if handler.nil?
+          return unless is_binding?(handler)
+
+          invocation = get_event_handler_invocation(handler, view_id, 'value.translation')
+          @modifier_bag.register(:on_pan, [
+            ".contentShape(Rectangle())",
+            ".simultaneousGesture(",
+            "    DragGesture(minimumDistance: 10).onChanged { value in",
+            "        #{invocation}",
+            "    }",
+            ")"
+          ])
+        end
+
+        # onPinch — binding-only, fired repeatedly while the user pinches with
+        # `value.magnification` (cumulative CGFloat scale). MagnifyGesture is
+        # the iOS 17+ replacement for the deprecated MagnificationGesture;
+        # SwiftJsonUI's platform floor is iOS 17, so generated code can use it
+        # unconditionally without deprecation warnings.
+        def apply_pinch_to_bag
+          handler = @component['onPinch']
+          return if handler.nil?
+          return unless is_binding?(handler)
+
+          invocation = get_event_handler_invocation(handler, view_id, 'value.magnification')
+          @modifier_bag.register(:on_pinch, [
+            ".contentShape(Rectangle())",
+            ".simultaneousGesture(",
+            "    MagnifyGesture().onChanged { value in",
+            "        #{invocation}",
+            "    }",
+            ")"
+          ])
+        end
+
+        # highlighted — the pressed/selected appearance.
+        #
+        # UIKit swaps to `highlightBackgroundColor` when the flag is set
+        # (SJUIView:187). SwiftUI has no such state, so this emits the same
+        # swap against `highlightBackground`, driven by the flag. A binding lets
+        # the screen control it; a literal `true` pins it on, which is what
+        # UIKit's `attr["highlighted"].boolValue` does.
+        def apply_highlighted_to_bag
+          value = @component['highlighted']
+          return if value.nil?
+          highlight_bg = @component['highlightBackground']
+          return if highlight_bg.nil?
+
+          condition = if is_binding?(value)
+                        "data.#{extract_binding_property(value)}"
+                      elsif value == true || value == 'true'
+                        'true'
+                      else
+                        return
+                      end
+          # The swap REPLACES the background in its own slot. Appending it to
+          # :component_specific put the `.background` BEFORE `.frame(w, h)`,
+          # so the highlight painted only the children's bounds while the
+          # ordinary background painted the declared frame on top of the
+          # order (View_highlighted__true parity, run 31202080745 — a 40pt
+          # highlight patch inside a 200pt grey box). UIKit swaps the whole
+          # view's backgroundColor (SJUIView:187); registering :background
+          # wins over the unconditional registration and keeps the slot's
+          # position after frame_size.
+          else_color = @component['background'] ? get_swiftui_color(@component['background']) : 'Color.clear'
+          @modifier_bag.register(
+            :background,
+            background_line("#{condition} ? #{get_swiftui_color(highlight_bg)} : #{else_color}")
+          )
+        end
+
+        # Apply confirmationDialog modifier (iOS 15+) into the bag
+        def apply_confirmation_dialog_to_bag
+          apply_presented_dialog_to_bag(
+            @component['confirmationDialog'], 'confirmationDialog', :confirmation_dialog
+          )
+        end
+
+        # Apply alert modifier (iOS 15+) into the bag.
+        #
+        # `.alert` and `.confirmationDialog` take the same arguments except
+        # for titleVisibility, so they share one emitter rather than a second
+        # copy that can drift. The attribute exists because the two APIs do
+        # NOT render the same: in a regular size class `.confirmationDialog`
+        # draws no cancel button, while `.alert` draws it in both classes
+        # (measured on iPhone 16 Pro / iPad A16 / iPad Pro M4 against the same
+        # button set). The SSoT declares no titleVisibility for `alert`
+        # because `.alert` has no such parameter — it always shows its title.
+        def apply_alert_to_bag
+          apply_presented_dialog_to_bag(@component['alert'], 'alert', :alert)
+        end
+
+        # The body of both. *attribute* names the SwiftUI modifier to emit,
+        # which is spelled exactly like the attribute that drives it — an
+        # attribute whose name disagrees with the API it emits is a name that
+        # lies. *slot* is the modifier-bag key.
+        #
+        # The config is passed IN rather than read from @component here: the
+        # conformance coverage scanner recognises a read by the literal
+        # `@component['x']` form, so a computed key would report both
+        # attributes as unread by any converter (measured — it did).
+        def apply_presented_dialog_to_bag(dialog, attribute, slot)
+          return unless dialog.is_a?(Hash)
+
+          is_presented = dialog['isPresented']
+          return unless is_presented
+
+          # Extract binding property name for isPresented
+          is_presented_var = extract_binding_property(is_presented)
+          return unless is_presented_var
+
+          # Get title (can be string or binding)
+          title_value = dialog['title'] || ''
+          if is_binding?(title_value)
+            title_var = extract_binding_property(title_value)
+            title_expr = "data.#{title_var}"
+          else
+            title_expr = get_text_with_string_manager("\"#{title_value}\"")
+          end
+
+          # titleVisibility is confirmationDialog's alone: `.alert` has no
+          # such parameter, and the SSoT declares none for it.
+          has_title_visibility = attribute == 'confirmationDialog'
+          if has_title_visibility
+            title_visibility = dialog['titleVisibility'] || 'automatic'
+            title_visibility_expr = case title_visibility
+            when 'visible'
+              '.visible'
+            when 'hidden'
+              '.hidden'
+            else
+              '.automatic'
+            end
+          end
+
+          # Check for layout or actions (one of them is required)
+          layout_config = dialog['layout']
+          actions = dialog['actions']
+
+          # Return if neither layout nor actions is specified
+          return unless layout_config || actions
+
+          # Get message (optional, can be string or binding)
+          message_value = dialog['message']
+          has_message = !message_value.nil? && !message_value.to_s.empty?
+
+          # Build the full confirmation dialog code as multi-line string
+          lines = []
+          lines << ".#{attribute}("
+          lines << "    #{title_expr},"
+          if has_title_visibility
+            lines << "    isPresented: $data.#{is_presented_var},"
+            lines << "    titleVisibility: #{title_visibility_expr}"
+          else
+            lines << "    isPresented: $data.#{is_presented_var}"
+          end
+          if has_message
+            lines << ") {"
+          else
+            lines << ", actions: {"
+          end
+
+          # Generate actions content based on layout or actions binding
+          if layout_config.is_a?(Hash)
+            layout_name = layout_config['name']&.sub(/\.json$/, '')
+            layout_data = layout_config['data']
+
+            if layout_name && layout_data
+              view_name = to_pascal_case(layout_name) + "View"
+              data_var = extract_binding_property(layout_data)
+              lines << "    #{view_name}(data: data.#{data_var})"
+            end
+          elsif actions
+            actions_var = extract_binding_property(actions)
+            lines << "    if let actionsView = data.#{actions_var}?() {"
+            lines << "        actionsView"
+            lines << "    }"
+          end
+
+          if has_message
+            if is_binding?(message_value)
+              message_var = extract_binding_property(message_value)
+              message_expr = "data.#{message_var}"
+            else
+              message_expr = get_text_with_string_manager("\"#{message_value}\"")
+            end
+            lines << "} message: {"
+            lines << "    Text(#{message_expr})"
+            lines << "}"
+          else
+            lines << "})"
+          end
+
+          @modifier_bag.register(slot, lines)
+        end
+
+        # Legacy method - kept for backward compatibility with converters that call it directly
+        def apply_confirmation_dialog
+          apply_confirmation_dialog_to_bag
+        end
+
+        # Convert snake_case or kebab-case to PascalCase
+        def to_pascal_case(str)
+          str.split(/[-_]/).map(&:capitalize).join
+        end
+
+        # Apply lifecycle event modifiers into the bag
+        def apply_lifecycle_events_to_bag
+          if @component['onAppear']
+            handler = @component['onAppear']
+            lines = build_lifecycle_handler_lines('.onAppear', handler)
+            @modifier_bag.register(:on_appear, lines)
+          end
+
+          if @component['onDisappear']
+            handler = @component['onDisappear']
+            lines = build_lifecycle_handler_lines('.onDisappear', handler)
+            @modifier_bag.register(:on_disappear, lines)
+          end
+        end
+
+        # Legacy method - kept for backward compatibility
+        def apply_lifecycle_events
+          apply_lifecycle_events_to_bag
+        end
+
+        # ヘルパーメソッド
+
+        # Convert event handler to method call
+        # SwiftUI uses onClick only (binding format: @{functionName})
+        # If handler ends with ':', pass self as parameter
+        def get_event_handler_call(handler)
+          no_value_call(is_binding?(handler) ? extract_binding_property(handler) : handler)
+        end
+
+        # A handler that takes no value — a tap (onClick, the onclick
+        # selector), a long press, onAppear / onDisappear — called as the data
+        # declares it (the orchestrator's ruling on control-onclick-is-called-differently-
+        # on-every-path, 1.9.0): `(String)` with the viewId (view_id: the id,
+        # else the drawn type and the position), anything else with no
+        # argument; `name:`, the selector spelling with a sender, with `self`.
+        # Every one of these was called with no argument whatever it took: a
+        # `((String) -> Void)?` handler did not compile, while a Button's and a
+        # control's onClick were handed the viewId (get_event_handler_invocation).
+        # The call a partialAttributes range makes, or nil: its onClick binding
+        # (`data.x?()`), else each name of its onclick selector, as a
+        # selector tap calls them (no_value_call).
+        def range_handler_call(range)
+          kind, value = JsonUIShared::TapAccessibility.range_handler(range)
+          return nil unless kind
+          return "data.#{extract_binding_property(value)}?()" if kind == :binding
+
+          JsonUIShared::TapAccessibility.handler_values(value).map { |n| no_value_call(to_camel_case(n)) }.join('; ')
+        end
+
+        def no_value_call(name)
+          return "data.#{name.chomp(':')}?(self)" if name.end_with?(':')
+
+          klass = ColorHelper.data_definitions.dig(name, 'class')
+          if JsonUIShared::BindingValidatorCore.closure_parameters(klass) == ['String']
+            "data.#{name}?(#{swift_string_literal(view_id)})"
+          else
+            "data.#{name}?()"
+          end
+        end
+
+        # Draw one child of THIS container, honoring the child's `visibility`.
+        #
+        # 🚨 THE ONE DOOR FOR A CONTAINER THAT CALLS THE FACTORY ITSELF. A
+        # plain View's children go through ChildRenderingHelper, which wraps a
+        # child that declares `visibility` in `VisibilityWrapper(...)`. Three
+        # containers (ScrollView, Blur, GradientView) drew their children with
+        # `@converter_factory.create_converter(...)` directly and never asked
+        # about visibility, so a `visibility: "@{x}"` on a ScrollView's direct
+        # child compiled, built with 0 warnings, and was ALWAYS SHOWN on iOS —
+        # while kjui wrapped the same child in VisibilityWrapper. Reported
+        # 2026-09-20 from two consumer screens that had just moved a
+        # visibility binding from the ScrollView to its child.
+        #
+        # The wrapper goes where the caller stands: inside the VStack a
+        # single-child ScrollView builds, so the Spacer beside the child stays
+        # (wrapping the VStack would hide the Spacer too and change what
+        # weight / alignment mean). Returns the child's converter for state
+        # propagation, or nil when the factory produced none.
+        #
+        # 🚨 A CONVERTER SCAFFOLDED BY `jui g converter` 1.8.107–1.8.111 STORES
+        # THE FACTORY UNDER OTHER NAMES. Its `initialize` sets `@factory` /
+        # `@registry`, the scaffold's own names, and never `@converter_factory`
+        # / `@view_registry` — so once its `process_children` came through this
+        # door (1.8.107), every child of a custom container was dropped: the
+        # block came out `{\n}`, the build had 0 warnings, and the content was
+        # missing on iOS only (kjui renders the same layout's children).
+        # Reported 2026-09-24. The template now sets both names, but a scaffold
+        # is user-owned once written and `jui sync_tool` never touches
+        # `views/extensions/`, so a fix in the template alone would leave every
+        # converter scaffolded in those five releases broken until someone
+        # re-scaffolds it. Reading the scaffold's names as a fallback fixes
+        # those in place with the next sync. Only the scaffold uses them
+        # (`git grep -P '@factory\b|@registry\b' sjui_tools/lib`: the template
+        # and nothing else).
+        def render_child_honoring_visibility(child)
+          factory = @converter_factory || @factory
+          registry = @view_registry || @registry
+          return nil unless factory
+          if ResponsiveHelper.visibility_declared?(child)
+            visibility_param = ResponsiveHelper.visibility_param(child)
+            child_converter = factory.create_converter(child, @indent_level + 1, @action_manager, factory, registry)
+            return nil unless child_converter
+            add_line "VisibilityWrapper(#{visibility_param}) {"
+            child_converter.convert.split("\n").each { |line| @generated_code << line }
+            add_line "}"
+          else
+            child_converter = factory.create_converter(child, @indent_level, @action_manager, factory, registry)
+            return nil unless child_converter
+            child_converter.convert.split("\n").each { |line| @generated_code << line }
+          end
+          if child_converter.respond_to?(:state_variables) && child_converter.state_variables
+            @state_variables.concat(child_converter.state_variables)
+          end
+          child_converter
+        end
+
+        # Get event handler invocation based on handler type definition
+        # Checks data_definitions to determine if handler takes (viewId, value) or no arguments
+        # @param handler [String] The handler binding expression (e.g., "@{onValueChange}")
+        # @param view_id [String] The view ID to pass as first argument
+        # @param value_expr [String, nil] The value expression to pass as second argument (nil for click events)
+        # @return [String] The Swift code to invoke the handler
+        def get_event_handler_invocation(handler, view_id, value_expr = nil)
+          method_name = extract_binding_property(handler) || handler
+          data_def = ColorHelper.data_definitions[method_name]
+          class_type = data_def && data_def['class'].to_s
+          return "data.#{method_name}?()" if class_type.nil? || class_type.empty?
+
+          # Event-object handlers take (viewId[, value]) as before.
+          if class_type.include?('Event')
+            return value_expr.nil? ? "data.#{method_name}?(\"#{view_id}\")" : "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
+          end
+
+          # The declared closure's parameter count decides the call. The shape
+          # was guessed from the spelling — a class starting `(String` read as
+          # (viewId, value) — so a one-parameter `(String) -> Void` (a Radio's,
+          # a TextView's onTextChange) was called with two arguments, and an
+          # `(Any) -> Void` onPan, in neither list, with none: both did not
+          # compile (ticket sjui-radio-items-calls-a-one-parameter-handler-
+          # with-two-arguments).
+          params = JsonUIShared::BindingValidatorCore.closure_parameters(class_type) || []
+          case params.size
+          when 0
+            "data.#{method_name}?()"
+          when 1
+            if value_expr
+              "data.#{method_name}?(#{value_expr})"
+            elsif params.first.sub(/\?\z/, '') == 'String'
+              "data.#{method_name}?(\"#{view_id}\")"
+            else
+              "data.#{method_name}?()"
+            end
+          else
+            value_expr.nil? ? "data.#{method_name}?(\"#{view_id}\")" : "data.#{method_name}?(\"#{view_id}\", #{value_expr})"
+          end
+        end
+
+        private
+
+        # `.offset(x:y:)` from the declared offsetX / offsetY.
+        #
+        # Both are declared with a binding face, and the emit interpolated the
+        # raw JSON value into CODE position: `@{dx}` arrived in the generated
+        # source verbatim, which is not a wrong program but not a program at
+        # all — the build dies on it. `bound_number` is the arbiter that was
+        # already resolving the same union everywhere else.
+        #
+        # One home, because this had grown a second copy in the TextField
+        # converter and a vocabulary that exists twice drifts (plan 40).
+        def register_offset_modifier
+          return unless @component['offsetX'] || @component['offsetY']
+
+          x = offset_component('offsetX')
+          y = offset_component('offsetY')
+          @modifier_bag.register(:offset, ".offset(x: #{x}, y: #{y})")
+        end
+
+        def offset_component(key)
+          value = @component[key]
+          return 0 if value.nil?
+
+          bound_number(value) || value
+        end
+
+        # Categorize a binding modifier string into the correct bag key
+        def categorize_binding_modifier(modifier)
+          case modifier
+          when /^\.background\(/
+            :background
+          when /^\.cornerRadius\(/
+            :corner_radius
+          when /^\.overlay\(/
+            :border
+          when /^\.foregroundColor\(/
+            :foreground_color
+          when /^\.opacity\(/
+            :opacity
+          when /^\.disabled\(/
+            :disabled
+          when /^\.frame\(/
+            :frame_size
+          when /^\.clipped\(/, /^\.clipToBounds\(/
+            :clip_to_bounds
+          when /^\.allowsHitTesting\(/
+            :allows_hit_testing
+          when /^\.tint\(/
+            :tint_color
+          when /^\.padding\(\.top/
+            :padding
+          when /^\.padding\(\.bottom/
+            :padding
+          when /^\.padding\(\.leading/
+            :padding
+          when /^\.padding\(\.trailing/
+            :padding
+          when /^\.padding\(/
+            :padding
+          when /^\.font\(/
+            :component_specific
+          when /^\.fontWeight\(/
+            :component_specific
+          else
+            nil
+          end
+        end
+
+        # Build border overlay code as a single multi-line string
+        #: `indicatorStyle` / `style` as a scale factor. One home because two
+        #: components read the same declared vocabulary — Indicator and
+        #: Progress — and a second copy is how they drift (plan 40).
+        INDICATOR_SIZE_SCALES = { 'large' => 1.5, 'small' => 0.8 }.freeze
+
+        def indicator_size_scale(style)
+          INDICATOR_SIZE_SCALES.fetch(JsonUIShared::EnumSpelling.lowered(style, @component['type'], 'indicatorStyle').to_s, 1.0)
+        end
+
+        # The border overlay this component declares, or nil when it declares
+        # no border.
+        #
+        # **The rule lives in `shared/core/attribute_semantics.json`
+        # (`semantics.border`), not here, and not in the type/enum/default of
+        # `attribute_definitions.json`.** A border is drawn only when BOTH
+        # `borderWidth` and `borderColor` are declared. There is no default
+        # border colour: `borderWidth` alone draws nothing, `borderColor`
+        # alone draws nothing, and `borderStyle` alone draws nothing — style
+        # decorates a border the pair requests, it never summons one.
+        # (2026-08-03 user rulings, measured 0 px on all three platforms in
+        # plan 34's 2026-08-04 re-measure. A gray-default direction was tried
+        # in d2c8628 and withdrawn; the ruling has since reversed direction
+        # more than once whenever someone re-derived it from the declaration
+        # instead of reading the contract.)
+        #
+        # `TextField.borderStyle` is a DIFFERENT attribute (UIKit text-field
+        # chrome: roundedRect / line / bezel / none) and is outside this rule
+        # — its converter passes `style_source: nil`.
+        def border_overlay(corner_default = 0, style_source: @component['borderStyle'])
+          width = @component['borderWidth']
+          color = @component['borderColor']
+          return nil if width.nil? || color.nil?
+
+          corner = padding_value(@component['cornerRadius'] || corner_default)
+          build_border_overlay(border_color_expr(color), corner,
+                               border_width_operand(width), style_source)
+        end
+
+        # The stroke width. A bound one is an expression — `.to_i` on a
+        # binding is 0, which drew a zero-width border for every bound pair.
+        def border_width_operand(width)
+          bound_number(width) || width.to_i
+        end
+
+        # The stroke colour. A binding resolves through the same colour
+        # registry a literal does; it used to be skipped here and re-emitted
+        # by the binding handler as a SECOND overlay.
+        # `glass` is declared on `common` with type [boolean, object]:
+        #   true                      -> the default treatment
+        #   {style:, tint:, interactive:, shape:}  -> each key optional
+        #   false / absent            -> nothing emitted
+        #
+        # ⚠️ THE DECLARED VALUE SET IS NOT THE SAME ON BOTH iOS MODES.
+        # SwiftUI's `Glass` has regular/clear/identity and `.glassEffect` takes
+        # a shape; UIKit's `UIGlassEffectStyle` has only Regular and Clear and
+        # `UIGlassEffect` (a UIVisualEffect subclass) has no shape parameter.
+        # This emitter is the SwiftUI path, so it passes all four keys through;
+        # the UIKit path cannot honour `identity` or `shape` and the
+        # declaration says so.
+        # The :glass slot carries the node's materials: the `effectStyle`
+        # material first, then Liquid Glass over it. Both are "a material over
+        # whatever background is already there, clipped by :corner_radius",
+        # which is the slot's own reason for sitting where it does — so the
+        # effect material shares it instead of taking a new MODIFIER_ORDER key
+        # (a new key would move modifier_order.json, which SwiftJsonUI vendors
+        # at a pinned release). The Dynamic runtime's `glass` stage applies the
+        # two in the same order (DynamicModifierHelper.applyMaterials).
+        def apply_glass
+          lines = [effect_style_line, glass_line].compact
+          return if lines.empty?
+
+          # A single call keeps the slot's old shape (a String); two go in as
+          # an Array, which emit_all and to_lines already write in order.
+          @modifier_bag.register(:glass, lines.length == 1 ? lines.first : lines)
+        end
+
+        # `common.effectStyle` on a node that is not a Blur: the declared
+        # visual-effect material, drawn behind the content through the ONE
+        # library table (`jsonUIVisualEffect` / `VisualEffectStyle`) that the
+        # Blur converter calls — so a View and a Blur declaring the same
+        # material cannot draw different pictures. Android (modifier_builder)
+        # and web (base_converter) already drew a non-Blur node's material;
+        # ios read the attribute only in blur_converter.rb, so a View emitted
+        # exactly its control for every value.
+        #
+        # A Blur is left alone: it applies its own declaration (Light / Dark /
+        # ExtraLight) in BlurConverter, which also calls apply_modifiers.
+        #
+        # The value is forwarded in its declared spelling, case and all
+        # (jsonui-cli 1.9.0); the library judges it against common's
+        # declaration and draws `Regular` for anything undeclared. A binding
+        # is not a spelling at all: it draws the default, as it does on web
+        # and in the Dynamic runtime (the typed parse keeps it `.unknown`).
+        def effect_style_line
+          value = @component['effectStyle']
+          return nil if value.nil?
+          return nil if JsonUIShared::TypeSynonyms.drawn_type(@component['type'].to_s) == 'Blur'
+
+          if value.is_a?(String) && !bound_value?(value)
+            ".jsonUIVisualEffect(#{swift_string_literal(value)})"
+          else
+            '.jsonUIVisualEffect(nil)'
+          end
+        end
+
+        def glass_line
+          value = @component['glass']
+          return nil if value.nil? || value == false || value == 'false'
+
+          args = []
+          if value.is_a?(Hash)
+            style = value['style']
+            args << "style: #{swift_string_literal(style)}" if style
+            if (tint = value['tint'])
+              args << "tint: #{get_swiftui_color(tint)}"
+            end
+            unless value['interactive'].nil?
+              interactive = value['interactive'] == true || value['interactive'] == 'true'
+              args << "interactive: #{interactive}"
+            end
+            if (shape = value['shape'])
+              warn_unknown_glass_shape(shape) unless glass_shape_declared?(shape)
+              args << "shape: #{swift_string_literal(shape)}"
+            end
+          end
+
+          ".sjuiGlassEffect(#{args.join(', ')})"
+        end
+
+        # Is this shape spelling one the SSoT declares?
+        #
+        # The vocabulary is READ from attribute_definitions.json, never written here.
+        # A copy in this file would be a second list to keep in step, and the one that
+        # drifts is always the copy — the library already carried `rectangle`, which no
+        # declaration ever defined, because it was written from SwiftUI's type name
+        # instead of from the declaration.
+        #
+        # Two shapes of declaration are accepted, because the SSoT is mid-migration:
+        # `properties.shape.enum` when it exists (machine-readable, preferred), and
+        # otherwise the `shape: a|b|c` clause in the prose description. When the enum
+        # lands, the prose path stops being used without this code changing.
+        def glass_shape_declared?(shape)
+            # ⚠️ `BaseViewConverter.` explicitly, not `self.class.` — every converter
+            # subclass would otherwise memoise (and parse) its own copy, and a test
+            # that swaps the declaration on the base class would not reach them.
+            # Measured: the arm below failed for exactly this reason.
+            vocabulary = BaseViewConverter.declared_glass_shapes
+            if vocabulary.empty?
+              # Nothing to check against, so every spelling passes. That is the right
+              # behaviour and the wrong silence: "checked and fine" and "could not
+              # check" must not look alike, or a declaration that loses its enum turns
+              # this validation off with nothing said.
+              #
+              # This is NOT the population of the fallback removed above. That branch
+              # could not run at all; this one can: `jui sync_tool` copies the tools
+              # into a face, and a face carrying an older vendored definition while
+              # running a newer sjui_tools reaches exactly this state.
+              BaseViewConverter.warn_shape_validation_unavailable
+              return true
+            end
+
+            # As written: glass.shape is declared capsule / circle / rect, case
+            # and all (1.9.0) — `Capsule` is a spelling declared in no case.
+            spelling = shape.to_s
+            return true if vocabulary.include?(spelling)
+
+            # `rounded(N)` is a FORM, not a spelling: it carries a number, so it cannot
+            # be an enum member. The declaration therefore lists it in prose while the
+            # enum holds the three fixed words, and a check that only reads the enum
+            # rejects every `rounded(12)` a consumer writes. Measured: with the enum
+            # present, `rounded(12)` came back undeclared until this branch existed.
+            BaseViewConverter.declares_rounded_form? && spelling.start_with?('rounded')
+        end
+
+        def warn_unknown_glass_shape(shape)
+            declared = BaseViewConverter.declared_glass_shapes.join(', ')
+            puts "\e[33m[SwiftUI Warning] glass shape #{shape.inspect} is not declared " \
+                 "(declared: #{declared}). Emitting it anyway; the library falls back to " \
+                 "the SDK default, so the screen renders but not as written.\e[0m"
+        end
+
+        # Does the declaration describe the parameterised `rounded(N)` form?
+        #
+        # Read from the prose deliberately: a form with an argument has no enum to live
+        # in, so prose is where it can be declared at all. This is not a fallback for a
+        # missing enum — the enum and this coexist.
+        def self.declares_rounded_form?
+            return @declares_rounded_form unless @declares_rounded_form.nil?
+
+            description = find_glass_definition(load_attribute_definitions)&.fetch('description', nil).to_s
+            @declares_rounded_form = description.downcase.include?('rounded(n)')
+        end
+
+        # Clears the parsed vocabulary. Exists for the arm that proves this code READS
+        # the declaration: it swaps the declaration, clears, and checks the emitter's
+        # answers follow. Without that arm, a hard-coded list passes every other test.
+        def self.reset_declared_glass_shapes!
+            @declared_glass_shapes = nil
+            @declares_rounded_form = nil
+            @warned_shape_validation_unavailable = nil
+        end
+
+        # Parsed once per process: the file does not change while a build runs.
+        def self.declared_glass_shapes
+            @declared_glass_shapes ||= begin
+            glass = find_glass_definition(load_attribute_definitions)
+            # ⚠️ A prose fallback used to sit here (`|| from_description(glass)`).
+            # It was unreachable, and the reason is stronger than "the copies agree":
+            # in the repository there is ONE file. `sjui_tools/lib/core/
+            # attribute_definitions.json` is a symlink (mode 120000) to
+            # `shared/core/attribute_definitions.json`, as are kjui's and rjui's — the
+            # same blob, so they cannot disagree. In a distribution they become real
+            # files, copied from the shared one by `installer/bootstrap.sh` (it removes
+            # each symlink and copies the shared file over it), so they start life
+            # identical there too.
+            #
+            # Removed rather than armed: an arm for a branch that cannot run protects
+            # nothing and reads as coverage.
+            from_enum(glass) || []
+            end
+        end
+
+        # Said once per process, not per component: a build with fifty glass views
+        # should report an unusable declaration once, not fifty times.
+        def self.warn_shape_validation_unavailable
+            return if @warned_shape_validation_unavailable
+
+            @warned_shape_validation_unavailable = true
+            puts "\e[33m[SwiftUI Warning] glass shape spellings were not checked: " \
+                 "attribute_definitions.json declares no shape vocabulary " \
+                 "(properties.shape.enum). Spellings are emitted as written.\e[0m"
+        end
+
+        def self.from_enum(glass)
+            values = glass&.dig('properties', 'shape', 'enum')
+            return nil unless values.is_a?(Array) && !values.empty?
+
+            values.map(&:to_s)
+        end
+
+        def self.find_glass_definition(node)
+            case node
+            when Hash
+            return node['glass'] if node.key?('glass')
+
+            node.each_value do |child|
+                found = find_glass_definition(child)
+                return found if found
+            end
+            nil
+            when Array
+            node.each do |child|
+                found = find_glass_definition(child)
+                return found if found
+            end
+            nil
+            end
+        end
+
+        def self.load_attribute_definitions
+            path = File.expand_path('../../core/attribute_definitions.json', __dir__)
+            return {} unless File.exist?(path)
+
+            JSON.parse(File.read(path))
+        rescue JSON::ParserError
+            {}
+        end
+
+        # Swift string literal, escaped (the shared escaper): a style or
+        # shape spelling arrives from JSON and goes into generated source.
+        def swift_string_literal(value)
+          JsonUIShared::StringLiterals.swift(value)
+        end
+
+        def border_color_expr(value)
+          return get_swiftui_color(value) unless bound_value?(value)
+
+          expr = SjuiTools::SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
+          "SwiftJsonUIConfiguration.shared.getColor(for: #{expr}) ?? Color.black"
+        end
+
+        # The shape a component draws itself in, which its border, its declared fill and so its
+        # shadow follow instead of a cornerRadius rectangle — nil for every component but the one
+        # whose converter names it (a Segment's capsule, segment_converter.rb).
+        def outline_shape
+          nil
+        end
+
+        # The fills a component's outline_shape clips (the background stage's attributes).
+        OUTLINED_FILLS = %w[background backgroundColor gradient disabledBackground tapBackground highlightBackground].freeze
+
+        def build_border_overlay(color, corner_radius, border_width, style = nil)
+          indent_str = "    " * (@indent_level + 1)
+          sub_indent = "    " * (@indent_level + 2)
+          [
+            ".overlay(",
+            "#{indent_str}#{outline_shape || "RoundedRectangle(cornerRadius: #{corner_radius})"}",
+            "#{sub_indent}.stroke(#{color}, #{stroke_style_argument(border_width, style)})",
+            "#{indent_str[0...-4]})"
+          ].join("\n")
+        end
+
+        # `lineWidth:` for a solid border, a full `style: StrokeStyle(...)`
+        # for the dashed and dotted spellings.
+        #
+        # `common.borderStyle` (solid / dashed / dotted) is honoured by the
+        # web mapper and by Compose's dashedBorder/dottedBorder, and by
+        # nothing on ios — `view_binding_handler.rb` even carries a note
+        # saying dashed and dotted "require StrokeStyle", which SwiftUI has.
+        # The dash patterns are Compose's, so a layout that declares one
+        # border gets one border: [6, 3] for dashed and [width, width * 2]
+        # for dotted (DashedBorderModifier.kt).
+        #
+        # `TextField.borderStyle` is a DIFFERENT attribute with a different
+        # vocabulary (none / line / bezel / roundedRect) and its own handler;
+        # the two must not be merged, and are not — the TextField converter
+        # never reaches this overlay.
+        def stroke_style_argument(border_width, style)
+          case JsonUIShared::EnumSpelling.lowered(style, 'common', 'borderStyle')
+          when 'dashed'
+            "style: StrokeStyle(lineWidth: #{border_width}, dash: [6, 3])"
+          when 'dotted'
+            "style: StrokeStyle(lineWidth: #{border_width}, lineCap: .round, " \
+              "dash: [#{border_width}, #{border_width} * 2])"
+          else
+            "lineWidth: #{border_width}"
+          end
+        end
+
+        # Build shadow modifier code
+        def build_shadow_modifier(shadow)
+          if shadow.is_a?(Hash)
+            radius = number_slot(shadow['radius'] || 5)
+            x = number_slot(shadow['offsetX'] || 0)
+            y = number_slot(shadow['offsetY'] || 0)
+            color_hex = shadow['color']
+            opacity = shadow['opacity'] && number_slot(shadow['opacity'], cast: 'Double')
+
+            if color_hex
+              color = get_swiftui_color(color_hex)
+              if opacity
+                ".shadow(color: (#{color}).opacity(#{opacity}), radius: #{radius}, x: #{x}, y: #{y})"
+              else
+                ".shadow(color: #{color}, radius: #{radius}, x: #{x}, y: #{y})"
+              end
+            else
+              ".shadow(radius: #{radius}, x: #{x}, y: #{y})"
+            end
+          else
+            # The string form is the UIKit pipe contract
+            # 'color|offsetX|offsetY|opacity|radius' — exactly five fields;
+            # anything else draws nothing (SJUIViewCreator's count == 5
+            # guard, the canonical semantics all render paths share).
+            parts = shadow.to_s.split('|', -1)
+            return nil unless parts.length == 5
+            color = get_swiftui_color(parts[0])
+            ".shadow(color: (#{color}).opacity(#{parts[3].to_f}), radius: #{parts[4].to_f}, x: #{parts[1].to_f}, y: #{parts[2].to_f})"
+          end
+        end
+
+        # Build onClick lines as array of code strings
+        def build_on_click_lines(handler)
+          handler_call = get_event_handler_call(handler)
+          indent_str = "    " * (@indent_level + 1)
+          [
+            ".contentShape(Rectangle())",
+            tap_gesture_line(handler_call)
+          ] + tap_accessibility_lines
+        end
+
+        # onAppear / onDisappear name their handler — `x`, `@{x}`, or `x:`
+        # (UIKit's sender mark, which means nothing in SwiftUI) are the one
+        # name `x` — and it is called as the data declares it (no_value_call;
+        # The orchestrator's ruling on control-onclick-is-called-differently-on-every-path,
+        # 1.9.0: every path reads the three alike). `@{x}` wrote
+        # `data.@{x}?()`, which does not parse, and `x:` handed `self`.
+        def build_lifecycle_handler_lines(modifier_name, handler)
+          indent_str = "    " * (@indent_level + 1)
+          name = is_binding?(handler) ? extract_binding_property(handler) : handler.to_s
+          body = no_value_call(name.delete(':'))
+          ["#{modifier_name} {\n#{indent_str}#{body}\n#{indent_str[0...-4]}}"]
+        end
+
+        # `safeAreaInsetPositions` — the edges that RESERVE the safe area.
+        #
+        # This emitted `.ignoresSafeArea(.all, edges: …)`, which is the exact
+        # opposite: it lets the view draw THROUGH the safe area on those
+        # edges. The declaration means the other thing everywhere else —
+        #
+        #   SSoT   "Which edges reserve the safe area"
+        #   rjui   `padding<Side>: env(safe-area-inset-*)`  (view_converter)
+        #   kjui   windowInsetsPadding via SafeAreaConfig   (compose_builder)
+        #   UIKit  `SJUIView#applySafeAreaInsets` ADDS the inset to the
+        #          constraint — this library's own original implementation,
+        #          on this same platform
+        #
+        # so the SwiftUI codegen was the single outlier, and it contradicted
+        # the UIKit runtime shipped beside it. `.safeAreaPadding(_:)` is the
+        # SwiftUI spelling of "reserve" and lines up one-for-one with rjui's
+        # `env(safe-area-inset-*)` padding. It is iOS 17+, which is the
+        # package's floor already.
+        #
+        # (The SSoT description cites `apply_safe_area_insets_to_bag` running
+        # for every component as evidence that every platform honours the
+        # attribute on a plain view. The routing claim was right; what the
+        # method did was not.)
+        def apply_safe_area_insets_to_bag
+          positions = @component['safeAreaInsetPositions']
+          return unless positions
+
+          edges = safe_area_edge_set(positions)
+          return if edges.nil?
+
+          # Length 0: the safe area's own inset and nothing more. Without a
+          # length SwiftUI adds its default padding (16) on top, so a box that
+          # touches no screen edge moved its content 16 where Android and web
+          # moved it 0 (frame-parity, 2026-10-05; rjui pads by
+          # env(safe-area-inset-*)). Dynamic: DynamicModifierHelper.applySafeAreaInsets.
+          @modifier_bag.append(:safe_area_insets, ".safeAreaPadding(#{edges}, 0)")
+        end
+
+        #: Declared spelling -> `SwiftUI.Edge.Set` member, as written (the
+        #: items of safeAreaInsetPositions: top / bottom / leading / trailing /
+        #: vertical, and `all`). `left` / `right` / `horizontal` were accepted
+        #: here beyond the declaration; a value is its declared spelling
+        #: (1.9.0), so they select no edge now, as on rjui and kjui, and the
+        #: validator names them. Measured before they went (2026-09-26): no
+        #: node on the nine consumer faces declares safeAreaInsetPositions.
+        SAFE_AREA_EDGES = {
+          'top' => '.top',
+          'bottom' => '.bottom',
+          'leading' => '.leading',
+          'trailing' => '.trailing',
+          'vertical' => '.vertical'
+        }.freeze
+
+        # The `Edge.Set` argument for a declared position list, or nil when
+        # the declaration selects no edge. `Edge.Set` is an OptionSet, so an
+        # array literal is a legal set literal.
+        def safe_area_edge_set(positions)
+          list = positions.is_a?(Array) ? positions : [positions]
+          list = list.map(&:to_s)
+          return '.all' if list.include?('all')
+          return nil if list.include?('none') && list.length == 1
+
+          members = list.map { |edge| SAFE_AREA_EDGES[edge] }.compact.uniq
+          return nil if members.empty?
+
+          "[#{members.join(', ')}]"
+        end
+
+        # Legacy method kept for backward compatibility
+        def apply_safe_area_insets
+          apply_safe_area_insets_to_bag
+        end
+      end
+    end
+  end
+end

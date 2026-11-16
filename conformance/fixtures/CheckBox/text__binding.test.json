@@ -1,0 +1,37 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/text__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.text (binding)",
+    "description": "Conformance fixture for 'text' on CheckBox (section: CheckBox, class: assertable). Value under test: \"@{boundText}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "text__binding",
+      "description": "Conformance fixture for 'text' on CheckBox (section: CheckBox, class: assertable). Value under test: \"@{boundText}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "text",
+          "id": "target",
+          "equals": "Conformance Text"
+        }
+      ]
+    }
+  ]
+}

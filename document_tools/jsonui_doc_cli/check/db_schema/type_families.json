@@ -1,0 +1,48 @@
+{
+  "_comment": "OpenAPI (type[:format]) -> accepted DB base-type families per dialect. Data file on purpose (review §3-7): edit here, not in code. Lookup order: 'type:format' then 'type'. Base type = leading identifier of the column type, uppercased ('VARCHAR(255)' -> 'VARCHAR'). MariaDB is treated as mysql. '_enum_int' lists types accepted for enums stored as integer codes (x-enum-values).",
+  "mysql": {
+    "integer": ["INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT"],
+    "number": ["FLOAT", "DOUBLE", "DECIMAL", "NUMERIC", "REAL"],
+    "boolean": ["TINYINT", "BOOL", "BOOLEAN", "BIT"],
+    "string": ["VARCHAR", "CHAR", "TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT", "ENUM", "SET", "JSON"],
+    "string:date-time": ["DATETIME", "TIMESTAMP"],
+    "string:date": ["DATE"],
+    "string:time": ["TIME"],
+    "string:uuid": ["CHAR", "VARCHAR", "BINARY", "UUID"],
+    "string:binary": ["BLOB", "VARBINARY", "BINARY", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB"],
+    "string:byte": ["BLOB", "VARBINARY", "TEXT", "VARCHAR"],
+    "array": ["JSON", "TEXT", "LONGTEXT"],
+    "object": ["JSON", "TEXT", "LONGTEXT"],
+    "_enum_int": ["INT", "INTEGER", "TINYINT", "SMALLINT"]
+  },
+  "postgresql": {
+    "integer": ["INTEGER", "INT", "INT4", "INT8", "INT2", "BIGINT", "SMALLINT", "SERIAL", "BIGSERIAL", "SMALLSERIAL"],
+    "number": ["NUMERIC", "DECIMAL", "REAL", "DOUBLE", "FLOAT8", "FLOAT4", "MONEY"],
+    "boolean": ["BOOLEAN", "BOOL"],
+    "string": ["VARCHAR", "CHARACTER", "CHAR", "TEXT", "CITEXT", "JSON", "JSONB", "ENUM", "USER-DEFINED"],
+    "string:date-time": ["TIMESTAMP", "TIMESTAMPTZ"],
+    "string:date": ["DATE"],
+    "string:time": ["TIME", "TIMETZ"],
+    "string:uuid": ["UUID", "CHAR", "VARCHAR"],
+    "string:binary": ["BYTEA"],
+    "string:byte": ["BYTEA", "TEXT"],
+    "array": ["JSON", "JSONB", "ARRAY"],
+    "object": ["JSON", "JSONB"],
+    "_enum_int": ["INTEGER", "INT", "SMALLINT", "INT2", "INT4"]
+  },
+  "sqlite": {
+    "integer": ["INTEGER", "INT", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT"],
+    "number": ["REAL", "FLOAT", "DOUBLE", "NUMERIC", "DECIMAL"],
+    "boolean": ["BOOLEAN", "BOOL", "INTEGER", "TINYINT"],
+    "string": ["TEXT", "VARCHAR", "CHAR", "CLOB", "NVARCHAR", "JSON"],
+    "string:date-time": ["DATETIME", "TIMESTAMP", "TEXT"],
+    "string:date": ["DATE", "TEXT"],
+    "string:time": ["TIME", "TEXT"],
+    "string:uuid": ["TEXT", "VARCHAR", "CHAR", "BLOB"],
+    "string:binary": ["BLOB"],
+    "string:byte": ["BLOB", "TEXT"],
+    "array": ["TEXT", "JSON"],
+    "object": ["TEXT", "JSON"],
+    "_enum_int": ["INTEGER", "INT"]
+  }
+}

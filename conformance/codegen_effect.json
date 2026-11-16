@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
+  "entries": [
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "Label",
+      "attribute": "accessibilityLiveRegion",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A Label's live region is announced on iOS when its BOUND text changes (iOS has no live region); the probe's Label text is static, so it never changes and there is nothing to announce, for either value. sjui_tools/spec/swiftui/views/control_accessibility_spec.rb pins the announcement on a bound text.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "ios",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成 collection_converter、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。生成は sjui_tools/spec/swiftui/views/collection_reorder_spec.rb（swiftc で型検査）、描画は SwiftJsonUI の腕が測る",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "ios",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成 collection_converter、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。生成は sjui_tools/spec/swiftui/views/collection_reorder_spec.rb（swiftc で型検査）、描画は SwiftJsonUI の腕が測る",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは sjui_tools/spec/swiftui/views/collection_reorder_spec.rb と SwiftJsonUI の腕",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは sjui_tools/spec/swiftui/views/collection_reorder_spec.rb と SwiftJsonUI の腕",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "実装済み（kjui の生成 collection_component、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。組の probe（attribute_semantics の <x>Alone: no-draw）に載せるまでは、この行が測りの外を示す。生成は kjui_tools/spec/compose/components/collection_reorder_spec.rb と collection_cell_first_frame_spec.rb（kotlinc で compile して走らせる）、描画は KotlinJsonUI の CollectionReorderTest・DynamicCollectionReorderTest が測る",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "実装済み（kjui の生成 collection_component、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。組の probe（attribute_semantics の <x>Alone: no-draw）に載せるまでは、この行が測りの外を示す。生成は kjui_tools/spec/compose/components/collection_reorder_spec.rb と collection_cell_first_frame_spec.rb（kotlinc で compile して走らせる）、描画は KotlinJsonUI の CollectionReorderTest・DynamicCollectionReorderTest が測る",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "実装済み（kjui の生成、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは kjui_tools/spec/compose/components/collection_reorder_spec.rb と KotlinJsonUI の腕",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "実装済み（kjui の生成、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは kjui_tools/spec/compose/components/collection_reorder_spec.rb と KotlinJsonUI の腕",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
+      "reason": "reorderHandle is drawn only on a reorderable Collection (reorderable true or bound): the probe's Collection is not reorderable, so no value of it changes the output, by the rule (ticket jui-collection-drag-to-reorder). The tests that draw it are rjui_tools/spec/react/collection_reorder_spec.rb and conformance/hosts/web/scripts/collection_reorder_probe.mjs.",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
+      "reason": "reorderLockedProperty is drawn only on a reorderable Collection (reorderable true or bound): the probe's Collection is not reorderable, so no value of it changes the output, by the rule (ticket jui-collection-drag-to-reorder). The tests that draw it are rjui_tools/spec/react/collection_reorder_spec.rb and conformance/hosts/web/scripts/collection_reorder_probe.mjs.",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder (sjui_tools CollectionConverter#emit_reorder_rows, SwiftJsonUI CollectionReorderRows)",
+      "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
+      "note": "jsonui-cli 2.5.36 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder (kjui_tools CollectionComponent reorder_fixed_arg, KotlinJsonUI CollectionReorder)",
+      "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
+      "note": "jsonui-cli 2.5.36 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
+      "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
+      "note": "jsonui-cli 2.5.36 の候補"
+    }
+  ]
+}

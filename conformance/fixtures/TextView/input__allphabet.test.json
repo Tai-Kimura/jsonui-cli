@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/input__allphabet.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.input (allphabet)",
+    "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"allphabet\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "input__allphabet",
+      "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"allphabet\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_input__allphabet"
+        }
+      ]
+    }
+  ]
+}

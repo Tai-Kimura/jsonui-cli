@@ -1,0 +1,347 @@
+# frozen_string_literal: true
+
+require 'fileutils'
+require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
+require_relative '../../core/config_manager'
+require_relative '../../core/project_finder'
+require_relative '../../core/generated_marker'
+require_relative 'dynamic_registry_types'
+
+module KjuiTools
+  module Compose
+    module Generators
+      # Generates adapter for existing View to be used in Dynamic mode
+      # This allows views like HomeView to be rendered when TabView specifies view: "home"
+      class ViewAdapterGenerator
+        def initialize(name, options = {})
+          @name = name  # PascalCase name like Home
+          @view_name = "#{name}View"  # HomeView
+          @adapter_class_name = "#{name}ViewAdapter"  # HomeViewAdapter
+          @options = options
+          @logger = Core::Logger
+          @command = "kjui g adapter #{name}"
+        end
+
+        def generate
+          @logger.info "Generating view adapter for: #{@view_name}"
+
+          config = Core::ConfigManager.load_config
+          base_path = config['_config_dir'] || Dir.pwd
+          source_directory = config['source_directory'] || 'src/main'
+          package_name = config['package_name'] || Core::ProjectFinder.get_package_name || 'com.example.app'
+
+          # Store for use in templates
+          @package_name = package_name
+          @base_path = base_path
+          @source_directory = source_directory
+
+          # Create adapter file in debug source set
+          written = create_adapter_file
+
+          # Update DynamicComponentRegistry
+          update_registry_file
+
+          # Create DynamicComponentInitializer (debug/release versions)
+          create_dynamic_initializers
+
+          # Only when it wrote the adapter: a kept one has said "Skipped
+          # existing" / "Kept existing". Until 1.9.0 this line followed
+          # either way (ticket kjui-g-view-reports-what-it-did-not-do).
+          @logger.success "Successfully generated adapter: #{@adapter_class_name}" if written
+          @logger.info "Don't forget to call DynamicComponentInitializer.initialize() in your app initialization."
+          true
+        end
+
+        private
+
+        def create_adapter_file
+          # Create dynamic components directory in debug source set
+          adapter_dir = File.join(
+            @base_path,
+            @source_directory.gsub('main', 'debug'),
+            'kotlin',
+            @package_name.gsub('.', '/'),
+            'dynamic/components/adapters'
+          )
+          FileUtils.mkdir_p(adapter_dir)
+
+          adapter_file = File.join(adapter_dir, "#{@adapter_class_name}.kt")
+
+          # Through the converter core's one overwrite decision, so
+          # --force / --skip-existing / JUI_SKIP_EXISTING reach this
+          # file too, and a closed stdin reads as "n" instead of raising.
+          # It says Created or Overwrote; returns whether it wrote.
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            adapter_file, @options, @logger, noun: 'adapter file', label: 'adapter file', exists_label: 'Adapter file'
+          ) { adapter_template }
+        end
+
+        def update_registry_file
+          registry_file = File.join(
+            @base_path,
+            @source_directory.gsub('main', 'debug'),
+            'kotlin',
+            @package_name.gsub('.', '/'),
+            'dynamic/DynamicComponentRegistry.kt'
+          )
+
+          if !File.exist?(registry_file)
+            create_initial_registry
+            return
+          end
+
+          # Read existing registry
+          content = File.read(registry_file, encoding: 'UTF-8')
+
+          # Already registered: its types list (Configuration.customComponentTypes)
+          # is what a registry written before 1.9.0 lacks, so it is added here.
+          if content.include?("\"#{@name.downcase}\"") || content.include?("\"#{to_snake_case(@name)}\"")
+            registered = content.include?("\"#{to_snake_case(@name)}\"") ? to_snake_case(@name) : @name.downcase
+            listed, changed = DynamicRegistryTypes.list(content, [registered])
+            if changed
+              File.write(registry_file, listed)
+              @logger.info "Updated #{registry_file}: lists '#{registered}' in its types (Configuration.customComponentTypes)"
+            else
+              @logger.info "Unchanged #{registry_file}: it already registers '#{@name}'"
+            end
+            return
+          end
+
+          # Add new registration with proper indentation
+          # Use snake_case for component type (e.g., "home", "home_screen")
+          component_type = to_snake_case(@name)
+          new_registration = <<-REGISTRATION.chomp
+            "#{component_type}" -> {
+                #{@adapter_class_name}.create(json, data)
+                true
+            }
+REGISTRATION
+
+          # Insert before the else statement in when block
+          added = content.sub!(/(when \(type\) \{.*?)(\n            else)/m) do
+            existing = $1
+            else_clause = $2
+            "#{existing}\n#{new_registration}#{else_clause}"
+          end
+          # Said: until 1.9.0 a registry without this `when` was written
+          # back unchanged and reported as updated (the sub! went unchecked).
+          unless added
+            @logger.warn "Could not register '#{@name}' in #{registry_file}: it has no " \
+                         '`when (type) { … else …` to add it to — add it by hand'
+            return
+          end
+
+          # Add import if not present
+          import_line = "import #{@package_name}.dynamic.components.adapters.#{@adapter_class_name}"
+          unless content.include?(import_line)
+            # Add import after the last import line
+            content.sub!(/(import .+\n)(\n)/) do
+              "#{$1}#{import_line}\n#{$2}"
+            end
+          end
+
+          # And in its types list (Configuration.customComponentTypes): a
+          # registry written before 1.9.0 gets the list, made of its cases.
+          listed, = DynamicRegistryTypes.list(content, [component_type])
+          content = listed if listed
+
+          File.write(registry_file, content)
+          @logger.info "Updated #{registry_file}: registered #{@adapter_class_name}"
+        end
+
+        def create_initial_registry
+          registry_dir = File.join(
+            @base_path,
+            @source_directory.gsub('main', 'debug'),
+            'kotlin',
+            @package_name.gsub('.', '/'),
+            'dynamic'
+          )
+          FileUtils.mkdir_p(registry_dir)
+
+          registry_file = File.join(registry_dir, 'DynamicComponentRegistry.kt')
+
+          component_type = to_snake_case(@name)
+
+          content = <<~KOTLIN
+            package #{@package_name}.dynamic
+
+            import androidx.compose.runtime.Composable
+            import com.google.gson.JsonObject
+            import #{@package_name}.dynamic.components.adapters.#{@adapter_class_name}
+
+            /**
+             * Registry for dynamic custom components
+             * Auto-generated by #{@command}
+             */
+            object DynamicComponentRegistry {
+            #{DynamicRegistryTypes.types_block([component_type])}
+                @Composable
+                fun createCustomComponent(
+                    type: String,
+                    json: JsonObject,
+                    data: Map<String, Any>
+                ): Boolean {
+                    return when (type) {
+                        "#{component_type}" -> {
+                            #{@adapter_class_name}.create(json, data)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }
+          KOTLIN
+
+          File.write(registry_file, content)
+          @logger.info "Created #{registry_file} registering #{@adapter_class_name}"
+        end
+
+        def adapter_template
+          # Convert name to snake_case for component type matching and subdirectory
+          # e.g., "Home" -> "home", "HomeScreen" -> "home_screen"
+          component_type = to_snake_case(@name)
+          marker_header = Core::GeneratedMarker.scaffold_header(
+            source: @view_name,
+            generator: @command
+          )
+
+          <<~KOTLIN
+            #{marker_header}
+
+            package #{@package_name}.dynamic.components.adapters
+
+            import androidx.compose.runtime.Composable
+            import com.google.gson.JsonObject
+            import #{@package_name}.views.#{component_type}.#{@view_name}
+
+            /**
+             * Adapter to render #{@view_name} in Dynamic mode
+             * Use in TabView with: "view": "#{component_type}"
+             */
+            object #{@adapter_class_name} {
+
+                /**
+                 * Create the view
+                 */
+                @Composable
+                fun create(
+                    json: JsonObject,
+                    data: Map<String, Any>
+                ) {
+                    // Render the actual view
+                    #{@view_name}()
+                }
+            }
+          KOTLIN
+        end
+
+        def to_snake_case(str)
+          str.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+             .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+             .downcase
+        end
+
+        def create_dynamic_initializers
+          # Create debug version
+          debug_dir = File.join(
+            @base_path,
+            @source_directory.gsub('main', 'debug'),
+            'kotlin',
+            @package_name.gsub('.', '/')
+          )
+          FileUtils.mkdir_p(debug_dir)
+
+          debug_file = File.join(debug_dir, 'DynamicComponentInitializer.kt')
+
+          # Only create if it doesn't exist yet; one written before 1.9.0 gets
+          # the line that hands the registry's types to KotlinJsonUI.
+          if File.exist?(debug_file)
+            updated, changed = DynamicRegistryTypes.initializer(File.read(debug_file, encoding: 'UTF-8'))
+            if changed
+              File.write(debug_file, updated)
+              @logger.info "Updated DynamicComponentInitializer (debug): #{debug_file} sets Configuration.customComponentTypes"
+            else
+              # Said too (until 1.9.0 a run that found it said nothing of it).
+              @logger.info "Unchanged DynamicComponentInitializer (debug): #{debug_file} exists"
+            end
+          else
+            File.write(debug_file, generate_debug_initializer_content)
+            @logger.info "Created DynamicComponentInitializer (debug): #{debug_file}"
+          end
+
+          # Create release version
+          release_dir = File.join(
+            @base_path,
+            @source_directory.gsub('main', 'release'),
+            'kotlin',
+            @package_name.gsub('.', '/')
+          )
+          FileUtils.mkdir_p(release_dir)
+
+          release_file = File.join(release_dir, 'DynamicComponentInitializer.kt')
+
+          # Only create if it doesn't exist yet
+          if File.exist?(release_file)
+            # Said too (until 1.9.0 a run that found it said nothing of it).
+            @logger.info "Unchanged DynamicComponentInitializer (release): #{release_file} exists"
+          else
+            File.write(release_file, generate_release_initializer_content)
+            @logger.info "Created DynamicComponentInitializer (release): #{release_file}"
+          end
+        end
+
+        def generate_debug_initializer_content
+          <<~KOTLIN
+            package #{@package_name}
+
+            import androidx.compose.runtime.Composable
+            import com.google.gson.JsonObject
+            import com.kotlinjsonui.core.Configuration
+            import #{@package_name}.dynamic.DynamicComponentRegistry
+
+            /**
+             * Debug-only initializer for custom components in dynamic mode
+             * Auto-generated by #{@command}
+             */
+            object DynamicComponentInitializer {
+
+                /**
+                 * Register custom component handler for dynamic mode
+                 * This is only available in debug builds where DynamicComponentRegistry exists
+                 */
+                fun initialize() {
+                    // Requires KotlinJsonUI >= 2.42.0 (Configuration.customComponentTypes)
+                    #{DynamicRegistryTypes::ASSIGNMENT}
+                    Configuration.customComponentHandler = { type, json, data ->
+                        DynamicComponentRegistry.createCustomComponent(type, json, data)
+                    }
+                }
+            }
+          KOTLIN
+        end
+
+        def generate_release_initializer_content
+          <<~KOTLIN
+            package #{@package_name}
+
+            /**
+             * Release version of DynamicComponentInitializer (no-op)
+             * Auto-generated by #{@command}
+             */
+            object DynamicComponentInitializer {
+
+                /**
+                 * No-op in release builds
+                 */
+                fun initialize() {
+                    // Dynamic component registry is not available in release builds
+                }
+            }
+          KOTLIN
+        end
+      end
+    end
+  end
+end

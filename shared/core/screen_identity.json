@@ -1,0 +1,461 @@
+{
+  "version": 1,
+  "title": "JsonUI screen identity and navigation-assertion semantics (canonical)",
+  "notes": "Hand-authored canonical source (screen-identity track, declared 2026-07-25). This file IS the SSoT for what a 'screen' is, how a screen is identified across specs / layouts / tests / generated code, and how a screen's presence is asserted at runtime. Generators, validators, drivers and the flow-diagram generator conform to it, not the other way around. Canonical choices are design decisions, not majority votes of existing implementations.",
+  "screenId": {
+    "source": "layoutBasename",
+    "description": "A screen's canonical id is the basename of its layout file with the '.json' extension removed, kept verbatim (snake_case). The same id is used by spec files, screen/flow tests, generated markers and diagram nodes.",
+    "collection": "recursive",
+    "collectionNote": "Layout directories are scanned RECURSIVELY (Layouts/**/*.json). A flat glob under-collects: real projects nest sheets and cells one level deep (measured: 108 layouts, only 40 at the top level).",
+    "nonLayoutSubtrees": [
+      "Resources",
+      "Styles"
+    ],
+    "nonLayoutSubtreesNote": "Directories under the layout root that hold resources, not layouts: 'Resources/' (strings.json, colors.json, and the per-locale files a build generates beside them) and 'Styles/'. A JSON file at any depth inside one is skipped entirely — neither classified nor scanned for references. Without this, nothing references them, so step 4 defaults them to SCREEN. Measured on a real project: two phantom screens ('strings', 'colors') in the authored tree and four in the generated tree, which also made the generator's count disagree with 'jui screens' by exactly the two generated locale files. Every other place in the toolchain that collects layouts already excludes these subtrees — spelled ten different ways; the screen resolver is the reader that has to agree with them, so the rule is named here once. Depth is ANY depth under the layout root, matching the majority of those spellings: a directory called Resources means resources wherever it sits, and the cost of being wrong that way (an excluded file the author can rename) is smaller than the cost of the alternative (a phantom screen that grows a runtime marker). Known divergence: the build's copy/prune step still skips only TOP-LEVEL Resources/Styles. The two agree on every project surveyed, where these directories only ever appear at the layout root; unifying the remaining spellings on this rule is follow-up work.",
+    "uniqueness": "projectWide",
+    "uniquenessNote": "Basenames must be unique across the whole layout tree; a collision makes the id ambiguous and is a validator error (rule: screen-id-collision).",
+    "variantNormalization": {
+      "pattern": "<base>@<class>.json",
+      "classes": [
+        "compact",
+        "medium",
+        "regular"
+      ],
+      "rule": "Variant files normalize to the base id ('home@regular' -> 'home'). Variants are alternate renderings of the same screen, never a separate screen."
+    }
+  },
+  "screenClassification": {
+    "description": "Not every layout is a screen. Only screens carry a marker, are valid 'screen' values in tests, and become diagram nodes.",
+    "roles": [
+      "screen",
+      "cell",
+      "partial"
+    ],
+    "resolutionOrder": [
+      {
+        "step": 1,
+        "rule": "explicitRole",
+        "detail": "If the layout root declares \"role\": \"screen\" | \"cell\" | \"partial\", that declaration wins. The explicit declaration is canonical; derivation only fills in what is not declared."
+      },
+      {
+        "step": 2,
+        "rule": "referencedAsNonScreen",
+        "detail": "A layout referenced by ANY other layout through 'cell', 'header', 'footer', 'cellClasses' or 'include' is not a screen (it is instantiated inside another layout, potentially once per data row).",
+        "referenceKeys": [
+          "cell",
+          "header",
+          "footer",
+          "cellClasses",
+          "include"
+        ]
+      },
+      {
+        "step": 3,
+        "rule": "partialFlag",
+        "detail": "A layout with \"partial\": true is not a screen. This is a sufficient condition only — it is under-used in practice (measured: 2 of 108 layouts), so it must never be treated as the necessary condition."
+      },
+      {
+        "step": 4,
+        "rule": "defaultScreen",
+        "detail": "Anything left over is classified as a screen. Derivation is deliberately imperfect: tools MUST report the derived classification so authors can correct outliers with an explicit role (step 1)."
+      }
+    ],
+    "derivationBlindSpot": {
+      "description": "Step 2 only sees references written in layout JSON. A cell instantiated from host-language code — a CellBuilder, or a ViewModel assembling cellClasses at runtime — is referenced by no layout, so it reaches step 4 and becomes a screen. It then carries a marker inside its host screen's tree, which breaks marker.invariants[0] (exactly one marker per rendered screen). This is a blind spot of the derivation, not a bug in it: the information is not present in the layouts.",
+      "resolution": "Declare \"role\": \"cell\" on the layout. Step 1 exists for exactly this case.",
+      "reportingRule": "The set a tool must present for review is EVERY screen whose reason is 'default' (derivedScreens). A name-based hint over that set (screens_needing_review) may be offered as a convenience, but never as a complete list: measured on a real project it flagged 7 while missing 8 more wrongly-derived screens, and a consumer who fixed only the 7 was left with markers on non-screens and no way to notice.",
+      "rejectedSignals": [
+        {
+          "signal": "layout name shape (_cell, _row, _item …)",
+          "verdict": "hint only",
+          "measurement": "Catches 7 of 15 wrongly-derived screens on the measured project. Cells built from host code are named bar_card / holidays_section / indicator_dot and are missed."
+        },
+        {
+          "signal": "a screen spec exists with the same basename",
+          "verdict": "rejected",
+          "measurement": "0 of 55 screens on the measured project had a spec whose basename matched, so the signal separates nothing."
+        },
+        {
+          "signal": "the layout id appears in host-language source",
+          "verdict": "rejected",
+          "measurement": "48 of 55 derived screens are named in host source — every screen has a ViewModel named after it, exactly as every code-built cell does. 6 of 8 known cells hit, but so did 42 non-cells: ~12% precision."
+        }
+      ],
+      "preciseDetection": "The only exact detector is runtime: a screen whose tree exposes markers for two or more ids has at least one non-screen among them. Legitimate co-presentation (split-pane and tab hosts, see assertion semantics) means this must be reported as a warning with the ids listed, not a failure. Not yet implemented — follow-up on the driver side."
+    }
+  },
+  "appOwnedScreens": {
+    "description": "Screens the app owns outright — a hand-written page with no JsonUI layout behind it. They are real navigation destinations (a test navigates to them and asserts there), so they must be declarable, otherwise the screen-unknown rule rejects a legitimate id. Having no layout is what they ARE, not an omission: `jui verify`'s spec-coverage check looks for a layout that generates a screen nobody declared, so these fall outside it — requiring a spec would also leave no way to comply, since there is no layout root to carry a `role` and a spec for a screen with nothing to generate describes nothing.",
+    "declaration": {
+      "location": "jui.config.json",
+      "key": "test.appOwnedScreens",
+      "shape": "Array of entries. An entry is a screen id, or an object { id, group, transitions } when the screen also needs diagram metadata or declares outgoing transitions. All forms are equivalent for classification.",
+      "example": [
+        "tokushoho",
+        {
+          "id": "company",
+          "group": "static",
+          "transitions": [
+            "Licenses",
+            "Tokushoho"
+          ]
+        },
+        {
+          "id": "licenses",
+          "group": [
+            "static",
+            "legal"
+          ]
+        }
+      ],
+      "transitions": {
+        "value": "An array of raw destinations, in the SAME vocabulary a spec's transitions[].destination uses (classified by classify_destination with the face's aliases).",
+        "readBy": "The flow-diagram generator (document_tools spec_graph) — it draws them and flowTestCheck accepts them. Classification and code generation ignore them.",
+        "rationale": "The diagram is drawn from specs only (2026-09-10), and an app-owned screen has no spec — a spec for a screen with nothing to generate describes nothing. Without this key every flow test that leaves an app-owned screen (a footer link from the company page to the licenses page, measured: 2 on one face) would be an error with no way to comply."
+      },
+      "group": {
+        "value": "A group name, or an array of them — the same shape a screen test's metadata.group takes.",
+        "readBy": "The flow-diagram generator only. Classification and code generation read the id and ignore the rest of the object.",
+        "rationale": "Every other screen declares its diagram group in its screen test (metadata.group). An app-owned screen has no layout, so there is nothing to write a screen test against, so the declaration is the only place it can carry one. Without it such a screen sits in the ungrouped bucket permanently — and that bucket has to keep meaning 'nobody declared this yet', or the screens that genuinely need attention are hidden among the ones that can never leave.",
+        "precedence": "A screen test's own metadata.group wins; the declaration only fills in for a screen whose tests declare none. One screen, one place to look."
+      },
+      "readerCompatibility": "Both canon readers must TOLERATE the object form even though only the doc tool uses the group: a reader that skipped non-string entries would leave a declared screen unknown to the validator while code generation still saw it."
+    },
+    "marker": "Hand-written by the app, using the same marker spelling code generation emits, so drivers cannot tell the two apart. On web that is the data-screen attribute on the page's root element.",
+    "libraryApi": "None. No mobile app-owned screen exists in any consumer today; when one appears, expose the mechanism from marker.platforms as a function then — not before.",
+    "classification": "app-owned"
+  },
+  "marker": {
+    "namePattern": "__screen_<screenId>",
+    "prefix": "__screen_",
+    "prefixOwnership": "The RUNTIME layer forms the marker name from a bare screen id: SwiftJsonUI's .jsonUIScreenMarker(id), KotlinJsonUI's ScreenMarker(id). Code generation therefore passes the SCREEN ID, never an already-prefixed marker — doing both produced __screen___screen_<id> on a real device (caught by the Android smoke test, 2026-07-27). On web there is no runtime layer, so the generated data-screen attribute carries the bare id and the driver matches [data-screen=\"<screenId>\"].",
+    "description": "Runtime identity beacon emitted by code generation into every screen, and only into screens. Tests never spell the marker: it is an implementation detail owned by the drivers.",
+    "invariants": [
+      "A rendered screen exposes EXACTLY ONE marker. Zero markers means the generated code or the library pin is stale; two or more means a generator bug (variant struct, double-drive) — both are hard errors, not warnings.",
+      "The marker is a DEDICATED NODE, never an identifier applied to the layout's root node. Every platform has a single identifier slot per node (iOS accessibilityIdentifier, Compose testTag, web root id), and the root's own id is load-bearing for existing tests (measured: 73 of 108 layouts declare a root id).",
+      "The marker is emitted on every rendered branch of a screen (a root-level responsive split produces more than one static branch).",
+      "Variant structs do NOT emit a marker; the base emits it once.",
+      "Static and dynamic (hot reload) rendering paths must both emit the marker; a mode-dependent marker splits test results by rendering mode.",
+      "Dynamic renderers receive the marker from the screen call site. Auto-attaching it at the DynamicView entry point is forbidden: cells, tabs, embeds, includes and dialogs re-enter the same entry point and would each grow a false marker."
+    ],
+    "platforms": {
+      "ios-swiftui": {
+        "mechanism": "overlay leaf",
+        "detail": "A 0.5x0.5 Color.clear leaf in an overlay(alignment: .center) carrying .accessibilityElement(children: .ignore) + .accessibilityIdentifier(marker), plus .allowsHitTesting(false) so it never takes a real touch. Deliberately NOT an accessibility container: making the screen root a container merges single-child subtrees and drops the inner element's identifier (measured regression, 2026-07-21)."
+      },
+      "ios-uikit": {
+        "mechanism": "sibling view",
+        "detail": "A 1x1 empty UIView added to the root view with accessibilityIdentifier = marker. UIKit exposes a flat accessibility tree, so no container semantics are involved."
+      },
+      "android-compose": {
+        "mechanism": "sibling node",
+        "detail": "A 1.dp Box sibling carrying Modifier.testTag(marker) AND its own semantics { testTagsAsResourceId = true }, emitted inside a transparent Box(propagateMinConstraints = true) that wraps both rendering branches. The size is NOT cosmetic: a zero-size node is absent from the accessibility tree, and so is a sized child placed outside a zero-size parent (both measured) — the marker has to occupy real space. The wrapping Box is what makes that free: a Box sizes to its largest child, so the marker overlays the content instead of costing 1.dp of layout in the (dominant) Column-shaped screens. clearAndSetSemantics is forbidden on or above the marker — it erases the node. mergeDescendants was measured NOT to erase it on API 35.",
+        "minimumSize": "1.dp",
+        "selfSufficient": "The marker sets testTagsAsResourceId on ITSELF, so it does not depend on an ancestor opting in. Measured: under an ancestor with testTagsAsResourceId = false the marker was still found by resource id while a sibling relying on the ancestor was not."
+      },
+      "web-react": {
+        "mechanism": "data attribute",
+        "detail": "A data-screen=\"<screenId>\" attribute on the generated root element — the same element that carries the root id, so the marker is visible exactly when the screen is. A dedicated node would need its own non-empty box to satisfy the driver's visibility predicate and would join the parent's flex/grid flow. The root 'id' itself is NOT usable: it is an externally supplied prop and callers already override it. Server-side rendering emits the attribute into the initial markup, so the marker is present before hydration (measured)."
+      }
+    },
+    "buildGating": {
+      "readBy": "web: rjui_tools/lib/cli/commands/build_command.rb emits the generated screenMarker helper (returns {} when NODE_ENV is production) and rjui_tools/lib/react/react_generator.rb spreads it on the root; rjui_tools/spec/react/react_generator_screen_marker_spec.rb pins the emitted TEXT only. ⚠️ Until 2026-09-10 the emitted helper carried `typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production'`, which no bundler folds (measured: Next 16 Turbopack rendered the marker in production; esbuild kept it under define). Fixed the same day: the emit is the literal form, pinned by rjui_tools/spec/cli/commands/screen_marker_helper_spec.rb (text; tsc with and without a global process; esbuild define folds production and keeps development; the previous form runs through the same arm as the control). ios and android: implemented in the SwiftJsonUI and KotlinJsonUI libraries (outside this repository — DEBUG-only modifier / FLAG_DEBUGGABLE), not pinned from here. Declared 2026-09-10.",
+      "rule": "The marker is test scaffolding and must not reach a shipped app. Every platform emits it in development builds only.",
+      "platforms": {
+        "ios": "#if DEBUG inside the library modifier — the same gate ViewSwitcher uses for Dynamic mode. SwiftJsonUI is distributed as source (SPM / CocoaPods), so this follows the CONSUMER's build configuration.",
+        "android": "A RUNTIME check of the host application's ApplicationInfo.FLAG_DEBUGGABLE, not a compile-time one: KotlinJsonUI ships as an AAR, so its own BuildConfig.DEBUG describes how the library was built rather than how the app was. This is the same reason DynamicModeManager resolves availability from the host app's debuggable flag.",
+        "web": "A generated `screenMarker(id)` helper returns `{'data-screen': id}` in development and `{}` in production; the screen's root element spreads it. The check lives in ONE generated module rather than inline in every screen because a bare `process.env` reference fails to typecheck in a Vite project without @types/node (measured: TS2580) — the module declares the shape it needs. It must keep the literal `process.env.NODE_ENV` form: bundlers statically replace exactly that expression, so a production build folds the branch away, whereas a `globalThis.process` lookup would typecheck but NOT be replaced, and the marker would ship."
+      },
+      "consequence": "UI tests must run against a debug / development build. This is not a new constraint — Dynamic mode already requires it on both mobile platforms."
+    },
+    "placement": {
+      "rule": "The marker must be a sibling of the screen's scrollable, never a child of the scrolling content.",
+      "rationale": "A marker inside the scrolling content leaves the viewport when the user scrolls, and a node outside the viewport is absent from the accessibility tree: the screen would stop reporting itself as displayed halfway down a long page. Measured on Android (API 35) — after scrolling to the bottom, an in-content marker returned findObjects=0 / findObject=null / not-in-tree, while a sibling marker was unaffected. On iOS the overlay modifier applies to the screen root, which places the marker outside the scroll content by construction.",
+      "alignment": "center",
+      "alignmentRule": "The marker sits at the CENTRE of the screen root, never at a corner. A generated screen root fills the screen, so its top-left corner lies under the navigation bar and hit-testing there resolves to the chrome, not the marker — which fails the `exists && isHittable` predicate on every screen assertion. Measured on iOS 18.6, one run, one screen: the same 0.5pt leaf reported isHittable=false at .topLeading and isHittable=true at .center, while a sheet covering the screen still reported isHittable=false from the centre. The centre placement therefore fixes the false negative without costing the predicate its ability to detect a covered screen.",
+      "regressionNote": "This shipped as .topLeading in SwiftJsonUI 10.8.0 and broke every iOS screen assertion in a real app while the library's own probe stayed green — the probe marked a small view in the middle of a stack, where the corner is clear, and asserted only existence. Any probe for a runtime marker MUST assert the driver's exact predicate on a screen shaped the way code generation emits one; existence checks cannot catch a predicate bug.",
+      "alignmentAppliesTo": "iOS. The overlay modifier centres the marker inside the screen root. Android places the marker by padding instead (see systemBarChrome) because its failure is a different one: not hit-testing, but the accessibility framework's visible-region subtraction.",
+      "systemBarChrome": {
+        "appliesTo": "Android",
+        "rule": "The marker must be padded clear of the system-bar insets. A generated screen root sits at the window origin under edge-to-edge (targetSdk 35+), and the status bar is drawn over it.",
+        "rationale": "The accessibility framework subtracts the region covered by windows above the app. A node lying ENTIRELY inside that region reports isVisibleToUser=false, and UiAutomator's By.res — which IS the canonical Android predicate — does not return it, even though the node is present in the tree. Nothing is claiming to be a different screen there; the screen is plainly displayed, so this is a placement fault, not a predicate one.",
+        "measurements": {
+          "occluder": "The status bar WINDOW, not the inset: on the tablet AVD the window is Rect(0, 0 - 2560, 48) while WindowInsets.systemBars reports top=72. Sweeping the marker's y: invisible through y=46, visible from y=47 — exactly the window edge.",
+          "sizeIsNotAFix": "A 48.dp marker at the origin clears the bar on the tablet AVD (found) and is still entirely inside it on the phone AVD (not found). The required size is device-dependent, so only placement works.",
+          "paddingNotOffset": "Modifier.offset breaks the marker's OWN testTagsAsResourceId opt-in: measured with the offset before the tag, after the semantics, on an outer node, and with the opt-in moved to that outer node, the marker stopped being exposed as a resource id at all under an ancestor setting testTagsAsResourceId = false. Padding places the node and keeps it addressable.",
+          "afterFix": "tablet: found at y=72 | phone: found at y=132 | pre-fix shape on both: isVisibleToUser=false at (0,0), By.res finds 0"
+        },
+        "regressionNote": "This shipped as origin-placement in KotlinJsonUI 2.15.0 and failed every Android screen-transition test in a real app while the library's own probe stayed green — every probe mode ran under a root that padded the system bars away, so the one placement code generation actually emits was never measured. Same shape of blind spot as the iOS .topLeading regression. A probe for a runtime marker MUST measure the screen shape code generation emits, chrome included.",
+        "minLibraryVersion": "2.15.1"
+      }
+    },
+    "shapeEvidence": "Measured on iOS 18.6 (2026-07-27) over identical content: the LEAF shape keeps the screen's own root identifier and its children addressable; the CONTAINER shape wrapping the same subtree makes the screen's root identifier disappear (root_id_visible=false). The container shape is therefore rejected, not merely discouraged. On Android (API 35, 2026-07-27) the same probe measured the size floor and the ancestor-semantics hazards recorded above."
+  },
+  "assertion": {
+    "vocabulary": {
+      "assert": "screen",
+      "targetKey": "name",
+      "optionalKeys": [
+        "timeout",
+        "label",
+        "optional",
+        "when"
+      ],
+      "example": {
+        "assert": "screen",
+        "name": "mypage",
+        "timeout": 10000
+      }
+    },
+    "targetKeyNote": "The target key is 'name' (mirroring screenshotAssertion). The step-level 'screen' key means 'the screen this step runs on' and must not be overloaded as the assertion target — during a transition the two legitimately differ.",
+    "semantics": "The named screen IS DISPLAYED. It does not assert that the screen is displayed EXCLUSIVELY: embedded screens, split-pane layouts and tab hosts legitimately show several markers at once.",
+    "timing": "A marker means the destination has been CONSTRUCTED, not that the transition animation has settled. Both iOS NavigationStack and Android NavHost compose source and destination simultaneously for the duration of the transition.",
+    "rejected": {
+      "waitForScreen": "Assertions already auto-wait; a separate wait action would be a second spelling of one concept.",
+      "should_navigate_to": "Vocabulary is camelCase with action/assert separated.",
+      "exclusive": "No measured demand; asserting exclusivity requires window scoping that no driver has."
+    }
+  },
+  "predicates": {
+    "note": "Per-platform predicates for 'the marker is displayed'. Platform differences live here because the underlying accessibility runtimes genuinely differ; everything above this section is platform-neutral.",
+    "ios": {
+      "predicate": "exists && (isHittable || no OTHER screen marker is hittable)",
+      "rationale": "Measured on iOS 18.6 (ConformanceHost screen-marker probe, 2026-07-27). A pushed-away screen and an inactive tab leave the accessibility tree entirely (exists == false); a screen covered by a sheet or a fullScreenCover STAYS in the tree but reports isHittable == false, while the covering screen reports true. isHittable works here only because the marker is a LEAF: an accessibility container would report false even when fully visible, which is why the container marker shape is rejected. isHittable ALONE is not sufficient, and the second clause is not a softening. The marker sits inside the generated view by construction, so any overlay the app layers OUTSIDE that view — a coach mark, a loading scrim, a hand-rolled modal — always covers the marker even when it is fully transparent, and the screen is plainly still the one on display. What distinguishes the two cases is not reachability but whether something else CLAIMS to be the displayed screen: a sheet or cover is another screen and carries its own marker, an app overlay carries none. Measured both ways in one run: with a full-screen tap-catching overlay the marker reports isHittable=false and no other screen marker is hittable (=> displayed); with a sheet the presenter reports isHittable=false and the sheet's own marker IS hittable (=> not displayed).",
+      "measurements": {
+        "push": "covered screen: exists=false | covering: exists=true hittable=true",
+        "sheet": "covered: exists=true hittable=false | covering: exists=true hittable=true",
+        "fullScreenCover": "covered: exists=true hittable=false | covering: exists=true hittable=true",
+        "tabSwitch": "inactive tab: exists=false | active tab: exists=true hittable=true",
+        "splitPane": "both panes: exists=true hittable=true (both are displayed — this is correct)",
+        "appLevelOverlay": "generated view wrapped from outside by a full-screen contentShape(Rectangle()) overlay: marker exists=true isHittable=false, other hittable screens = [] => displayed",
+        "sheetUnderNewPredicate": "presenter: exists=true isHittable=false, other hittable screens = ['fullbleed_sheet'] => not displayed"
+      },
+      "status": "measured",
+      "appliesTo": "iOS only. Android's predicate is existence in the accessibility tree and web's is Playwright visibility (CSS/bounding box); neither is occlusion-sensitive, so neither needs the second clause."
+    },
+    "android": {
+      "predicate": "device.findObject(By.res(marker)) != null",
+      "rationale": "Measured on Android 15 / API 35 (KotlinJsonUI conformance-host screen-marker probe, 2026-07-27), identically with animations on and off. A covered screen leaves the search ENTIRELY: under an AlertDialog and under a ModalBottomSheet the presenter's marker reported findObjects=0, findObject=null and was absent from rootInActiveWindow — Android drops the obscured window's content from the accessibility tree. A NavHost destination likewise replaces its source. No visibleBounds test and no active-window scoping are needed, so the predicate is exactly the primitive the driver already uses for every other element.",
+      "measurements": {
+        "navHostPush": "source: not found | destination: found (identical with animation scales 1 and 0)",
+        "dialog": "covered: findObjects=0 findObject=null inTree=false | covering: found",
+        "modalBottomSheet": "covered: findObjects=0 findObject=null inTree=false | covering: found",
+        "splitPane": "both panes found (both are displayed — this is correct)",
+        "scrolledOutOfViewport": "marker inside the scrolling content: not found after scrolling to the bottom | sibling marker: unaffected (see marker.placement)"
+      },
+      "supersedes": "The earlier provisional predicate assumed a whole-device search would report a covered screen as present. Measurement refuted it: the covered screen is not reachable by any of the three search modes.",
+      "transitionNote": "UiAutomator queries synchronize on window idle, so the interval in which NavHost has both source and destination composed is not observable through the driver's own API; sampling immediately after the click already showed the source gone.",
+      "status": "measured"
+    },
+    "web": {
+      "predicate": "[data-screen=\"<screenId>\"] attached && Playwright-visible",
+      "rationale": "Measured with React 19 SSR + hydration under Playwright/Chromium (conformance web host screen-marker probe, 2026-07-27). Neither a plain client-side swap nor a suspending transition ever exposed two screens' markers at once, and a suspending transition never mounted the destination's marker early — while it was pending, NO marker was present at all. So the predicate needs no exclusivity test and no transition handling.",
+      "measurements": {
+        "ssrBeforeHydration": "data-screen is in the server markup: count=1, isVisible=true, hydrated=false",
+        "interactivityGap": "a click in that window is DROPPED (counter stayed 0); the same click after hydration works",
+        "clientSideSwap": "per-frame sampling: probe_home -> detail_screen, never both",
+        "suspendingTransition": "source unmounts to the Suspense fallback (no marker at all for ~1.2s), then the destination appears; the destination marker never appears early"
+      },
+      "hydrationLimitation": "The marker is visible before the page is interactive, so on the FIRST document load a screen assertion can pass while clicks are still being dropped. This is deliberately NOT part of the predicate: React exposes no standard 'hydrated' signal, and canonizing a gate no driver can implement would be worse than naming the gap. It does not recur on client-side navigation, which happens after hydration.",
+      "status": "measured"
+    },
+    "statusNote": "'provisional' predicates must be confirmed by device measurement before default-on verification is enabled; the measured result replaces the predicate here. As of 2026-07-27 all three platforms are measured."
+  },
+  "implicitVerification": {
+    "scope": "flowInlineStepScreenChange",
+    "description": "In a flow test, the driver verifies the marker at each point where the inline step's 'screen' differs from the previously executed step's screen.",
+    "rules": [
+      "Steps skipped by a 'when' condition do not advance the tracked screen.",
+      "A file-reference step carries no screen: reset the tracker to unknown so the next inline step is verified.",
+      "Steps inside a block continue the enclosing screen.",
+      "Screens that legitimately co-present (split-pane hosts, tab hosts) may opt out per screen."
+    ],
+    "timeout": {
+      "key": "screenTransitionTimeout",
+      "defaultMs": 10000,
+      "rationale": "Distinct from defaultTimeout (5000ms): real cross-screen assertions in production suites already use 15000-20000ms after a cold start."
+    },
+    "optOut": {
+      "readBy": "Outside this repository: the three test drivers read the config key (jsonui-test-runner drivers/android and drivers/web JsonUITestRunner, jsonui-test-runner-ios TestRunner; all default true). Nothing in jsonui-cli reads this entry; it documents the drivers. Declared 2026-09-10.",
+      "config": "TestRunnerConfig.verifyScreenTransitions",
+      "default": true,
+      "note": "ON by default from driver ios 1.9.0 / android 1.8.0 / web 1.8.0. An app whose generated code predates screen markers fails every screen change with marker-absent — that is the intended signal that it needs `jui build` and a current library pin, not a reason to soften the check. A project mid-migration opts out by setting this to false."
+    },
+    "failureHandling": {
+      "readBy": "Outside this repository: the drivers choose the class string and throw (ios and web found by the spelling `diagnosis`; android not located by that spelling on 2026-09-10 — unmeasured, not absent). Nothing in jsonui-cli reads this entry. Declared 2026-09-10.",
+      "severity": "failure",
+      "note": "Every class below fails the step through the ordinary assertion path. There is no warning tier and no per-class severity: a class is a prefix on the thrown failure message that names the likely CAUSE, so the reader knows what to fix — not how seriously to take it. This is what the three drivers implement (ScreenMarker.diagnosis on ios/android, AssertionExecutor.screenDiagnosis on web): they choose a string, then throw.",
+      "rationale": "A class was briefly considered for demotion to a warning (marker-absent, since its cause is the build rather than the app). Rejected: a suite that reports success while verifying nothing is worse than one that fails loudly on a stale build."
+    },
+    "failureClasses": [
+      {
+        "id": "marker-absent",
+        "meaning": "No marker anywhere. The cause is the build, not the navigation: a production build (markers are development-only), stale generated code, or a stale library pin. Fix with `jui build` and a current pin — the failure itself is not softened.",
+        "note": "Only reportable after the timeout expires. A suspending navigation legitimately shows NO marker while it is pending (measured on web: ~1.2s with the source unmounted to a fallback), so an instantaneous zero-marker reading is not evidence of stale code."
+      },
+      {
+        "id": "previous-screen-only",
+        "meaning": "Only the previous screen's marker is present — the navigation did not happen. The cause is in the app or the test, not the build."
+      },
+      {
+        "id": "marker-not-displayed",
+        "meaning": "Expected marker exists but fails the platform predicate — transition animation or predicate problem."
+      },
+      {
+        "id": "children-unresolvable",
+        "meaning": "Marker present but the screen's own element ids cannot be resolved — accessibility regression."
+      }
+    ]
+  },
+  "diagram": {
+    "description": "The screen-transition diagram is drawn from the screen SPECS — <screen spec>.transitions[].destination, plus test.appOwnedScreens[].transitions for a screen that has no spec — and the flow tests are CHECKED against it. Ruled 2026-09-10.",
+    "nodeSource": "ONE source: spec transitions, normalized through specTransitions below, plus the app-owned declarations (appOwnedScreens.declaration.transitions). Flow tests are NOT a source since 2026-09-10; they are the check (flowTestCheck). History: from 2026-09-09 this key declared TWO sources while document_tools read only the first (flow tests) and had ZERO readers of specTransitions — the diagram answered 'No flow tests found' on a face holding 48 specs. A declaration with no reader is a sentence, not a rule. The reader is now document_tools/.../mermaid/spec_graph.py, and its arms fail when the generator reads a flow test as a source.",
+    "drawingPipeline": [
+      "readSpecs (spec stems are the screen ids)",
+      "classifyDestinations (specTransitions.kinds)",
+      "buildForwardEdges (kind screen)",
+      "deriveReturnEdges (kind back → a dotted edge to every screen with a forward edge into the declarer)",
+      "terminalNodes (kind external)",
+      "groupByScreenTestMetadata"
+    ],
+    "pipelineNote": "`pipeline` is the FLOW-TEST walk (resolve → canonicalize → collapse → build edges). It no longer draws anything; flowTestCheck runs it to obtain what the tests DO and compares that with what the specs declare.",
+    "pipeline": [
+      "resolve",
+      "canonicalize",
+      "collapseConsecutiveDuplicates",
+      "buildEdges"
+    ],
+    "rules": [
+      "Self-loops are discarded (they are the collapse of a screen onto itself).",
+      "An edge caused by a 'back' action is a return edge and is rendered distinctly from a forward transition.",
+      "Node ids are sanitized for the diagram language; a screen id is never emitted raw into a diagram identifier position.",
+      "A `back` declaration carries no target: it is drawn as a return edge (dotted) to each screen that has a forward edge into the declaring screen. Derived from the specs, never from a test.",
+      "An `external` destination is drawn as a terminal node; `none` draws nothing (a positive declaration); `unknown` and an unmapped `route` draw nothing and are treated as ABSENT — counted and listed, not errors by themselves (ruled 2026-09-10: 解決できない宣言は「無い」扱い)."
+    ],
+    "idSpaceCollisions": "The id space (layout screen ids ∪ spec stems ∪ app-owned ids) is collapsed onto the classifier's normalized key BEFORE classification. Two raw ids that normalize alike (a layout forgot_password and a spec file forgotpassword) are one screen: the winner is chosen by provenance — layout > app-owned > spec file name, ties by sort — every loser is redirected to it, and the pair is reported as WARNING [doc-diagram] naming both ids and their sources. Measured 2026-09-10 on one face: left to a set, the winner followed PYTHONHASHSEED (3 of 6 seeds each way), the same input drew 31 or 32 nodes, and the round trip split across two nodes with no warning. The classifier itself is deterministic (sorted, first wins) but cannot see provenance, so the collapse lives in the caller.",
+    "flowTestCheck": {
+      "rule": "Every FORWARD transition a flow test performs (consecutive distinct screens after resolve/canonicalize/collapse) must be an edge the specs declare: a forward edge, or the return edge derived from a `back` declaration (X returns to each screen that pushes it — a flow that leaves a sheet by tapping save and lands on its opener performs that return as a forward step). One that is neither is an ERROR.",
+      "ruledOn": "2026-09-10 — 'flowdiagram は spec だけ見て書く。flow test で遷移が見つかって、それが spec にない時はエラーを吐く'",
+      "exempt": "Back steps (action `back`). A return through the stack is the inverse of a transition the check already saw — and a spec `back` declaration has no target to compare with.",
+      "unresolvedIsAbsent": "A destination the classifier cannot resolve (kind unknown, or route with no mapping) is NOT in the spec for the purpose of this check. So a flow test that navigates to the screen such a destination was meant to name is an error, and the error names the unresolved destination(s) on that source: that is usually the fix.",
+      "reasons": [
+        "<from> has no spec",
+        "<from>'s spec declares no transition to <to>",
+        "the app-owned screen <from> declares no transition to <to> (jui.config.json test.appOwnedScreens[].transitions)"
+      ],
+      "severity": "error. `jsonui-doc generate html` writes every page (the diagram page lists the errors), prints one `ERROR [doc-diagram]:` line per transition, and exits 1. Not covered by --allow-partial (that accepts missing pages; this is a wrong spec). `generate mermaid` exits 1 likewise.",
+      "reported": "per owner (app), with the flow test's name and file, from, to, and the reason. A count without the list is not a report.",
+      "noSpecDirectory": "A flow group with no spec directory anywhere gets ONE `WARNING [doc-diagram]` naming how many flow test files went unchecked, and no diagram. Absence of the directory is a configuration state, not a spec omission.",
+      "readBy": "document_tools/jsonui_doc_cli/test_doc/mermaid/generator.py build_diagram; the exit code in document_tools/jsonui_doc_cli/cli.py cmd_generate_html"
+    },
+    "specTransitions": {
+      "source": "<screen spec>.transitions[].destination",
+      "description": "A spec transition's destination is FREE PROSE, not an identifier. The validator requires only that the key exists (condition + destination), so nothing has ever constrained its shape, and the corpus shows at least six different kinds of value in that one column.",
+      "measured": {
+        "date": "2026-09-09",
+        "scanRoot": "<face>/docs/screens/json/*.spec.json (the generated <face>/docs/html/screens tree is NOT the corpus)",
+        "idSpace": "the spec stems under that root, UNION the layout basenames under <face>/docs/screens/layouts (variant-normalized)",
+        "faces": 4,
+        "transitions": 271,
+        "note": "Two of the four faces carry exactly 93 transitions. A count reported without naming its face is therefore ambiguous, and reads as correct either way."
+      },
+      "kinds": {
+        "description": "CLOSED vocabulary. It exists so that a destination which is not a screen id stops being reported as a defect. Declaring only 'screen' would make 119 of 271 measured destinations spec errors, when they are other kinds of transition — that turns a reporting gap into a rejection of correct input, which is the worse direction.",
+        "values": [
+          {"kind": "screen", "meaning": "resolves to a screen id in this face's id space", "drawn": "a node and an edge"},
+          {"kind": "route", "meaning": "a URL path owned by a web router, e.g. '/admin/login'", "drawn": "nothing until the route is mapped to a screen; until then it is reported with the unknowns and treated as absent"},
+          {"kind": "external", "meaning": "leaves the app entirely (browser, tel:, map app, mailer)", "drawn": "a terminal node, never a screen"},
+          {"kind": "none", "meaning": "declares that no screen transition happens (in-page tab switch, SPA state change)", "drawn": "nothing. This is a POSITIVE declaration, not a missing value"},
+          {"kind": "back", "meaning": "returns through the navigation stack (pop, dismiss, previous screen)", "drawn": "a dotted return edge to each screen that has a forward edge into the declaring screen (derived from the specs)"},
+          {"kind": "unknown", "meaning": "none of the above matched", "drawn": "nothing, and it is COUNTED AND LISTED — see unresolvedReporting. Treated as ABSENT by the diagram and by flowTestCheck (ruled 2026-09-10)"}
+        ]
+      },
+      "normalization": {
+        "description": "Applied in order. Every step is here rather than in a resolver because a rule that lives at one call site is absent from the other two (screen_identity.py, mermaid/flow_graph.py, verify_cmd.py each resolve ids today).",
+        "parentheticalsNest": "The strip step COUNTS DEPTH; it is not a match. A flat pattern consumes up to the INNER close of `Name (a=b / onNavigate(Screen.X))` and leaves the OUTER one, producing the candidate `Name )`, which resolves to nothing. Measured 2026-09-09: 5 destinations nest, and 3 of them were unresolvable for this reason alone — the value read like prose the classifier could not handle when it was prose the classifier had damaged.",
+        "pipeline": [
+          "compare case-insensitively with whitespace, '_' and '-' removed",
+          "strip a trailing parenthetical, full-width or half-width, then split on ' or ', '/', and '、' and try each part",
+          "apply the face's declared aliases (below)"
+        ],
+        "multipleScreens": "A destination whose split parts (pipeline step 2) resolve to MORE THAN ONE screen — `Chat or Mypage（source依存…）` — declares a transition to each. classify_destination returns the first match; the diagram asks jui_cli.core.screen_identity.destination_parts for the parts and classifies each. One resolving part is the classifier's single answer, unchanged.",
+        "parentSpecs": "A `screen_parent_spec` carries no transitions; its `subSpecs[].file` entries (type `screen_sub_spec`) do. The diagram merges them under the parent's screen id (the parent's stem). Measured 2026-09-10: one face's main screen had 0 transitions in the parent and 15 in the sub spec, and reading the parent alone produced false errors for 42 flow tests.",
+        "flowTestConditions": "For the CHECK: a flow test runs once per context (platform, responsive class), and a step gated by `when.platform` / `when.responsive` — any `when` key with a string or list-of-strings value — runs only in its own. Two sibling steps gated ios / android, or regular / compact, are never consecutive; the sequence is built once per combination of the `when` values the flow uses and the edges are the union (measured 2026-09-10: 3 invented transitions on one face).",
+        "aliases": {
+          "shape": "each declared alias is (position, affix); position is drawn from the closed set below",
+          "positions": ["prefix", "suffix"],
+          "declaration": {
+            "location": "jui.config.json",
+            "key": "spec.transitionAliases",
+            "shape": "Array of { position: 'prefix' | 'suffix', affix: '<text>' }. A wrong position is REFUSED (the run fails naming the entry), never skipped — an alias that silently does not fire looks exactly like a face that declared nothing.",
+            "example": [
+              {
+                "position": "prefix",
+                "affix": "Web"
+              },
+              {
+                "position": "suffix",
+                "affix": "画面"
+              },
+              {
+                "position": "suffix",
+                "affix": "View"
+              }
+            ],
+            "readBy": "jui_cli.core.project_config.declared_transition_aliases → jui_cli.core.screen_identity.parse_transition_aliases; consumed by document_tools spec_graph.build_spec_graph through classify_destination(aliases=…)",
+            "history": "Declared as per-face from 2026-09-09 with the SHAPE only — no key, no reader. Measured 2026-09-10: 0 faces could declare one. Added with the reader."
+          },
+          "positionsNote": "THE TWO POSITIONS OBSERVED SO FAR, not all of them. Infix and partial matches are NOT covered, and saying which is which matters: a generalization that names its coverage makes the third example a counterexample that asks for a redesign, while one that says 'all' makes the same example an exception to be pushed in sideways, leaving the mechanism bent.",
+          "measured": "prefix 'Web' resolves 50 of one face's 93 destinations; suffix '画面' resolves 10 (9 distinct spellings) of another face's 69. The two sit at different ends, which is why the mechanism carries a position rather than a bare string. A THIRD affix then turned up that does not behave like those two: suffix 'View' resolves 8 on one face and 2 on ANOTHER, so an affix is not necessarily one face's convention. Per-face declaration still expresses it — each face declares it separately — but the earlier reading that 'an affix helps exactly one face' was drawn from a sample of two. Whether to declare it is the FACE's call, not the library's — the mechanism already accepts it — so the numbers a face needs are recorded here rather than argued: declaring suffix 'View' resolves 10 destinations (8 on one face, 2 on another) and leaves 5 occurrences / 4 spellings that contain 'View' still unresolved, because stripping it yields no id — FullscreenImageViewer, LicensesView, and the Privacy/Terms WebView pair, whose kind is a separate question (embedded page or external browser) that no measurement here answers.",
+          "scopingIsARiskChoiceNotAMeasuredOne": {
+            "whatWasMeasuredAndFailed": "Applying either affix to ALL FOUR faces unconditionally changes not one count. The other faces' zeros come from having no id that matches after the strip — NOT from the declaration withholding itself. So the corpus cannot tell a per-face declaration from a global rule, and an earlier version of this note claimed it could: it read '0 of the other three faces' as evidence the scoping was working, when that zero was made by the predicate.",
+            "whatCanBeMeasured": "How close the global rule is to going wrong. Ids beginning with 'Web' already exist — `web_view`, in two of the four faces. Strip the prefix and you get `view`, which is no face's id TODAY. The distance is ONE id: a face that adds `view` turns the global rule into a silent misresolution that gets drawn in a diagram.",
+            "conclusion": "Per-face, because the distance is one id — not because the counts said so. The two sentences above are kept apart on purpose: 'we could not measure a difference' and 'we measured how near the failure is' are different claims, and collapsing them is how a withdrawn reason survives a correct decision."
+          }
+        }
+      },
+      "unresolvedReporting": {
+        "rule": "The count of 'unknown' destinations is reported PER FACE, never only as a total, together with the scanned total it was drawn from.",        "treatment": "ABSENT (ruled 2026-09-10). Not drawn, not an error by itself, listed per face with the raw value and the reason the classifier gave. It becomes an error only when a flow test performs the transition the unresolved destination was meant to declare.",
+
+        "rationale": "Measured unresolved rates were 28% / 61% / 50% / 100%. Summed, the face at 100% disappears into the average — and a face that resolves nothing looks exactly like a face with nothing to resolve. A bare zero, or a bare average, cannot tell an instrument that found nothing from one that never reached the corpus."
+      }
+    },
+    "fileReferences": {
+      "rule": "A file-reference step ({ file, case }) becomes a node for the SCREEN the referenced test covers — resolved through that test's own source.layout — not for the referenced file's name.",
+      "rationale": "A test file NAME is not a screen id. One screen routinely has several test files (login_smoke, foo_complete--bar_pending), so naming the node after the file splits one screen into several nodes; the split-off node also carries no metadata, so it loses the group its test declared and drops into the ungrouped bucket. The basename only looked right because it usually happens to equal the screen id.",
+      "fallback": "A reference that resolves to no indexed test — broken, or pointing at a test with no source.layout — falls back to the basename, so it still draws a node rather than silently dropping the edge.",
+      "ambiguity": "When one file name is claimed by several tests covering DIFFERENT screens, nothing is resolved: picking one would silently label the node with the wrong screen."
+    },
+    "groups": {
+      "source": "A node's group comes, in this precedence, from: the screen tests covering it (metadata.group); the screen spec's metadata.group (string or list) — added 2026-09-10 because the diagram is drawn from specs and a screen with a spec and a layout but no test had nowhere to declare one (one face: 22 of 31 drawn nodes undeclared); the jui.config.json app-owned declaration (appOwnedScreens.declaration.group).",
+      "ungrouped": "Nodes with no group land in a catch-all bucket, which must keep reading as 'undeclared'. A screen with no way to declare a group would otherwise live there forever and hide the ones that simply have not been declared yet."
+    }
+  },
+  "validatorRules": [
+    {
+      "id": "screen-unknown",
+      "severity": "error",
+      "message": "A test's 'screen' value resolves to neither a layout nor a declared app-owned screen."
+    },
+    {
+      "id": "screen-not-a-screen",
+      "severity": "error",
+      "message": "A test's 'screen' value resolves to a layout classified as a cell or partial. Use the owning screen."
+    },
+    {
+      "id": "screen-id-collision",
+      "severity": "error",
+      "message": "Two layouts share a basename, making the screen id ambiguous."
+    },
+    {
+      "id": "screen-source-layout-missing",
+      "severity": "error",
+      "message": "A flow 'sources[].layout' path does not exist."
+    },
+    {
+      "id": "screen-alias-unreferenced",
+      "severity": "warning",
+      "message": "A flow declares a 'sources[].alias' that no step references."
+    }
+  ]
+}

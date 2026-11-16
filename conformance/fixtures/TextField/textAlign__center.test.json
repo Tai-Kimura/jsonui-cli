@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextField/textAlign__center.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextField.textAlign (center)",
+    "description": "Conformance fixture for 'textAlign' on TextField (section: TextField, class: visual). Value under test: \"Center\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextField"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "textAlign__center",
+      "description": "Conformance fixture for 'textAlign' on TextField (section: TextField, class: visual). Value under test: \"Center\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextField_textAlign__center"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TabView/unselectedColor__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TabView.unselectedColor (static)",
+    "description": "Conformance fixture for 'unselectedColor' on TabView (section: TabView, class: visual). Value under test: \"#FF0000\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TabView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "unselectedColor__static",
+      "description": "Conformance fixture for 'unselectedColor' on TabView (section: TabView, class: visual). Value under test: \"#FF0000\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TabView_unselectedColor__static"
+        }
+      ]
+    }
+  ]
+}

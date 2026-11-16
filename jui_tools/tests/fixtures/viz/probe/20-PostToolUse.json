@@ -1,0 +1,84 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "tool_name": "Agent",
+ "tool_input": {
+  "description": "List probe folder files",
+  "prompt": "Read-only task. Working directory: /work/probe-app\n\nList every file in this folder (non-recursive is fine; include hidden files and note whether an entry is a directory). Report the file list only, as a short bulleted list with the entry type for each. Do not modify anything.",
+  "subagent_type": "Explore",
+  "run_in_background": false
+ },
+ "tool_response": {
+  "status": "completed",
+  "prompt": "Read-only task. Working directory: /work/probe-app\n\nList every file in this folder (non-recursive is fine; include hidden files and note whether an entry is a directory). Report the file list only, as a short bulleted list with the entry type for each. Do not modify anything.",
+  "agentId": "a6c469945290964a4",
+  "agentType": "Explore",
+  "harnessNoteCount": 0,
+  "harnessTailCount": 0,
+  "harnessSectionHash": "39a03d48666880a4",
+  "content": [
+   {
+    "type": "text",
+    "text": "The folder has 6 entries (excluding `.` and `..`):\n\n- `.claude/` (directory, hidden)\n- `.git/` (directory, hidden)\n- `hooks/` (directory)\n- `probe.py` (file)\n- `sample.txt` (file)\n- `t0` (file)\n\nI made no changes."
+   }
+  ],
+  "resolvedModel": "claude-haiku-5-5",
+  "totalDurationMs": 7054,
+  "totalTokens": 18338,
+  "totalToolUseCount": 2,
+  "usage": {
+   "output_tokens_details": {
+    "thinking_tokens": 108
+   },
+   "input_tokens": 2,
+   "cache_creation_input_tokens": 615,
+   "cache_read_input_tokens": 17508,
+   "output_tokens": 213,
+   "server_tool_use": {
+    "web_search_requests": 0,
+    "web_fetch_requests": 0
+   },
+   "service_tier": "standard",
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 615
+   },
+   "inference_geo": "global",
+   "iterations": [
+    {
+     "input_tokens": 2,
+     "output_tokens": 213,
+     "cache_read_input_tokens": 17508,
+     "cache_creation_input_tokens": 615,
+     "cache_creation": {
+      "ephemeral_5m_input_tokens": 615,
+      "ephemeral_1h_input_tokens": 0
+     },
+     "type": "message"
+    }
+   ],
+   "speed": "standard",
+   "fallback_credit": null
+  },
+  "toolStats": {
+   "readCount": 0,
+   "searchCount": 0,
+   "bashCount": 2,
+   "editFileCount": 0,
+   "linesAdded": 0,
+   "linesRemoved": 0,
+   "otherToolCount": 0
+  },
+  "canContinueAgent": true
+ },
+ "tool_use_id": "toolu_01WK3niH9JKgFkACK8DfL7LG",
+ "duration_ms": 7055
+}

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/spacing__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.spacing (binding)",
+    "description": "Conformance fixture for 'spacing' on CheckBox (section: CheckBox, class: visual). Value under test: \"@{boundSpacing}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "spacing__binding",
+      "description": "Conformance fixture for 'spacing' on CheckBox (section: CheckBox, class: visual). Value under test: \"@{boundSpacing}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_spacing__binding"
+        }
+      ]
+    }
+  ]
+}

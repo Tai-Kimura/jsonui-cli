@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Radio/label__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Radio.label (binding)",
+    "description": "Conformance fixture for 'label' on Radio (section: Radio, class: visual). Value under test: \"@{boundLabel}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Radio"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "label__binding",
+      "description": "Conformance fixture for 'label' on Radio (section: Radio, class: visual). Value under test: \"@{boundLabel}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Radio_label__binding"
+        }
+      ]
+    }
+  ]
+}

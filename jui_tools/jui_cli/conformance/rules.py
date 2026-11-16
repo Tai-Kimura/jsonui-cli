@@ -1,0 +1,4047 @@
+"""Declarative classification rules for conformance fixture generation.
+
+Every attribute in ``attribute_definitions.json`` is classified into one of
+three classes (see plan §3.1):
+
+- ``assertable`` — machine-verifiable with the cross-platform assertions the
+  jsonui-test-runner supports (visible / notVisible / enabled / disabled /
+  text equals / contains / count).
+- ``visual`` — only observable in rendered output (colors, padding, fonts...).
+  A fixture is still generated, but the test only takes a ``screenshot``
+  (artifact capture; pixel comparison is a non-goal in v1).
+- ``untestable`` — callbacks, binding-only attributes, metadata, and
+  attributes that cannot be expressed as a single-file static fixture.
+  These are *recorded with a reason* in the manifest (silent drop is
+  forbidden by plan §7.1).
+
+The tables in this module are the single place where attribute names are
+special-cased; :mod:`fixture_generator` stays purely mechanical.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+CLASS_ASSERTABLE = "assertable"
+CLASS_VISUAL = "visual"
+CLASS_UNTESTABLE = "untestable"
+#: Generated, loaded and compiled — but deliberately not photographed.
+#:
+#: See :func:`is_uikit_only`. A fixture in this class still proves its
+#: declaration is legal and that the host renders the screen without falling
+#: over; it makes no claim about pixels, so it carries no control and takes no
+#: screenshot, and it is not counted as visual coverage.
+CLASS_DECLARATION_ONLY = "declaration-only"
+
+#: id given to the component under test in every generated layout.
+TARGET_ID = "target"
+#: id of the sibling view generated for view-reference attributes.
+ANCHOR_ID = "anchor"
+
+#: attribute_definitions.json platform tags -> test-runner platform names.
+PLATFORM_MAP = {
+    "swift": "ios",
+    "kotlin": "android",
+    "react": "web",
+}
+ALL_PLATFORMS = ("ios", "android", "web")
+
+
+# --------------------------------------------------------------------------- #
+# Result dataclasses
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CasePlan:
+    """One concrete fixture: a case name + the value written into the layout."""
+
+    name: str
+    value: Any
+    written_key: str
+    assertions: tuple[dict, ...] = ()
+    alias_of: str | None = None  # canonical fixture id when this is an alias probe
+
+
+@dataclass(frozen=True)
+class AttributePlan:
+    """All fixtures generated for one (section, attribute) pair."""
+
+    section: str  # top-level key in attribute_definitions.json ("common", "Label", ...)
+    attribute: str
+    cls: str  # CLASS_ASSERTABLE | CLASS_VISUAL
+    host: str  # component type instantiated as the target node
+    cases: tuple[CasePlan, ...]
+    platforms: tuple[str, ...]
+    mode: str | list | None = None
+    deprecated: str | list | None = None
+    needs_anchor: bool = False
+    #: Set only for the EXTRA hosts of a common attribute (see
+    #: ``COMMON_EXTRA_HOSTS``): the fixture id/filename stem, so the second
+    #: host's fixture does not collide with the first's. ``None`` means "the
+    #: attribute name", which is every fixture that existed before this.
+    id_slug: str | None = None
+
+
+@dataclass(frozen=True)
+class SkippedAttribute:
+    """An attribute intentionally not turned into a fixture, with the reason."""
+
+    section: str
+    attribute: str
+    reason: str
+
+
+# --------------------------------------------------------------------------- #
+# Untestable rule tables
+# --------------------------------------------------------------------------- #
+
+# Reasons are stable strings: the manifest exposes them and tests assert on them.
+REASON_CALLBACK = "callback"
+REASON_BINDING_ONLY = "binding-only"
+REASON_METADATA = "metadata (not rendered)"
+REASON_STRUCTURAL = "structural (child container attribute)"
+REASON_CROSS_FILE = "cross-file reference (not expressible in a single-file fixture)"
+REASON_BEHAVIORAL = "behavioral (no visual or assertable effect in v1)"
+REASON_COMPOSITE = "composite value (no representative static value in v1)"
+REASON_NETWORK = "network resource (v1 fixtures are offline)"
+REASON_RUNTIME_DATA = "requires runtime data / cell template (v1 static fixtures only)"
+REASON_DEFINITION_META = "definition metadata, not an attribute"
+REASON_COMPONENT_ALIAS = "component alias (fixtures live on the canonical section)"
+
+#: Attribute names (any section) that are pure metadata for parsers / codegen.
+METADATA_ATTRS = {
+    "id",
+    "type",
+    "generatedBy",
+    "partial",
+    # build directive consumed (and removed) at distribution time by
+    # PlatformResolver — never reaches any renderer
+    "platform",
+    # layout-root screen classification, read by the screen-identity
+    # resolver at build time — never reaches any renderer
+    "role",
+    "propertyName",
+    "binding_id",
+    "binding_group",
+    "tag",
+    "className",
+    "testId",
+    "data",
+    "responsive",
+    "shared_data",
+    "variables",
+    "rect",
+    "frame",
+    "widthRaw",
+    "heightRaw",
+    "config",
+}
+
+#: Binding wiring attributes (the *mechanism*, not a bindable value).
+BINDING_ATTRS = {"binding", "bind", "bindingScript"}
+
+#: Script / event-map attributes (callback family, but not `on*`-named).
+SCRIPT_ATTRS = {"scripts", "events", "valueChange"}
+
+#: ``on``-prefixed attributes that are NOT callbacks (checked-state values).
+CALLBACK_NAME_EXCEPTIONS = {"onTintColor", "onSrc"}
+
+#: Structural child containers.
+STRUCTURAL_ATTRS = {"child", "children"}
+
+#: References to other layout / style files.
+CROSS_FILE_ATTRS = {"include", "style"}
+
+#: Behavioral attributes with no observable effect in a static screenshot
+#: and no cross-platform assertion in the v1 runner vocabulary.
+BEHAVIORAL_ATTRS = {
+    "canTap",
+    "userInteractionEnabled",
+    "touchDisabledState",
+    "touchEnabledViewIds",
+    "keyBottomView",
+    "keyTopView",
+    "keyLeftView",
+    "keyRightView",
+    "keyboardAvoidance",
+    "keyboardAvoidancePadding",
+    "keyboardDismissMode",
+    "scrollsToTop",
+    "bounces",
+    "paging",
+    "decelerationRate",
+    "scrollEnabled",
+    "nextFocus",
+    "canBack",
+    "confirmationDialog",
+    # Same class as confirmationDialog: a modal presented OVER the render
+    # surface, so a screenshot of the surface asserts nothing about it. The
+    # composite-value rule also catches it (it is an object), but that reason
+    # would go stale the moment composite values become representable.
+    "alert",
+    "momentary",
+    "setTargetAsDelegate",
+    "setTargetAsDataSource",
+    "autoChangeTrackingId",
+    "scrollTo",
+    "scrollAnimated",
+    "hideOnFocused",
+    "includePromptWhenDataBinding",
+    "contentInsetAdjustmentBehavior",
+    "allowsBackForwardNavigationGestures",
+    "allowsLinkPreview",
+    "allowsEditingTextAttributes",
+    "dataDetectorTypes",
+    "maxZoom",
+    "minZoom",
+    "onAppear",  # also matched by the on* rule; listed for clarity
+    "onDisappear",
+}
+
+#: (section, attribute) pairs that need network access at render time.
+NETWORK_ATTRS = {
+    ("NetworkImage", "src"),
+    ("NetworkImage", "url"),
+    ("NetworkImage", "headers"),
+    ("NetworkImage", "cachePolicy"),
+    ("NetworkImage", "timeout"),
+    # Act only while a read from disk or the network is in flight; an offline
+    # fixture has no src, so the frame never loads and none of them can show
+    # (ticket jui-networkimage-load-listener).
+    ("NetworkImage", "loadingRenderer"),
+    ("NetworkImage", "loadingDelay"),
+    ("NetworkImage", "transitionDuration"),
+    ("Web", "url"),
+}
+
+#: (section, attribute) pairs that need runtime data / cell templates.
+RUNTIME_DATA_ATTRS = {
+    ("Collection", "items"),
+    ("Collection", "sections"),
+    ("Collection", "cellClasses"),
+    ("Collection", "headerClasses"),
+    ("Collection", "footerClasses"),
+    ("Collection", "cellIdProperty"),
+    ("Collection", "currentPage"),
+    ("SelectBox", "selectedDate"),
+}
+
+#: Whole sections excluded from the generic per-attribute sweep.
+UNTESTABLE_SECTIONS = {
+    "Embed": (
+        "cross-file reference — attribute sweep skipped; semantic Embed "
+        "fixtures (navigationMode/params + companion screens) are emitted "
+        "bespoke by conformance.embed_fixtures"
+    ),
+}
+
+# --------------------------------------------------------------------------- #
+# Assertable rule table
+# --------------------------------------------------------------------------- #
+
+#: Components whose rendered text content is queryable through the runner's
+#: ``text`` assertion on every platform.
+TEXT_ASSERTABLE_COMPONENTS = {
+    "Label",
+    "Button",
+    "TextField",
+    "TextView",
+    "EditText",
+    "Input",
+    "IconLabel",
+    "Radio",
+    "CheckBox",
+    "Check",
+}
+
+#: Components on which the enabled/disabled assertion is meaningful.
+ENABLED_ASSERTABLE_COMPONENTS = {
+    # A container's disabled state is observable through the a11y tree —
+    # `aria-disabled` on web, the `Disabled` semantics on Compose, SwiftUI's
+    # `.disabled` on iOS. It was left out while the three codegens ignored
+    # `enabled` on a View, which is the same reason the fixture was hosted on a
+    # Button and the gap stayed invisible.
+    "View",
+    "Button",
+    "TextField",
+    "TextView",
+    "EditText",
+    "Input",
+    "Switch",
+    "Toggle",
+    "CheckBox",
+    "Check",
+    "SelectBox",
+    "Slider",
+    "Segment",
+}
+
+#: Deterministic text payload used by text fixtures + assertions.
+CONFORMANCE_TEXT = "Conformance Text"
+
+# --------------------------------------------------------------------------- #
+# Representative values
+# --------------------------------------------------------------------------- #
+
+#: Attributes whose value must be a view id; a sibling anchor view is added.
+VIEW_REF_ATTRS = {
+    "alignTopOfView",
+    "alignBottomOfView",
+    "alignLeftOfView",
+    "alignRightOfView",
+    "alignTopView",
+    "alignBottomView",
+    "alignLeftView",
+    "alignRightView",
+    "alignCenterVerticalView",
+    "alignCenterHorizontalView",
+    "toView",
+    "indexBelow",
+    "indexAbove",
+    "inView",
+    "referenceView",
+}
+
+#: Attributes whose entire effect is OFF the screen, so no screenshot can
+#: show it. They configure the soft keyboard / IME, which is not part of the
+#: captured frame (and does not exist at all in a headless browser).
+#:
+#: They still get fixtures — a converter that crashes or drops the key is worth
+#: catching — but the fixture-vs-control check must not count them as
+#: "identical to control, investigate". Without this they were the single
+#: largest block of inert results on web (39 of 235) and pure noise.
+NON_OBSERVABLE_ATTRS = {
+    "returnKeyType",
+    "input",
+    "inputType",
+    "keyboardType",
+    "autocapitalizationType",
+    "autocorrectionType",
+    "autocapitalize",
+    "enterKeyHint",
+    "nextFocus",
+    # contentType is the autofill HINT: iOS sets `.textContentType`, web sets
+    # the `autoComplete` attribute, Android picks a keyboard variant. None of
+    # the three puts a pixel in the captured frame, so every one of its 39
+    # enum fixtures would be counted as "identical to control, investigate" —
+    # the same false-positive block 34 cleared on web (39 of 235).
+    "contentType",
+    # --- lane A §5(3), the six A named explicitly ------------------------- #
+    # Validation and semantics that live in the DOM/a11y layer, never in the
+    # frame: the submit/reset role of a button, an image's alt text, an input's
+    # length cap and validation pattern and required flag, a view's drag
+    # affordance. The codegen probe still measures every one of them — this
+    # only stops the SCREENSHOT check from filing "identical to its control"
+    # against something a camera cannot see.
+    "buttonType",
+    "alt",
+    "maxLength",
+    "pattern",
+    "required",
+    "draggable",
+    # --- lane F family-B group A1, the ones that hold on every host --------- #
+    # A press-state background, with no press in a still capture.
+    "tapBackground",
+    # Scroll indicators fade out when the view is idle, which is exactly when
+    # the screenshot is taken.
+    "showsVerticalScrollIndicator",
+}
+
+#: Same contract as :data:`NON_OBSERVABLE_ATTRS`, but scoped to one component.
+#:
+#: Needed because most of these names ARE observable somewhere else:
+#: `Slider.tintColor` paints a track, `Switch.value` is a checked state,
+#: `Segment.items` are the visible tabs. Only the listed pairing is off-frame.
+#:
+#: Source: lane F's family-B read (46/46), group A1 — "a static screenshot
+#: cannot photograph this", as distinct from "the fixture is shaped wrong".
+#: Changing the fixture does not help, and re-measuring does not either; what
+#: was missing was the ledger entry.
+NON_OBSERVABLE_BY_SECTION: set[tuple[str, str]] = {
+    # Press states. The capture is taken at rest, with no finger on the screen.
+    ("Button", "highlightColor"),
+    # tint IS the caret, and an unfocused field has no caret.
+    ("TextField", "tintColor"),
+    # --- lane A §5(3), the six `is_non_observable()` did not already cover -- #
+    # A ran the predicate over all 22 rather than reading the tables, and 15
+    # were already registered.
+    #
+    # `highlightBackground` is SECTION-scoped on purpose, and this is the whole
+    # reason the scoped table exists: paired with `highlighted: true` it paints
+    # in the resting state and photographs perfectly well — A fixed exactly
+    # that emit in §5(1). A bare name here would switch off `View.highlighted`,
+    # which is a fixture that works.
+    #
+    # `tapBackground` stays bare by contrast: nothing declares a `tapped`
+    # state, so it only ever reaches the `active:` path and is unreachable in a
+    # still capture on every host.
+    ("Button", "highlightBackground"),
+    ("common", "highlightBackground"),
+    # The old spelling of Button.highlightColor, same press state.
+    ("Button", "hilightColor"),
+    # A fetch hint the browser acts on; no pixels either way.
+    ("Image", "loading"),
+    ("NetworkImage", "loading"),
+    # The iframe permission policy.
+    ("Web", "allow"),
+    # A radio's group is the mutual-exclusion key and its value is what gets
+    # submitted. Neither draws. (`CheckBox.value` / `Switch.value` DO — they
+    # are the checked state — which is why this is scoped.)
+    ("Radio", "group"),
+    ("Radio", "value"),
+    # Everything below is inside the picker SHEET; the fixture photographs the
+    # closed control. `items` additionally only reaches the closed label
+    # through `initialSelectedIndex`, which the fixture does not declare, and
+    # both `selectItemType` faces render their initial empty string.
+    ("SelectBox", "items"),
+    ("SelectBox", "selectItemType"),
+    ("SelectBox", "datePickerStyle"),
+    ("SelectBox", "minuteInterval"),
+    ("SelectBox", "dateStringFormat"),
+    # Adjudicated by E2 and measured there: neither has a face a capture can
+    # hold. `CheckBox.value` is the payload a checked box SUBMITS — the box
+    # draws its checked state from `isOn`/`checked`, and the value rides
+    # along unseen (same reasoning as `Radio.value` above, which is already
+    # here). `Web.sandbox` sets the iframe permission flags, which change
+    # what the frame may DO, never what it looks like — the sibling of
+    # `Web.allow`, also already here.
+    ("CheckBox", "value"),
+    ("Web", "sandbox"),
+    # `("NetworkImage", "loadingImage")` used to live here, on the argument
+    # that an in-flight image exists only for the length of a request and a
+    # still capture has no duration — so the shutter opens either before the
+    # request starts or after it has failed, however the fixture is shaped.
+    #
+    # The argument holds only while requests are ALLOWED TO COMPLETE. H's
+    # `pending.invalid` contract (INTERACTIVE_HOST_CONTRACT.md §5) reserves a
+    # host that never completes and never fails, which makes the loading face
+    # a state of REST rather than a state of time — on screen for the whole
+    # run, photographed like any other resting fixture. The claim written here
+    # became false, so the entry is gone rather than left standing with a
+    # rationale nothing supports.
+}
+
+
+def is_non_observable(section: str, attribute: str) -> bool:
+    """True when no static capture can show this attribute, at any value."""
+    return (
+        attribute in NON_OBSERVABLE_ATTRS
+        or (section, attribute) in NON_OBSERVABLE_BY_SECTION
+    )
+
+
+#: Required pixel size of every bundled conformance asset, on every host.
+#:
+#: The contract used to name the assets and say nothing about their size, and
+#: the three hosts drifted: ios 64x64, web 96x96, android 128x128 (measured
+#: 2026-08-05). Size is not cosmetic here — it decides whether `contentMode` is
+#: measurable at all. Against the 140x80 Image frame:
+#:
+#:   64   fits INSIDE the frame, so top / center / bottom can only move 8pt
+#:        apart and the position values are nearly indistinguishable
+#:   96   overflows vertically, so each position crops different content
+#:   128  overflows further, same effect
+#:
+#: 96 is the smallest size that overflows, and `conformance_sample_alt` is
+#: already 96 on all three, so aligning on it is the one-file change.
+#:
+#: The hosts own their asset directories (ios F, android G, web A), so this
+#: constant is the contract, not the fix.
+CONFORMANCE_ASSET_PIXELS = 96
+
+#: Attributes that reference a bundled image asset. Platform host apps
+#: (plans 02/03/04) must bundle an asset with this name, at
+#: :data:`CONFORMANCE_ASSET_PIXELS` square.
+IMAGE_ASSET_NAME = "conformance_sample"
+
+#: Distinct second asset for STATE images (NetworkImage placeholder/hint/
+#: loadingImage/errorImage). The control's base carries defaultImage with
+#: the primary asset; giving state images the same asset made every state
+#: transition unobservable — a hijacked no-src state rendered pixel-
+#: identical to the correct one. Hosts must bundle this asset too.
+IMAGE_ALT_ASSET_NAME = "conformance_sample_alt"
+IMAGE_ATTRS = {
+    "src",
+    "srcName",
+    "highlightSrc",
+    "highlightSrcName",
+    "loadingImage",
+    "errorImage",
+    "defaultImage",
+    "image",
+    "icon",
+    "selectedIcon",
+    "selected_icon",
+    "onSrc",
+    "icon_on",
+    "icon_off",
+    "progressImage",
+    "trackImage",
+    "minimumValueImage",
+    "maximumValueImage",
+}
+
+#: A base value meaning "write no such key": the target is generated without it (the generator would otherwise
+#: write `wrapContent` for a missing width / height).
+OMIT = "__omit__"
+
+
+#: Per-attribute value overrides (fallback table, any section).
+VALUE_OVERRIDES: dict[str, Any] = {
+    "width": 100,
+    "height": 100,
+    "minWidth": 50,
+    "maxWidth": 150,
+    "minHeight": 50,
+    "maxHeight": 150,
+    "idealWidth": 120,
+    "idealHeight": 120,
+    "aspectWidth": 4,
+    "aspectHeight": 3,
+    "weight": 1,
+    "widthWeight": 1,
+    "heightWeight": 1,
+    "minWidthWeight": 0.25,
+    "maxWidthWeight": 0.75,
+    "minHeightWeight": 0.25,
+    "maxHeightWeight": 0.75,
+    "fontSize": 20,
+    "cornerRadius": 8,
+    "borderWidth": 2,
+    "opacity": 0.5,
+    "alpha": 0.5,
+    "lines": 2,
+    "minimumScaleFactor": 0.5,
+    # rjui maps BOTH line-metric spellings onto one CSS declaration:
+    # `lineSpacing: N` emits `lineHeight: 1 + N/16`, `lineHeightMultiple: M`
+    # emits `lineHeight: M` (measured — 8 and 1.5 produce a byte-identical
+    # style attribute, as do 16 and 2.0). The web host default IS 1.5, so
+    # both representatives asked for the value already on screen and all
+    # four rows (static + bound x two attributes) read inert on web — lane
+    # A's DOM measurement, explained. 1.8 and 16 stay distinct from the
+    # default and from each other.
+    "lineHeightMultiple": 1.8,
+    "lineSpacing": 16,
+    # Drawn at textScale 2.0 (BASE_ATTRS_BY_ATTRIBUTE): a cap below it, so the capped text differs from its control.
+    "maxFontScale": 1.2,
+    "font": "bold",
+    "fontWeight": "bold",
+    # The SSoT types hintFont as a bare string, so the generic fallback
+    # ("sample") applied — but the converters match it against the WEIGHT
+    # vocabulary (`json_data['hintFont'] == 'bold'`), and a value outside the
+    # vocabulary can only ever render nothing. Same value as its siblings.
+    "hintFont": "bold",
+    # `sans-serif` is Android's DEFAULT family, so the fixture asked for the
+    # face the platform already draws — and it is not a real font name on iOS
+    # either, where it has always fallen back to the system font. `serif` is a
+    # genuine CSS generic on web, and Compose resolves it once G's
+    # `resolveFontFamily` mapping lands. Strictly better than the old value on
+    # every platform, and the same "representative == platform default" shape
+    # as GradientView.locations. (Lane G.)
+    #
+    # NOTE for whoever reads the 3PF result: android stays inert until G's
+    # mapping is in, and iOS depends on SwiftJsonUI resolving generic family
+    # names at all — which is an open question, raised with F/B.
+    "fontFamily": "serif",
+    "text": CONFORMANCE_TEXT,
+    "html": "<p>Conformance Sample</p>",
+    "gradient": ["#FF0000", "#0000FF"],
+    "locations": [0.0, 1.0],
+    "maxLength": 5,
+    "pattern": "[0-9]*",
+    "doneText": "Done",
+    "prompt": "Choose",
+    "dateStringFormat": "yyyy-MM-dd",
+    "minimumDate": "2020-01-01",
+    "maximumDate": "2030-12-31",
+    "minuteInterval": 15,
+    # A step of 1 over the 0..1 range E ruled for Slider is both the react
+    # default AND a step that leaves only the two endpoints reachable.
+    "step": 0.25,
+    "value": 0.5,
+    "progress": 0.5,
+    "minimum": 0,
+    "maximum": 10,
+    "minValue": 0,
+    "maxValue": 10,
+    "selectedIndex": 1,
+    "rows": 3,
+    # 20 IS the HTML default for <textarea cols>, so the attribute asked
+    # for the box the browser already draws (lane A).
+    "cols": 60,
+    "columns": 2,
+    "columnCount": 2,
+    "size": 3,
+    # The UIKit pipe contract is exactly five fields
+    # ('color|offsetX|offsetY|opacity|radius') — a four-field string is
+    # invalid and draws nothing on every path.
+    "shadow": "#000000|2|2|0.5|4",
+    "edgeInset": [8, 8, 8, 8],
+    "containerInset": 8,
+    "contentSize": [200, 400],
+    "contentOffset": [0, 50],
+}
+
+#: (section, attribute) overrides — beat VALUE_OVERRIDES.
+VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
+    # The canonical shadow object (UIKit SJUILabel contract) — a generic
+    # string value renders as invalid CSS on web and nothing anywhere, so
+    # the fixture could never differ from its control.
+    ("Label", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
+    ("IconLabel", "textShadow"): {"color": "#000000", "blur": 4, "offset": [2, 2]},
+    # A fixture that writes the value its own base already supplies is not a
+    # fixture: layout and control come out byte-identical, so "inert" says
+    # nothing about the attribute (plan 41 measured six of these at the
+    # codegen stage — all six turned out to be read correctly everywhere the
+    # moment the values differed). Same rule as the state images below: the
+    # value under test must differ from the base's.
+    ("Segment", "items"): ["Alpha", "Beta", "Gamma"],
+    ("SelectBox", "items"): ["Alpha", "Beta", "Gamma"],
+    ("GradientView", "gradient"): ["#00AA00", "#FFAA00"],
+    # `[0.0, 1.0]` IS the default stop set of a two-colour linear gradient, so
+    # the fixture asked for the picture its control already draws. Lane F's
+    # family-B read, group A2. Off-centre stops squeeze the blend into the
+    # middle half, which no default produces.
+    ("GradientView", "locations"): [0.25, 0.75],
+    # Above the content the freed box falls to (40pt children), so the floor
+    # actually lifts. The generic 50 would have worked too; 150 matches the
+    # ceiling fixtures' scale and leaves no doubt which side of the content it
+    # is on.
+    # rjui's default bar is h-2 (8px), so the generic 8 drew the control's bar.
+    ("Progress", "progressHeight"): 20,
+    ("common", "minWidth"): 150,
+    ("common", "minHeight"): 150,
+    ("Image", "src"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "defaultImage"): IMAGE_ALT_ASSET_NAME,
+    # NetworkImage's hint is its PLACEHOLDER IMAGE NAME (SSoT: "Placeholder
+    # image name (primary)"), not user-facing text — the generic hint text
+    # produced painterResource(R.drawable.conformance_hint) on Compose, a
+    # resource that cannot exist. State images get the DISTINCT alt asset:
+    # the control's defaultImage uses the primary one, so a state image
+    # hijacking the no-src display renders visibly different instead of
+    # pixel-identical (canonical networkImage.noSrc = defaultImage).
+    ("NetworkImage", "hint"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "placeholder"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "loadingImage"): IMAGE_ALT_ASSET_NAME,
+    ("NetworkImage", "errorImage"): IMAGE_ALT_ASSET_NAME,
+    # Selected-state icons swap against the base icon — same distinct-asset
+    # rule as the NetworkImage state images.
+    # The Image base carries `src: conformance_sample`, so a highlightSrc
+    # naming the SAME asset is two spellings of one picture — the highlight
+    # state cannot be told from the resting one however correctly it is
+    # swapped. The alt asset is what makes the swap visible (lane E2).
+    ("Image", "highlightSrc"): IMAGE_ALT_ASSET_NAME,
+    ("Image", "highlightSrcName"): IMAGE_ALT_ASSET_NAME,
+    ("CheckBox", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
+    ("Radio", "selectedIcon"): IMAGE_ALT_ASSET_NAME,
+    ("Radio", "selected_icon"): IMAGE_ALT_ASSET_NAME,
+    # srcName overrides the base src — with the same asset the override is
+    # unobservable; label overrides text the same way.
+    ("Image", "srcName"): IMAGE_ALT_ASSET_NAME,
+    ("CheckBox", "label"): "Alt label",
+    # 8 equals the cross-platform default gap — indistinguishable from the
+    # control on any platform that implements it.
+    ("IconLabel", "iconMargin"): 16,
+    # Collection's containerInset is declared `array`; the name-keyed value is
+    # the scalar TextView.containerInset (a number) and writing it here made
+    # the fixture fail the sjui validator on every build. Same shape as the
+    # Collection insets/contentInsets overrides.
+    ("Collection", "containerInset"): [8, 8, 8, 8],
+    # `value` is Slider/Progress vocabulary in the name-keyed fallback table
+    # (0.5), but Switch declares it as its boolean state alias — 0.5 is not a
+    # boolean, the Compose codegen host cannot even compile it
+    # (`checked = 0.5`), and a non-boolean state fixture can never assert the
+    # attribute it exists for.
+    ("Switch", "value"): True,
+    ("SelectBox", "selectedItem"): "Two",
+    ("SelectBox", "selectedValue"): "Two",
+    # Three tabs, none of them the base's two — see the base-supplies-the-value
+    # note above (the base already writes One/Two, so the old override made the
+    # fixture and its control byte-identical).
+    ("TabView", "tabs"): [{"title": "Alpha"}, {"title": "Beta"}, {"title": "Gamma"}],
+    ("Collection", "insets"): [8, 8, 8, 8],
+    ("Collection", "contentInsets"): [8, 8, 8, 8],
+    ("common", "padding"): 8,
+    ("common", "paddings"): [8, 8, 8, 8],
+    ("common", "margins"): [8, 8, 8, 8],
+    # Every declared key. `lineHeightMultiple` and `textAlign` were left out
+    # while SJUILabel's creator still shared the BASE paragraph style with the
+    # highlight dictionary and so ignored both; it builds its own copy now, and
+    # Compose and web implement the swap too, so all four surfaces agree and the
+    # fixture can assert the whole set.
+    # `partialAttributes` was skipped as "composite value (no representative
+    # static value)", so a declared attribute whose semantics the SSoT pins
+    # down precisely had no fixture at all. The declaration is specific enough
+    # to write one: an array range is [start, end) with the end exclusive,
+    # resolved at runtime against the resolved string. "Sample" is the Label
+    # base text, so [0, 3) styles "Sam" and leaves "ple" alone — visible on
+    # every platform and independent of localisation.
+    ("Label", "partialAttributes"): [
+        {"range": [0, 3], "fontColor": "#FF0000", "underline": True},
+    ],
+    ("Label", "highlightAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+        "textAlign": "Center",
+    },
+    # `sample` is not a mode, and the converter refuses to guess one from an
+    # unrecognised value, so the default string would render nothing. `always`
+    # is the one mode a static screenshot can show — the editing-sensitive modes
+    # need focus.
+    ("TextField", "clearButtonMode"): "always",
+    # Skipped as "no representative static value" until web implemented it.
+    # NOTE the fixture cannot show a visual difference on web: `env(safe-area-
+    # inset-*)` resolves to 0 in a headless desktop browser, so the padding is
+    # zero and the screenshot matches its control. It still proves the emit, and
+    # on iOS/Android the inset is real.
+    ("SafeAreaView", "safeAreaInsetPositions"): ["top", "bottom"],
+    ("View", "safeAreaInsetPositions"): ["top", "bottom"],
+    # Skipped as "no representative static value" until web implemented it. The
+    # four keys here are the ones that move pixels on a closed select, which is
+    # what the label is.
+    ("SelectBox", "labelAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "textAlign": "Center",
+    },
+    # UIKit-only (SJUISelectBox) until 1.8.101, so `_platforms` scoped it to
+    # iOS and the composite rule skipped it; now every face draws the caret
+    # from this bag. No `src`: the default glyph is the case that matters —
+    # `{"rightMargin": N}` alone is why the object was promoted — and an asset
+    # would make tintColor depend on the asset's rendering mode. The four
+    # values each move pixels on their own: 32x32 is larger than any face's
+    # default glyph, the tint is the fixture red, the background paints the
+    # caret's box, and 24 pushes it off the trailing edge on every face.
+    ("SelectBox", "caretAttributes"): {
+        "width": 32,
+        "height": 32,
+        "tintColor": "#FF0000",
+        "background": "#00AA00",
+        "rightMargin": 24,
+    },
+    # Skipped as "composite value" until the properties hole was filled: the
+    # declarations on TextField/TextView were bare objects, so the bag's own
+    # keys existed only in the readers. The declared four (font / fontSize /
+    # fontColor / lineHeightMultiple) now have fixtures asserting the
+    # nested-wins cascade the description pins down. fontColor + fontSize are
+    # the pixel-movers on every face; the bag deliberately carries all four so
+    # a reader that drops one key still fails the screenshot.
+    ("Label", "hintAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+    },
+    ("TextField", "hintAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+    },
+    ("TextView", "hintAttributes"): {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+    },
+    # --- plan 49-D round (2026-08-05): values outside the attribute's own
+    # --- domain, which no converter can read however correctly it is written.
+    #
+    # `return unless value > 0 && value <= 1.0` (sjui collection_converter.rb:
+    # 1713) — the name-keyed fallback DEFAULT_NUMBER (8) is outside the domain,
+    # so the fixture could only ever measure the guard. And within the domain,
+    # 0.5 was the companion in disguise: fed0d27 folds the weight into a
+    # column count, round(1/0.5) = 2 = the companion's own `columns: 2`, so
+    # control, representative and the derived second value (1.5 - out of
+    # domain, ignored) all drew a 2-column grid. 0.25 asks for FOUR columns
+    # against the companion's two (B's arithmetic, probe-confirmed:
+    # count: 4 vs count: 2).
+    ("Collection", "itemWeight"): 0.25,
+    # `value` is Slider/Progress vocabulary in the name-keyed table (0.5), but
+    # CheckBox/Radio declare it as `any`: the checked state's associated value.
+    # sjui reads `@component['value'] == true` for the checkbox seed, so 0.5
+    # can never be the checked state; Radio's is the option's IDENTITY within
+    # the group (`radio_value = @component['value'] || id`), i.e. a name.
+    ("CheckBox", "value"): True,
+    ("Radio", "value"): "optionB",
+    # `selectedValue` names WHICH option of the group is selected, so it has to
+    # be one of the group's items or it selects nothing — see the `items`
+    # companion below.
+    ("Radio", "selectedValue"): "Beta",
+    # Radio icons are BOTH an asset name and a vocabulary, and neither face
+    # can serve as the other's representative. sjui resolves the string as an
+    # asset (`Image(name)`), so the SF-Symbol spellings that used to sit here
+    # named assets no host bundles and every icon fixture drew the same empty
+    # glyph — icon ≡ selectedIcon, value discrimination gone (lane F, 5th
+    # run). kjui instead matches the string against SF-Symbol spellings
+    # (radio_component.rb:209-236, map_icon_name:423-437) and drops anything
+    # else to the same `Icons.Outlined.Star`, so two asset names emit
+    # byte-identical text. The PRIMARY takes the bundled asset (ios draws it,
+    # kjui's Star arm still differs from the vocabulary arms) and the
+    # vocabulary face lives on in EXTRA_CASES. No row needed here: `icon`
+    # falls back to IMAGE_ASSET_NAME via IMAGE_ATTRS, and selectedIcon's
+    # distinct-asset rows are declared with the other state images above.
+    # --- representative == platform default, non-enum half (lane A §5) ------ #
+    #
+    # Same defect as PREFERRED_PRIMARY_CASE below, for attributes with no enum
+    # to reorder: the name-keyed fallback happened to pick the value the
+    # platform already uses, so the fixture rendered its control.
+    #
+    # Booleans whose platform default is ON — the indicator spins, the
+    # scrollbars show, the tabs are labelled, the text view is editable and
+    # selectable, the iframe is sandboxed — so `true` was a no-op.
+    ("Collection", "showsHorizontalScrollIndicator"): False,
+    ("Collection", "showsVerticalScrollIndicator"): False,
+    ("ScrollView", "showsHorizontalScrollIndicator"): False,
+    ("ScrollView", "showsVerticalScrollIndicator"): False,
+    ("TabView", "showLabels"): False,
+    ("TextView", "editable"): False,
+    ("TextView", "selectable"): False,
+    ("Web", "sandbox"): False,
+    ("Indicator", "animating"): False,
+    ("Indicator", "hidesWhenStopped"): False,
+    # DEFAULT_NUMBER (8) is also the cross-platform default gap.
+    ("CheckBox", "spacing"): 16,
+    # Same fallback, one component along, and the A §5(2) round only caught the
+    # CheckBox: `radio_spacing_dp` is `json_data['spacing'] || 8`
+    # (kjui radio_component.rb:534), so the generic 8 was the default spelled
+    # out. Read out of the implementation rather than inferred from the number
+    # happening to match CheckBox's.
+    ("Radio", "spacing"): 16,
+    # rjui's own fallback is `attributes['minimumScaleFactor'] || 0.5`, so the
+    # generic 0.5 was the default spelled out.
+    ("Label", "minimumScaleFactor"): 0.25,
+    # A slider's floor defaults to 0. Kept below the companion `value: 0.5` so
+    # the thumb still has somewhere to sit.
+    ("Slider", "minimum"): 0.25,
+}
+
+#: Extra representative values appended AFTER the primary case, for attributes
+#: whose converters branch on a closed vocabulary the SSoT does not enumerate.
+#:
+#: One value can only ever prove "the spelling is read"; proving the VALUE is
+#: read needs a second one that lands in a DIFFERENT branch. Without it
+#: `codegen_effect` derives its second value by appending to the first
+#: (`circle` -> `circleTwo`), which falls straight back to the vocabulary's
+#: default arm and emits identical text — the C2 "presence-only" verdict.
+EXTRA_CASES: dict[tuple[str, str], list[Any]] = {
+    # A corner on each side of the default classes in Tailwind's name order (see
+    # COMMON_EXTRA_HOSTS["cornerRadius"]): 4 is `rounded`, before rounded-lg;
+    # 0 is `rounded-none`, after it; 100 is `rounded-[100px]`,
+    # an arbitrary value, the capsule a declared large corner asks for.
+    ("common", "cornerRadius"): [4, 0, 100],
+    # The VOCABULARY face of the Radio icons (see the representative-value
+    # comment above): the primary is the bundled asset, and this second value
+    # is the SF-Symbol spelling that reaches kjui's Checkbox arm — a different
+    # arm from the fallback Star the asset name lands on, so the value stays
+    # provably read on Compose. `circle`/`checkmark.circle.fill` are NOT
+    # cases: kjui maps them to the arm an icon-less radio already renders,
+    # i.e. the default in disguise.
+    ("Radio", "icon"): ["square"],
+    # Two four-character Japanese labels in a Segment as narrow as iOS fits
+    # them (156 wide, 32 high, CASE_BASE_ATTRS): the shape a consumer screen
+    # declares. Each face draws its labels at its default size, 13 on iOS, and
+    # neither may cut a label to "…" (ticket
+    # kjui-segment-label-font-larger-than-ios: Android drew 16 sp and did).
+    # And labels of uneven length in a Segment that takes its content's width
+    # (wrapContent): every segment as wide as the widest label, as
+    # UISegmentedControl and KotlinJsonUI's Segment divide it, and no label
+    # cut. The web's flex row sized it by the shortest label and cut the
+    # others (2.5.45 regression, fixed in 2.5.46).
+    # And the same uneven labels at each width a Segment can be given (2.5.47,
+    # the three faces aligned): matchParent fills and divides equally, a number
+    # divides equally, no width written is wrapContent; three labels of fifteen
+    # characters in a wrapContent Segment are capped at the width offered,
+    # divided equally and cut with "…".
+    ("Segment", "items"): [
+        ("ja_fit_156", ["あいうえ", "かきく"]),
+        ("wrap_uneven", ["あ", "あいうえお", "かき"]),
+        ("wrap_long", ["あいうえおかきくけこさしすせそ", "たちつてとなにぬねのはひふへほ", "まみむめもやゆよらりるれろわを"]),
+        ("match_parent", ["あ", "あいうえお", "かき"]),
+        ("width_200", ["あ", "あいうえお", "かき"]),
+        ("no_width", ["あ", "あいうえお", "かき"]),
+    ],
+    ("Radio", "selectedIcon"): ["checkmark.square.fill"],
+    ("Radio", "selected_icon"): ["checkmark.square.fill"],
+    # A second LITERAL, so the codegen differential's "second value" is not the
+    # bound case. Both of these plan exactly one literal, and with a bound case
+    # appended the probe compared `"Beta"` against `@{boundSelectedValue}` —
+    # which kjui DOES read (it reads only bindings), so the pair looked
+    # different and the real android finding disappeared. Masking a defect is
+    # the worse direction of the same artifact that filed nine false ones.
+    # Values are drawn from each fixture's own `items`.
+    ("Radio", "selectedValue"): ["Gamma"],
+    # A `<select>` with nothing selected displays its FIRST option, so
+    # `defaultValue="One"` over a list that begins with One is a visual
+    # no-op — read straight off the emitted DOM, which is what made this the
+    # one web-inert row of the family. With only two base items the sole
+    # non-default choice was the representative's own value, so the second
+    # case had nowhere to point but at the default; a third item gives it
+    # somewhere. The cross_effect row commissioned exactly this fix and
+    # named D as its owner, so it leaves the ledger with the change.
+    ("SelectBox", "selectedValue"): ['Three'],
+    # The NUMERIC face of a union-typed attribute. `fontWeight` is declared
+    # `["string", "number"]` and every fixture wrote `"bold"`, so the numeric
+    # spelling — legal, and named in the attribute's own description — was
+    # untested on all three platforms. It is not a hypothetical, though the
+    # crash is narrower than first recorded here: a numeric fontWeight
+    # ALONGSIDE `partialAttributes` killed `sjui build` with a NoMethodError,
+    # because the partial path reached label_converter's private copy of the
+    # weight vocabulary and called `.downcase` on an Integer (B, fixed in
+    # 2b58e99). B isolated it by controlled experiment against the pre-fix
+    # tools, where a numeric weight ON ITS OWN generated all 708 layouts.
+    #
+    # So this case proves the value is READ; the build failure needs the pair,
+    # and that lives in VARIANT_CASES (`fontWeight__*_with_partial`).
+    #
+    # No new table needed. A union's second type is another literal value, and
+    # EXTRA_CASES is where an attribute's extra literals go — same as Radio's
+    # icon vocabulary above. `600` is semibold in every platform's table.
+    ("Label", "fontWeight"): [600],
+    ("Button", "fontWeight"): [600],
+    # The faces F measured making the node DISAPPEAR on the dynamic path —
+    # the same mechanism as the wave's first finding (`fontSize: "@{x}"`
+    # deleting a Label). The object shapes are the declared properties
+    # (underline: color/lineOffset/lineStyle, strikethrough: color/lineStyle).
+    # Unlike onclick's array face, these do not kill any generator (measured:
+    # all three emit and differ from control), so they ship rather than hold.
+    ("Label", "underline"): [
+        ("styled", {"color": "#FF0000", "lineStyle": "Single", "lineOffset": 2}),
+        # Double/Thick landed on all three faces 2026-08-08 (android
+        # StyledTextLines, ios the UILabel bridge, web decoration-double /
+        # decoration-2) — these probes are what measure them. No colour on
+        # purpose: the style axis alone must discriminate from `true`.
+        ("double", {"lineStyle": "Double"}),
+        ("thick", {"lineStyle": "Thick"}),
+    ],
+    ("Label", "strikethrough"): [
+        ("styled", {"color": "#FF0000", "lineStyle": "Single"}),
+        ("double", {"lineStyle": "Double"}),
+        ("thick", {"lineStyle": "Thick"}),
+    ],
+    # The string spelling of a weight. "2" also differs from the numeric
+    # case's 1, so the two faces are distinguishable from each other too.
+    ("common", "weight"): [("as_string", "2")],
+    # The edges the representative (`["top", "bottom"]`) never names. The
+    # 1.9.0 product fix (fa537fab) made `leading` / `trailing` / `vertical`
+    # reach every platform; these are its conformance fixtures, first written in
+    # 83633f15, which was never merged. Named, so the list value does not
+    # become a stringified slug. On web a headless desktop viewport reports
+    # env(safe-area-inset-*) = 0, so these render like their control there —
+    # they prove the emit, and the insets are real on the devices.
+    ("View", "safeAreaInsetPositions"): [
+        ("leading", ["leading"]),
+        ("trailing", ["trailing"]),
+        ("vertical", ["vertical"]),
+    ],
+    ("SafeAreaView", "safeAreaInsetPositions"): [
+        ("leading", ["leading"]),
+        ("trailing", ["trailing"]),
+        ("vertical", ["vertical"]),
+    ],
+}
+
+#: Attributes that get a BOUND case: the value under test written as
+#: ``@{...}`` instead of a literal, with the data property declared.
+#:
+#: The suite had 30 bound fixtures and all of them were on attributes where
+#: binding is the FIRST-CLASS spelling — `text`, the callbacks, `visibility`.
+#: Coverage of the `bound-*` defect family (168 findings across the eight
+#: lane queues) was zero: dimensions, colours, enums and numbers, where
+#: binding is the exception, had not one bound fixture between them. So the
+#: 176 fixes A/B/C are landing in this wave were unprotected the moment they
+#: landed, and the render stage could not have caught a regression.
+#:
+#: The value is the DATA CLASS of the property, and it is load-bearing: the
+#: three codegen hosts compile these layouts, and kjui passes an unknown
+#: class straight through into Kotlin. Only `String` / `Int` / `Double` /
+#: `Boolean` (and `CollectionDataSource`) survive all three.
+#:
+#: Derived from the eight `bound-*` queues, not hand-listed. Three of the 84
+#: pairs are absent because E removed or alias-folded them (`SelectBox.text`,
+#: `Slider.minValue`, `Slider.maxValue`).
+BOUND_CASE_CLASSES: dict[tuple[str, str], str] = {
+    # --- String (36) ---
+    ('Button', 'disabledFontColor'): 'String',
+    ('Button', 'highlightColor'): 'String',
+    ('CheckBox', 'font'): 'String',
+    ('Collection', 'lazy'): 'String',
+    # jsonui-cli 1.9.29 (jui-collection-scrollto-per-request-anchor): the
+    # anchor of a scrollTo, chosen per request — the bound case lands by the
+    # bound value as the written one does (its scrollTo companion below).
+    ('Collection', 'scrollAnchor'): 'String',
+    ('Image', 'contentMode'): 'String',
+    ('Label', 'font'): 'String',
+    ('Label', 'fontFamily'): 'String',
+    ('Label', 'highlightColor'): 'String',
+    ('Label', 'textAlign'): 'String',
+    ('NetworkImage', 'contentMode'): 'String',
+    ('Radio', 'font'): 'String',
+    ('SelectBox', 'hintColor'): 'String',
+    ('Switch', 'thumbTintColor'): 'String',
+    ('Switch', 'tint'): 'String',
+    ('TabView', 'tabBarBackground'): 'String',
+    ('TextField', 'contentType'): 'String',
+    ('TextField', 'font'): 'String',
+    ('TextField', 'fontFamily'): 'String',
+    ('TextField', 'hintColor'): 'String',
+    ('TextView', 'font'): 'String',
+    ('TextView', 'fontFamily'): 'String',
+    ('TextView', 'hintColor'): 'String',
+    ('common', 'disabledBackground'): 'String',
+    ('common', 'highlightBackground'): 'String',
+    ('common', 'tapBackground'): 'String',
+    ('IconLabel', 'text'): 'String',
+    ('Radio', 'label'): 'String',
+    ('Radio', 'text'): 'String',
+    ('CheckBox', 'label'): 'String',
+    ('CheckBox', 'text'): 'String',
+    ('common', 'tintColor'): 'String',
+    ('Label', 'hintColor'): 'String',
+    ('Radio', 'selectedValue'): 'String',
+    ('SelectBox', 'maximumDate'): 'String',
+    ('SelectBox', 'minimumDate'): 'String',
+    ('SelectBox', 'selectedValue'): 'String',
+    # The 10.14.2 on-device batch: `srcName: "@{heartFilterIconName}"` rendered
+    # nothing on the dynamic path, because the raw `"@{expr}"` was handed to
+    # `Image(_:)` unresolved while `src` / `highlightSrc` went through
+    # processText. The image family had NO bound case — not one pair of the
+    # eighty-four came from it — so the suite could not have seen it.
+    #
+    # Web note (owner A): the bound emit is `` `/images/${prop}` ``, and the
+    # extension cannot be resolved from a runtime value the way
+    # `resolve_image_extension` resolves a literal. No single seed spells an
+    # asset all three faces resolve — ios and android take the bare catalogue
+    # name, web needs the extension — so the web face needs an EXTENSIONLESS
+    # copy of the asset under `hosts/web/public/images/`, the same trick the
+    # host already uses at its public root for the `src` face.
+    ('Image', 'srcName'): 'String',
+    # --- Wave 3, the 49 that this wave's own fixes touched ------------- #
+    #
+    # Lane G asked whether `Image.srcName` was one of a family, and the
+    # count says yes: 77 spellings declare `binding` and had no bound case
+    # (against 82 that did), so the bound face of most of the ecosystem was
+    # unguarded the same way srcName's was when it broke on device.
+    #
+    # Not all 77 land here. The orchestrator split them by whether THIS
+    # wave's converter work touched the spelling — those get their bound
+    # fixture now, as regression armour for the fix that just landed; pure
+    # new coverage waits for the next train so the adjudication stock does
+    # not re-inflate. The split is machine-derived (attribute quoted in an
+    # ADDED line of the wave's `*_tools/lib` diffs AND named in the commit
+    # message) and stable across three ways of asking: 60 / 60 / 56 / 52.
+    #
+    # Three of the 52 are held back for a class ruling, not forgotten:
+    # `SelectBox.items` is `array` and `common.width` / `common.height` are
+    # `number|enum|binding` — neither shape has a class that survives all
+    # three generators (the four-class vocabulary of 49-D §2.1).
+    ('Button', 'fontColor'): 'String',
+    ('Button', 'fontFamily'): 'String',
+    ('Button', 'image'): 'String',
+    ('Button', 'text'): 'String',
+    ('CheckBox', 'checked'): 'Boolean',
+    ('CheckBox', 'fontColor'): 'String',
+    ('IconLabel', 'selected'): 'Boolean',
+    ('Image', 'src'): 'String',
+    ('Indicator', 'animating'): 'Boolean',
+    ('Indicator', 'color'): 'String',
+    ('Label', 'disabledFontColor'): 'String',
+    ('Label', 'fontColor'): 'String',
+    ('Label', 'selected'): 'Boolean',
+    ('Label', 'text'): 'String',
+    ('Progress', 'progress'): 'Double',
+    ('Progress', 'progressTintColor'): 'String',
+    ('Progress', 'trackTintColor'): 'String',
+    ('Radio', 'fontColor'): 'String',
+    ('SafeAreaView', 'spacing'): 'Int',
+    ('Segment', 'selectedIndex'): 'Int',
+    ('SelectBox', 'selectedIndex'): 'Int',
+    ('SelectBox', 'selectedItem'): 'String',
+    ('Slider', 'value'): 'Double',
+    ('Switch', 'checked'): 'Boolean',
+    ('Switch', 'enabled'): 'Boolean',
+    ('Switch', 'fontColor'): 'String',
+    ('Switch', 'fontSize'): 'Int',
+    ('Switch', 'label'): 'String',
+    ('Switch', 'value'): 'Boolean',
+    ('TabView', 'selectedIndex'): 'Int',
+    ('TabView', 'tintColor'): 'String',
+    ('TabView', 'unselectedColor'): 'String',
+    ('TextField', 'fontColor'): 'String',
+    ('TextField', 'text'): 'String',
+    ('TextView', 'fontColor'): 'String',
+    ('TextView', 'text'): 'String',
+    ('common', 'background'): 'String',
+    ('common', 'borderColor'): 'String',
+    ('common', 'enabled'): 'Boolean',
+    ('common', 'endMargin'): 'Int',
+    ('common', 'heightWeight'): 'Int',
+    ('common', 'hidden'): 'Boolean',
+    ('common', 'leftMargin'): 'Int',
+    ('common', 'offsetX'): 'Int',
+    ('common', 'offsetY'): 'Int',
+    ('common', 'opacity'): 'Double',
+    ('common', 'rightMargin'): 'Int',
+    ('common', 'startMargin'): 'Int',
+    # --- 2026-08-08, the rest of the 77 (no-carryover ruling) ----------- #
+    #
+    # The wave-3 split sent only the touched spellings; the standing order
+    # is now "no carryover", so the remaining VISUAL binding-capable
+    # spellings all get their bound case here. Callback rows are NOT
+    # missing — they live in the interactive channel (__callback_fire);
+    # the structural shapes (items/params/bind/tag/scrollTo) carry holds
+    # with their class ruling below.
+    ('CheckBox', 'isOn'): 'Boolean',
+    ('Switch', 'isOn'): 'Boolean',
+    ('Switch', 'offTintColor'): 'String',
+    ('Collection', 'columns'): 'Int',
+    ('Collection', 'currentPage'): 'Int',
+    ('Collection', 'scrollEnabled'): 'Boolean',
+    ('ScrollView', 'scrollEnabled'): 'Boolean',
+    ('ScrollView', 'maxZoom'): 'Double',
+    ('ScrollView', 'minZoom'): 'Double',
+    ('Image', 'highlightSrc'): 'String',
+    ('Image', 'highlightSrcName'): 'String',
+    ('NetworkImage', 'src'): 'String',
+    ('NetworkImage', 'url'): 'String',
+    ('Web', 'url'): 'String',
+    ('SelectBox', 'selectedDate'): 'String',
+    ('common', 'aspectHeight'): 'Int',
+    ('common', 'aspectWidth'): 'Int',
+    ('common', 'bottomMargin'): 'Int',
+    ('common', 'topMargin'): 'Int',
+    ('common', 'canTap'): 'Boolean',
+    ('common', 'defaultBackground'): 'String',
+    ('common', 'innerPadding'): 'Int',
+    ('common', 'maxBottomMargin'): 'Int',
+    ('common', 'maxLeftMargin'): 'Int',
+    ('common', 'maxRightMargin'): 'Int',
+    ('common', 'maxTopMargin'): 'Int',
+    ('common', 'minBottomMargin'): 'Int',
+    ('common', 'minLeftMargin'): 'Int',
+    ('common', 'minRightMargin'): 'Int',
+    ('common', 'minTopMargin'): 'Int',
+    ('common', 'maxHeightWeight'): 'Int',
+    ('common', 'maxWidthWeight'): 'Int',
+    ('common', 'minHeightWeight'): 'Int',
+    ('common', 'minWidthWeight'): 'Int',
+    ('common', 'userInteractionEnabled'): 'Boolean',
+    ('common', 'widthWeight'): 'Int',
+    # --- Int (30) ---
+    ('CheckBox', 'fontSize'): 'Int',
+    ('CheckBox', 'spacing'): 'Int',
+    ('Label', 'fontSize'): 'Int',
+    ('Label', 'lineSpacing'): 'Int',
+    ('Radio', 'fontSize'): 'Int',
+    ('Radio', 'spacing'): 'Int',
+    ('Slider', 'maximum'): 'Int',
+    ('TextField', 'fontSize'): 'Int',
+    ('TextView', 'fontSize'): 'Int',
+    ('View', 'spacing'): 'Int',
+    ('common', 'cornerRadius'): 'Int',
+    ('common', 'padding'): 'Int',
+    ('common', 'weight'): 'Int',
+    ('Button', 'fontWeight'): 'Int',
+    ('Label', 'lines'): 'Int',
+    ('common', 'bottomPadding'): 'Int',
+    ('common', 'leftPadding'): 'Int',
+    ('common', 'rightPadding'): 'Int',
+    ('common', 'topPadding'): 'Int',
+    ('common', 'borderWidth'): 'Int',
+    ('common', 'maxHeight'): 'Int',
+    ('common', 'maxWidth'): 'Int',
+    ('common', 'minHeight'): 'Int',
+    ('common', 'minWidth'): 'Int',
+    ('common', 'paddingBottom'): 'Int',
+    ('common', 'paddingEnd'): 'Int',
+    ('common', 'paddingLeft'): 'Int',
+    ('common', 'paddingRight'): 'Int',
+    ('common', 'paddingStart'): 'Int',
+    ('common', 'paddingTop'): 'Int',
+    # --- Double (3) ---
+    ('Label', 'lineHeightMultiple'): 'Double',
+    ('Slider', 'minimum'): 'Double',
+    ('Label', 'minimumScaleFactor'): 'Double',
+    # --- Boolean (12) ---
+    ('Label', 'linkable'): 'Boolean',
+    ('common', 'alignBottom'): 'Boolean',
+    ('common', 'alignLeft'): 'Boolean',
+    ('common', 'alignRight'): 'Boolean',
+    ('common', 'alignTop'): 'Boolean',
+    ('common', 'centerHorizontal'): 'Boolean',
+    ('common', 'centerInParent'): 'Boolean',
+    ('common', 'centerVertical'): 'Boolean',
+    ('common', 'clipToBounds'): 'Boolean',
+    ('Radio', 'checked'): 'Boolean',
+    ('TextField', 'secure'): 'Boolean',
+    ('CheckBox', 'enabled'): 'Boolean',
+}
+
+
+#: Bound cases held back because the fixture would break the codegen HOST.
+#:
+#: A fixture that does not compile does not measure its own attribute badly —
+#: it stops that platform's ENTIRE run, because the host is one build. So a
+#: bound case whose emitted source does not build is declared here instead of
+#: shipped.
+#:
+#: This is a HOLD, not a decision. Each entry names who owns the defect, what
+#: the defect is, and — the load-bearing part — WHAT TO RUN to find out whether
+#: it is still true. The gate checks the `verify` axes it can execute itself
+#: and reports the rest as unverified holds rather than failing on them: a
+#: non-empty table is normal operation, because it means somebody found a
+#: defect and wrote it down. What the gate fails on is an entry with no owner,
+#: or one whose `verify` says it is already clear.
+#:
+#: Known `verify` axes, both of them established by having actually happened:
+#:
+#:   codegen-effect:bound-uncompilable
+#:       `jui conformance codegen-effect` reports the pair in that class.
+#:       Cleared 26 entries when A/B/C fixed the raw `Modifier.width(@{v}.dp)`
+#:       interpolation family.
+#:   web-host-typecheck
+#:       regenerate `conformance/hosts/web` and run `tsc --noEmit`.
+#:       Cleared the last 6 — and the differential said nothing about them,
+#:       because it only asks whether `@{` survived into the output, never
+#:       whether the output typechecks. One axis would have missed them.
+#:
+#: Empty today. It stays in the file precisely because it is empty: the next
+#: bound fixture that stops a host from building needs somewhere to be declared
+#: with its reason, rather than quietly deleted.
+BOUND_CASES_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
+    # ("Label", "textAlign"): {
+    #     "owner": "A",
+    #     "reason": "React.CSSProperties['textAlign'] is a literal union; a "
+    #               "plain string does not assign",
+    #     "verify": "web-host-typecheck",
+    # },
+}
+
+#: Declared types whose fixture is held back because EMITTING it breaks the
+#: generator. Same three fields as the other holds.
+#:
+#: An attribute typed `string|array` whose array face nothing has ever written
+#: is not a hypothetical gap: measured on all three, writing
+#: `onclick: ["confPush", "confPop"]` gives
+#:
+#:   ios      both selectors emitted — the codegen is right, and F's finding is
+#:            that the DYNAMIC path invokes neither
+#:   android  generation dies: NoMethodError, undefined method `match?' for
+#:            Array (kjui get_event_handler_call, reached from
+#:            modifier_builder.rb:732 and button_component.rb:71)
+#:   web      emits `onClick={data.["confPush", "confPop"]}` — TS1003,
+#:            not valid syntax
+#:
+#: Two of three cannot build, and a fixture that stops a host building takes
+#: that platform's whole run with it. So the fixture is written and held, the
+#: same way the bound cases were: each entry names what has to be true for it
+#: to come out, and it comes out the moment that is true.
+ARRAY_FACE_BLOCKED: dict[tuple[str, str], dict[str, str]] = {
+    ("common", "onclick"): {
+        "owner": "C + A",
+        "reason": "kjui raises NoMethodError (`match?` on an Array) and rjui "
+                  "emits `data.[...]`, which is not syntax; ios emits both "
+                  "selectors correctly",
+        "verify": "codegen-probe:all-three-emit",
+    },
+}
+
+
+def _check_array_face_blocked() -> None:
+    for pair, hold in ARRAY_FACE_BLOCKED.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not hold.get(f)]
+        if missing:
+            raise ValueError(
+                f"ARRAY_FACE_BLOCKED[{pair!r}] is missing {missing!r}"
+            )
+
+
+#: Fixture pairs that are EXPECTED to render identically to each other.
+#:
+#: The visual check compares each fixture to its control, and nothing compares
+#: two declared values to one another. So "both differ from the control, and
+#: are identical to each other" passes everything — which is exactly what
+#: `distribution`'s four values do. The manifest now carries a `peerGroup` so a
+#: gate can make that comparison; this is where the exceptions are declared,
+#: because some values legitimately draw the same picture.
+#:
+#: `borderStyle__solid` is the shape to keep in mind: `solid` IS the declared
+#: default, so it drawing what the default draws is correct, and a bare
+#: pairwise-distinct rule would file the correct implementation as a defect.
+#: A device that turns adjudicated-correct behaviour red is worse than no
+#: device — it trains people to ignore it.
+#:
+#: Empty on purpose. Populating it from guesses would pre-declare exceptions
+#: nobody has measured; the entries belong to whoever runs the comparison and
+#: sees a pair come back identical. Same three fields as the other ledgers.
+PEER_EXPECTED_IDENTICAL: dict[tuple[str, str, str, str], dict[str, str]] = {
+    # ("common", "borderStyle", "solid", "dashed"): {
+    #     "owner": "E",
+    #     "reason": "…",
+    #     "verify": "…",
+    # },
+}
+
+
+def _check_peer_exceptions() -> None:
+    for key, entry in PEER_EXPECTED_IDENTICAL.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not entry.get(f)]
+        if missing:
+            raise ValueError(
+                f"PEER_EXPECTED_IDENTICAL[{key!r}] is missing {missing!r} — an "
+                "expected-identical pair without a reason is indistinguishable "
+                "from a defect nobody looked at"
+            )
+
+
+#: Attributes reachable only through UIKit, which nothing in the conformance
+#: suite renders — and which, by the 2026-08-05 user ruling, nothing will.
+#:
+#: Neither iOS path can photograph them, for two independent reasons:
+#:
+#:   codegen host   UIKit attributes are applied by the Swift runtime and
+#:                  never pass through a Ruby converter (the same fact
+#:                  MODE_PLATFORM_MAP records: `uikit` maps to no codegen).
+#:   dynamic host   it is the SwiftUI dynamic renderer, not the UIKit one
+#:                  (INTERACTIVE_HOST_CONTRACT.md:56).
+#:
+#: 61 fixtures sat in this position calling themselves `visual`: generated,
+#: control-bearing, counted as visual coverage, and never once captured. Only
+#: three ever surfaced, because only those three happened to be in a baseline;
+#: the rest were absorbed by the no_baseline / missing_artifact ratchets.
+#:
+#: The ruling is to stop measuring them, and the class is where that has to be
+#: recorded — a ledger entry alone would leave 61 fixtures still claiming
+#: coverage they do not have, which is the failure this wave exists to remove.
+#: A decision not to measure has to show up in the numbers.
+#:
+#: The fixtures STAY. A `mode: uikit` attribute is a legal iOS layout and the
+#: fixture proves the declaration survives generation; what changes is that it
+#: stops pretending to be a photograph.
+#:
+#: Deliberately NOT `is_non_observable`, which means "no still capture could
+#: ever show this". These could be shown — by a UIKit host. The reason is that
+#: we chose not to point a camera at them, and the two reasons should not be
+#: filed under one name.
+def is_uikit_only(defn: dict) -> bool:
+    """True when ``mode`` names UIKit and nothing else."""
+    raw = defn.get("mode")
+    modes = raw if isinstance(raw, list) else ([raw] if raw else [])
+    return bool(modes) and set(modes) == {"uikit"}
+
+
+#: Attributes whose fixture cannot be SHAPED to observe them yet, with what is
+#: missing. Same three fields as the bound-hold table: who owns it, what the
+#: obstacle is, and what would settle it.
+#:
+#: Deliberately NOT wired into `is_non_observable`. That table says "no still
+#: capture can ever show this", which is a permanent claim; these are the
+#: opposite — the attribute is observable in principle and the generator simply
+#: cannot build the fixture that would show it today. Declaring them
+#: unobservable would be the mistake A caught over `disabledBackground`:
+#: pronouncing something unmeasurable when a fix would reveal it.
+#:
+#: So the fixtures stay, keep their controls, and go on reporting inert. This
+#: table is what stops that inert from being read as a defect — and what tells
+#: the next person which single mechanism unlocks it.
+UNSHAPEABLE_FIXTURES: dict[tuple[str, str], dict[str, str]] = {
+    # Empty, and every entry it ever held came out the way the table was meant
+    # to work: the `verify` condition was written down, somebody else met it,
+    # and the row went. `Blur.blurRadius` and `common.indexAbove` needed a
+    # root-children mechanism, which turned out to be two `root.` companions;
+    # `Collection.scrollAnchor` needed a scrollTo data class that compiles on
+    # three hosts, which E made a plain value (9930e18) and B unblocked by
+    # replacing sjui's `.throttle` with `.onChange` (8c41e3e).
+    #
+    # Keep the table. The next fixture the generator cannot shape needs
+    # somewhere to be declared with its owner and its release condition,
+    # instead of being called "next wave".
+}
+
+
+def _check_unshapeable() -> None:
+    for pair, entry in UNSHAPEABLE_FIXTURES.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not entry.get(f)]
+        if missing:
+            raise ValueError(
+                f"UNSHAPEABLE_FIXTURES[{pair!r}] is missing {missing!r} — an "
+                "unmeasurable fixture without an owner is just an unexplained "
+                "inert result"
+            )
+
+
+#: `verify` values the gate knows how to act on. A hold naming anything else is
+#: still legal — it just cannot be checked automatically, so it surfaces in the
+#: report as an unverified hold instead of being silently trusted.
+BOUND_HOLD_VERIFY_AXES = frozenset(
+    {"codegen-effect:bound-uncompilable", "web-host-typecheck"}
+)
+
+#: Fields every hold must carry. Enforced at import: a hold that loses its
+#: owner stops being a hold and becomes an unexplained gap in the suite.
+BOUND_HOLD_FIELDS = ("owner", "reason", "verify")
+
+def _check_bound_holds() -> None:
+    for pair, hold in BOUND_CASES_BLOCKED.items():
+        missing = [f for f in BOUND_HOLD_FIELDS if not hold.get(f)]
+        if missing:
+            raise ValueError(
+                f"BOUND_CASES_BLOCKED[{pair!r}] is missing {missing!r} — a hold "
+                "without an owner and a way to verify it is an unexplained gap"
+            )
+
+
+_check_bound_holds()
+_check_unshapeable()
+_check_peer_exceptions()
+_check_array_face_blocked()
+
+
+#: Name of the data property a bound case binds to, per attribute.
+BOUND_PROP_PREFIX = "bound"
+
+
+def bound_prop_name(attribute: str) -> str:
+    """`fontSize` -> `boundFontSize`. Prefixed so it cannot collide with a
+    companion binding (`inputText`, `pickedDate`) or a host data property."""
+    return f"{BOUND_PROP_PREFIX}{attribute[:1].upper()}{attribute[1:]}"
+
+
+#: Suffix marking the bound case in a fixture id.
+BOUND_CASE_SUFFIX = "binding"
+
+
+def bound_case_for(
+    section: str, attribute: str, assertions: tuple[dict, ...] = ()
+) -> CasePlan | None:
+    """The bound case for this attribute, or None if it does not get one.
+
+    *assertions* is carried over from the literal case on assertable
+    attributes: the bound property is seeded with the same value, so the
+    fixture must satisfy the same assertion — and it only can if the binding
+    actually resolved. Without them the test is a `waitFor` and nothing else.
+    """
+    cls = BOUND_CASE_CLASSES.get((section, attribute))
+    if cls is None or (section, attribute) in BOUND_CASES_BLOCKED:
+        return None
+    prop = bound_prop_name(attribute)
+    return CasePlan(
+        name=BOUND_CASE_SUFFIX,
+        value=f"@{{{prop}}}",
+        written_key=attribute,
+        assertions=assertions,
+    )
+
+
+#: Enum value promoted to the FRONT of an attribute's case list.
+#:
+#: Every enum value still gets its own fixture; this only decides which one is
+#: the attribute's *representative* — the value the alias probe mirrors and the
+#: codegen differential calls `primary`. When the first value in the SSoT enum
+#: is one the converters deliberately ignore, the representative measures the
+#: rejection instead of the attribute.
+PREFERRED_PRIMARY_CASE: dict[tuple[str, str], Any] = {
+    # `return '' unless %w[graphical inline].include?(style)` (rjui
+    # select_box_converter.rb:487). The enum leads with `automatic`, which is
+    # exactly the arm that emits nothing.
+    ("SelectBox", "datePickerStyle"): "graphical",
+    # --- representative == platform default (lane A §5, 2026-08-05) --------- #
+    #
+    # These enums lead with the value the platform already renders when the
+    # attribute is absent, so the fixture and its control come out identical
+    # and the visual check reads "identical to control, investigate" — a false
+    # positive that looks exactly like a dropped attribute. Every value still
+    # gets its own fixture; this only moves the REPRESENTATIVE off the default.
+    # The replacements are the machine's own second value (`codegen-effect`
+    # `representativeValueCandidates`), not hand-picked.
+    # `medium` IS the circular style an indeterminate ProgressView already
+    # draws, so the emit was correct (C0 passes) and the picture was the
+    # control's. `large` adds `.scaleEffect(1.5)` and discriminates. Measured
+    # by B, same family as GradientView.locations.
+    ("Indicator", "indicatorStyle"): "large",
+    # Progress has the same pair and the same trap, one component along:
+    # `medium` is the size an indeterminate ProgressView already draws, so the
+    # fixture asked for its control. B measured it as value-is-default.
+    ("Progress", "indicatorStyle"): "large",
+    # `Vertical` is the default gradient axis, so the direction fixture drew
+    # what a gradient with no direction draws. Now that the fixture has a
+    # gradient at all (this round), the representative has to be off the
+    # default for the attribute to show.
+    ("View", "gradientDirection"): "Horizontal",
+    ("Collection", "defaultScrollAnchor"): "center",
+    ("Collection", "layout"): "horizontal",
+    ("Collection", "lazy"): "eager",
+    ("GradientView", "gradientDirection"): "Horizontal",
+    ("IconLabel", "iconPosition"): "Right",
+    ("Image", "contentMode"): "fill",
+    ("Image", "renderingMode"): "template",
+    ("Label", "lineBreakMode"): "Clip",
+    ("ScrollView", "scrollMode"): "window",
+    ("SelectBox", "datePickerMode"): "time",
+    ("SelectBox", "selectItemType"): "Date",
+    ("Switch", "labelPosition"): "trailing",
+    ("TextView", "lineBreakMode"): "Clip",
+    ("TextView", "resize"): "both",
+    ("View", "direction"): "bottomToTop",
+    ("View", "distribution"): "fillEqually",
+    ("common", "alignment"): "top",
+    ("common", "distribution"): "fillEqually",
+    # Radio icon/selectedIcon rows (promote `square` over `circle`) were
+    # removed when the primary became the bundled asset: an SF-Symbol
+    # representative names an asset ios cannot resolve, and its empty glyph
+    # sits exactly on the icon-less control — the inert false positive this
+    # table exists to prevent.
+}
+
+#: Text-ish string attributes that read better with a hint payload.
+HINT_ATTRS = {"hint", "placeholder"}
+HINT_TEXT = "Conformance Hint"
+
+#: Text long enough to wrap several times inside the 200pt text hosts, for
+#: attributes that only act once there is MORE content than fits (line caps,
+#: break modes). The one-word base text made every such value render the same
+#: pixels as its control.
+#: Text with a URL in it, for `linkable`: the attribute turns URLs in the body
+#: into links, and the plain sample text contains none, so it had nothing to
+#: turn (lane F family-B, group A3).
+LINK_TEXT = "See https://example.com/conformance for details"
+
+LONG_TEXT = (
+    "Sample text long enough to wrap onto several lines inside the "
+    "two hundred point wide conformance hosts"
+)
+
+#: Fallback representative values by scalar type.
+DEFAULT_NUMBER = 8
+DEFAULT_STRING = "sample"
+DEFAULT_COLOR = "#FF0000"
+
+# --------------------------------------------------------------------------- #
+# Host component / base attribute tables
+# --------------------------------------------------------------------------- #
+
+#: Base attributes merged into the target node so it renders something
+#: meaningful (text content, sizes, required attrs...). The attribute under
+#: test overrides its base entry when the keys collide.
+BASE_ATTRS: dict[str, dict[str, Any]] = {
+    "View": {"width": 200, "height": 200, "background": "#DDDDDD"},
+    "SafeAreaView": {"width": "matchParent", "height": "matchParent", "background": "#DDDDDD"},
+    "ScrollView": {"width": 200, "height": 200, "background": "#DDDDDD"},
+    "CircleView": {"width": 100, "height": 100, "background": "#DDDDDD"},
+    "GradientView": {"width": 100, "height": 100, "gradient": ["#FF0000", "#0000FF"]},
+    "Blur": {"width": 100, "height": 100},
+    # Collections render their declared cells (F4 Phase 2): without them a
+    # bare container is all any layout attribute (columns, itemSpacing,
+    # insets...) has to act on, and every such fixture renders identically.
+    # The cell view name doubles as the layout FILE stem — iOS dynamic loads
+    # it verbatim, Android dynamic snake_cases it (identity here), the three
+    # codegens PascalCase it — so it must stay snake_case. Item data arrives
+    # through the layout root `data` section (BASE_DATA below), the one
+    # channel all four render paths share (INTERACTIVE_HOST_CONTRACT.md §4).
+    "Collection": {
+        "width": 200,
+        "height": 200,
+        "background": "#DDDDDD",
+        "sections": [{"cell": "conformance_cell"}],
+        "items": "@{items}",
+    },
+    "TabView": {"width": "matchParent", "height": "matchParent", "tabs": [{"title": "One"}, {"title": "Two"}]},
+    # An explicit width wider than the text is what makes `textAlign` /
+    # `gravity` observable. On wrapContent these hosts are exactly as wide as
+    # their content, so every alignment value renders the same pixels and the
+    # fixture cannot tell a working implementation from a dropped attribute.
+    "Label": {"text": "Sample", "width": 200},
+    "IconLabel": {"text": "Sample", "width": 200},
+    "Button": {"text": "Sample", "width": 200},
+    "TextField": {"hint": "Sample", "width": 200},
+    "TextView": {"hint": "Sample", "width": 200, "height": 100},
+    "EditText": {"hint": "Sample", "width": 200},
+    "Input": {"hint": "Sample", "width": 200},
+    # `group` is required (attribute_definitions Radio.group); a Radio
+    # without one is input the validator warns on. Every Radio fixture belongs
+    # to the one group, so `checked` is asked of a grouped radio, the case its
+    # `with_group` variant existed to reach (removed 2026-10-07).
+    "Radio": {"text": "Sample", "width": 200, "group": "conformance_group"},
+    "CheckBox": {"text": "Sample", "width": 200},
+    "Check": {"text": "Sample", "width": 200},
+    "Segment": {"items": ["One", "Two"], "width": 200},
+    # No height (OMIT): a SelectBox's height when the layout writes none is the rule under test on every
+    # SelectBox fixture — the content's height, as wrapContent (ticket
+    # kjui-selectbox-fixed-56dp-ignores-wrap-content-height: iOS took all the free height, Android fixed 56dp).
+    "SelectBox": {"items": ["One", "Two", "Three"], "width": 200, "height": OMIT},
+    "Slider": {"width": 200},
+    "Progress": {"width": 200},
+    # Deliberately NOT square: the bundled asset is 96x96, so in a square box
+    # fit / fill / aspectFit / aspectFill / center all render the same image and
+    # `contentMode` is untestable. A 140x80 box makes each mode distinguishable.
+    "Image": {"src": IMAGE_ASSET_NAME, "width": 140, "height": 80},
+    "NetworkImage": {"defaultImage": IMAGE_ASSET_NAME, "width": 140, "height": 80},
+    "Web": {"html": "<p>Sample</p>", "width": 200, "height": 200},
+}
+
+#: One stripe is this wide, in pt. The blur radii the styles resolve to are
+#: 12-16dp (see the `Blur.effectStyle` entry), so a stripe has to be of that
+#: order for the smear to change the picture rather than erase it.
+_STRIPE_PT = 20
+
+#: Band ids. Letters first because the two Blur families were baked with
+#: `stripe_a..d` and their baselines carry those exact spellings.
+_STRIPE_IDS = "abcdefghijklmnopqrstuvwxyz"
+
+#: The backdrop's own fill. It is the LAST band of the cycle, not a
+#: margin: at the baked width the four stripes cover 80 of 100pt and this
+#: shows through the remaining 20. Measured on `effectStyle__ultrathin`,
+#: the right edge of the blurred square reads (190,134,108) — green smeared
+#: into red — so the band is load-bearing, and a wider backdrop that paved
+#: over it would drop a colour the baked renders are using.
+_BACKDROP_FILL = "#FF0000"
+
+#: The band colours, cycled to fill the requested width. White alternates
+#: with a saturated hue so the swing shows in every channel: over the red
+#: fill the scrim differences land on G and B, and the white/blue and
+#: white/green pairs keep R moving too. The fill is the fifth entry, which
+#: is why the cycle is 5 long while only `width/_STRIPE_PT - 1` stripes are
+#: ever emitted — the last band of each cycle is the fill itself.
+_STRIPE_COLOURS = ("#FFFFFF", "#0000FF", "#FFFFFF", "#00AA00", _BACKDROP_FILL)
+
+
+def _striped_backdrop(width: int = 100, height: int = 100) -> list[dict[str, Any]]:
+    """A HIGH-FREQUENCY backdrop node, freshly built on each call.
+
+    Three separate families need something behind the target that is neither
+    flat nor white, and all three need it for the same arithmetic reason (see
+    the `Blur.blurRadius`, `Blur.effectStyle` and `TextField.applyLiquidGlass`
+    entries). Built by a function rather than shared as a literal so the
+    entries cannot alias each other's nested child list.
+
+    `width` defaults to 100 because that is what the two `Blur` entries were
+    generated with and their baselines are baked against it — changing the
+    default would re-bake twelve fixtures to say nothing new. A family whose
+    target is wider passes its own width: the stripes must reach under the
+    WHOLE target, or the part hanging off the edge sits over white and is
+    silent, which is the defect this backdrop exists to remove.
+
+    The stripes are cycled to fill `width`, so the count follows from the
+    width rather than being written down twice.
+    """
+    # One band short of the full width: the backdrop's own fill is the last
+    # band. At width 100 this is the four letter-named stripes the Blur
+    # baselines were baked with, unchanged.
+    count = width // _STRIPE_PT - 1
+    stripes = [
+        {"type": "View", "id": f"stripe_{_STRIPE_IDS[i]}", "width": _STRIPE_PT,
+         "height": height, "background": _STRIPE_COLOURS[i % len(_STRIPE_COLOURS)]}
+        for i in range(count)
+    ]
+    return [
+        {"type": "View", "id": "backdrop", "width": width, "height": height,
+         "background": _BACKDROP_FILL, "orientation": "horizontal",
+         "child": stripes},
+    ]
+
+
+#: Extra base attributes for specific attributes, so the fixture gives the
+#: attribute under test something to act on.
+#:
+#: A View with no `orientation` is an OVERLAY: the converters stack children on
+#: top of each other (web emits `relative` + `absolute inset-0`). Nothing that
+#: depends on flow — wrapping, distribution, gravity, padding reflow, child
+#: order — can be observed in that mode, and the fixture-vs-control check
+#: measured exactly that: `flexWrap`, `distribution`, `gravity` and `padding`
+#: all rendered pixel-identical to a fixture without them.
+#:
+#: Overlay mode is worth testing, but not by the fixture for a flow attribute.
+BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
+    # Text size following: drawn at twice the standard text size (root.textScale, see text_scale), with text to
+    # draw where the base has none.
+    "fontScaling": {"root.textScale": 2.0},
+    "maxFontScale": {"root.textScale": 2.0},
+    "TextView.fontScaling": {"text": "Sample", "root.textScale": 2.0},
+    "TextView.maxFontScale": {"text": "Sample", "root.textScale": 2.0},
+    # A selected value and a label to scale: without them the closed SelectBox and the Switch drew no text, so the
+    # rule went unmeasured on them (2026-11-14: Android's CheckBox kept a hole such a fixture could not see).
+    "SelectBox.fontScaling": {"selectedIndex": 0, "root.textScale": 2.0},
+    "SelectBox.maxFontScale": {"selectedIndex": 0, "root.textScale": 2.0},
+    "Switch.fontScaling": {"label": "Sample", "root.textScale": 2.0},
+    "Switch.maxFontScale": {"label": "Sample", "root.textScale": 2.0},
+    "TextField.fontScaling": {"text": "Sample", "root.textScale": 2.0},
+    "TextField.maxFontScale": {"text": "Sample", "root.textScale": 2.0},
+    # Text-styling attributes need TEXT to style: the TextField/TextView base
+    # is hint-only, so font/fontColor/... rendered nothing to look at and the
+    # 33 cross-effect sweep measured platform-dependent placeholder
+    # inheritance instead of the attribute (fixture-observability family).
+    "TextView.font": {"text": "Sample"},
+    "TextView.fontColor": {"text": "Sample"},
+    "TextView.fontFamily": {"text": "Sample"},
+    "TextView.fontSize": {"text": "Sample"},
+    "TextField.font": {"text": "Sample"},
+    "TextField.fontColor": {"text": "Sample"},
+    "TextField.fontFamily": {"text": "Sample"},
+    # iconPosition/iconMargin need an ICON to position (base is text-only).
+    "IconLabel.iconPosition": {"icon_off": IMAGE_ASSET_NAME},
+    # iconSize needs an ICON to size (same family).
+    "IconLabel.iconSize": {"icon_off": IMAGE_ASSET_NAME},
+    "IconLabel.iconMargin": {"icon_off": IMAGE_ASSET_NAME},
+    # Checked-state skins need the checked state to exist, and a BASE icon
+    # distinct from the selected one — with a single asset the state swap
+    # renders identically whichever image wins (33: single-asset
+    # unobservability, the NetworkImage alt-asset precedent).
+    "CheckBox.selectedIcon": {"checked": True, "icon": IMAGE_ASSET_NAME},
+    # Radio.icon is 2P-scoped while selected_icon is 3P — the checked
+    # state alone makes the swap observable (ALT image vs default glyph).
+    "Radio.selectedIcon": {"checked": True},
+    "Radio.selected_icon": {"checked": True},
+    # selectedValue is the GROUP's selection binding, and every platform only
+    # has a group to select from when the radio declares `items`: sjui takes
+    # the group path on `items.any?` (radio_converter.rb:13) and kjui reads the
+    # spelling only inside generate_radio_group_with_items
+    # (radio_component.rb:293-295). A single radio has no selection to name —
+    # its own identity is `value` — so the old `{value: "sample"}` companion
+    # was answering a different question. The representative value is one of
+    # these items (VALUE_OVERRIDES_BY_SECTION: "Beta").
+    "Radio.selectedValue": {"items": ["Alpha", "Beta", "Gamma"]},
+    "CheckBox.checkedColor": {"checked": True},
+    "Radio.checkedColor": {"checked": True},
+    # onTintColor colors the ON track — the switch must be on to show it.
+    "Switch.onTintColor": {"isOn": True},
+    # --- plan 34 fixture-observability round (2026-08-04) ------------------ #
+    # Every converter reads `text || label`, and the Radio base supplies
+    # `text` — so `label` lost the coin toss on all three platforms and the
+    # fixture measured inert everywhere. Dropping the mask does NOT make the
+    # fixture pass: sjui's radio_converter never reads `label` at all (grep:
+    # zero hits), so iOS stays inert. That is the point — the mask was hiding
+    # a real single-platform gap behind a uniform one.
+    "Radio.label": {"text": None},
+    # `placeholder` is declared as an ALIAS of `hint`, and the base injects
+    # `hint` — so the fixture carried both spellings, the primary won, and the
+    # alias could never move a pixel however correctly it resolved. Same for
+    # Label, whose hint only shows "when empty" and whose base supplies text.
+    #
+    # Dropping the text is necessary but NOT sufficient (49-D re-measure): the
+    # canonical Label hint contract — UIKit SJUILabel, mirrored by all three
+    # codegens — requires BOTH keys, `hint` AND `hintAttributes`
+    # (rjui label_converter.rb:89 `return nil unless attrs.is_a?(Hash) …`,
+    # sjui label_converter.rb:392 label_hint_config, kjui text_component.rb:
+    # 457). With no hintAttributes the styled-hint swap never happens and the
+    # fixture emitted an empty label on every platform. `hintAttributes` here
+    # carries NO fontColor on purpose, so `hintColor` is the one that decides
+    # the colour (`attrs['fontColor'] || hintColor`).
+    "Label.hint": {"text": None, "hintAttributes": {"fontSize": 12}},
+    "Label.placeholder": {"text": None, "hintAttributes": {"fontSize": 12}},
+    # hintColor styles the HINT, so the hint has to be the thing rendering:
+    # drop the base text (a non-empty Label never shows its hint) AND supply
+    # the hint itself, or the fixture is an empty label with a colour setting.
+    "Label.hintColor": {
+        "text": None,
+        "hint": HINT_TEXT,
+        "hintAttributes": {"fontSize": 12},
+    },
+    # Same shape for the bag itself: the hint must be the thing rendering, and
+    # the bag under test is the second half of the BOTH-keys contract, so no
+    # extra hintAttributes base is needed (or wanted — it would collide with
+    # the value under test).
+    "Label.hintAttributes": {"text": None, "hint": HINT_TEXT},
+    # minimumScaleFactor is the FLOOR of the auto-shrink, read only inside
+    # `if attributes['autoShrink']` (rjui label_converter.rb:450). Without the
+    # switch there is no shrinking for a floor to bound.
+    "Label.minimumScaleFactor": {"autoShrink": True, "text": LONG_TEXT},
+    "TextField.placeholder": {"hint": None},
+    "TextView.placeholder": {"hint": None},
+    # placeholderColor styles the PLACEHOLDER, so the placeholder spelling has
+    # to be the one rendering — with the base hint present, hintColor governs.
+    "TextField.placeholderColor": {"hint": None, "placeholder": HINT_TEXT},
+    # Range attributes move the thumb only if there IS a thumb position: with
+    # no value declared the thumb sits at an end on every platform and the
+    # range can be anything (ios pinned it at min, android at max, web at the
+    # midpoint — all three inert). Same reason Slider.tintColor already has it.
+    "Slider.maximum": {"value": 0.5},
+    "Slider.maxValue": {"value": 0.5},
+    "Slider.minimum": {"value": 0.5},
+    "Slider.minValue": {"value": 0.5},
+    "Slider.step": {"value": 0.5},
+    "Slider.trackTintColor": {"value": 0.5},
+    "Slider.progressTintColor": {"value": 0.5},
+    # iconColor maps to the CHECKMARK (kjui: Material checkmarkColor, sjui:
+    # the glyph tint) — an unchecked box draws no checkmark to tint.
+    "CheckBox.iconColor": {"checked": True},
+    # `selected` chooses icon_on over icon_off and selectedFontColor over
+    # fontColor (SSoT), so both alternatives must exist for the swap to show;
+    # and selectedFontColor is only in force while selected.
+    "IconLabel.selected": {
+        "icon_off": IMAGE_ASSET_NAME,
+        "icon_on": IMAGE_ALT_ASSET_NAME,
+        "selectedFontColor": "#FF0000",
+    },
+    "IconLabel.selectedFontColor": {"selected": True},
+    # Label.selected switches the label to highlightAttributes (SSoT) — with
+    # none declared there is nothing to switch TO.
+    "Label.selected": {"highlightAttributes": {"fontColor": "#FF0000"}},
+    # Disabled skins need the disabled state, which IS reachable in a static
+    # capture (unlike pressed/tapped).
+    "disabledBackground": {"enabled": False},
+    "disabledFontColor": {"enabled": False},
+    # secure masks TEXT; the base is hint-only, so there was nothing to mask.
+    "TextField.secure": {"text": "Sample"},
+    # columnSpacing is the gap BETWEEN columns — the default single-column
+    # collection has no gap to size.
+    # A safe-area inset is PADDING, and padding does not move the outside of a
+    # box that is already pinned to both parent edges — `matchParent x
+    # matchParent` is the same rectangle whatever is inset inside it. Fixing
+    # the size lets the inset show on the outline. F measured it: at 200x200 a
+    # local smoke gives distance 10 where matchParent gives 0.
+    #
+    # Scoped to SafeAreaView: `View.safeAreaInsetPositions` sits on the View
+    # base, which is already a fixed 200x200 square.
+    "SafeAreaView.safeAreaInsetPositions": {
+        "width": 200,
+        "height": 200,
+    },
+    # `align*OfView` places the target OUTSIDE the anchor's edge, so the target
+    # needs that much room between the anchor and the screen edge. With the
+    # 200pt View base and the anchor 60pt in, `alignTopOfView` put the target
+    # at y = -140..60 and `alignLeftOfView` at x = -140..60: off-screen, so
+    # BOTH the dynamic and the codegen host drew nothing, parity read the two
+    # blanks as agreement, and inert-complete saw no difference either. Two
+    # empty pictures agreeing is the most convincing kind of nothing. (Lane G.)
+    #
+    # A 50pt target with the anchor 120pt in puts all four directions on
+    # screen — top/left at 70..120, bottom/right at 170..220, against a control
+    # at 0..50 — which fits the narrowest host (a ~390pt phone) with room to
+    # spare and leaves a 70pt shift to see. Checked arithmetically for 50 / 100
+    # / 200 before writing it down; 100 fits but only shifts 20pt, and 200 does
+    # not fit at all.
+    # `backdrop-filter` blurs what is BEHIND the element, and the root is an
+    # overlay — so an earlier sibling sits underneath the target. A flat colour
+    # blurs to the same flat colour, which is why every radius rendered its
+    # control; stripes give the blur something to smear.
+    "Blur.blurRadius": {"root.backdrop": _striped_backdrop()},
+    # `intensity` is a blur radius as well (rjui: intensity × 20 px), so it needs
+    # the same stripes underneath; 2.3.21's fixture blurred a white page.
+    "Blur.intensity": {"root.backdrop": _striped_backdrop()},
+    # The same missing backdrop, one attribute along, and the arithmetic is
+    # exact rather than approximate. A material is a scrim PLUS a blur, and
+    # the two values the ledger records as collapsed differ in both:
+    #
+    #   prominent   White @ alpha 0.90, blur 12dp
+    #   thick       White @ alpha 0.85, blur 16dp
+    #
+    # (kjui `library-dynamic/.../helpers/EffectStyleTable.kt`; the codegen
+    # emits the same two alphas — measured, `.background(Color.White.copy(
+    # alpha = 0.9f))` vs `0.85f`.) Over the fixture's uniform light backdrop
+    # NEITHER term can show: white over white is white at every alpha, and
+    # blurring a flat field returns the flat field. The renders are not
+    # within a quantisation step of each other, they are IDENTICAL, which is
+    # what `diff_pixels` (min_pixels 0, any non-zero channel counts) reported.
+    #
+    # Against the stripes both terms become measurable, and the assertion
+    # stays away from the 8-bit floor the device declares it does not meter:
+    # over the #FF0000 field the two scrims differ by 0.05 * 255 ≈ 12.75
+    # levels on G and B — about thirteen quantisation steps, not a fraction of
+    # one — and the 12dp/16dp radii smear the stripe edges over different
+    # widths. Ledger row: value_discrimination `common.effectStyle` android
+    # prominent/thick, owner G, `backdrop-collapses-8bit`.
+    "Blur.effectStyle": {"root.backdrop": _striped_backdrop()},
+    # The common spelling on its default `View` host (COMMON_HOST_OVERRIDES
+    # no longer moves it to a Blur). The target keeps the View base's 200x200
+    # and its six boxes, so the backdrop is 200x200 to reach under all of it
+    # on both axes, as `glass` does. `background: None` drops the base's
+    # opaque #DDDDDD: web paints the material's scrim only when no background
+    # is declared, and an opaque fill between the backdrop filter and the
+    # stripes would make every value draw the same grey square.
+    "View.effectStyle": {"root.backdrop": _striped_backdrop(width=200, height=200),
+                         "background": None},
+    # The THIRD family that needs something behind it, found the same way
+    # the first two were: the three glass fixtures render over the bare root,
+    # which is white, and a material over white is white at every setting.
+    #
+    # Measured on the ALREADY-BAKED `common/effectStyle__*` renders, which
+    # have this backdrop (ios, 1206x2622, interior of the 100x100 square):
+    # all nine styles land on a different mean colour — closest pair
+    # prominent/thick at 3.2 levels — and the stripes show up as a left-to-
+    # right colour swing of 120.7 (ultrathin) down to 10.3 (thick). Over a
+    # flat white field BOTH quantities are 0 by construction, which is the
+    # `backdrop-collapses-8bit` row one paragraph up.
+    #
+    # 🔻 THIS IS NECESSARY, NOT SUFFICIENT — AND TODAY NOTHING RENDERS IT.
+    # MEASURED, not inferred: a filtered run of these three on 2026-09-14
+    # (iPhone 17 Pro, ios 26.4) reported all three
+    #     status skipped, "mode uikit not hosted (SwiftUI dynamic host)"
+    # and 77 fixtures share that exact reason — distinct in the same run
+    # from the 938 the filter excluded and the 73 not applicable to ios, so
+    # the count is a predicate, not a leftover. BOTH conformance hosts are
+    # SwiftUI (dynamic and codegen), and the SSoT declares both attributes
+    # `"mode": "uikit"`, so there is no host that can photograph them. This
+    # is upstream of the renderer question below and survives it: even an
+    # emitter would not put these three on film while the declaration says
+    # uikit.
+    #
+    # Downstream of that, no ios path draws them either:
+    #   codegen   `sjui_tools/lib` — zero occurrences of either spelling
+    #   dynamic   parsed into {TextField,EditText,Input}Attributes and read
+    #             by nobody; TextFieldConverter's 27-step modifier list has
+    #             no material in it (control: it does read component.hint)
+    #   uikit     SJUITextField.swift:149 — real, but inside the
+    #             `case "number", "decimal":` keyboard branch, applied to the
+    #             accessory BAR above the keyboard, not to the field. The
+    #             fixtures declare no `input`, so it is unreachable even there.
+    # So these three keep `class: declaration-only` and are not photographed
+    # at all. The backdrop is here so that the day the declaration opens to
+    # SwiftUI and an emitter lands, the fixture can show it on the FIRST
+    # bake — a first bake over white would record `true` and `false` as the
+    # same picture and nothing downstream would object, which is exactly how
+    # `backdrop-collapses-8bit` got into the ledger.
+    #
+    # ⚠️ `glassEffectStyle` has NO `enum` in the SSoT, so the generator emits
+    # the placeholder `"sample"`. The uikit switch matches ten spellings
+    # (systemUltraThinMaterial … extraLight) and `"sample"` hits `default`,
+    # i.e. the same picture as omitting the attribute. Declaring the enum is
+    # what turns this one into a discriminating fixture; the backdrop alone
+    # cannot.
+    "TextField.applyLiquidGlass": {"root.backdrop": _striped_backdrop(width=200)},
+    "TextField.glassEffectStyle": {"root.backdrop": _striped_backdrop(width=200)},
+    # `glass` (common, SSoT 16b350d6) is the spelling that SUPERSEDES those
+    # two, and unlike them it declares `mode: [uikit, swiftui]` — so it is
+    # the one the SwiftUI hosts can actually photograph, and it is classed
+    # `visual` rather than declaration-only. Its target is the common `View`
+    # base: 200x200 on `#DDDDDD`.
+    #
+    # #DDDDDD is 87% white. Everything said above about a material over a
+    # white field applies to it almost undiminished — this is the same
+    # defect arriving through the default rather than through an omission,
+    # which is why the backdrop is attached to the attribute and not left
+    # to whatever the section's base happens to be.
+    #
+    # The backdrop is 200x200 so it reaches the target's full extent on
+    # BOTH axes; the `Blur` pair only ever needed 100x100 because their
+    # target is 100x100. A glass effect refracts what is BEHIND it, and an
+    # earlier sibling of an overlay root is exactly that.
+    # `background: None` REMOVES the base key (see `apply_base_overrides`).
+    # Without that the backdrop is decoration: the common `View` base paints
+    # the target #DDDDDD edge to edge, so a glass effect that refracts what
+    # is behind it refracts an opaque grey rectangle and the stripes never
+    # reach the lens. Dropping the fill leaves the target's own six colour
+    # boxes as foreground — they are what tells `glass` apart from a plain
+    # transparent View — over stripes that are now actually behind it.
+    "glass": {"root.backdrop": _striped_backdrop(width=200, height=200),
+              "background": None},
+    # The anchor goes LAST so the target starts underneath it and `indexAbove`
+    # has somewhere to travel from. `indexBelow` needs no such thing — the
+    # default order already puts the target on top, which is exactly why only
+    # one of the pair was ever inert.
+    "indexAbove": {"root.anchorLast": True},
+    # A sibling drawn after the target, over all of it: the control shows the
+    # cover, and a z-index lifts the target above it (root_cover).
+    "zIndex": {"root.cover": [{"type": "View", "id": "cover", "width": 200, "height": 200, "background": "#0000FF"}]},
+    "alignTopOfView": {"width": 50, "height": 50},
+    "alignBottomOfView": {"width": 50, "height": 50},
+    "alignLeftOfView": {"width": 50, "height": 50},
+    "alignRightOfView": {"width": 50, "height": 50},
+    "Collection.columnSpacing": {"columns": 2},
+    # `listStyle` selects a SwiftUI List style, and the converter only takes
+    # the List path when the collection is not sectioned — with the base
+    # `sections` present all four values landed in the same non-List branch
+    # (lane B, whose List implementation landed in ba5e6d1 with no fixture
+    # that could reach it).
+    "Collection.listStyle": {"sections": None},
+    # A separator to hide: without a chrome no face draws one (the
+    # declaration's own NO-OP contract), so the probe was vacuous on all
+    # three. grouped + the default sectioned cells give every face rows
+    # with separators. (2026-08-08, with the chrome implementations.)
+    "Collection.hideSeparator": {"listStyle": "grouped"},
+    # `flow` is only distinguishable from `horizontal` once a row FILLS: the
+    # three 60pt cells total 180pt, which fits the 200pt host in one row, so
+    # flow never wrapped and the pair drew one picture (run 5, android/web).
+    # 150pt forces flow into a 2+1 grid while horizontal keeps one scrolling
+    # row — and vertical is untouched by width.
+    "Collection.layout": {"width": 150},
+    # A scroll ANCHOR decides which part of the content the viewport rests
+    # on, so the content must look different in different parts. The base
+    # first child is a single flat 600pt block: top, center and bottom all
+    # rest on the same red (lane A). Banding it makes the resting place
+    # readable off the screenshot.
+    "ScrollView.defaultScrollAnchor": {"child": [
+        {"type": "View", "id": "band_a", "width": 150, "height": 200,
+         "background": "#FF0000"},
+        {"type": "View", "id": "band_b", "width": 150, "height": 200,
+         "background": "#FFFFFF"},
+        {"type": "View", "id": "band_c", "width": 150, "height": 200,
+         "background": "#0000FF"},
+        {"type": "View", "id": "band_d", "width": 150, "height": 200,
+         "background": "#00AA00"},
+    ]},
+    # `cols` and `rows` size a textarea in characters and lines, and an
+    # explicit width/height overrides them everywhere. Dropping the base size
+    # is what lets the attribute decide the box (lane A §5(4)).
+    "TextView.cols": {"width": None},
+    "TextView.rows": {"height": None},
+    # A FLOOR only lifts a box that would otherwise be smaller than it, and the
+    # View base is a fixed 200pt square — so `minWidth: 50` lost to the 200 and
+    # the fixture measured the fixed width, not the floor. Freeing the axis lets
+    # the box fall to its content (the overlaid 40pt children) so the floor has
+    # something to lift it off. Lane F's family-B read, group A2, the last of
+    # the six.
+    #
+    # `maxWidth` / `maxHeight` need no such treatment: a CEILING of 150 does
+    # clamp a 200pt box, which is why only the floors were inert. The
+    # matchParent-plus-ceiling case has its own bespoke fixtures
+    # (conformance.bounds_fixtures).
+    # A border is summoned by the WIDTH+COLOUR pair: a width with no colour
+    # draws in the platform default (transparent on two of the three) and a
+    # colour with no width draws nothing at all. `borderStyle` already got
+    # its `with_border` variant for exactly this reason; these two had the
+    # same gap and no companion (lane E2).
+    "borderWidth": {"borderColor": "#FF0000"},
+    "borderColor": {"borderWidth": 2},
+    "minWidth": {"width": "wrapContent"},
+    "minHeight": {"height": "wrapContent"},
+    # clipToBounds needs something to clip: the stacked base children fit
+    # inside the host, a horizontal row of them overflows it.
+    "clipToBounds": {"orientation": "horizontal"},
+    # A line CAP needs more lines than the cap: the one-word base text fits
+    # on a single line, so any maximum renders the same pixels.
+    "Label.lines": {"text": LONG_TEXT},
+    "IconLabel.lines": {"text": LONG_TEXT},
+    # --- lane F family-B, group A3 (2026-08-05) ---------------------------- #
+    # "the fixture is too thin for the attribute to act on". Every Label
+    # fixture was `text: "Sample"` in a 200pt box — one short line that fits —
+    # and each of these attributes only exists once there is MORE than that.
+    #
+    # Line metrics need a second line to sit between.
+    "Label.lineSpacing": {"text": LONG_TEXT},
+    "Label.lineHeightMultiple": {"text": LONG_TEXT},
+    # `capitalize` upper-cases the first letter of each word, and the shared
+    # base text is already "Sample" — so the transform was the identity map
+    # and the fixture drew its control. A lower-case body is what makes the
+    # transform do anything (lane E2's fixture-shaping queue).
+    "Label.textTransform": {"text": "sample conformance text"},
+    # Truncation modes only choose WHERE to cut once something is being cut.
+    "Label.lineBreakMode": {"text": LONG_TEXT},
+    # The same rule, on the component whose body IS its hint. The TextView
+    # base carries `hint: "Sample"` — six characters in a 200x100 box, which
+    # cannot overflow, so all six truncation modes drew one picture. H
+    # measured the pair: Label's six values separate on an overflowing body
+    # while TextView's six collapse, which is the direct refutation of the
+    # "android has not implemented it" reading the collapse invited.
+    "TextView.lineBreakMode": {"hint": LONG_TEXT},
+    # Shrink-to-fit needs an overflow to shrink out of; the floor needs the
+    # shrinking to be happening before it can bound it.
+    "Label.autoShrink": {"text": LONG_TEXT},
+    # A shrink FLOOR only shows once the text is being shrunk, and shrinking
+    # only starts when the box cannot hold the text — the Label base is
+    # height: wrapContent, which always can. The height constraint is what
+    # makes the floor bind (lane A).
+    "Label.minimumScaleFactor": {"autoShrink": True, "text": LONG_TEXT,
+                                 "height": 40},
+    # A hint's line height needs a hint of more than one line.
+    "TextView.hintLineHeightMultiple": {"hint": LONG_TEXT},
+    # `linkable` turns URLs in the body into links. "Sample" has none.
+    "Label.linkable": {"text": LINK_TEXT},
+    # The no-source state shows `defaultImage` FIRST, so the state images
+    # behind it were never displayed — same shape as Image.errorImage above.
+    # An error image needs a REQUEST THAT FAILS, and every NetworkImage fixture
+    # was in the no-src state — 19 of them, none carrying a url — so neither
+    # the error nor the loading face had ever occurred (C, #19). kjui says so
+    # at the point of the branch: an absent source is a NULL model that selects
+    # the fallback, while a real URL routes through the request/error path.
+    #
+    # `.invalid` is reserved by RFC 2606 precisely so it can never resolve, so
+    # this fails at DNS without leaving the machine and keeps the offline rule
+    # the v1 fixtures are built on. `defaultImage` still goes, or the no-src
+    # fallback would win before the request was ever made.
+    "NetworkImage.errorImage": {
+        "defaultImage": None,
+        "url": "https://conformance.invalid/missing.png",
+    },
+    # The loading face needs a request that is IN FLIGHT when the shutter
+    # opens, which `conformance.invalid` cannot give it — that host's whole
+    # job is to fail synchronously, so the errorImage sibling's url would
+    # photograph the error face here too.
+    #
+    # `pending.invalid` is the second reserved host from H's contract
+    # (INTERACTIVE_HOST_CONTRACT.md §5): the platform hosts stall it forever
+    # instead of failing it, so the in-flight state stops being a moment and
+    # becomes the resting state of the run. Still under `.invalid` (RFC 2606),
+    # so it cannot leave the machine either way.
+    #
+    # The face itself stays a STATIC asset, never a spinner (contract §5.5):
+    # the web and Android capture paths shoot until two frames are identical,
+    # and an animated face never converges. `VALUE_OVERRIDES_BY_SECTION` gives
+    # this pair the alt asset, which is what makes it a still.
+    #
+    # If a host has NOT installed the stall, the request reaches a resolver,
+    # `pending.invalid` NXDOMAINs like any `.invalid` name, and the error face
+    # is photographed instead. That is why this fixture must have a control:
+    # stall installed → alt asset vs blank control → active; stall missing →
+    # both faces are the error face → inert, and an inert row cannot hide from
+    # the ratchet. The control follows automatically now that the pair is no
+    # longer recorded non-observable.
+    "NetworkImage.loadingImage": {
+        "defaultImage": None,
+        "url": "https://pending.invalid/stalled.png",
+    },
+    "NetworkImage.placeholder": {"defaultImage": None},
+    # A closed SelectBox draws `prompt` when there is one and the (initially
+    # empty) selected text when there is not — so with no prompt declared
+    # there were no glyphs for a colour to land on.
+    "SelectBox.fontColor": {"prompt": "Choose"},
+    "SelectBox.hintColor": {"prompt": "Choose"},
+    # Same gap, same companion, two attributes further along: a weight and a
+    # size need glyphs to apply to just as much as a colour does. The A3 round
+    # caught the colours and stopped there, so `font` and `fontSize` kept
+    # styling the closed box's empty selected text. Found by G while
+    # registering the `selectedIndex` prediction — the point being that fixing
+    # `selectedIndex` would not have moved these two either.
+    "SelectBox.font": {"prompt": "Choose"},
+    "SelectBox.fontSize": {"prompt": "Choose"},
+    # Found by checking the siblings rather than reported: `labelAttributes`
+    # declares font / fontSize / fontColor / textAlign and no text of its own,
+    # so it styles the same empty closed label. `hint` and `placeholder` are
+    # deliberately NOT here — they ARE the text under test, and a prompt would
+    # win over them exactly the way the base `text` used to beat `Label.hint`.
+    "SelectBox.labelAttributes": {"prompt": "Choose"},
+    # Track/progress tints need a nonzero value or there is nothing to
+    # paint (a zero-length active track is invisible on every platform).
+    # Slider's canonical value attribute is `value`; Progress's is `progress`
+    # (`value` is the undeclared legacy spelling there — see
+    # shared/core/attribute_semantics.json → progressValue).
+    "Slider.tintColor": {"value": 0.5},
+    # The scale needs a value to scale: with no progress the bar is empty at 0/8
+    # as at 0/100 (2.3.21's fixture). 4 of the representative 8 is half a bar,
+    # of the default 100 a sliver.
+    "Progress.maximumValue": {"progress": 4},
+    "Progress.color": {"progress": 0.5},
+    "Progress.tintColor": {"progress": 0.5},
+    "Progress.progressTintColor": {"progress": 0.5},
+    "Progress.trackTintColor": {"progress": 0.5},
+    # Flow attributes need a flex container. `horizontal` is the direction that
+    # makes wrapping visible with the standard 6-box child set (240px of boxes
+    # in a 200px host).
+    "flexWrap": {"orientation": "horizontal"},
+    # Distribution shares out FREE space, and six 40pt boxes in a 200pt row
+    # leave none — they overflow it. A 300pt row leaves 60pt to share.
+    "distribution": {"orientation": "horizontal", "width": 300},
+    # Gravity positions CONTENT inside free space, so it needs slack on BOTH
+    # axes — the six boxes overflow a 200pt row and the horizontal half of
+    # every value was invisible (run 5: android rendered centerhorizontal,
+    # left, top and right as one picture). 300pt leaves 60pt of horizontal
+    # slack, the same lever distribution uses. left ≡ top survives this on
+    # purpose: the unspecified axis defaults to top/start on every platform,
+    # so both values name the top-left corner — that pair is recorded, not
+    # fixtured away.
+    "gravity": {"orientation": "horizontal", "width": 300},
+    "spacing": {"orientation": "horizontal"},
+    "padding": {"orientation": "horizontal"},
+    "paddings": {"orientation": "horizontal"},
+    "paddingTop": {"orientation": "horizontal"},
+    "paddingLeft": {"orientation": "horizontal"},
+    "paddingStart": {"orientation": "horizontal"},
+    # The TRAILING edges need the box to be free, not merely flowing. In a
+    # fixed 200x200 square the content sits in the top-left corner, so padding
+    # added at the bottom or the right pushes against nothing and the picture
+    # is unchanged. On a wrapContent box the padding grows the box itself,
+    # which is visible on any edge. (Lane A §5(4). The leading edges above
+    # already move the content and need no change.)
+    "paddingBottom": {"orientation": "horizontal", "height": "wrapContent"},
+    "bottomPadding": {"orientation": "horizontal", "height": "wrapContent"},
+    "paddingRight": {"orientation": "horizontal", "width": "wrapContent"},
+    "rightPadding": {"orientation": "horizontal", "width": "wrapContent"},
+    "paddingEnd": {"orientation": "horizontal", "width": "wrapContent"},
+    # A trailing MARGIN on the only child of a fixed parent has nothing behind
+    # it to push away from. Parking the root's content against that same edge
+    # gives it something to push off — the lever the top-left family uses,
+    # pointed the other way.
+    "bottomMargin": {"root.gravity": "bottom"},
+    "rightMargin": {"root.gravity": "right"},
+    "endMargin": {"root.gravity": "right"},
+    # NO `borderStyle` companion here, deliberately. A border is drawn only
+    # when `borderWidth` AND `borderColor` are both declared — there is no
+    # default border colour — so `borderStyle` alone is CORRECTLY inert and its
+    # fixture must stay a lone declaration. The ruling lives in
+    # `shared/core/attribute_semantics.json` -> `semantics.border`
+    # (`widthAlone: no-draw`, `styleAlone: no-draw`), and its own text records
+    # that the gray-default direction was tried and withdrawn.
+    #
+    # A `{borderWidth: 1}` companion was added here on 2026-08-05 and taken
+    # back the same day: it was reasoned from `attribute_definitions.json`
+    # (only borderStyle declares `"default": "solid"`, so something must summon
+    # the border and width looked like the summoner). The default proves style
+    # is a MODIFIER; it says nothing about which key summons. **Read
+    # attribute_semantics.json before inferring semantics from a type, an enum
+    # or a default** — that is where rulings live (commit d119189).
+    #
+    # The "top-left family". `alignTop` / `alignLeft` pin the target to the
+    # parent edge it is ALREADY at — the root stacks its children at the
+    # top-start corner — so the attribute asked for the position the target
+    # already had and nothing moved. G proved it from the distribution rather
+    # than from the code: `alignBottom` / `alignRight` / `alignBottomView` /
+    # `alignRightView` are absent from the android queue, i.e. their pixels DO
+    # move, and an implementation defect has no reason to pick a direction.
+    #
+    # Pushing the root's content to the far edge gives the attribute somewhere
+    # to travel from. The `root.` companion widens the control identically, so
+    # the comparison still measures only the attribute.
+    "alignTop": {"root.gravity": "bottom"},
+    "alignLeft": {"root.gravity": "right"},
+    # `highlighted` is the other half of a pair, like border/borderColor:
+    # `return if highlight_bg.nil?` (sjui base_view_converter.rb:730), which
+    # faithfully mirrors UIKit's SJUIView:187 — a highlighted state with no
+    # highlight colour has nothing to draw. The probe wrote the flag alone and
+    # read it as an unread spelling. (borderColor/borderWidth are the same
+    # family and were closed on the device side by `--paired`; this one closes
+    # with a base attribute.) Handed over by lane B.
+    "View.highlighted": {"highlightBackground": "#FF0000"},
+    # tapBackground on a View is drawn only on a View with a tap (ruling (a)),
+    # so the View host carries one (COMMON_EXTRA_HOSTS).
+    "View.tapBackground": {"onClick": "@{conformanceTap}"},
+    # A Segment reads no cornerRadius and draws its fill, border and shadow in
+    # its capsule (2026-11-16: the requester's ruling and the orchestrator's
+    # decision under it). Its corner fixtures carry all three, so a corner that
+    # still reached any of them shows; every case draws its control.
+    "Segment.cornerRadius": {
+        "background": "#FFD54F",
+        "borderColor": "#1E88E5",
+        "borderWidth": 2,
+        "shadow": "#000000|0|2|0.5|4",
+    },
+    # accessibilitySelected tells a screen reader only where the node is one
+    # button (shared/core/control_accessibility.rb `selected`): a View or an
+    # IconLabel with a tap. Without one the rule says nothing and the probe
+    # would read an unread spelling.
+    "View.accessibilitySelected": {"onClick": "@{conformanceTap}"},
+    "IconLabel.accessibilitySelected": {"onClick": "@{conformanceTap}"},
+    # `direction` reverses the children of an ORIENTED container; with no
+    # orientation the canonical answer is "no effect", so the fixture has to
+    # supply one or it can never show anything. One orientation cannot serve
+    # every value: the reversal only acts on its OWN axis, so the horizontal
+    # values get a horizontal container via CASE_BASE_ATTRS below — on the
+    # shared vertical base, `rightToLeft` was a designed no-op, and the only
+    # thing its fixture ever caught was an ios dynamic missing the axis guard
+    # (run 5: it reversed a vertical stack).
+    "direction": {"orientation": "vertical"},
+    # The highlight attribute sets only take effect while the label is
+    # selected — that is the whole contract (UIKit: `selected ?
+    # highlightAttributes : attributes`). Without this the fixture renders its
+    # base styling, matches the control exactly, and reads as inert.
+    #
+    # Scoped to Label on purpose: Button declares `highlightColor` too but has
+    # no `selected`, and its highlight is a press state that a static
+    # screenshot cannot show anyway.
+    "Label.highlightAttributes": {"selected": True},
+    "Label.highlightColor": {"selected": True},
+    # UIKit hides the clear button while the field is empty — there is nothing
+    # to clear — so an empty fixture field renders no button at all.
+    "TextField.clearButtonMode": {"text": "Clear me"},
+    # The date-picker attributes only reach their code path when the SelectBox
+    # IS a date picker; without this the fixture renders the ordinary
+    # options list and the attribute is never consulted.
+    "SelectBox.datePickerStyle": {"selectItemType": "Date"},
+    # A list's sheet on Android has no button that takes a word: only a date's confirm does.
+    "SelectBox.doneButtonText": {"selectItemType": "Date"},
+    # `dateStringFormat` is the shape the VIEWMODEL holds, so it is only
+    # consulted while converting a BOUND value in and out of the input's ISO
+    # spelling (rjui select_box_converter.rb:391 `if format` — inside the
+    # `has_binding?(date_value)` arm). A date picker with no bound date has no
+    # value to reformat, so the declared format was never read.
+    "SelectBox.dateStringFormat": {
+        "selectItemType": "Date",
+        "selectedDate": "@{pickedDate}",
+    },
+    # minuteInterval is a step through minutes, so it needs a time-bearing mode.
+    "SelectBox.minuteInterval": {"selectItemType": "Date", "datePickerMode": "time"},
+    # Same date-branch gate, four attributes the earlier round missed.
+    # `colorScheme` is consumed only by build_date_style_attr (rjui
+    # select_box_converter.rb:426); the bounds and the mode are date-only on
+    # all three platforms.
+    "SelectBox.datePickerMode": {"selectItemType": "Date"},
+    "SelectBox.colorScheme": {"selectItemType": "Date"},
+    "SelectBox.minimumDate": {"selectItemType": "Date", "datePickerMode": "date"},
+    "SelectBox.maximumDate": {"selectItemType": "Date", "datePickerMode": "date"},
+    # scrollAnchor is the anchor OF a programmatic scroll and every platform
+    # reads it only inside the scrollTo path. D withdrew this companion in an
+    # earlier round for a reason that no longer holds: scrollTo's declared
+    # class had to be `PassthroughSubject<Int, Never>` for sjui's
+    # `data.<prop>.throttle(...)`, and no class satisfied all three hosts at
+    # once. E made the canonical class a plain value (9930e18) and B dropped
+    # the throttle for `.onChange` (8c41e3e), so `Int` now compiles everywhere.
+    #
+    # The withdrawal was right at the time and the entry said what would undo
+    # it; both halves happened, so it goes in.
+    #
+    # The request itself is a CHANGE of the scrollTo value after the first
+    # draw (jsonui-cli 1.9.0: the value a list is drawn with scrolls nowhere),
+    # so a static fixture never made one: three 28-high cells sat in a
+    # 200-high list and top / center / bottom drew the control's picture on
+    # every face (conformance-collection-scrollanchor-family-does-not-
+    # discriminate, 2026-10-14). The host now changes `scrollTarget` once
+    # after the first draw (AFTER_FIRST_DRAW below), the cells are keyed by
+    # their title so a String names one, and each is 150 high in a 200-high
+    # list (450 of content): landing the middle cell ("Beta", drawn at 150)
+    # top, centre or bottom puts it at 0, 25 or 50 — every landing moves the
+    # list, none is clamped by the content's end, and the cell's content stays
+    # in view. Measured 2026-10-14 with 300-high cells and the last cell: the
+    # landings were 0 / -50 / -100 by the frames, but centre and bottom drew
+    # one picture, the cell's content being out of view in both.
+    "Collection.scrollAnchor": {
+        "scrollTo": "@{scrollTarget}", "cellIdProperty": "title", "cellHeight": 150,
+    },
+    # defaultScrollAnchor says where a list STARTS, which shows only when the
+    # content is taller than the list: the base's three cells (28 high each,
+    # 84 in a 200-high list) left nothing to scroll, so top / center / bottom
+    # all drew the control's picture on every face and cross_effect.json
+    # booked them as "value-is-default"
+    # (conformance-collection-scrollanchor-family-does-not-discriminate,
+    # 2026-10-14). Three 100-high cells are 300 in 200: top rests at 0, center
+    # at the middle cell's middle (50), bottom at the end (100).
+    "Collection.defaultScrollAnchor": {"cellHeight": 100},
+    # itemWeight is the fraction of the container width ONE ITEM takes, which
+    # is a grid concept: sjui folds it into the grid's column count
+    # (fed0d27: round(1/weight) columns) and the default single-column
+    # CollectionStackView path never consults it. The companion supplies the
+    # grid; the REPRESENTATIVE (0.25, above) is what has to disagree with the
+    # companion's own column count, or all three probe pictures collapse.
+    #
+    # `Collection.scrollAnchor` is the other half of this family and is NOT
+    # fixable here — see the 49-D report. It needs `scrollTo` as a companion,
+    # `scrollTo` is a `binding`, and the data property behind it has no class
+    # that compiles on more than one codegen host (iOS wants
+    # `PassthroughSubject<String, Never>`, Compose emits `raw.isEmpty()` /
+    # `substringBefore` on it, i.e. String, and kjui's map_to_kotlin_type
+    # passes an unknown class straight through). Handed to E + C.
+    "Collection.itemWeight": {"columns": 2},
+    # The horizontal indicator is only configurable on a horizontal scroller —
+    # sjui gates both hosts on it (scrollview_converter.rb:58,
+    # collection_converter.rb:1753). Unscoped: Collection and ScrollView both
+    # declare the attribute and both have the gate.
+    "showsHorizontalScrollIndicator": {"orientation": "horizontal"},
+    # `errorImage` / `loadingImage` on a NON-network Image are fallback
+    # imagery for a missing `src`, never an in-flight or failed state (kjui
+    # image_component.rb:12-15 says so in its own words) — they are read only
+    # in the `src`-absent arm (sjui image_converter.rb:36/42). The base
+    # supplies `src`, so the fallback arm was unreachable.
+    "Image.errorImage": {"src": None},
+    # Same dead branch one spelling along: `defaultImage` is what shows when
+    # there is NO source, so a fixture carrying the base `src` never reaches
+    # it (lane B measured the converter as correct — it is the fixture that
+    # cannot arrive).
+    "Image.defaultImage": {"src": None},
+    "Image.loadingImage": {"src": None},
+    # `hidesWhenStopped` decides what a STOPPED indicator does — keep its space
+    # or collapse out of the layout — so it is only ever read on the
+    # `animating == false` branch (sjui indicator_converter.rb:23, kjui
+    # indicator_component.rb:13). `animating` defaults to true, and Indicator
+    # has no BASE_ATTRS entry, so the fixture was always a spinning indicator
+    # and the branch was unreachable. Unblocked by E declaring `animating`
+    # (the attribute existed in three converters and in no schema).
+    "Indicator.hidesWhenStopped": {"animating": False},
+    # A linear indicator's track: kjui reads `trackColor` on the linear bar
+    # only (indicator_component.rb), and the base indicator is a spinner.
+    "Indicator.trackColor": {"indicatorStyle": "linear"},
+    # The icon's accessibility text: kjui writes it on the icon's Image, and
+    # the base IconLabel is text-only (same family as iconSize above).
+    "IconLabel.contentDescription": {"icon_off": IMAGE_ASSET_NAME},
+    # A flow row's alignment needs a flow layout whose rows leave room — the
+    # `Collection.layout` width that makes flow wrap.
+    "Collection.flowAlignment": {"layout": "flow", "width": 150},
+    # How rjui stacks a GradientView's children: a gradient with none has
+    # nothing to stack (three, as SafeAreaView's orientation needs).
+    "GradientView.orientation": {"child": [
+        {"type": "View", "id": "box_a", "width": 20, "height": 20, "background": "#FFFFFF"},
+        {"type": "View", "id": "box_b", "width": 20, "height": 20, "background": "#000000"},
+        {"type": "View", "id": "box_c", "width": 20, "height": 20, "background": "#00AA00"},
+    ]},
+    # kjui puts the label on whichever side `labelPosition` names, but only on
+    # the labelled path (switch_component.rb:144/170) — and a Switch's label is
+    # `labelAttributes.text`. Switch has no BASE_ATTRS entry at all, so there
+    # was no label to place.
+    "Switch.labelPosition": {"labelAttributes": {"text": "Sample"}},
+    # The flat fontColor/fontSize style the LABEL — same no-label vacuity
+    # as labelPosition above. The flat `label` spelling, not the bag: the
+    # bag is not declared on every platform and the scope guard rejects a
+    # fixture using an attribute its platform does not declare.
+    "Switch.fontColor": {"label": "Sample"},
+    "Switch.fontSize": {"label": "Sample"},
+    # SwiftUI has no maximum-length primitive, so sjui enforces maxLength by
+    # truncating on change and writing BACK — which needs somewhere to write:
+    # `return unless raw.is_a?(String) && is_binding?(raw)` on the text
+    # (textfield_converter.rb:519, and its own comment at 511-513). The base is
+    # hint-only, with no bound text.
+    "TextField.maxLength": {"text": "@{inputText}"},
+    # Same parent-axis rule as `weight` below, and the same fix: B measured
+    # that all three read these once the parent has an orientation. They were
+    # filed as "the codegen does not read the spelling" when the fixture was
+    # not letting it.
+    # A gradient DIRECTION needs a gradient to point. B measured it: with no
+    # `gradient` the converter emits nothing at all; with one it emits
+    # `.background(LinearGradient(colors: [...], startPoint:, endPoint:))`.
+    "View.gradientDirection": {"gradient": ["#FF0000", "#0000FF"]},
+    "widthWeight": {"root.orientation": "horizontal"},
+    # `height: 0` is not decoration — it is how you say "the weight decides
+    # this axis". kjui spells the rule out: `explicit_height` is false only
+    # when `heightWeight && height == 0`, and an explicit height wins over the
+    # weight branch entirely (modifier_builder.rb:404-421). With the base's
+    # 200pt height the weight branch was unreachable on Compose, which is why
+    # iOS cleared on the orientation alone and android did not.
+    # NOTE `height: 0` was here and had to come out. kjui needs it — an
+    # explicit height beats the weight branch entirely — but it only means
+    # "the weight decides this axis" WHEN A WEIGHT IS PRESENT, and the control
+    # by definition has no `heightWeight`. sjui says so exactly:
+    # `should_ignore_height` is `height == 0 AND (weight || heightWeight)`
+    # (frame_helper.rb:127), so on the control the zero survived into a real
+    # frame request and the control drew nothing — parity distance 35 between
+    # the two iOS paths, and every comparison against that control inherited
+    # it.
+    #
+    # A control that renders differently from every fixture it controls is
+    # worse than a weaker fixture: it moves the baseline the other comparisons
+    # subtract. The android C1/C2 finding this was chasing is owned by C
+    # anyway (`build_weight` never reads `heightWeight`), so the fixture gives
+    # up nothing real by dropping it.
+    "heightWeight": {"root.orientation": "vertical"},
+    "maxWidthWeight": {"root.orientation": "horizontal"},
+    "minWidthWeight": {"root.orientation": "horizontal"},
+    "maxHeightWeight": {"root.orientation": "vertical"},
+    "minHeightWeight": {"root.orientation": "vertical"},
+    # `weight` is a share of the PARENT's main axis, and every platform gates
+    # it on that parent being a Row/Column (kjui modifier_builder.rb:105
+    # `parent_orientation`, sjui view_converter.rb:160). The fixture root is a
+    # plain View — an overlay — so there was no axis to take a share of. The
+    # `root.` prefix puts the orientation on the ROOT node rather than on the
+    # target (see `split_root_attrs`).
+    #
+    # A share also needs a COMPETITOR: a lone weighted child takes all the
+    # leftover space whatever its weight says, so 1 and '2' drew one picture
+    # on all three platforms (run 5). The backdrop sibling holds weight 1
+    # against the target's value; its width is 0 — the width-0-plus-weight
+    # pairing every platform special-cases — so the boundary between the two
+    # is set by the ratio alone. The target's own 200pt width is untouched:
+    # the control has no weight, and a zero-size control draws nothing (the
+    # heightWeight lesson).
+    "weight": {
+        "root.orientation": "horizontal",
+        "root.backdrop": [
+            {"type": "View", "id": "rival", "width": 0, "height": 200,
+             "weight": 1, "background": "#334455"},
+        ],
+    },
+    # The ON-state colours are invisible on an off switch, so the fixture
+    # rendered pixel-identical to its control and read as inert.
+    "Switch.tint": {"isOn": True},
+    "Switch.tintColor": {"isOn": True},
+    "Switch.onTintColor": {"isOn": True},
+    "Toggle.tint": {"isOn": True},
+    "Toggle.tintColor": {"isOn": True},
+    "Toggle.onTintColor": {"isOn": True},
+    # systemIcon is a BOOLEAN ("interpret `src` as an SF Symbol name") — the
+    # fixture needs `src` to actually be one, or the reinterpretation renders
+    # a missing symbol. The old string-valued fixture ("systemIcon": "star")
+    # was invalid input: the dynamic decoder fail-louded on it while codegen
+    # silently ignored it, which is a fixture bug, not a parity signal.
+    "Image.systemIcon": {"src": "star"},
+}
+
+
+#: Extra cases that carry their OWN base attributes, keyed by
+#: ``(section, attribute)`` -> ``{case_suffix: extra_base}``.
+#:
+#: A plain :data:`EXTRA_CASES` value shares the attribute's base, which is the
+#: right default. This is for the case where the SAME attribute has to be
+#: measured under two different declarations at once — and the existing fixture
+#: must keep its name, because `attribute_semantics.json#observable` records a
+#: verdict PER FIXTURE NAME. Rewriting a fixture in place would leave the
+#: ledger quietly asserting the old verdict about the new layout.
+VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
+    # `borderStyle` alone draws nothing — a border is summoned by the
+    # borderWidth+borderColor pair — so the lone fixtures are correctly inert
+    # and `observable` records them as `uniformly-inert`. That left the three
+    # implementations landed in this wave (B: iOS dashed/dotted, C: android,
+    # A: web TailwindMapper#map_border_style) with NO fixture that could show
+    # them working: the suite would report "inert on all three", the ledger
+    # would agree, and nothing would ever contradict it.
+    #
+    # The `_with_border` variant declares the pair, so the style has a border
+    # to modify. Both live side by side under different names, so both verdicts
+    # stay true. E owns the `observable` entry for the active side.
+    ("common", "borderStyle"): {
+        "with_border": {"borderWidth": 2, "borderColor": "#FF0000"},
+    },
+    # (`Radio.checked`'s `with_group` variant is gone: `group` is required, so
+    # the Radio base declares it and every `checked` fixture is a grouped
+    # radio — ticket conformance-generators-emit-layouts-missing-required-
+    # attributes. A LONE radio, which the variant was written against, is
+    # input the validator warns on.)
+    # B isolated the real crash and it is narrower than either of us wrote
+    # down: a numeric `fontWeight` alone generates fine, `partialAttributes`
+    # alone generates fine, and only the PAIR raised NoMethodError — the
+    # partial path reached label_converter's private copy of the weight
+    # vocabulary and called `.downcase` on an Integer (fixed in 2b58e99).
+    #
+    # `fontWeight__600` proves the numeric value is READ. It does not
+    # reproduce the build failure; only this variant does. Both faces get the
+    # pairing, because `"bold"` with partials is the control for it.
+    ("Label", "fontWeight"): {
+        "with_partial": {
+            "partialAttributes": [
+                {"range": [0, 3], "fontColor": "#FF0000"},
+            ],
+        },
+    },
+    # A HORIZONTAL collection carries `insetHorizontal` down a different
+    # channel: the stack view's `insetLeading` / `insetTrailing`, while the
+    # content-padding channel is fed only on the vertical axis
+    # (`include_horizontal: axis == :vertical`, sjui collection_converter
+    # 1831). The dynamic path fed both and the inset came out doubled — 28pt
+    # for a declared 14 — on device.
+    #
+    # Every inset fixture in the suite is orientation-less, i.e. vertical, so
+    # the doubled channel was never exercised: the visual baseline was 720/720
+    # through the whole batch. Measured before writing it down — on all three,
+    # the horizontal fixture differs from a horizontal control, and ios emits
+    # `insetLeading/insetTrailing` with no second padding line.
+    ("Collection", "insetHorizontal"): {
+        "horizontal": {"orientation": "horizontal"},
+    },
+    # The row-of-boxes base overflows the host in the FLOW direction, and G
+    # adjudicated the android collapse `compose-measure-constraint`: a Compose
+    # Row measures its children against the remaining width, so the ones that
+    # do not fit are measured to nothing rather than painted outside. Clip-on
+    # and clip-off compose the same picture because there is nothing outside.
+    #
+    # This variant states the overflow as a SIZE instead of a flow: one child
+    # declared larger than the box it sits in. Measured on all three — ios
+    # `.frame(width: 300)` and web `w-[300px] shrink-0` both overflow, so the
+    # clip has something to cut; kjui emits `Modifier.width(300.dp)`, which is
+    # enforce-incoming and therefore CLAMPS to the parent's 200 (it never
+    # emits `requiredWidth`/`requiredSize`, grep: zero hits in `kjui_tools/`).
+    #
+    # So the ledger's reason is one layer short of the mechanism: the pair is
+    # not un-measurable in Compose, it is un-measurable through kjui's choice
+    # of size modifier — and the same declaration overflows on the other two.
+    # This fixture is the form that says so. Prediction on the next 3PF run,
+    # registered before it is run: ACTIVE on ios and web, INERT on android,
+    # and the android half turns active with no fixture change on the day
+    # kjui honours an oversized explicit size. Owner of that half: C/G.
+    # A weighted stack's CROSS axis. With unequal weights SwiftJsonUI lays the
+    # stack out through its Layout-protocol path (WeightedHStackLayout /
+    # WeightedVStackLayout), which returned the height (width) the parent
+    # proposed whatever the stack declared: a 3:2 row of 56pt buttons grew to
+    # its column's remaining height on iOS while Android's Row and web's flex
+    # row stayed as tall as their tallest child (ticket
+    # sjui-weighted-hstack-wrap-content-takes-proposed-height). The plain
+    # `height__*` / `width__*` fixtures stack six 40pt boxes with no weight, so
+    # none of them reached that path.
+    #
+    # The target is the stack itself: two weighted children, 3:2, of different
+    # cross sizes, under each declared cross size. wrapContent must come out
+    # as the larger child (56 tall, 120 wide); a number and matchParent keep
+    # their box. The overlay root proposes its whole size, which is what
+    # exposed the iOS reading.
+    ("common", "height"): {
+        "weighted_row": {
+            "orientation": "horizontal",
+            "child": [
+                {"type": "View", "id": "weighted_a", "width": 0, "weight": 3,
+                 "height": 56, "background": "#FF0000"},
+                {"type": "View", "id": "weighted_b", "width": 0, "weight": 2,
+                 "height": 40, "background": "#0000FF"},
+            ],
+        },
+    },
+    ("common", "width"): {
+        "weighted_column": {
+            "orientation": "vertical",
+            "child": [
+                {"type": "View", "id": "weighted_a", "height": 0, "weight": 3,
+                 "width": 120, "background": "#FF0000"},
+                {"type": "View", "id": "weighted_b", "height": 0, "weight": 2,
+                 "width": 80, "background": "#0000FF"},
+            ],
+        },
+    },
+    ("common", "clipToBounds"): {
+        "overflow": {
+            "orientation": None,
+            "child": [
+                {"type": "View", "id": "overflow_box", "width": 300,
+                 "height": 300, "background": "#FF0000"},
+            ],
+        },
+        # The same oversized child where the container centres it and where it
+        # puts it at the end. A container places an over-constrained child
+        # where its gravity says: flex overflows both sides when centred and
+        # the start side at the end. Compose coerced the required size and
+        # centred the content whatever the gravity, which the default-gravity
+        # "overflow" case cannot tell from a corner (ticket
+        # kjui-oversized-child-is-centred-and-cut-to-its-parent). These two
+        # give the frames gate a centred and an end-placed overflow on all
+        # three platforms.
+        #
+        # Both sit 120 in from the root's top and left. At the root's origin
+        # the start-side overhang (−50 centred, −100 at the end) was off the
+        # screen, so clip-on and clip-off drew the same picture on web and
+        # android, and on ios differed only by the strip under the status bar
+        # (ticket conformance-cliptobounds-overflow-end-pair-draws-the-same-on-
+        # web-and-android). 120 > 100 puts the whole overhang on screen.
+        "overflow_center": {
+            "orientation": None,
+            "gravity": "center",
+            "topMargin": 120,
+            "leftMargin": 120,
+            "child": [
+                {"type": "View", "id": "overflow_box", "width": 300,
+                 "height": 300, "background": "#FF0000"},
+            ],
+        },
+        "overflow_end": {
+            "orientation": None,
+            "gravity": ["right", "bottom"],
+            "topMargin": 120,
+            "leftMargin": 120,
+            "child": [
+                {"type": "View", "id": "overflow_box", "width": 300,
+                 "height": 300, "background": "#FF0000"},
+            ],
+        },
+    },
+}
+
+#: A SECOND bound case for an attribute, declared under a different data class.
+#:
+#: Union-typed attributes are read one way by the generated Data type and
+#: another by the view — B found `Button.fontWeight` holding an Int while the
+#: view matched a string vocabulary, and two more like it, one of which failed
+#: the build. B then put the adjudication in a single place, and reported that
+#: the generalisation changed not one byte of output, "because no fixture
+#: declares a numeric property as String". This is that fixture.
+#:
+#: One representative is the point, not coverage: crossing "attribute" with
+#: "declared class" multiplies the suite, and the defect only needs a fixture
+#: that would notice it coming back.
+BOUND_UNION_CASES: dict[tuple[str, str], str] = {
+    # `weight` is declared `["number", "string", "binding"]`, so a String-typed
+    # property holding "1" is a legal spelling — and the exact shape that had
+    # the Data type and the view disagreeing.
+    ("common", "weight"): "String",
+}
+
+#: Case name and seed for the union probe above.
+BOUND_UNION_CASE_SUFFIX = "binding_as_string"
+BOUND_UNION_SEED = "1"
+
+
+def bound_union_case_for(section: str, attribute: str) -> CasePlan | None:
+    """The union-typed bound case, or None."""
+    if (section, attribute) not in BOUND_UNION_CASES:
+        return None
+    prop = f"{bound_prop_name(attribute)}Str"
+    return CasePlan(
+        name=BOUND_UNION_CASE_SUFFIX,
+        value=f"@{{{prop}}}",
+        written_key=attribute,
+    )
+
+
+def bound_union_data_entry(section: str, attribute: str) -> dict[str, Any] | None:
+    """The ``data`` declaration the union probe needs."""
+    cls = BOUND_UNION_CASES.get((section, attribute))
+    if cls is None:
+        return None
+    return {
+        "name": f"{bound_prop_name(attribute)}Str",
+        "class": cls,
+        "defaultValue": BOUND_UNION_SEED,
+    }
+
+
+def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]:
+    """``{case_suffix: extra_base}`` declared for this attribute."""
+    return VARIANT_CASES.get((section, attribute), {})
+
+
+#: Extra base attributes for ONE case of an attribute, keyed by
+#: ``(section, attribute, case_name)``.
+#:
+#: :data:`VARIANT_CASES` repeats every case under a suffix; this replaces the
+#: base of a case that already exists. Needed when the values of a single enum
+#: want incompatible fixtures — which `distribution` does, in a way that is
+#: geometric rather than incidental:
+#:
+#:   fill / fillEqually    are instructions to the CHILD's axis, and E's `size`
+#:                         adjudication orders explicit > bounds > fill, so a
+#:                         child with an explicit width correctly ignores them.
+#:                         They need children with no declared width.
+#:   equalSpacing /        distribute the space BETWEEN children, so the
+#:   equalCentering        children have to occupy space to be spaced apart.
+#:                         They need the explicit-width boxes.
+#:
+#: One child set cannot serve both. And children of EQUAL intrinsic width
+#: cannot separate `fill` from `fillEqually` either — both end up thirds of the
+#: row — so the fill children are Labels of different text lengths: `fill`
+#: consumes the axis while keeping their proportions, `fillEqually` flattens
+#: them to equal shares.
+#:
+#: Unequal TEXT alone turned out not to separate the pair on ios (51-orch
+#: value_discrimination rows, run 31160838024, measured WITH the A/BBBB/
+#: CCCCCCCC labels already in place): the canon ios mapping for `fill` is
+#: ".frame(maxWidth: .infinity) on each child", and an HStack divides its
+#: proposal EQUALLY among children of equal flexibility whatever their text —
+#: so `fill` and `fillEqually` draw the same thirds whenever every child is
+#: flexible. The discriminator the canon itself provides is
+#: `explicitChildSizeWins` (explicit > bounds > fill): `box_a` now declares
+#: its main-axis size, which `fill` must LEAVE ALONE (sjui
+#: apply_distribution_fill skips a declared axis; compose DistributionFillRow
+#: "explicit child size never grown"). The two flexible labels keep their
+#: unequal text, which is what separates the pair on android/web
+#: (content-proportional grow vs equal shares).
+#:
+#: `fillEqually` leaves the declared size alone too. The SSoT's CHILD SIZE
+#: PRECEDENCE names both values: "`fill` and `fillEqually` do not override a
+#: declared child size" (attribute_semantics distribution.ruling, 49-E). This
+#: comment said until 2026-10-05 that `fillEqually` "equalises every child
+#: regardless", which read the precedence for `fill` only. That is the reading
+#: the SSoT rules out, and web drew it (rjui-fillequally-overrides-a-childs-
+#: declared-width). What the undeclared children get beside the declared one is
+#: not declared yet (triage's ruling table, item (2)).
+_FILL_CHILDREN = [
+    {"type": "View", "id": "box_a", "width": 60, "height": 40, "background": "#FF0000"},
+    {"type": "Label", "id": "box_b", "width": "wrapContent", "height": "wrapContent", "text": "BBBB", "background": "#0000FF"},
+    {"type": "Label", "id": "box_c", "width": "wrapContent", "height": "wrapContent", "text": "CCCCCCCC", "background": "#00AA00"},
+]
+
+CASE_BASE_ATTRS: dict[tuple[str, str, str], dict[str, Any]] = {
+    # The bound tapBackground on a View also gates its tap with a bound canTap:
+    # the press is held to the tap's gates (`.tracksPress(enabled: …)`, kjui's
+    # `isPressed && gate`), and that form has to compile too. Keyed on the View
+    # host alone, so the Button's fixtures do not change.
+    ("View", "tapBackground", "binding"): {"canTap": "@{conformanceTapGate}"},
+    ("common", "distribution", "fill"): {"child": _FILL_CHILDREN},
+    ("common", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
+    ("View", "distribution", "fill"): {"child": _FILL_CHILDREN},
+    ("View", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
+    # The horizontal direction values act on a horizontal axis (the canonical
+    # UIKit contract reverses along the orientation axis only), so they get a
+    # row: on the shared vertical base both were designed no-ops, and the
+    # value pair bottomToTop/rightToLeft could only ever be told apart by an
+    # implementation that ignores the axis — which is a library bug to catch
+    # in the library's tests, not a picture this suite can hold once each
+    # value sits on its own axis.
+    ("Segment", "items", "ja_fit_156"): {"width": 156, "height": 32},
+    ("Segment", "items", "wrap_uneven"): {"width": "wrapContent"},
+    ("Segment", "items", "wrap_long"): {"width": "wrapContent"},
+    ("Segment", "items", "match_parent"): {"width": "matchParent"},
+    ("Segment", "items", "width_200"): {"width": 200},
+    ("Segment", "items", "no_width"): {"width": OMIT},
+    ("View", "direction", "righttoleft"): {"orientation": "horizontal"},
+    ("View", "direction", "lefttoright"): {"orientation": "horizontal"},
+}
+
+
+def base_attrs_for(host: str, attribute: str, case_name: str = "") -> dict[str, Any]:
+    """Extra base attributes that make `attribute` observable on `host`.
+
+    Keys are either scoped to a component (`Label.highlightColor`) or apply to
+    the attribute wherever it appears (`flexWrap`); scoped wins. The scoping
+    matters when two components share an attribute name and only one has the
+    driver — injecting `selected` into a Button fixture would put an attribute
+    Button does not declare into the layout.
+
+    A value of ``None`` REMOVES the base key instead of adding one — see
+    :func:`apply_base_overrides`.
+
+    *case_name* selects a :data:`VARIANT_CASES` overlay when the case is one of
+    the attribute's variant cases; the overlay is merged ON TOP of the shared
+    extras, so a variant inherits whatever the attribute already needed.
+    """
+    scoped = BASE_ATTRS_BY_ATTRIBUTE.get(f"{host}.{attribute}")
+    shared = scoped if scoped is not None else BASE_ATTRS_BY_ATTRIBUTE.get(attribute, {})
+
+    if not case_name:
+        return shared
+    # 🔻 `common` IS ALWAYS THE FALLBACK SECTION, not only for View. This read
+    # `host if host != View else (host, "common")`, which was invisible while
+    # every common attribute was hosted on View — and wrong the moment one got
+    # a SECOND host (rules.COMMON_EXTRA_HOSTS, 2026-09-16). The Label-hosted
+    # `borderStyle__*_with_border` fixtures then lost the extras that make a
+    # border exist at all (`borderWidth: 2, borderColor: "#FF0000"`), so the
+    # layout declared a STYLE for a border nobody asked for: measured, all
+    # three platforms rendered them byte-identical to the plain-Label control.
+    # A fixture with no discriminating power is decoration, and the gate was
+    # right to call all eight inert.
+    #
+    # The host's own section still wins — a component that declares the
+    # attribute itself (TextField.borderStyle) keeps its own extras.
+    sections = (host, "common") if host != "common" else ("common",)
+    # A case-scoped base replaces the shared one for that case only.
+    for section in sections:
+        case_extra = CASE_BASE_ATTRS.get((section, attribute, case_name))
+        if case_extra is not None:
+            return {**shared, **case_extra}
+    for section in sections:
+        for suffix, overlay in VARIANT_CASES.get((section, attribute), {}).items():
+            if case_name == suffix or case_name.endswith(f"_{suffix}"):
+                return {**shared, **overlay}
+    return shared
+
+
+#: Prefix marking a companion that belongs on the ROOT node, not the target.
+ROOT_ATTR_PREFIX = "root."
+
+
+def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> None:
+    """Merge *extra* into *base*, treating ``None`` as "drop this base key".
+
+    Adding attributes is not always what makes a fixture observable —
+    sometimes the base is what hides it. `TextField.placeholder` is declared
+    as an alias of `hint`, and the base injects `hint: "Sample"`, so the
+    fixture carried both spellings: the primary won and the alias could never
+    move a pixel however correctly it resolved. Removal is the fix, and it
+    has to travel with the CONTROL too, or the pair stops being comparable.
+
+    ``root.``-prefixed keys are skipped here: they configure the fixture's
+    ROOT node (see :func:`split_root_attrs`), not the component under test.
+    """
+    for key, value in (extra or {}).items():
+        if key.startswith(ROOT_ATTR_PREFIX):
+            continue
+        if value is None:
+            base.pop(key, None)
+        else:
+            base[key] = value
+
+
+#: `root.` keys that describe the root's CHILDREN rather than its attributes.
+#: Handled structurally by the layout builders; never written as JSON keys.
+ROOT_STRUCTURE_KEYS = ("backdrop", "anchorLast", "cover", "textScale")
+
+
+def text_scale(extra: dict[str, Any] | None) -> float | None:
+    """The text size the host draws the fixture at (`root.textScale`), or None for the standard size.
+
+    fontScaling / maxFontScale change the picture only at a text size other than the standard one (ticket
+    sjui-label-font-size-ignores-dynamic-type), so their fixtures and controls carry it; the manifest records it
+    as `textScale` and each host applies it before drawing (iOS: the Dynamic Type step at most it; Android: the
+    configuration's fontScale; the web: the root font size).
+    """
+    value = split_root_attrs(extra).get("textScale")
+    return float(value) if value is not None else None
+
+
+def root_backdrop(extra: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Nodes to place BEHIND the target, in the root's own child list.
+
+    A root with no orientation is an overlay, so an earlier sibling sits
+    underneath. `Blur` needs one: `backdrop-filter` blurs what is behind the
+    element, and a flat colour blurs to the same flat colour — the fixture and
+    its control came out identical no matter what radius was asked for.
+    """
+    return [dict(n) for n in (split_root_attrs(extra).get("backdrop") or [])]
+
+
+def root_cover(extra: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Nodes to place OVER the target, after it in the root's own child list.
+
+    `zIndex` decides which of two overlapping siblings is drawn on top, and the
+    target overlapped nothing, so every value drew its control (2.3.21, ticket
+    2026-10-23-four-new-fixtures-cannot-show-their-attribute). A later sibling
+    covers the target in the control; the fixture's z-index lifts it back over.
+    """
+    return [dict(n) for n in (split_root_attrs(extra).get("cover") or [])]
+
+
+def root_anchor_last(extra: dict[str, Any] | None) -> bool:
+    """True when the anchor must be emitted AFTER the target.
+
+    `indexAbove` raises the target above the referenced view, and the anchor is
+    normally emitted first — so the target was already on top and raising it
+    changed nothing. Emitting the anchor last is what gives the attribute
+    somewhere to travel from. (`indexBelow` works precisely because of the
+    default order, which is why only one of the pair was ever inert.)
+    """
+    return bool(split_root_attrs(extra).get("anchorLast"))
+
+
+def split_root_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
+    """The ``root.``-prefixed companions in *extra*, with the prefix stripped.
+
+    Some attributes are read off the PARENT rather than off the node that
+    declares them — `weight` is a share of the parent's main axis, and every
+    platform ignores it unless that parent is a Row/Column. Nothing the
+    fixture writes on the target can create that condition, so the companion
+    has to land on the root.
+
+    They ride the same table (and therefore the same shape name) as the target
+    companions, so a fixture whose root was widened is still compared against a
+    control widened the same way.
+    """
+    return {
+        key[len(ROOT_ATTR_PREFIX):]: value
+        for key, value in (extra or {}).items()
+        if key.startswith(ROOT_ATTR_PREFIX)
+    }
+
+
+def root_node_attrs(extra: dict[str, Any] | None) -> dict[str, Any]:
+    """:func:`split_root_attrs` minus the structural keys.
+
+    Only these belong in the root node's own JSON; `backdrop` and `anchorLast`
+    describe its children and are consumed by the builders.
+    """
+    return {
+        k: v
+        for k, v in split_root_attrs(extra).items()
+        if k not in ROOT_STRUCTURE_KEYS
+    }
+
+
+#: ``@{name}`` binding companions whose data property is not a String.
+#:
+#: Empty today: every companion binding is String on all three codegen paths
+#: (`data.inputText.count` / `String(newValue.prefix(n))` on iOS,
+#: `data.pickedDate.toDate(format:)` for the date companion). A class outside
+#: the narrow cross-platform vocabulary — `String` / `Int` / `Boolean` /
+#: `CollectionDataSource` — does not survive kjui's `map_to_kotlin_type`,
+#: which passes unknown classes through verbatim into Kotlin source.
+BINDING_DATA_CLASSES: dict[str, str] = {
+    # Collection.scrollTo: the declared class decides what the value names
+    # (1.9.0) — a String is a cell's key. The scrollAnchor fixtures name the
+    # cell "Beta" by its title (cellIdProperty), set after the first draw
+    # (AFTER_FIRST_DRAW); its zero, "", names no cell, so the first draw
+    # scrolls nowhere.
+    "scrollTarget": "String",
+    # The View host of tapBackground: its tap, and the tap's bound gate.
+    "conformanceTap": "() -> Void",
+    "conformanceTapGate": "Boolean",
+}
+
+
+#: Visual fixtures whose subject shows only after a value CHANGES once the
+#: fixture has been drawn, keyed by the ``@{name}`` binding that changes. A
+#: fixture (or control) whose layout binds one gets a manifest ``state`` with
+#: ``afterFirstDraw: {name, set: {var, value}}``: the host draws it, sets the
+#: var to the literal once, waits for the picture to come to rest and only
+#: then lets the screenshot be taken, and stamps the result
+#: (INTERACTIVE_HOST_CONTRACT.md "afterFirstDraw"; RESULTS_SCHEMA.md). The
+#: gate fails a declared fixture whose result does not say it fired, so a
+#: host that never fires cannot photograph the first draw and pass.
+#:
+#: ``scrollTarget`` (Collection.scrollAnchor and its control): a scroll is a
+#: change of the scrollTo value, never the value the list is drawn with.
+AFTER_FIRST_DRAW: dict[str, dict[str, str]] = {
+    "scrollTarget": {"value": "Beta"},
+}
+
+#: The name every afterFirstDraw operation carries (results and logs name it).
+AFTER_FIRST_DRAW_NAME = "conformanceAfterFirstDraw"
+
+
+def _fits(value: Any, cls: str) -> bool:
+    if cls == "Boolean":
+        return isinstance(value, bool)
+    if cls == "Int":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if cls == "Double":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, str)
+
+
+def bound_seed_from(plan: "AttributePlan") -> Any:
+    """The literal a bound case should seed its data property with.
+
+    The representative case is the natural seed — the bound fixture then asks
+    for exactly what its literal twin asks for — but on a UNION-typed
+    attribute the representative may be spelled in the other member of the
+    union, and then it does not fit the declared data class and
+    :func:`bound_data_entry` falls back to the class's zero.
+
+    That is how `Button/fontWeight__binding` came to declare `Int 0`: the
+    representative is `"bold"`, the class is `Int`, and zero is not a weight
+    at all — the fixture asked the platform to render a value outside the
+    attribute's domain (lane E2's fixture-shaping queue). So the seed is the
+    first case whose value actually FITS the class, and only then the
+    representative.
+    """
+    cls = BOUND_CASE_CLASSES.get((plan.section, plan.attribute))
+    literals = [c for c in plan.cases if c.alias_of is None and c.name != BOUND_CASE_SUFFIX]
+    if cls is not None:
+        for case in literals:
+            if _fits(case.value, cls):
+                return case.value
+    return literals[0].value if literals else None
+
+
+def bound_data_entry(
+    section: str, attribute: str, default: Any = None
+) -> dict[str, Any] | None:
+    """The ``data`` declaration a bound case needs, or None.
+
+    Without it the generated view reads `data.<prop>` off a Data type that has
+    no such member and the codegen host does not compile — kjui and sjui derive
+    the type from this section alone.
+    """
+    cls = BOUND_CASE_CLASSES.get((section, attribute))
+    if cls is None or (section, attribute) in BOUND_CASES_BLOCKED:
+        return None
+    # Seed the property with the LITERAL case's value, so the bound fixture is
+    # asking for exactly what its literal twin asks for. A zero seed would make
+    # every bound fixture render the platform default, i.e. its control — the
+    # binding would resolve perfectly and still measure nothing.
+    seed = default if _fits(default, cls) else _BINDING_DATA_DEFAULTS.get(cls, "")
+    return {"name": bound_prop_name(attribute), "class": cls, "defaultValue": seed}
+
+#: Binding companions that feed a TWO-WAY control, mapped to the class of the
+#: change handler the generated code calls back into.
+#:
+#: Declaring a property in the layout's `data` section makes rjui use the
+#: declaration verbatim and SKIP its own inference — so a companion that drives
+#: a controlled input has to name both halves of the two-way pair or the
+#: generated component calls `data.on<Prop>Change?.(...)` against a Data type
+#: that has no such member (`tsc --noEmit`, 49-D round 3: Fx0326 / Fx0536).
+#:
+#: rjui infers the handler for TextField's text binding but not for SelectBox's
+#: date binding — that asymmetry is reported to lane A. This table is the
+#: fixture side of it, and stays correct either way: the handler belongs in the
+#: declaration of a two-way binding.
+BINDING_CHANGE_HANDLERS: dict[str, str] = {
+    # SelectBox.selectedDate — `onChange` writes the reformatted string back.
+    "pickedDate": "(String) -> Void",
+}
+
+
+def _change_handler_name(prop: str) -> str:
+    """rjui's two-way partner for *prop*: ``pickedDate`` -> ``onPickedDateChange``."""
+    return f"on{prop[:1].upper()}{prop[1:]}Change"
+
+_BINDING_RE = re.compile(r"^@\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+
+#: Default class for an auto-declared binding companion.
+BINDING_DATA_DEFAULT_CLASS = "String"
+
+#: Default value per declared class, so the generated Data type compiles.
+_BINDING_DATA_DEFAULTS: dict[str, Any] = {
+    "String": "",
+    "Int": 0,
+    "Double": 0.0,
+    "Boolean": False,
+}
+
+
+def binding_data_entries(
+    attrs: dict[str, Any], already_declared: set[str]
+) -> list[dict[str, Any]]:
+    """``data`` entries for every ``@{name}`` companion in *attrs*.
+
+    kjui and sjui derive the generated Data type from the layout's ``data``
+    section ONLY — they never infer a property from a binding expression — so a
+    companion like ``{"text": "@{inputText}"}`` produces a view that reads
+    ``data.inputText`` off a class with no such property, and the codegen host
+    does not compile. Declaring the property is what makes the companion
+    usable at all.
+
+    Only *companion* bindings are declared: the value under test comes from the
+    case plan, and the static fixture suite never writes a binding there.
+    """
+    entries: list[dict[str, Any]] = []
+    seen = set(already_declared)
+    for value in attrs.values():
+        if not isinstance(value, str):
+            continue
+        match = _BINDING_RE.match(value.strip())
+        if match is None:
+            continue
+        name = match.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        cls = BINDING_DATA_CLASSES.get(name, BINDING_DATA_DEFAULT_CLASS)
+        if "->" in cls:
+            # A handler has no default: it is supplied at runtime, and the
+            # codegens emit it as an optional callback member.
+            entries.append({"name": name, "class": cls})
+        else:
+            entries.append(
+                {"name": name, "class": cls, "defaultValue": _BINDING_DATA_DEFAULTS.get(cls, "")}
+            )
+        handler_cls = BINDING_CHANGE_HANDLERS.get(name)
+        if handler_cls is not None:
+            handler = _change_handler_name(name)
+            if handler not in seen:
+                seen.add(handler)
+                # No defaultValue: a handler is supplied at runtime, and the
+                # codegens emit it as an optional callback member.
+                entries.append({"name": handler, "class": handler_cls})
+    return entries
+
+
+#: Children injected into container hosts so layout attributes are observable.
+BASE_CHILDREN: dict[str, list[dict[str, Any]]] = {
+    # Six 40px boxes total 240px inside a 200px host, i.e. they OVERFLOW one
+    # row. Two boxes fitted comfortably, which left `flexWrap` nothing to wrap,
+    # `distribution` no free space to distribute, and `padding` no reflow to
+    # cause — all three rendered pixel-identical to a fixture without them.
+    "View": [
+        {"type": "View", "id": "box_a", "width": 40, "height": 40, "background": "#FF0000"},
+        {"type": "View", "id": "box_b", "width": 40, "height": 40, "background": "#0000FF"},
+        {"type": "View", "id": "box_c", "width": 40, "height": 40, "background": "#00AA00"},
+        {"type": "View", "id": "box_d", "width": 40, "height": 40, "background": "#FFAA00"},
+        {"type": "View", "id": "box_e", "width": 40, "height": 40, "background": "#AA00AA"},
+        {"type": "View", "id": "box_f", "width": 40, "height": 40, "background": "#00AAAA"},
+    ],
+    # Three boxes, not one: `orientation` chooses between a row and a column,
+    # and one child renders the same picture either way (lane A §5(4)).
+    "SafeAreaView": [
+        {"type": "View", "id": "box_a", "width": 40, "height": 40, "background": "#FF0000"},
+        {"type": "View", "id": "box_b", "width": 40, "height": 40, "background": "#0000FF"},
+        {"type": "View", "id": "box_c", "width": 40, "height": 40, "background": "#00AA00"},
+    ],
+    # The tall block is what makes the scroller scroll; the two beside it are
+    # what makes its orientation visible.
+    "ScrollView": [
+        {"type": "View", "id": "content", "width": 150, "height": 600, "background": "#FF0000"},
+        {"type": "View", "id": "content_b", "width": 150, "height": 80, "background": "#0000FF"},
+        {"type": "View", "id": "content_c", "width": 150, "height": 80, "background": "#00AA00"},
+    ],
+    "CircleView": [],
+    "Collection": [],
+    "TabView": [],
+}
+
+# --------------------------------------------------------------------------- #
+# Collection cell supply (F4 Phase 2 — INTERACTIVE_HOST_CONTRACT.md §4)
+# --------------------------------------------------------------------------- #
+
+#: Layout root ``data`` section entries injected per host. The shorthand
+#: CollectionDataSource shape (bare cell array = one section) pairs with the
+#: ``sections``/``items`` base attrs above; each render path materializes it
+#: through its own production channel (generated Data-class defaults on the
+#: codegen paths, host-side materialization on the dynamic paths).
+BASE_DATA: dict[str, list[dict[str, Any]]] = {
+    "Collection": [
+        {
+            "name": "items",
+            "class": "CollectionDataSource",
+            "defaultValue": [
+                {"title": "Alpha"},
+                {"title": "Beta"},
+                {"title": "Gamma"},
+            ],
+        },
+    ],
+}
+
+#: Companion layouts (conformance-root-relative) recorded on every manifest
+#: entry whose host needs them. Companions ride the SAME distribution channel
+#: as the Embed screens: each host mirrors every manifest ``companions`` path
+#: into the directory its production loader reads (assets/Layouts on Android,
+#: Resources/Layouts on iOS, Layouts/pages on web) under the bare file name.
+BASE_COMPANIONS: dict[str, list[str]] = {
+    "Collection": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        # Cells whose ROOT declares no id — the shape the corpus lacked, and
+        # the reason the cell-address suite was green through the defect.
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json",
+    ],
+}
+
+#: Companion layout payloads the generator writes once per run, keyed by
+#: their conformance-root-relative path. Fixed 60x28 cells keep grid effects
+#: (columns, spacing, insets) visible inside the 200x200 host without the
+#: infinite-constraint edge cases a matchParent cell hits in horizontal and
+#: flow layouts.
+#:
+#: The ``data`` section is load-bearing: kjui/sjui Data generation derives
+#: properties from it ONLY (no binding inference), so without it the
+#: generated cell view reads ``data.title`` off a Data class that has no
+#: such property and the codegen host does not compile. rjui and the
+#: dynamic renderers infer/resolve the binding either way; the declared
+#: empty default is overridden by each rendered cell's data.
+SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
+    #: A cell root with NO id and two identified children. `conformance_cell`
+    #: declares `id: "cell_root"`, which already made it an explicit
+    #: accessibility container — so every Collection fixture in the corpus
+    #: rendered the one shape the defect cannot occur in.
+    "fixtures/Collection/__cells/conformance_cell_bare.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 40,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_child_a",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "cell_child_b",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "b",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+        ],
+    },
+    #: The single-child shape. SwiftUI merges a container holding one
+    #: accessibility child, which would put the wrapper's address back onto
+    #: that child; this is the fixture that decides whether each renderer
+    #: needs the anchor overlay against that merge.
+    "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 28,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_only_child",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 4,
+            }
+        ],
+    },
+    #: The cell id-box pair: one child, margins, padding 8, offsetX 5, a fixed
+    #: size and a background — without and with a root id. A cell's item box
+    #: (`{collectionId}_item_{N}`) and the root's own id box are read
+    #: against the drawn box (SwiftJsonUI ConformanceHost CellIdBoxProbe):
+    #: the anchor against the single-child merge used to sit outside the
+    #: root's offset and margins.
+    "fixtures/Collection/__cells/conformance_cell_inset_bare_single.layout.json": {
+        "type": "View",
+        "width": 100,
+        "height": 40,
+        "leftMargin": 20,
+        "topMargin": 10,
+        "padding": 8,
+        "offsetX": 5,
+        "background": "#FFDD00",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_inset_child",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+            }
+        ],
+    },
+    "fixtures/Collection/__cells/conformance_cell_inset_single.layout.json": {
+        "type": "View",
+        "id": "cell_inset_root",
+        "width": 100,
+        "height": 40,
+        "leftMargin": 20,
+        "topMargin": 10,
+        "padding": 8,
+        "offsetX": 5,
+        "background": "#FFDD00",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_inset_id_child",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+            }
+        ],
+    },
+    #: The `within` family (within_fixtures): every cell repeats the same
+    #: child ids, so only a lookup scoped to one cell tells the cells apart.
+    #: `within_gone` is gone in every cell: `hidden` within a cell holds on
+    #: it and not on the drawn `within_badge` beside it.
+    "fixtures/Collection/__cells/conformance_cell_within.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 40,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "within_title",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "within_badge",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "b",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "within_gone",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "g",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "visibility": "gone",
+            },
+        ],
+    },
+    #: One child: the single-child merge could put the cell's address on the
+    #: child and leave nothing under the address to look inside.
+    "fixtures/Collection/__cells/conformance_cell_within_single.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 28,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "within_only",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 4,
+            }
+        ],
+    },
+    #: A clickable cell root: a clickable node can merge its children's
+    #: semantics into itself (Compose), which would leave no child to find.
+    "fixtures/Collection/__cells/conformance_cell_within_tap.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 40,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""},
+            {"name": "onCellTap", "class": "() -> Void"},
+        ],
+        "onClick": "@{onCellTap}",
+        "child": [
+            {
+                "type": "Label",
+                "id": "within_tap_title",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "within_tap_badge",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "b",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+        ],
+    },
+    "fixtures/Collection/__cells/conformance_cell.layout.json": {
+        "type": "View",
+        "id": "cell_root",
+        "width": 60,
+        "height": 28,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_title",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 4,
+            }
+        ],
+    },
+}
+
+#: Hosts for ``common`` attributes that only make sense on an interactive
+#: component. Default host for common attributes is ``View``.
+#:
+#: `enabled` is deliberately NOT here. It used to be hosted on Button, on the
+#: assumption that only an interactive component can be disabled — but a View
+#: with an onClick is interactive, and hosting the fixture on a Button is what
+#: hid the fact that `enabled` did nothing on a View: the Button emits a real
+#: `disabled` attribute, so the fixture passed while three codegens ignored the
+#: attribute on every container. The View host asserts through the a11y tree
+#: (`aria-disabled` on web, the `Disabled` semantics on Compose), which is the
+#: only thing a UI test can observe on a non-input element.
+COMMON_HOST_OVERRIDES: dict[str, str] = {
+    # `effectStyle` is NOT here any more, so its common fixtures go on the
+    # default `View` host. They used to sit on a `Blur`, on the August reading
+    # that "a blur effect style is only meaningful on something that blurs".
+    # That stopped being true once a value on a Blur is judged on Blur's OWN
+    # declaration (Light / Dark / ExtraLight): Regular, Prominent, Thin,
+    # UltraThin, Thick and Chrome are undeclared there, all six drew the
+    # default, and six of the nine common fixtures drew one picture. Common's
+    # spellings were never measured on a node that declares them.
+    #
+    # On a View every path that has a non-Blur route draws a material (a scrim
+    # plus a blur), so the nine values are told apart where they are declared.
+    # A path with no such route draws nothing and shows as inert, which is a
+    # finding, not a reason to hide the fixture on another host. The Blur
+    # section keeps its own `Blur/effectStyle__*` fixtures for its own enum.
+    "tapBackground": "Button",
+    "highlightBackground": "Button",
+    "disabledBackground": "Button",
+    "defaultBackground": "Button",
+}
+DEFAULT_COMMON_HOST = "View"
+
+#: Common attributes that must ALSO be exercised on a SECOND host, and which.
+#:
+#: 🔻 WHY THIS EXISTS. A common attribute gets ONE host, and for almost all of
+#: them that host is `View`. On iOS's dynamic renderer, View goes through the
+#: shared modifier pipeline — and four components do not: Label, Image,
+#: NetworkImage and Text re-implement the generator's modifier order by hand.
+#: All four had copied it as far as `cornerRadius` and dropped `border`, so a
+#: declared border drew in codegen and not in dynamic. Nine fixtures declare
+#: `borderWidth`; all nine declare it on `View`. THE CORPUS ASKED THE BORDER
+#: QUESTION ONLY WHERE THE ANSWER WAS ALREADY YES — measured 2026-09-16, from a
+#: consumer's screenshot rather than from any gate.
+#:
+#: ⚠️ NOT "every common attribute on every host". That would double a 1099
+#: fixture corpus to buy coverage of combinations nobody has a defect for. The
+#: entries here are the ones where a SECOND implementation of the same
+#: attribute is known to exist — the hand-rolled chain — so the second host is
+#: a second implementation, not a second decoration.
+COMMON_EXTRA_HOSTS: dict[str, tuple[str, ...]] = {
+    # The border family, on the component whose chain lost it.
+    #
+    # And on the three input fields (2026-10-05, frame parity): the user ruled
+    # that a border does not push the content inward, EXCEPT on an input field,
+    # where the border is control chrome and the text's place inside it is the
+    # platform's idiom (attribute_semantics borderContentBox.inputFieldException).
+    # The corpus had no input field with a border, so the exception was a
+    # declaration no gate could see. Width and colour only: TextField has its
+    # own `borderStyle` (the UIKit field chrome), which the common spelling
+    # would collide with.
+    "borderWidth": ("Label", "TextField", "TextView", "SelectBox"),
+    "borderColor": ("Label", "TextField", "TextView", "SelectBox"),
+    "borderStyle": ("Label",),
+    # The pressed background on a node with a tap (jsonui-cli 1.9.0, ruling
+    # (a)). The Button draws it in its own view; every other node with a tap
+    # draws it through a second implementation — a background slot the press
+    # replaces (sjui `.pressedBackground` + `.tracksPress`, kjui's watched
+    # press in `run { … }`, rjui `active:bg-*`). No face writes tapBackground
+    # outside a Button, so without this fixture no emission of that stage ever
+    # reached a real Swift or Kotlin compiler. A still capture cannot show a
+    # press: the fixture is there to be compiled and drawn at rest.
+    "tapBackground": ("View",),
+    # The offset, on the components whose SwiftJsonUI Dynamic chain is built
+    # by hand (2026-10-06): Label, Button, TextView and SelectBox ran their own
+    # modifier chain without the offset stage, so offsetX / offsetY moved
+    # nothing in Dynamic while codegen and Android moved them (measured: drawn
+    # at the margin, x = 20, where the others drew 25; ticket sjui-dynamic-
+    # offsetx-is-not-applied-to-label-button-and-textview). Every offset
+    # fixture was hosted on a View, whose chain is the standard one — the
+    # corpus asked the offset question only where the answer was yes.
+    "offsetX": ("Label", "Button", "TextView", "SelectBox"),
+    "offsetY": ("Label", "Button", "TextView", "SelectBox"),
+    # The declared corner on the controls that draw a corner of their own when
+    # none is declared (2026-11-16, ticket rjui-selectbox-default-corner-
+    # overrides-declared): rjui put that default class beside the declared one,
+    # and Tailwind, writing rounded-* in name order, let the default win for
+    # rounded / rounded-2xl / rounded-[Npx] (SelectBox, Segment rounded-lg).
+    # Every fixture was hosted on a View, which has no default. The extra
+    # values are in EXTRA_CASES: the representative 8 is the SelectBox's own
+    # default and shows nothing there. (A TextField writes its declared corner
+    # inline as well, which no class beats.)
+    "cornerRadius": ("SelectBox", "Segment"),
+    # A Segment's shadow under its own translucent track, with no background
+    # declared (2026-11-16): Compose's dropShadow fills its whole shape whatever
+    # the content's opacity, iOS's .shadow is cast from the drawn content, so
+    # the shadow showing through the 12% grey track is where the two can part.
+    "shadow": ("Segment",),
+}
+
+
+# --------------------------------------------------------------------------- #
+# Type normalization
+# --------------------------------------------------------------------------- #
+
+
+def normalize_type(defn: dict) -> tuple[set[str], list[Any]]:
+    """Return ``(base_types, enum_values)`` for one attribute definition.
+
+    ``type`` may be a string, or a list mixing strings and ``{"enum": [...]}``
+    objects (e.g. ``width``). A sibling ``enum`` key contributes values too.
+    """
+    base_types: set[str] = set()
+    enum_values: list[Any] = []
+
+    raw = defn.get("type")
+    entries = raw if isinstance(raw, list) else [raw]
+    for entry in entries:
+        if isinstance(entry, str):
+            base_types.add(entry)
+        elif isinstance(entry, dict) and isinstance(entry.get("enum"), list):
+            enum_values.extend(entry["enum"])
+
+    sibling = defn.get("enum")
+    if isinstance(sibling, list):
+        for v in sibling:
+            if v not in enum_values:
+                enum_values.append(v)
+
+    return base_types, enum_values
+
+
+def _slugify(value: Any) -> str:
+    """Filesystem-safe, lowercase case-name for an enum value."""
+    text = str(value)
+    safe = "".join(c if c.isalnum() or c in "_-" else "-" for c in text)
+    return safe.lower() or "empty"
+
+
+def dedupe_case_names(values: list[Any]) -> list[tuple[str, Any]]:
+    """Assign unique, case-insensitively distinct case names to enum values.
+
+    macOS filesystems are case-insensitive, and several enums list both
+    spellings (``Left`` / ``left``); the second occurrence gets a ``_2``
+    (``_3``...) suffix in definition order — fully deterministic.
+    """
+    seen: dict[str, int] = {}
+    out: list[tuple[str, Any]] = []
+    for v in values:
+        slug = _slugify(v)
+        count = seen.get(slug, 0) + 1
+        seen[slug] = count
+        out.append((slug if count == 1 else f"{slug}_{count}", v))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Representative value selection
+# --------------------------------------------------------------------------- #
+
+
+def _clamp(value: float, defn: dict) -> Any:
+    lo = defn.get("min")
+    hi = defn.get("max")
+    if isinstance(lo, (int, float)) and value < lo:
+        value = lo
+    if isinstance(hi, (int, float)) and value > hi:
+        value = hi
+    return value
+
+
+def representative_value(section: str, attribute: str, defn: dict) -> tuple[bool, Any]:
+    """Pick the single deterministic non-enum representative value.
+
+    Returns ``(found, value)``; ``found`` is False when no static value can be
+    derived (composite object/array without an override).
+    """
+    if (section, attribute) in VALUE_OVERRIDES_BY_SECTION:
+        return True, VALUE_OVERRIDES_BY_SECTION[(section, attribute)]
+    if attribute in VIEW_REF_ATTRS:
+        return True, ANCHOR_ID
+    if attribute in IMAGE_ATTRS:
+        return True, VALUE_OVERRIDES.get(attribute, IMAGE_ASSET_NAME)
+    if attribute in VALUE_OVERRIDES:
+        return True, VALUE_OVERRIDES[attribute]
+    if attribute in HINT_ATTRS:
+        return True, HINT_TEXT
+
+    base_types, _ = normalize_type(defn)
+
+    if "boolean" in base_types:
+        return True, True
+    if "number" in base_types:
+        if "default" in defn and isinstance(defn["default"], (int, float)):
+            return True, defn["default"]
+        return True, _clamp(DEFAULT_NUMBER, defn)
+    if "color" in base_types or _is_color_name(attribute):
+        return True, DEFAULT_COLOR
+    if "string" in base_types:
+        if isinstance(defn.get("default"), str) and defn["default"]:
+            return True, defn["default"]
+        return True, DEFAULT_STRING
+    return False, None
+
+
+def _is_color_name(attribute: str) -> bool:
+    lower = attribute.lower()
+    return "color" in lower or lower.endswith("background") or lower == "tint"
+
+
+# --------------------------------------------------------------------------- #
+# Assertion builders
+# --------------------------------------------------------------------------- #
+
+
+def _visible() -> dict:
+    return {"assert": "visible", "id": TARGET_ID}
+
+
+def _not_visible() -> dict:
+    return {"assert": "notVisible", "id": TARGET_ID}
+
+
+def _hidden() -> dict:
+    # Not drawn, wherever it is (test-runner `hidden`): the position-free
+    # check beside notVisible, which is the viewport's.
+    return {"assert": "hidden", "id": TARGET_ID}
+
+
+def _enabled() -> dict:
+    return {"assert": "enabled", "id": TARGET_ID}
+
+
+def _disabled() -> dict:
+    return {"assert": "disabled", "id": TARGET_ID}
+
+
+def _text_equals(expected: str) -> dict:
+    return {"assert": "text", "id": TARGET_ID, "equals": expected}
+
+
+def _assertable_cases(section: str, attribute: str, host: str, defn: dict) -> tuple[CasePlan, ...] | None:
+    """Return assertion-bearing cases when the attribute is assertable, else None."""
+    if attribute == "visibility":
+        _, enum_values = normalize_type(defn)
+        assert_map = {
+            "visible": (_visible(),),
+            "invisible": (_not_visible(), _hidden()),
+            "gone": (_not_visible(), _hidden()),
+        }
+        cases = []
+        for name, value in dedupe_case_names(enum_values):
+            assertions = assert_map.get(str(value))
+            if assertions is None:
+                assertions = (_visible(),)
+            cases.append(CasePlan(name=name, value=value, written_key=attribute, assertions=assertions))
+        return tuple(cases)
+
+    if attribute == "hidden":
+        return (
+            CasePlan(name="true", value=True, written_key=attribute, assertions=(_not_visible(), _hidden())),
+            CasePlan(name="false", value=False, written_key=attribute, assertions=(_visible(),)),
+        )
+
+    if attribute == "enabled" and host in ENABLED_ASSERTABLE_COMPONENTS:
+        return (
+            CasePlan(name="true", value=True, written_key=attribute, assertions=(_visible(), _enabled())),
+            CasePlan(name="false", value=False, written_key=attribute, assertions=(_visible(), _disabled())),
+        )
+
+    if attribute == "text" and host in TEXT_ASSERTABLE_COMPONENTS:
+        return (
+            CasePlan(
+                name="static",
+                value=CONFORMANCE_TEXT,
+                written_key=attribute,
+                assertions=(_visible(), _text_equals(CONFORMANCE_TEXT)),
+            ),
+        )
+
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Main entry: plan one attribute
+# --------------------------------------------------------------------------- #
+
+
+def _untestable_reason(section: str, attribute: str, defn: dict) -> str | None:
+    """Return the skip reason for untestable attributes, or None."""
+    if attribute.startswith("_"):
+        return REASON_DEFINITION_META
+    if section in UNTESTABLE_SECTIONS:
+        return UNTESTABLE_SECTIONS[section]
+
+    base_types, enum_values = normalize_type(defn)
+
+    if "callback" in base_types:
+        return REASON_CALLBACK
+    if attribute in SCRIPT_ATTRS:
+        return REASON_CALLBACK
+    if (
+        len(attribute) > 2
+        and attribute.startswith("on")
+        and attribute[2].isupper()
+        and attribute not in CALLBACK_NAME_EXCEPTIONS
+    ):
+        return REASON_CALLBACK
+    if attribute == "onclick":
+        # The array face of `onclick` is measurable and is NOT here — it is
+        # held in ARRAY_FACE_BLOCKED, because emitting it breaks two of the
+        # three generators outright. See that table.
+        return REASON_CALLBACK
+    if attribute in BINDING_ATTRS:
+        return REASON_BINDING_ONLY
+    if base_types == {"binding"}:
+        return REASON_BINDING_ONLY
+    if attribute in METADATA_ATTRS or attribute.startswith("$"):
+        # $-prefixed names are harness/normalizer markers (e.g. $jui).
+        return REASON_METADATA
+    if attribute in STRUCTURAL_ATTRS:
+        return REASON_STRUCTURAL
+    if attribute in CROSS_FILE_ATTRS:
+        return REASON_CROSS_FILE
+    if attribute in BEHAVIORAL_ATTRS:
+        return REASON_BEHAVIORAL
+    if (section, attribute) in NETWORK_ATTRS:
+        return REASON_NETWORK
+    if (section, attribute) in RUNTIME_DATA_ATTRS:
+        return REASON_RUNTIME_DATA
+    return None
+
+
+#: `mode` tag -> the platforms an attribute is VALID on.
+#:
+#: Not the same mapping as `coverage.MODE_TAGS`, which answers "whose Ruby
+#: converter must read this" and maps `uikit` to nothing because UIKit applies
+#: attributes in the Swift runtime with no Ruby codegen involved. A UIKit
+#: attribute is still legal in an iOS layout, so a fixture for it belongs on
+#: iOS — and nowhere else.
+MODE_PLATFORM_MAP: dict[str, set[str]] = {
+    "uikit": {"ios"},
+    "swiftui": {"ios"},
+    "compose": {"android"},
+    "react": {"web"},
+}
+
+
+def _platforms(defn: dict) -> tuple[str, ...]:
+    """Platforms a fixture for this attribute should run on.
+
+    Honours `mode` as well as `platform`. Ignoring `mode` gave every
+    Compose-only attribute a three-platform fixture: `Collection.reverseLayout`
+    and `View.onAppear` were rendered on iOS and web, where the attribute is not
+    declared at all, so the layout was invalid there and the screenshot could
+    only ever match its control.
+    """
+    scope: set[str] | None = None
+
+    raw = defn.get("platform")
+    if raw is not None:
+        tags = raw if isinstance(raw, list) else [raw]
+        unknown = [t for t in tags if t not in PLATFORM_MAP]
+        if unknown:
+            # A silently-dropped token either shrinks the declared surface
+            # (partial typo) or WIDENS it to all platforms (all tokens
+            # unknown -> scope None). Both corrupt the coverage universe
+            # without a trace — writing "web" instead of "react" did exactly
+            # that. Fail loudly instead.
+            raise ValueError(
+                f"unknown platform token(s) {unknown!r} in attribute "
+                f"definition (known: {sorted(PLATFORM_MAP)})"
+            )
+        mapped = {PLATFORM_MAP[t] for t in tags}
+        scope = mapped or None
+
+    raw_mode = defn.get("mode")
+    if raw_mode is not None:
+        tags = raw_mode if isinstance(raw_mode, list) else [raw_mode]
+        mode_scope: set[str] = set()
+        for tag in tags:
+            # An unknown or deliberately broad tag (`dynamic-only`) does not
+            # narrow: it says how the attribute is applied, not where.
+            mode_scope |= MODE_PLATFORM_MAP.get(tag, set(ALL_PLATFORMS))
+        scope = mode_scope if scope is None else (scope & mode_scope)
+
+    if scope is None:
+        return ALL_PLATFORMS
+    # Preserve the canonical ios/android/web order.
+    ordered = tuple(p for p in ALL_PLATFORMS if p in scope)
+    return ordered or ALL_PLATFORMS
+
+
+def host_for(section: str, attribute: str) -> str:
+    """Component type used as the target node for a fixture."""
+    if section == "common":
+        return COMMON_HOST_OVERRIDES.get(attribute, DEFAULT_COMMON_HOST)
+    return section
+
+
+def plan_attribute(
+    section: str, attribute: str, defn: Any
+) -> AttributePlan | SkippedAttribute:
+    """Classify one attribute and produce its fixture plan (or a skip record)."""
+    if not isinstance(defn, dict):
+        return SkippedAttribute(section, attribute, REASON_DEFINITION_META)
+
+    reason = _untestable_reason(section, attribute, defn)
+    if reason is not None:
+        return SkippedAttribute(section, attribute, reason)
+
+    host = host_for(section, attribute)
+    needs_anchor = attribute in VIEW_REF_ATTRS
+
+    assertable = _assertable_cases(section, attribute, host, defn)
+    if assertable is not None:
+        cases = list(assertable)
+        cls = CLASS_ASSERTABLE
+    else:
+        cases = _visual_cases(section, attribute, defn)
+        if not cases:
+            return SkippedAttribute(section, attribute, REASON_COMPOSITE)
+        cls = CLASS_VISUAL
+
+    # The user ruling above: UIKit-only attributes are not photographed, so the
+    # plan stops claiming visual coverage before anything downstream reads it —
+    # the control, the screenshot step and the counts all follow from `cls`.
+    if cls == CLASS_VISUAL and is_uikit_only(defn):
+        cls = CLASS_DECLARATION_ONLY
+
+    cases = _with_alias_cases(section, attribute, defn, cases)
+
+    # The bound case goes last: it must never be the representative (`primary`
+    # is the literal form, which is what the C0/C2 checks compare), and the
+    # alias probes mirror the first case, not this one.
+    bound = bound_case_for(
+        section, attribute, cases[0].assertions if cls == CLASS_ASSERTABLE else ()
+    )
+    # A boolean attribute planned exactly ONE literal case, and which one
+    # depended on whichever value the representative tables happened to pick.
+    # That is thin on its own — half the attribute's domain untested — and it
+    # bites in two specific ways:
+    #
+    #   * the codegen differential looks for its "second value" in the case
+    #     list, so with one literal it landed on the bound case and compared a
+    #     literal against a `@{...}` expression. That is the C1 question, not
+    #     C2; it filed nine android booleans as "emits a constant" with nothing
+    #     wrong with them, and it MASKED two real findings by going the other
+    #     way.
+    #   * a contract pinned to `__true` silently stops being checked when the
+    #     representative flips to `false`. `TabView/showLabels__true` is
+    #     recorded in `attribute_semantics.json#skinIdioms` and has not existed
+    #     in the manifest since the representative round — a dead contract, and
+    #     no number of measurement rounds would have surfaced it, because the
+    #     fixture it names is not there to measure. (Found by E.)
+    #
+    # Both close the same way: a boolean plans both of its values, always.
+    # Count only the BOOLEAN literals. Counting every literal made the rule
+    # stop firing the moment an attribute gained a non-boolean extra case —
+    # adding `underline__styled` silently deleted `underline__false`, which is
+    # exactly the dead-contract shape this rule exists to prevent.
+    #
+    # Count DISTINCT VALUES, not cases, for the same reason one step along. A
+    # variant repeats a case under a suffix WITH THE SAME VALUE, so counting
+    # cases made two spellings of `true` look like a complete domain and the
+    # rule fell silent again: `Radio/checked__false` has been absent from the
+    # manifest since `checked`'s `with_group` variant landed, deleted by the
+    # rule written to stop exactly that. The failure is invisible from the
+    # outside — a fixture that is not planned cannot fail — which is why the
+    # count has now been narrowed twice.
+    bool_literals = [
+        c for c in cases if c.alias_of is None and isinstance(c.value, bool)
+    ]
+    bool_values = {c.value for c in bool_literals}
+    if len(bool_values) == 1:
+        seed = bool_literals[0]
+        missing = not seed.value
+        name = str(missing).lower()
+        cases.append(
+            CasePlan(
+                name=name,
+                value=missing,
+                written_key=attribute,
+                assertions=seed.assertions,
+            )
+        )
+        # The synthesized value earns the same variants its twin has, or the
+        # variant family measures one half of the domain and the pair the
+        # variant exists to compare cannot be formed at all.
+        for suffix in variant_bases_for(section, attribute):
+            cases.append(
+                CasePlan(
+                    name=f"{name}_{suffix}",
+                    value=missing,
+                    written_key=attribute,
+                    assertions=seed.assertions,
+                )
+            )
+
+    union = bound_union_case_for(section, attribute)
+    if bound is not None:
+        cases.append(bound)
+    if union is not None:
+        cases.append(union)
+
+    return AttributePlan(
+        section=section,
+        attribute=attribute,
+        cls=cls,
+        host=host,
+        cases=tuple(cases),
+        platforms=_platforms(defn),
+        mode=defn.get("mode"),
+        deprecated=defn.get("deprecated"),
+        needs_anchor=needs_anchor,
+    )
+
+
+def _prefer_primary(section: str, attribute: str, cases: list[CasePlan]) -> list[CasePlan]:
+    """Move the declared representative case to the front, if one is declared.
+
+    The set of fixtures is unchanged — only which one is the attribute's
+    representative (see :data:`PREFERRED_PRIMARY_CASE`).
+    """
+    preferred = PREFERRED_PRIMARY_CASE.get((section, attribute))
+    if preferred is None:
+        return cases
+    index = next((i for i, c in enumerate(cases) if c.value == preferred), None)
+    if index is None or index == 0:
+        return cases
+    return [cases[index]] + cases[:index] + cases[index + 1:]
+
+
+def canonical_enum_values(defn: dict, enum_values: list[Any]) -> list[Any]:
+    """*enum_values* with the ``valueAliases`` spellings removed.
+
+    ``valueAliases`` maps a non-canonical spelling to the canonical one, and
+    the L1 normalizer rewrites it before any converter sees it — so an alias
+    fixture renders the canonical value's picture a second time. Nine spellings
+    across three platforms is 27 screenshots of something already covered, and
+    `Collection.layout` alone was shooting three of them.
+
+    Alias RESOLUTION still gets its regression probe: `_with_alias_cases`
+    covers the attribute-name aliases, and the value aliases are checked where
+    they are implemented — in the normalizer, not the camera.
+    """
+    aliases = defn.get("valueAliases")
+    if not isinstance(aliases, dict) or not aliases:
+        return enum_values
+    return [v for v in enum_values if v not in aliases]
+
+
+def _visual_cases(section: str, attribute: str, defn: dict) -> list[CasePlan]:
+    """Enum values expand into one case each; scalars get a single case."""
+    base_types, enum_values = normalize_type(defn)
+    enum_values = canonical_enum_values(defn, enum_values)
+    cases: list[CasePlan] = []
+
+    for name, value in dedupe_case_names(enum_values):
+        cases.append(CasePlan(name=name, value=value, written_key=attribute))
+
+    if enum_values and not ({"number", "boolean"} & base_types):
+        # Enum fully covers string-typed attributes.
+        return _with_variant_cases(
+            section, attribute, _prefer_primary(section, attribute, cases)
+        )
+
+    found, value = representative_value(section, attribute, defn)
+    if found:
+        if isinstance(value, bool):
+            # Name from the VALUE, not from the type. Hard-coding `True` here
+            # meant a boolean attribute whose platform default is already true
+            # could not be given a non-default representative at all — the
+            # override was read and then thrown away, and the fixture went on
+            # rendering exactly what its control rendered.
+            cases.append(
+                CasePlan(name=str(value).lower(), value=value, written_key=attribute)
+            )
+        else:
+            cases.append(CasePlan(name="static", value=value, written_key=attribute))
+
+    # Second (third...) value from a vocabulary the SSoT does not enumerate:
+    # the case name is the value's own slug, so it stays greppable and stable.
+    # A (name, value) tuple names the case explicitly — needed for dict values,
+    # whose stringified slug would otherwise become the filename.
+    declared = EXTRA_CASES.get((section, attribute), [])
+    named = [v for v in declared if isinstance(v, tuple)]
+    for name, extra in dedupe_case_names([v for v in declared if not isinstance(v, tuple)]):
+        cases.append(CasePlan(name=name, value=extra, written_key=attribute))
+    for name, extra in named:
+        cases.append(CasePlan(name=name, value=extra, written_key=attribute))
+
+    return _with_variant_cases(
+        section, attribute, _prefer_primary(section, attribute, cases)
+    )
+
+
+def _with_variant_cases(
+    section: str, attribute: str, cases: list[CasePlan]
+) -> list[CasePlan]:
+    """Repeat every case under each VARIANT_CASES suffix.
+
+    Appended last so a variant never becomes the representative — `primary`
+    still means the plain declaration.
+    """
+    out = list(cases)
+    for suffix in variant_bases_for(section, attribute):
+        for case in cases:
+            if case.alias_of is not None:
+                continue
+            out.append(
+                CasePlan(
+                    name=f"{case.name}_{suffix}",
+                    value=case.value,
+                    written_key=case.written_key,
+                    assertions=case.assertions,
+                )
+            )
+    return out
+
+
+def _with_alias_cases(
+    section: str, attribute: str, defn: dict, cases: list[CasePlan]
+) -> list[CasePlan]:
+    """Append one alias fixture per alias, mirroring the first canonical case.
+
+    Writing the same value under the alias key and expecting the identical
+    result is the regression probe for pillar B/C alias resolution.
+    """
+    aliases = defn.get("aliases")
+    if not isinstance(aliases, list) or not cases:
+        return cases
+    first = cases[0]
+    canonical_id = f"{section}/{attribute}__{first.name}"
+    for alias in aliases:
+        cases.append(
+            CasePlan(
+                name=f"alias_{alias}",
+                value=first.value,
+                written_key=str(alias),
+                assertions=first.assertions,
+                alias_of=canonical_id,
+            )
+        )
+    return cases

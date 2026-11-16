@@ -1,0 +1,28 @@
+{
+ "session_id": "00000000-0000-4000-8000-000000000000",
+ "transcript_path": "/work/home/.claude/projects/-work-probe-app/00000000-0000-4000-8000-000000000000.jsonl",
+ "cwd": "/work/probe-app",
+ "scratchpad_dir": "/tmp/claude/-work-probe-app/00000000-0000-4000-8000-000000000000/scratchpad",
+ "prompt_id": "00000000-0000-4000-8000-000000000002",
+ "permission_mode": "default",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "tool_name": "Read",
+ "tool_input": {
+  "file_path": "/work/probe-app/sample.txt"
+ },
+ "tool_response": {
+  "type": "text",
+  "file": {
+   "filePath": "/work/probe-app/sample.txt",
+   "content": "hello\n",
+   "numLines": 2,
+   "startLine": 1,
+   "totalLines": 2
+  }
+ },
+ "tool_use_id": "toolu_01U8bZLuM61DfEbBtMFfZokE",
+ "duration_ms": 2
+}

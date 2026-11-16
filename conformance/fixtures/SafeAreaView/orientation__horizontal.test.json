@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SafeAreaView/orientation__horizontal.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SafeAreaView.orientation (horizontal)",
+    "description": "Conformance fixture for 'orientation' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: \"horizontal\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SafeAreaView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "orientation__horizontal",
+      "description": "Conformance fixture for 'orientation' on SafeAreaView (section: SafeAreaView, class: visual). Value under test: \"horizontal\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SafeAreaView_orientation__horizontal"
+        }
+      ]
+    }
+  ]
+}

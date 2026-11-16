@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/dateStringFormat__alias_dateFormat.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.dateStringFormat (alias_dateFormat)",
+    "description": "Conformance fixture for 'dateStringFormat' on SelectBox (section: SelectBox, class: visual). Value under test: \"yyyy-MM-dd\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "dateStringFormat__alias_dateFormat",
+      "description": "Conformance fixture for 'dateStringFormat' on SelectBox (section: SelectBox, class: visual). Value under test: \"yyyy-MM-dd\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_dateStringFormat__alias_dateFormat"
+        }
+      ]
+    }
+  ]
+}

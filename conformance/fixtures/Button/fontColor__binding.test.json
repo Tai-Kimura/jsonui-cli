@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/fontColor__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.fontColor (binding)",
+    "description": "Conformance fixture for 'fontColor' on Button (section: Button, class: visual). Value under test: \"@{boundFontColor}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "fontColor__binding",
+      "description": "Conformance fixture for 'fontColor' on Button (section: Button, class: visual). Value under test: \"@{boundFontColor}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_fontColor__binding"
+        }
+      ]
+    }
+  ]
+}

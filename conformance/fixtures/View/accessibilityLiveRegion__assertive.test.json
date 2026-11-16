@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/View/accessibilityLiveRegion__assertive.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View.accessibilityLiveRegion (assertive)",
+    "description": "Conformance fixture for 'accessibilityLiveRegion' on View (section: View, class: visual). Value under test: \"assertive\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "View"
+    ]
+  },
+  "platform": [
+    "android",
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "accessibilityLiveRegion__assertive",
+      "description": "Conformance fixture for 'accessibilityLiveRegion' on View (section: View, class: visual). Value under test: \"assertive\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "View_accessibilityLiveRegion__assertive"
+        }
+      ]
+    }
+  ]
+}

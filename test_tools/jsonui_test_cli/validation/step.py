@@ -1,0 +1,1219 @@
+"""Step validation for actions and assertions."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from ..install import _platform_matches
+from .models import ValidationMessage, ValidationResult
+from .mock import find_mock_index, validate_mock_reference
+from .responsive import validate_responsive_field
+from .screen_ids import check_screen_value, load_screen_index
+from ..schema import (
+    COMMON_STEP_ATTRIBUTES,
+    CONDITION_PLATFORMS,
+    CONDITION_PLATFORM_ARRAY_ITEMS,
+    RESPONSIVE_ORIENTATIONS,
+    SUPPORTED_ACTIONS,
+    SUPPORTED_ASSERTIONS,
+    VALID_CONDITION_KEYS,
+    VALID_CONDITION_STATE_KEYS,
+    VALID_DIRECTIONS,
+    VALID_STEP_KEYS,
+)
+
+# Pattern to match @{varName} placeholders
+ARG_PLACEHOLDER_PATTERN = re.compile(r'@\{([^}]+)\}')
+
+
+#: Platforms the project under validation targets, from the `platforms` key of
+#: the config this run actually loaded. `None` means undeclared, which must
+#: behave exactly as before this existed.
+#:
+#: Resolved once per run and pushed in, rather than searched for from each test
+#: file: the two layouts in the corpus include one whose tests live in a parent
+#: repository and whose config sits in the app directory, so walking up from a
+#: test file reaches a config that never declared any platforms. The same shape
+#: has now produced three defects (mockDir, canonical_param_case, and this
+#: would have been the third), and the settled rule is that the config the run
+#: read is the authority.
+_PROJECT_PLATFORMS: set | None = None
+
+PLATFORM_CONSTRAINT = "platform-constraint"
+
+
+def set_project_platforms(platforms=None):
+    """Declare the run's target platforms (`None` restores the default)."""
+    global _PROJECT_PLATFORMS
+    _PROJECT_PLATFORMS = set(platforms) if platforms else None
+
+
+def project_platforms() -> set | None:
+    """The run's target platforms, or `None` when the config declares none."""
+    return _PROJECT_PLATFORMS
+
+
+def _gate(step: dict):
+    """The step's `when.platform` as written, or `None` when it has none."""
+    when = step.get("when")
+    return when.get("platform") if isinstance(when, dict) else None
+
+
+def _reaches(step: dict, platform: str) -> bool:
+    """Does the step's own `when.platform` let it run on *platform*?
+
+    Read by `install._platform_matches` — the rule the bundles are shaped by
+    and the drivers filter with — so the scalar `"all"` (a legal value,
+    CONDITION_PLATFORMS) runs everywhere. It was read as a set of words, in
+    which `"all"` names no platform: such a step was warned as running
+    nowhere, and every mobile warning on it was silenced as if it were gated
+    off the mobile drivers.
+    """
+    return _platform_matches(_gate(step), platform)
+
+
+def _gated_off(step: dict, platforms) -> bool:
+    """Can no platform in `platforms` reach this step?
+
+    Warnings about a driver's limits should be silent on steps that never
+    reach that driver, and only those. Each caller passes the platforms its
+    own warning is about, because the answer differs per constraint: the
+    addMedia extension matrix is shared by iOS and Android, so a web-gated
+    step escapes it but an Android-gated one does not, while the flat-bundle
+    path rule is iOS alone.
+
+    Two independent narrowings apply, and a platform must survive both to keep
+    a warning alive: the step's own gate, and the project's declared targets.
+    Either being absent means "no limit from that side", so a project that
+    declares nothing behaves exactly as it did before the declaration existed.
+    """
+    for platform in platforms:
+        if not _reaches(step, platform):
+            continue
+        if _PROJECT_PLATFORMS is not None and platform not in _PROJECT_PLATFORMS:
+            continue
+        return False
+    return True
+
+
+def _mobile_reach_note(step: dict) -> str:
+    """Why a web-only step still reaches a driver that cannot run it.
+
+    An ungated step reaches the mobile drivers by default, and the fix is to
+    gate it. A step gated ONTO iOS/Android reaches them on purpose, and
+    telling its author to gate it for web would be answering a question they
+    did not ask — they have said where they want it to run, and the point is
+    that it does not run there.
+    """
+    declared = _gate(step)
+    if declared is None or declared == "all":
+        # `"all"` is no narrowing: the step reaches the mobile drivers the
+        # way an ungated one does, and the remedy is the same.
+        return "gate it with 'when': {'platform': 'web'} in cross-platform tests"
+    reaching = [p for p in ("ios", "android") if _reaches(step, p)]
+    return (f"this step is gated onto {'/'.join(reaching)}, where it does not run")
+
+
+class StepValidator:
+    """Validates test steps (actions and assertions)."""
+
+    def __init__(self, test_file_path: Path | None = None):
+        self._test_file_path = test_file_path
+
+    def set_test_file_path(self, path: Path | None):
+        """Set the test file path for resolving relative paths."""
+        self._test_file_path = path
+
+    def _validate_screen_id(self, screen_id: str, path: str, result: ValidationResult):
+        """Check a screen id against the project's layout vocabulary.
+
+        Silently passes when the project's layouts cannot be located — this
+        validator also runs on trees it knows nothing about, and inventing
+        "unknown screen" errors there would block their install pipeline.
+        """
+        index = load_screen_index(self._test_file_path)
+        if index.available:
+            result.screen_ids["checked"] += 1
+        else:
+            # Counted, so the run can say so: a skip that says nothing
+            # looks exactly like a clean result.
+            result.screen_ids["not_checked"] += 1
+            result.screen_ids_unchecked_why = index.why
+        message = check_screen_value(screen_id, index)
+        if message:
+            result.errors.append(ValidationMessage(path=path, message=message))
+
+    def validate_step(self, step: dict, path: str, result: ValidationResult, is_flow: bool = False):
+        """Validate a test step."""
+        # Check for file reference step (flow tests only)
+        if "file" in step:
+            if not is_flow:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="File reference steps are only allowed in flow tests"
+                ))
+                return
+            self._validate_file_step(step, path, result)
+            return
+
+        # Check for block step (flow tests only)
+        if "block" in step:
+            if not is_flow:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Block steps are only allowed in flow tests"
+                ))
+                return
+            self._validate_block_step(step, path, result)
+            return
+
+        # Check for unknown keys
+        for key in step.keys():
+            if key not in VALID_STEP_KEYS:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"Unknown step key: {key}",
+                    level="warning"
+                ))
+
+        action = step.get("action")
+        assertion = step.get("assert")
+        self._check_keys_of_the_kind(step, path, result)
+
+        # Top-level inline flow steps must name their screen — the drivers'
+        # FlowTestStep.isInlineStep requires screen != null, so a screen-less
+        # action/assert step deserializes but never executes on-device.
+        # (Block inner steps are validated with is_flow=False and don't need it.)
+        if is_flow and (action or assertion):
+            screen = step.get("screen")
+            if not isinstance(screen, str) or not screen.strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Inline flow step must have a non-empty 'screen' (the canonical id of the screen this step runs on)"
+                ))
+            else:
+                self._validate_screen_id(screen.strip(), path, result)
+
+        # assert:screen names its target screen — validate that id too.
+        if assertion == "screen":
+            target = step.get("name")
+            if isinstance(target, str) and target.strip():
+                self._validate_screen_id(target.strip(), path, result)
+
+        if action and assertion:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="Step cannot have both 'action' and 'assert'"
+            ))
+        elif action:
+            self._validate_common_attributes(step, path, result)
+            self._validate_action(step, path, result)
+        elif assertion:
+            self._validate_common_attributes(step, path, result)
+            self._validate_assertion(step, path, result)
+        else:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="Step must have either 'action' or 'assert'"
+            ))
+
+    #: Keys that change what a step targets: on a kind that does not take
+    #: them the driver ignores them and the step reads the FIRST element with
+    #: the id — the opposite of what was written — so they are errors. `index`
+    #: is one of three things (tapItem's / selectTab's derived id, selectOption's
+    #: option), never "the n-th match" (that is `within`).
+    MEANING_KEYS = ("index", "within")
+
+    def _check_keys_of_the_kind(self, step: dict, path: str, result: ValidationResult):
+        """A key VALID_STEP_KEYS knows on a step whose kind does not take it
+        (the canonical schema's additionalProperties: false, per kind)."""
+        # An action's or an assertion's: a non-empty element id string.
+        if "within" in step and (not isinstance(step["within"], str) or not step["within"].strip()):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'within' must be a non-empty element id string"
+            ))
+        kind = step.get("action") or step.get("assert")
+        table = SUPPORTED_ACTIONS if "action" in step else SUPPORTED_ASSERTIONS
+        spec = table.get(kind) if isinstance(kind, str) else None
+        if spec is None:
+            return
+        allowed = (set(spec["required"]) | set(spec["optional"]) | set(COMMON_STEP_ATTRIBUTES)
+                   | {"action", "assert", "screen", "steps", "times", "while", "maxRetries"})
+        for key in step:
+            if key in allowed or key not in VALID_STEP_KEYS:
+                continue
+            if key == "index":
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=(f"'index' does nothing on {kind} — the drivers read the first element "
+                             f"with the id, not the n-th. To name one cell's child, look it up inside "
+                             f"the cell: \"within\": \"<collectionId>_item_<n>\" ('index' is tapItem's, "
+                             f"selectTab's and selectOption's only)")))
+            elif key == "within":
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'within' does nothing on {kind} — it scopes a step that targets an element by id"))
+            else:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"'{key}' is not a key of {kind} — the drivers ignore it",
+                    level="warning"))
+
+    def _validate_common_attributes(self, step: dict, path: str, result: ValidationResult):
+        """Validate common step attributes: label, optional, when."""
+        # 'label' must be a string on every step.
+        # On selectOption it keeps its legacy meaning (option text), which is also a string.
+        if "label" in step and not isinstance(step["label"], str):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"'label' must be a string, got: {type(step['label']).__name__}"
+            ))
+
+        if "optional" in step and not isinstance(step["optional"], bool):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"'optional' must be a boolean, got: {type(step['optional']).__name__}"
+            ))
+
+        if "when" in step:
+            self.validate_condition(step["when"], f"{path}.when", result)
+            self._check_platform_is_reachable(step, path, result)
+
+    def _check_platform_is_reachable(self, step: dict, path: str,
+                                     result: ValidationResult):
+        """Warn when a step's gate and the project's targets do not overlap.
+
+        A step gated onto a platform the project does not build runs nowhere.
+        Staying quiet about it would be the same mistake the web-only warnings
+        used to make — reading a gate as evidence the author knew what they
+        were doing, and so saying nothing in the one case worth saying
+        something about. That the step is dead is precisely the fact its
+        author would want.
+
+        Lives here rather than beside each platform warning so that a step
+        carrying two of them (addMedia has both) reports it once.
+        """
+        if _PROJECT_PLATFORMS is None:
+            return
+        declared = _gate(step)
+        if declared is None or any(_reaches(step, p) for p in _PROJECT_PLATFORMS):
+            return
+        gated = ("/".join(sorted({str(p) for p in declared})) if isinstance(declared, list)
+                 else str(declared))
+        targets = "/".join(sorted(_PROJECT_PLATFORMS))
+        result.warnings.append(ValidationMessage(
+            path=path,
+            message=f"this step is gated onto {gated}, which the project does "
+                    f"not target (it builds {targets}) — the step runs nowhere",
+            level="warning",
+            kind=PLATFORM_CONSTRAINT,
+        ))
+
+    def validate_condition(self, condition, path: str, result: ValidationResult):
+        """Validate a condition object (used by 'when' and 'repeat.while')."""
+        if not isinstance(condition, dict):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"Condition must be an object, got: {type(condition).__name__}"
+            ))
+            return
+
+        if len(condition) == 0:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="Condition object must have at least one key (visible/notVisible/hidden/platform/responsive/state)"
+            ))
+            return
+
+        for key in condition.keys():
+            if key not in VALID_CONDITION_KEYS:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Unknown condition key: {key}. Must be one of: {VALID_CONDITION_KEYS}"
+                ))
+
+        if "within" in condition:
+            within = condition["within"]
+            if not isinstance(within, str) or not within.strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Condition 'within' must be a non-empty element id string"
+                ))
+            if not {"visible", "notVisible", "hidden"} & condition.keys():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Condition 'within' scopes visible / notVisible / hidden — the condition has none of them"
+                ))
+
+        for key in ("visible", "notVisible", "hidden"):
+            if key in condition:
+                value = condition[key]
+                if not isinstance(value, str) or not value.strip():
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message=f"Condition '{key}' must be a non-empty element id string"
+                    ))
+
+        if "platform" in condition:
+            platform = condition["platform"]
+            if isinstance(platform, str):
+                if platform not in CONDITION_PLATFORMS:
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message=f"Invalid condition platform: {platform}. Must be one of: {CONDITION_PLATFORMS}"
+                    ))
+            elif isinstance(platform, list):
+                if len(platform) == 0:
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message="Condition 'platform' array must not be empty"
+                    ))
+                for item in platform:
+                    if item not in CONDITION_PLATFORM_ARRAY_ITEMS:
+                        result.errors.append(ValidationMessage(
+                            path=path,
+                            message=f"Invalid condition platform: {item}. Must be one of: {CONDITION_PLATFORM_ARRAY_ITEMS}"
+                        ))
+            else:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Condition 'platform' must be a string or array, got: {type(platform).__name__}"
+                ))
+
+        if "responsive" in condition:
+            validate_responsive_field(condition["responsive"], f"{path}.responsive", result)
+
+        if "state" in condition:
+            state = condition["state"]
+            if not isinstance(state, dict):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Condition 'state' must be an object, got: {type(state).__name__}"
+                ))
+            else:
+                for key in state.keys():
+                    if key not in VALID_CONDITION_STATE_KEYS:
+                        result.errors.append(ValidationMessage(
+                            path=path,
+                            message=f"Unknown condition state key: {key}. Must be one of: {VALID_CONDITION_STATE_KEYS}"
+                        ))
+                if not isinstance(state.get("path"), str) or not state.get("path", "").strip():
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message="Condition 'state' must have a non-empty string 'path'"
+                    ))
+                if "equals" not in state:
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message="Condition 'state' must have 'equals'"
+                    ))
+
+    def _validate_file_step(self, step: dict, path: str, result: ValidationResult):
+        """Validate a file reference step in flow tests."""
+        file_ref = step["file"]
+
+        # Validate file reference format
+        if not isinstance(file_ref, str) or not file_ref.strip():
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'file' must be a non-empty string"
+            ))
+            return
+
+        # Check for valid keys in file step
+        valid_file_step_keys = {"file", "case", "cases", "args", "when"}
+        for key in step.keys():
+            if key not in valid_file_step_keys:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"Unknown key in file step: {key}",
+                    level="warning"
+                ))
+
+        # Validate when condition if present
+        if "when" in step:
+            self.validate_condition(step["when"], f"{path}.when", result)
+
+        # Validate args if present
+        if "args" in step:
+            args = step["args"]
+            if not isinstance(args, dict):
+                result.errors.append(ValidationMessage(
+                    path=f"{path}.args",
+                    message="'args' must be an object/dictionary"
+                ))
+            else:
+                for key, value in args.items():
+                    if not isinstance(key, str):
+                        result.errors.append(ValidationMessage(
+                            path=f"{path}.args",
+                            message=f"Argument key must be a string, got: {type(key).__name__}"
+                        ))
+                    if not isinstance(value, (str, int, float, bool)):
+                        result.errors.append(ValidationMessage(
+                            path=f"{path}.args.{key}",
+                            message=f"Argument value must be a primitive type (string, number, boolean), got: {type(value).__name__}"
+                        ))
+
+        # Cannot have both 'case' and 'cases'
+        if "case" in step and "cases" in step:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="File step cannot have both 'case' and 'cases'"
+            ))
+
+        # Validate 'case' is a string
+        if "case" in step:
+            if not isinstance(step["case"], str) or not step["case"].strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="'case' must be a non-empty string"
+                ))
+
+        # Validate 'cases' is a non-empty list of strings
+        if "cases" in step:
+            cases = step["cases"]
+            if not isinstance(cases, list) or len(cases) == 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="'cases' must be a non-empty array"
+                ))
+            elif not all(isinstance(c, str) and c.strip() for c in cases):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="'cases' must be an array of non-empty strings"
+                ))
+
+        # Try to resolve the file path and validate it exists
+        if self._test_file_path:
+            resolved_path = self._resolve_file_reference(file_ref)
+            if resolved_path and not resolved_path.exists():
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"Referenced test file not found: {file_ref} (looked for {resolved_path})",
+                    level="warning"
+                ))
+            elif resolved_path and resolved_path.exists():
+                # Validate args against referenced screen test
+                self._validate_file_step_args(step, path, result, resolved_path)
+                # Its initialState (the file's, or a case's it runs) is not
+                # applied inside the flow: warned.
+                try:
+                    referenced = json.loads(resolved_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    referenced = None
+                from .initial_state import check_referenced_file
+                check_referenced_file(step, referenced, path, result)
+
+    def _validate_file_step_args(self, step: dict, path: str, result: ValidationResult, resolved_path: Path):
+        """Validate that flow's args only override existing screen args (no new args allowed)."""
+        try:
+            with open(resolved_path, 'r', encoding='utf-8') as f:
+                screen_data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            # Skip validation if file can't be read
+            return
+
+        cases = screen_data.get("cases", [])
+        if not cases:
+            return
+
+        flow_args = step.get("args", {}) if isinstance(step.get("args"), dict) else {}
+        if not flow_args:
+            # No flow args to validate
+            return
+
+        # Determine which cases to validate
+        case_names_to_validate = []
+        if "case" in step:
+            case_names_to_validate = [step["case"]]
+        elif "cases" in step:
+            case_names_to_validate = step["cases"]
+        else:
+            # All cases
+            case_names_to_validate = [c.get("name") for c in cases if c.get("name")]
+
+        for case in cases:
+            case_name = case.get("name")
+            if case_name not in case_names_to_validate:
+                continue
+
+            # Get screen's defined args for this case
+            screen_defined_args = set(case.get("args", {}).keys()) if isinstance(case.get("args"), dict) else set()
+
+            # Check if flow is trying to add new args not defined in screen
+            flow_arg_keys = set(flow_args.keys())
+            undefined_in_screen = flow_arg_keys - screen_defined_args
+            if undefined_in_screen:
+                for arg_name in sorted(undefined_in_screen):
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message=f"Argument '@{{{arg_name}}}' passed in flow is not defined in screen case '{case_name}'. Flow can only override existing screen args."
+                    ))
+
+    def _extract_used_args(self, steps: list) -> set[str]:
+        """Extract all @{varName} placeholders used in steps."""
+        used_args: set[str] = set()
+        for step in steps:
+            self._extract_args_from_value(step, used_args)
+        return used_args
+
+    def _extract_args_from_value(self, obj, used_args: set[str]):
+        """Recursively extract @{varName} from any string value in the object."""
+        if isinstance(obj, str):
+            matches = ARG_PLACEHOLDER_PATTERN.findall(obj)
+            used_args.update(matches)
+        elif isinstance(obj, dict):
+            for value in obj.values():
+                self._extract_args_from_value(value, used_args)
+        elif isinstance(obj, list):
+            for item in obj:
+                self._extract_args_from_value(item, used_args)
+
+    def _resolve_file_reference(self, file_ref: str) -> Path | None:
+        """Resolve a file reference to an actual path."""
+        if not self._test_file_path:
+            return None
+
+        base_dir = self._test_file_path.parent
+
+        # Find tests root (parent of flows/ or screens/)
+        tests_root = base_dir
+        if base_dir.name == "flows" or base_dir.name == "screens":
+            tests_root = base_dir.parent
+        elif base_dir.parent.name == "flows" or base_dir.parent.name == "screens":
+            tests_root = base_dir.parent.parent
+
+        # Try different file locations
+        candidates = [
+            # Same directory as flow test
+            base_dir / f"{file_ref}.test.json",
+            base_dir / f"{file_ref}.json",
+            base_dir / file_ref,
+            # screens/{file_ref}/{file_ref}.test.json (standard screen test structure)
+            tests_root / "screens" / file_ref / f"{file_ref}.test.json",
+            # screens/{file_ref}.test.json (flat structure)
+            tests_root / "screens" / f"{file_ref}.test.json",
+            # flows/{file_ref}/{file_ref}.test.json
+            tests_root / "flows" / file_ref / f"{file_ref}.test.json",
+            # flows/{file_ref}.test.json
+            tests_root / "flows" / f"{file_ref}.test.json",
+        ]
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        # Return the most likely location for error message
+        return tests_root / "screens" / file_ref / f"{file_ref}.test.json"
+
+    def _validate_block_step(self, step: dict, path: str, result: ValidationResult):
+        """Validate a block step in flow tests."""
+        block_name = step["block"]
+
+        # Validate block name is non-empty string
+        if not isinstance(block_name, str) or not block_name.strip():
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'block' must be a non-empty string"
+            ))
+            return
+
+        # Check for valid keys in block step
+        valid_block_step_keys = {"block", "description", "descriptionFile", "steps", "when"}
+        for key in step.keys():
+            if key not in valid_block_step_keys:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"Unknown key in block step: {key}",
+                    level="warning"
+                ))
+
+        # Validate when condition if present
+        if "when" in step:
+            self.validate_condition(step["when"], f"{path}.when", result)
+
+        # Validate steps is required and non-empty
+        if "steps" not in step:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="Block step must have 'steps' array"
+            ))
+            return
+
+        steps = step["steps"]
+        if not isinstance(steps, list) or len(steps) == 0:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="Block 'steps' must be a non-empty array"
+            ))
+            return
+
+        # Validate each step in the block (inline steps only, no nested blocks/files)
+        for i, inner_step in enumerate(steps):
+            inner_step_path = f"{path}.steps[{i}]"
+            # Block steps can only contain action/assert steps, not file references or nested blocks
+            if "file" in inner_step:
+                result.errors.append(ValidationMessage(
+                    path=inner_step_path,
+                    message="File references are not allowed inside block steps"
+                ))
+            elif "block" in inner_step:
+                result.errors.append(ValidationMessage(
+                    path=inner_step_path,
+                    message="Nested blocks are not allowed inside block steps"
+                ))
+            else:
+                self.validate_step(inner_step, inner_step_path, result, is_flow=False)
+
+        # Validate descriptionFile if present
+        if "descriptionFile" in step and self._test_file_path:
+            desc_file_path = step["descriptionFile"]
+            # Resolve relative to test file location
+            if not Path(desc_file_path).is_absolute():
+                desc_file_path = self._test_file_path.parent / desc_file_path
+
+            desc_path = Path(desc_file_path)
+            if not desc_path.exists():
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"Description file not found: {step['descriptionFile']}",
+                    level="warning"
+                ))
+
+    def _validate_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate an action step."""
+        action = step["action"]
+
+        if action not in SUPPORTED_ACTIONS:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"Unsupported action: {action}"
+            ))
+            return
+
+        spec = SUPPORTED_ACTIONS[action]
+
+        # Check required parameters
+        for param in spec["required"]:
+            if param not in step:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Missing required parameter '{param}' for action '{action}'"
+                ))
+
+        # Validate direction if present
+        if "direction" in step and step["direction"] not in VALID_DIRECTIONS:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"Invalid direction: {step['direction']}. Must be one of: {VALID_DIRECTIONS}"
+            ))
+
+        # Validate timeout is positive
+        if "timeout" in step:
+            timeout = step["timeout"]
+            if not isinstance(timeout, int) or timeout <= 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Timeout must be a positive integer (ms), got: {timeout}"
+                ))
+
+        # Validate ms is positive
+        if "ms" in step:
+            ms = step["ms"]
+            if not isinstance(ms, int) or ms <= 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"ms must be a positive integer, got: {ms}"
+                ))
+
+        # Validate ids is a non-empty list of non-empty strings
+        if "ids" in step:
+            ids = step["ids"]
+            if not isinstance(ids, list) or len(ids) == 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="ids must be a non-empty array"
+                ))
+            elif not all(isinstance(i, str) and i.strip() for i in ids):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="ids must be an array of non-empty strings"
+                ))
+
+        # Validate index is a non-negative integer
+        if "index" in step:
+            index = step["index"]
+            if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"index must be a non-negative integer, got: {index}"
+                ))
+
+        # Validate container is a non-empty string (scrollUntilVisible)
+        if "container" in step:
+            container = step["container"]
+            if not isinstance(container, str) or not container.strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="'container' must be a non-empty element id string"
+                ))
+
+        # Validate retryTapIfNoChange is a boolean (tap)
+        if "retryTapIfNoChange" in step and not isinstance(step["retryTapIfNoChange"], bool):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"'retryTapIfNoChange' must be a boolean, got: {type(step['retryTapIfNoChange']).__name__}"
+            ))
+
+        # Action-specific validation
+        if action == "selectOption":
+            self._check_select_option_selectors(step, path, result)
+
+        if action == "readText":
+            variable = step.get("variable")
+            if variable is not None and (not isinstance(variable, str) or not variable.strip()):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="'variable' must be a non-empty string"
+                ))
+        elif action == "repeat":
+            self._validate_repeat_action(step, path, result)
+        elif action == "retry":
+            self._validate_retry_action(step, path, result)
+        elif action == "setLocation":
+            self._validate_set_location_action(step, path, result)
+        elif action == "addMedia":
+            self._validate_add_media_action(step, path, result)
+        elif action == "setMocks":
+            index = find_mock_index(self._test_file_path)
+            validate_mock_reference(step.get("mocks"), f"{path}.mocks", result, index)
+        elif action == "setViewport":
+            self._validate_set_viewport_action(step, path, result)
+        elif action == "setOrientation":
+            self._validate_set_orientation_action(step, path, result)
+        elif action == "emitHook":
+            self._validate_emit_hook_action(step, path, result)
+        elif action == "moveItem":
+            self._validate_move_item_step(step, path, result)
+        elif action == "setSliderValue":
+            self._validate_slider_step(step, path, result, "setSliderValue")
+
+    def _validate_repeat_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a repeat control step."""
+        if "times" not in step and "while" not in step:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="repeat must have 'times' and/or 'while'"
+            ))
+
+        if "times" in step:
+            times = step["times"]
+            if not isinstance(times, int) or isinstance(times, bool) or times < 1:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'times' must be an integer >= 1, got: {times}"
+                ))
+
+        if "while" in step:
+            self.validate_condition(step["while"], f"{path}.while", result)
+
+        self._validate_nested_steps(step, path, result, "repeat")
+
+    def _validate_retry_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a retry control step."""
+        if "maxRetries" in step:
+            max_retries = step["maxRetries"]
+            if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not (0 <= max_retries <= 3):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'maxRetries' must be an integer between 0 and 3, got: {max_retries}"
+                ))
+
+        self._validate_nested_steps(step, path, result, "retry")
+
+    def _validate_nested_steps(self, step: dict, path: str, result: ValidationResult, action: str):
+        """Validate the nested steps array of a repeat/retry control step."""
+        if "steps" not in step:
+            # Missing 'steps' is already reported as a missing required parameter
+            return
+
+        steps = step["steps"]
+        if not isinstance(steps, list) or len(steps) == 0:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"{action} 'steps' must be a non-empty array"
+            ))
+            return
+
+        for i, inner_step in enumerate(steps):
+            inner_step_path = f"{path}.steps[{i}]"
+            if not isinstance(inner_step, dict):
+                result.errors.append(ValidationMessage(
+                    path=inner_step_path,
+                    message="Step must be an object"
+                ))
+            elif "file" in inner_step or "block" in inner_step:
+                result.errors.append(ValidationMessage(
+                    path=inner_step_path,
+                    message=f"File references and blocks are not allowed inside {action} steps"
+                ))
+            else:
+                # Nested repeat/retry are allowed; recurse as plain steps
+                self.validate_step(inner_step, inner_step_path, result, is_flow=False)
+
+    def _validate_set_location_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a setLocation action."""
+        ranges = {"latitude": (-90, 90), "longitude": (-180, 180)}
+        for param, (low, high) in ranges.items():
+            if param not in step:
+                continue
+            value = step[param]
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not (low <= value <= high):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'{param}' must be a number between {low} and {high}, got: {value}"
+                ))
+
+    def _validate_set_viewport_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a setViewport action (web only at runtime; no-op+warn elsewhere)."""
+        for param in ("width", "height"):
+            if param not in step:
+                # Missing width/height is already reported as a missing required parameter
+                continue
+            value = step[param]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'{param}' must be a positive integer (logical pixels), got: {value!r}"
+                ))
+
+    def _validate_move_item_step(self, step: dict, path: str, result: ValidationResult):
+        """moveItem: the indices, and what the drivers refuse before they move anything (the sentences of
+        jsonui-test-runner schemas moveItemAction and specs/vectors/move-item.json)."""
+        def index(v) -> bool:
+            return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+        def error(message: str):
+            result.errors.append(ValidationMessage(path=path, message=message))
+
+        for key in ("from", "to"):
+            if key in step and not index(step[key]):
+                error(f"'{key}' on moveItem must be a row index (an integer of 0 or more), got: {step[key]!r}")
+        if index(step.get("from")) and index(step.get("to")) and step["from"] == step["to"]:
+            error(f"moveItem's 'from' and 'to' are the same row ({step['from']}): nothing would move")
+        if "section" in step and step["section"] != 0:
+            error(f"moveItem moves within section 0 (v1: no move across or in other sections), got: {step['section']!r}")
+
+    def _validate_slider_step(self, step: dict, path: str, result: ValidationResult, kind: str):
+        """setSliderValue / the value assertion: the numbers, and what the
+        drivers would refuse at run time, said here when `range` / `step` are
+        written (the sentences the drivers use, schemas setSliderValueAction).
+        """
+        def number(v) -> bool:
+            return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+        def variable(v) -> bool:
+            return isinstance(v, str) and v.startswith("@{") and v.endswith("}")
+
+        def show(v: float) -> str:
+            return str(int(round(v))) if abs(v - round(v)) < 1e-9 else repr(float(f"{v:.12g}"))
+
+        def error(message: str):
+            result.errors.append(ValidationMessage(path=path, message=message))
+
+        field = "value" if kind == "setSliderValue" else "equals"
+        target = step.get(field)
+        if field in step and not (number(target) or variable(target)):
+            error(f"'{field}' on {kind} must be a number (the slider's units), got: {target!r}")
+        bounds = None
+        if "range" in step:
+            r = step["range"]
+            if not (isinstance(r, list) and len(r) == 2 and all(number(x) for x in r)):
+                error(f"'range' must be [minimum, maximum] (two numbers), got: {r!r}")
+            elif not r[0] < r[1]:
+                error(f"'range' must be [minimum, maximum] with minimum < maximum, got: {r!r}")
+            else:
+                bounds = (float(r[0]), float(r[1]))
+        grid = None
+        if "step" in step:
+            st = step["step"]
+            if not number(st) or st <= 0:
+                error(f"'step' must be a number greater than 0, got: {st!r}")
+            else:
+                grid = float(st)
+        if "tolerance" in step:
+            t = step["tolerance"]
+            if not number(t) or t < 0:
+                error(f"'tolerance' must be a number of 0 or more, got: {t!r}")
+
+        # What the drivers refuse before they move anything, said up front.
+        if number(target) and bounds is not None:
+            v, (lo, hi) = float(target), bounds
+            slack = 1e-6 * max(1.0, hi - lo)
+            if v < lo - slack:
+                error(f"{show(v)} is below the slider's range [{show(lo)}, {show(hi)}]; "
+                      f"the nearest value it can take is {show(lo)}")
+            elif v > hi + slack:
+                error(f"{show(v)} is above the slider's range [{show(lo)}, {show(hi)}]; "
+                      f"the nearest value it can take is {show(hi)}")
+            elif grid is not None:
+                k = (v - lo) / grid
+                if abs(k - round(k)) > 1e-6:
+                    below = lo + int(k + 1e-6) * grid
+                    above = min(below + grid, hi)
+                    error(f"{show(v)} is not on the slider's steps ({show(lo)} + k * {show(grid)}); "
+                          f"the nearest values are {show(below)} and {show(above)}")
+
+        # iOS reads no bounds from a slider (measured: its accessibility value
+        # is a number, or a percentage for 0...1 / 0...100).
+        if not _gated_off(step, ("ios",)) and "range" not in step:
+            if kind == "setSliderValue":
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message="setSliderValue without 'range': iOS cannot read a slider's bounds, so it "
+                            "moves the thumb to both ends to read them (the app sees those values), "
+                            "and a 0...1 or 0...100 slider fails there. Write the layout's [minimum, maximum]",
+                    level="warning",
+                    kind=PLATFORM_CONSTRAINT,
+                ))
+            elif "step" not in step and "tolerance" not in step:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message="value without 'range', 'step' or 'tolerance' fails on iOS: a slider "
+                            "there is placed by a drag and read to three decimals, so its tolerance "
+                            "comes from one of them",
+                    level="warning",
+                    kind=PLATFORM_CONSTRAINT,
+                ))
+
+    def _validate_set_orientation_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate a setOrientation action."""
+        if "orientation" not in step:
+            # Missing 'orientation' is already reported as a missing required parameter
+            return
+        orientation = step["orientation"]
+        if orientation not in RESPONSIVE_ORIENTATIONS:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"Invalid orientation: {orientation!r}. Must be one of: {RESPONSIVE_ORIENTATIONS}"
+            ))
+
+    def _validate_add_media_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate an addMedia action."""
+        if "paths" not in step:
+            # Missing 'paths' is already reported as a missing required parameter
+            return
+        paths = step["paths"]
+        if not isinstance(paths, list) or len(paths) == 0:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'paths' must be a non-empty array"
+            ))
+            return
+        if not all(isinstance(p, str) and p.strip() for p in paths):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'paths' must be an array of non-empty strings"
+            ))
+            return
+
+        # Extension matrix shared by the Android and iOS drivers; anything
+        # else fails at runtime, so surface it at validate time. Shared by
+        # both, so only a step gated off BOTH can skip it — a step that still
+        # runs on Android hits the same matrix.
+        supported = {"png", "jpg", "jpeg", "gif", "mp4"}
+        if not _gated_off(step, ("ios", "android")):
+            for p in paths:
+                ext = p.rsplit(".", 1)[-1].lower() if "." in p else ""
+                if ext not in supported:
+                    result.warnings.append(ValidationMessage(
+                        path=path,
+                        message=f"addMedia path '{p}' has an unsupported type for "
+                                f"iOS/Android drivers (supported: png/jpg/jpeg/gif/mp4)",
+                        level="warning",
+                        kind=PLATFORM_CONSTRAINT,
+                    ))
+
+        # The iOS bundle is flat: a subdirectory path silently falls back to
+        # its basename there. Nudge toward basenames unless the step is
+        # explicitly gated off iOS. Narrower than the matrix above on purpose:
+        # this one is an iOS packaging property, so Android does not keep it
+        # alive.
+        if not _gated_off(step, ("ios",)):
+            for p in paths:
+                if "/" in p and not p.startswith("/"):
+                    result.warnings.append(ValidationMessage(
+                        path=path,
+                        message=f"addMedia path '{p}' contains a directory; on iOS it "
+                                f"resolves by basename only — prefer basenames (or gate "
+                                f"the step with 'when': {{'platform': ...}})",
+                        level="warning",
+                        kind=PLATFORM_CONSTRAINT,
+                    ))
+
+    def _validate_emit_hook_action(self, step: dict, path: str, result: ValidationResult):
+        """Validate an emitHook action (web-only; no-op+warn on iOS/Android)."""
+        name = step.get("name")
+        if name is not None and (not isinstance(name, str) or not name.strip()):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'name' must be a non-empty hook name string"
+            ))
+
+        if "hookArgs" in step and not isinstance(step["hookArgs"], list):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"'hookArgs' must be an array, got: {type(step['hookArgs']).__name__}"
+            ))
+
+        # Web-only step: warn whenever it can still reach a mobile driver.
+        # Keying on the mere presence of `when` read a gate as the author
+        # having understood the limit, which is backwards for the one gate
+        # that matters — `{'platform': 'ios'}` says "run this on iOS", where
+        # it no-ops, and that is exactly when the warning is warranted.
+        if not _gated_off(step, ("ios", "android")):
+            result.warnings.append(ValidationMessage(
+                path=path,
+                message="emitHook is web-only (no-op with a warning on iOS/Android); "
+                        + _mobile_reach_note(step),
+                level="warning",
+                kind=PLATFORM_CONSTRAINT,
+            ))
+
+    # The order the schema declares (jsonui-test-runner 169ad16, selectOption
+    # value/label/index descriptions). The drift test reads the vendored copy
+    # and checks the schema still says this.
+    SELECT_OPTION_PRECEDENCE = ("index", "value", "label")
+
+    def _check_select_option_selectors(self, step: dict, path: str, result: ValidationResult):
+        """Warn when a selectOption step carries more than one selector.
+
+        The schema declares the order — index, then value, then label — and
+        that a lower selector is ignored when a higher one is present. On
+        selectOption 'label' is the option text, not the step note it is on
+        every other step, so the shape this catches most often is `index`
+        plus a note written into 'label': the note is dead under the declared
+        order, and before the order was declared iOS read label first and
+        tried to select the note (measured 2026-09-03 on a consumer step).
+
+        One selector is silent, a lone 'label' included: that step selects
+        by text, which is what the schema says it does.
+        """
+        present = [k for k in self.SELECT_OPTION_PRECEDENCE if k in step]
+        if len(present) < 2:
+            return
+        winner = present[0]
+        ignored = " and ".join(f"'{k}'" for k in present[1:])
+        verb = "is" if len(present) == 2 else "are"
+        result.warnings.append(ValidationMessage(
+            path=path,
+            message=(
+                f"selectOption carries {len(present)} selectors ({', '.join(present)}); "
+                f"precedence is index, then value, then label, so '{winner}' selects and "
+                f"{ignored} {verb} ignored. Write exactly one — on selectOption 'label' is the "
+                "option text to select, not a step note"
+            ),
+            level="warning",
+        ))
+
+    def _validate_assertion(self, step: dict, path: str, result: ValidationResult):
+        """Validate an assertion step."""
+        assertion = step["assert"]
+
+        if assertion not in SUPPORTED_ASSERTIONS:
+            result.errors.append(ValidationMessage(
+                path=path,
+                message=f"Unsupported assertion: {assertion}"
+            ))
+            return
+
+        spec = SUPPORTED_ASSERTIONS[assertion]
+
+        # Check required parameters
+        for param in spec["required"]:
+            if param not in step:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Missing required parameter '{param}' for assertion '{assertion}'"
+                ))
+
+        # Validate timeout (auto-wait) — allowed on all assertions
+        if "timeout" in step:
+            timeout = step["timeout"]
+            if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Timeout must be a positive integer (ms), got: {timeout}"
+                ))
+
+        # For text assertion, must have equals or contains
+        if assertion == "text":
+            if "equals" not in step and "contains" not in step:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Text assertion must have 'equals' or 'contains'"
+                ))
+
+        # openedUrl: web-only assert against the runner's window.open spy
+        if assertion == "openedUrl":
+            if "equals" not in step and "contains" not in step:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="openedUrl assertion must have 'equals' or 'contains'"
+                ))
+            if not _gated_off(step, ("ios", "android")):
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message="openedUrl is web-only (the mobile drivers reject it); "
+                            + _mobile_reach_note(step),
+                    level="warning",
+                    kind=PLATFORM_CONSTRAINT,
+                ))
+
+        # For count assertion, equals must be a non-negative integer
+        if assertion == "count" and "equals" in step:
+            equals = step["equals"]
+            if not isinstance(equals, int) or isinstance(equals, bool) or equals < 0:
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"Count 'equals' must be a non-negative integer, got: {equals}"
+                ))
+
+        if assertion == "value":
+            self._validate_slider_step(step, path, result, "value")
+
+        # For state assertion, path must be a non-empty string
+        if assertion == "state" and "path" in step:
+            state_path = step["path"]
+            if not isinstance(state_path, str) or not state_path.strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="State assertion 'path' must be a non-empty string"
+                ))
+
+        # For screenshot assertion, validate name/cropId/threshold
+        if assertion == "screenshot":
+            name = step.get("name")
+            if name is not None and (not isinstance(name, str) or not name.strip()):
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Screenshot assertion 'name' must be a non-empty string"
+                ))
+            if "cropId" in step:
+                crop_id = step["cropId"]
+                if not isinstance(crop_id, str) or not crop_id.strip():
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message="'cropId' must be a non-empty element id string"
+                    ))
+            if "threshold" in step:
+                threshold = step["threshold"]
+                if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not (0 <= threshold <= 100):
+                    result.errors.append(ValidationMessage(
+                        path=path,
+                        message=f"'threshold' must be a number between 0 and 100, got: {threshold}"
+                    ))

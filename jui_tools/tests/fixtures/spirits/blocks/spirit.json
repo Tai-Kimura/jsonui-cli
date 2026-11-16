@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "name": {"en": "Blocks", "ja": "積み木"},
+  "spirit": {"file": "spirit.glb", "at": "back", "clips": {"appear": "appear", "loop": "loop", "leave": "leave"}},
+  "parts": [{"file": "robot-cap.glb", "at": "head"}, {"file": "prop-stick.glb", "at": "handR"}],
+  "bubble": {"text": "ok", "target": "robot"}
+}

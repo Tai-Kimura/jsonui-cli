@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/NetworkImage/loading__lazy.layout.json"
+  },
+  "metadata": {
+    "name": "conformance NetworkImage.loading (lazy)",
+    "description": "Conformance fixture for 'loading' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"lazy\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "NetworkImage"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "loading__lazy",
+      "description": "Conformance fixture for 'loading' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"lazy\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "NetworkImage_loading__lazy"
+        }
+      ]
+    }
+  ]
+}

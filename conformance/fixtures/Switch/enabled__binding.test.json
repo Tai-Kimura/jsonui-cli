@@ -1,0 +1,36 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/enabled__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.enabled (binding)",
+    "description": "Conformance fixture for 'enabled' on Switch (section: Switch, class: assertable). Value under test: \"@{boundEnabled}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "enabled__binding",
+      "description": "Conformance fixture for 'enabled' on Switch (section: Switch, class: assertable). Value under test: \"@{boundEnabled}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "visible",
+          "id": "target"
+        },
+        {
+          "assert": "enabled",
+          "id": "target"
+        }
+      ]
+    }
+  ]
+}

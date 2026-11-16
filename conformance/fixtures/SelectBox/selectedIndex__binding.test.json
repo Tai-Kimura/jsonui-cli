@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/selectedIndex__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.selectedIndex (binding)",
+    "description": "Conformance fixture for 'selectedIndex' on SelectBox (section: SelectBox, class: visual). Value under test: \"@{boundSelectedIndex}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "selectedIndex__binding",
+      "description": "Conformance fixture for 'selectedIndex' on SelectBox (section: SelectBox, class: visual). Value under test: \"@{boundSelectedIndex}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_selectedIndex__binding"
+        }
+      ]
+    }
+  ]
+}

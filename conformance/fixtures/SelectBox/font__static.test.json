@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/font__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.font (static)",
+    "description": "Conformance fixture for 'font' on SelectBox (section: SelectBox, class: visual). Value under test: \"bold\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "font__static",
+      "description": "Conformance fixture for 'font' on SelectBox (section: SelectBox, class: visual). Value under test: \"bold\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_font__static"
+        }
+      ]
+    }
+  ]
+}

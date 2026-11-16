@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/width__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.width (static)",
+    "description": "Conformance fixture for 'width' on View (section: common, class: visual). Value under test: 100.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "width__static",
+      "description": "Conformance fixture for 'width' on View (section: common, class: visual). Value under test: 100.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_width__static"
+        }
+      ]
+    }
+  ]
+}

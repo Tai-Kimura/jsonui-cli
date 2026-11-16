@@ -1,0 +1,47 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "Collection",
+      "id": "target",
+      "width": 200,
+      "height": 200,
+      "background": "#DDDDDD",
+      "sections": [
+        {
+          "cell": "conformance_cell"
+        }
+      ],
+      "items": "@{items}",
+      "reverseLayout": false
+    }
+  ],
+  "data": [
+    {
+      "name": "items",
+      "class": "CollectionDataSource",
+      "defaultValue": [
+        {
+          "title": "Alpha"
+        },
+        {
+          "title": "Beta"
+        },
+        {
+          "title": "Gamma"
+        }
+      ]
+    }
+  ]
+}

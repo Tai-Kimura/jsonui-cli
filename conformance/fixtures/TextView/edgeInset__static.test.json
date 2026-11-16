@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/edgeInset__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.edgeInset (static)",
+    "description": "Conformance fixture for 'edgeInset' on TextView (section: TextView, class: visual). Value under test: [8, 8, 8, 8].",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "edgeInset__static",
+      "description": "Conformance fixture for 'edgeInset' on TextView (section: TextView, class: visual). Value under test: [8, 8, 8, 8].",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_edgeInset__static"
+        }
+      ]
+    }
+  ]
+}

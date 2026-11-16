@@ -1,0 +1,223 @@
+# frozen_string_literal: true
+
+module SjuiTools
+  module SwiftUI
+    module Views
+      # ModifierBag collects modifiers with ordered keys and deduplication.
+      # Later `register` calls win (binding overrides static).
+      # Multi-value keys (padding, margin, component_specific) use arrays.
+      class ModifierBag
+        # SwiftJsonUI's Dynamic runtime applies its standard modifiers in this
+        # order too, held to it through modifier_order.json (next to this
+        # file), which it copies byte for byte. Change the two together:
+        # spec/swiftui/views/modifier_order_json_spec.rb goes red when they
+        # disagree, and SwiftJsonUI's tests go red until its copy and its
+        # chain follow.
+        MODIFIER_ORDER = [
+          :component_specific,  # font, resizable, aspectRatio, etc.
+          :padding,             # inner padding entries
+          :frame_constraints,   # min/max width/height
+          :fixed_size,          # fixedSize
+          :frame_size,          # width/height
+          :background,          # background color
+          :gradient,            # gradient background
+          # `.glassEffect` renders a glass material OVER whatever background
+          # is already there, and carries its own shape argument — so it sits
+          # after the two background entries and before :corner_radius, which
+          # clips the result rather than the glass.
+          :glass,               # glassEffect (iOS 26+, via the library helper)
+          :corner_radius,       # cornerRadius
+          :border,              # overlay stroke
+          :shadow,              # shadow
+          :clip_to_bounds,      # clipped
+          :foreground_color,    # foregroundColor
+          :opacity,             # opacity/alpha
+          :hidden,              # hidden
+          :accessibility_anchor, # the 0.5pt single-child merge anchor, inside the offset and the margins
+          :conformance_frame,   # jsonUIConformanceFrame (the frames gate's layout box; conformance host only)
+          # The gestures go on inside the offset and the margins, where the
+          # anchor and the conformance frame are: the tap's receiver is the id
+          # box (margin out, padding in, moved by the offset — user ruling
+          # 2026-10-06), as Compose's clickable sits inside the margins. After
+          # the margin, `.contentShape(Rectangle())` took the margin in: a tap
+          # in it ran the handler, and a combined tap's id read it (56 high
+          # with topMargin 24 read 80; ticket sjui-a-combined-taps-id-box-
+          # takes-its-margin-in).
+          :on_click,            # contentShape + onTapGesture
+          :on_long_press,       # onLongPressGesture
+          :on_pan,              # contentShape + simultaneousGesture(DragGesture)
+          :on_pinch,            # contentShape + simultaneousGesture(MagnifyGesture)
+          # allowsHitTesting (userInteractionEnabled)
+          # stops the whole view, so it wraps the view's own gestures: a
+          # gesture attached outside it is not stopped. It sat before
+          # :on_click, and a View with `userInteractionEnabled: false` and an
+          # onClick still called its handler — for a tap in its padding and
+          # for one in its child's frame — while the child's tap stopped
+          # (measured on iOS 18.6 and 26.4, SwiftJsonUI ConformanceHost
+          # -interactionGateProbe).
+          :allows_hit_testing,  # allowsHitTesting
+          :offset,              # offset
+          :margin,              # outer margin entries
+          :tint_color,          # tint
+          :on_value_change,     # onChange handlers
+          :on_text_change,      # text change handlers
+          :on_appear,           # onAppear
+          :on_disappear,        # onDisappear
+          :confirmation_dialog, # confirmationDialog
+          :alert,               # alert
+          :safe_area_insets,    # ignoresSafeArea
+          :tag,                 # tag
+          :z_index,             # zIndex
+          :accessibility_id,    # accessibilityIdentifier
+          # .disabled is an ENVIRONMENT modifier and must wrap the
+          # accessibility element: applied before :accessibility_id, the
+          # container's a11y element sits outside the disabled environment
+          # and never carries the notEnabled trait — XCUITest then reads the
+          # node as enabled (measured on the dynamic runtime, same layering).
+          :disabled,            # disabled (outermost)
+        ].freeze
+
+        # Keys that store arrays of code strings (multi-value)
+        MULTI_VALUE_KEYS = [
+          :component_specific,
+          :padding,
+          :margin,
+          :frame_constraints,
+          :frame_size,
+          :on_click,
+          :on_long_press,
+          :on_pan,
+          :on_pinch,
+          :on_value_change,
+          :on_text_change,
+          :on_appear,
+          :on_disappear,
+          :confirmation_dialog,
+          :safe_area_insets,
+          :z_index,
+          :border,
+        ].freeze
+
+        def initialize
+          @bag = {}
+        end
+
+        # Register a modifier. Later registration wins (overwrites previous).
+        # For multi-value keys, replaces the entire array.
+        # @param key [Symbol] modifier key from MODIFIER_ORDER
+        # @param code [String, Array<String>] SwiftUI modifier code line(s)
+        def register(key, code)
+          if MULTI_VALUE_KEYS.include?(key)
+            @bag[key] = code.is_a?(Array) ? code : [code]
+          else
+            @bag[key] = code
+          end
+        end
+
+        # Register only if key is not yet set (static default, won't override binding).
+        # @param key [Symbol] modifier key
+        # @param code [String, Array<String>] SwiftUI modifier code line(s)
+        def register_unless_exists(key, code)
+          return if @bag.key?(key)
+          register(key, code)
+        end
+
+        # Append a code string to a multi-value key.
+        # Creates the array if it doesn't exist yet.
+        # @param key [Symbol] modifier key (should be in MULTI_VALUE_KEYS)
+        # @param code [String] single SwiftUI modifier code line
+        def append(key, code)
+          @bag[key] ||= []
+          if @bag[key].is_a?(Array)
+            @bag[key] << code
+          else
+            # Convert single value to array and append
+            @bag[key] = [@bag[key], code]
+          end
+        end
+
+        # Check if a key is registered
+        # @param key [Symbol] modifier key
+        # @return [Boolean]
+        def key?(key)
+          @bag.key?(key)
+        end
+
+        # Get the value for a key (for inspection/testing)
+        # @param key [Symbol] modifier key
+        # @return [String, Array<String>, nil]
+        def [](key)
+          @bag[key]
+        end
+
+        # Emit all registered modifiers in correct order via converter.add_modifier_line
+        # @param converter [BaseViewConverter] the converter to emit lines through
+        def emit_all(converter)
+          MODIFIER_ORDER.each do |key|
+            next unless @bag.key?(key)
+            value = @bag[key]
+
+            if value.is_a?(Array)
+              value.each do |line|
+                next unless line && !line.empty?
+                # Multi-line modifiers (like .overlay with indented content)
+                # are passed as-is; the converter handles indentation
+                if line.include?("\n")
+                  line.split("\n").each_with_index do |sub_line, idx|
+                    if idx == 0
+                      converter.add_modifier_line(sub_line)
+                    else
+                      converter.add_line(sub_line)
+                    end
+                  end
+                else
+                  converter.add_modifier_line(line)
+                end
+              end
+            else
+              next unless value && !value.to_s.empty?
+              if value.include?("\n")
+                value.split("\n").each_with_index do |sub_line, idx|
+                  if idx == 0
+                    converter.add_modifier_line(sub_line)
+                  else
+                    converter.add_line(sub_line)
+                  end
+                end
+              else
+                converter.add_modifier_line(value)
+              end
+            end
+          end
+        end
+
+        # Return all registered keys (for testing)
+        def keys
+          @bag.keys
+        end
+
+        # Return the registered modifier strings flattened in MODIFIER_ORDER.
+        # Used by the responsive container path to materialize modifiers for
+        # branch-specific attrs without actually writing them to a converter.
+        def to_lines
+          lines = []
+          MODIFIER_ORDER.each do |key|
+            next unless @bag.key?(key)
+            value = @bag[key]
+            if value.is_a?(Array)
+              value.each { |line| lines << line if line && !line.to_s.empty? }
+            elsif value && !value.to_s.empty?
+              lines << value
+            end
+          end
+          lines
+        end
+
+        # Clear all modifiers
+        def clear
+          @bag.clear
+        end
+      end
+    end
+  end
+end

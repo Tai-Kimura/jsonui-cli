@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/background__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.background (binding)",
+    "description": "Conformance fixture for 'background' on View (section: common, class: visual). Value under test: \"@{boundBackground}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "background__binding",
+      "description": "Conformance fixture for 'background' on View (section: common, class: visual). Value under test: \"@{boundBackground}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_background__binding"
+        }
+      ]
+    }
+  ]
+}

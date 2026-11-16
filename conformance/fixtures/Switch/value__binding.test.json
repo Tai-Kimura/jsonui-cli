@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/value__binding.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.value (binding)",
+    "description": "Conformance fixture for 'value' on Switch (section: Switch, class: visual). Value under test: \"@{boundValue}\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "value__binding",
+      "description": "Conformance fixture for 'value' on Switch (section: Switch, class: visual). Value under test: \"@{boundValue}\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_value__binding"
+        }
+      ]
+    }
+  ]
+}

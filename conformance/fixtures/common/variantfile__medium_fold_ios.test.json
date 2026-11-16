@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/variantfile__medium_fold_ios.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.variantfile (medium_fold_ios)",
+    "description": "Responsive variant-file semantic fixture (medium_fold_ios). Companion screens with @-suffixed variants live under fixtures/common/__screens/ — see manifest 'companions'.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "variantfile",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "medium_folds_into_ios_compact",
+      "description": "variant-file: medium_folds_into_ios_compact",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "assert": "text",
+          "id": "variant-which",
+          "equals": "medium"
+        }
+      ]
+    }
+  ]
+}

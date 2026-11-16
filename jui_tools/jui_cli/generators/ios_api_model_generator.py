@@ -1,0 +1,1433 @@
+"""iOS API model emitter — Swift DTO (`@generated`) + Domain scaffold.
+
+Consumes :class:`SchemaIR` from :mod:`openapi_loader` and emits per-schema
+output. The DTO file is always rewritten on every build; the Domain
+scaffold is written only when it does not already exist.
+
+Layout under ``<ios_root>/<sources>/<model_dir>/``:
+
+::
+
+    Model/
+      Generated/
+        UserDto.swift       (DTO, @generated)
+        AuthProvider.swift  (enum, @generated)
+      User.swift            (Domain scaffold, user-owned after first emit)
+
+See plan §2.2, §3.2, §4 for the full contract.
+"""
+from __future__ import annotations
+
+import json
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from ..core.generated_marker import comment_footer, comment_header
+from ..core.impl_updater import atomic_write_text
+from ..core.openapi_naming import (
+    check_enum_case_identifiers,
+    enum_case_source,
+    escape_keyword,
+    resolve_enum_case_for_default,
+    snake_to_camel,
+    snake_to_pascal,
+)
+from ..core.schema_ir import (
+    EnumDef,
+    FieldDef,
+    FieldType,
+    OneOfRef,
+    PrimitiveKind,
+    SchemaDef,
+    SwaggerDocument,
+    UnionDef,
+)
+
+
+@dataclass(frozen=True)
+class IosApiPlatformConfig:
+    """Resolved ``api.platforms.ios`` config (with defaults applied).
+
+    Carried through the generator so callers don't have to pass paths
+    around piecewise.
+
+    ``format_mapping`` mirrors the project-level ``api.format_mapping``
+    opt-in (plan 03): when True, string formats map to native types
+    (``date-time`` → ``Date``, ``uuid`` → ``UUID``, ``binary`` → ``Data``)
+    except for docs listed in ``format_excluded_docs`` (swagger file
+    basenames — the per-doc opt-out).
+    """
+
+    sources_root: Path  # absolute, e.g. <project>/<ios.root>/<sources>
+    model_dir: str = "Model"          # relative to sources_root
+    dto_subdir: str = "Generated"     # relative to model_dir
+    format_mapping: bool = False
+    # ``api.enum_unknown_case`` (default True; ticket jui-api-model-enum-unknown-value-fails-whole-decode): each enum
+    # gets ``case unknown(<raw>)`` and decodes a value it does not know into it, so a value the server added later does
+    # not fail the whole response. False: the enum as before (a raw-value enum whose decode throws on such a value).
+    enum_unknown_case: bool = True
+    format_excluded_docs: frozenset[str] = frozenset()
+    # ``api.platforms.ios.modules[].access_level`` (ticket jui-api-model-ios-dto-cannot-be-shared-with-framework-target):
+    # "public" for the DTOs written into a module of their own (a framework the app and an extension share), so code
+    # outside that module can name them. "internal" (the default) writes exactly what was written before the key.
+    access_level: str = "internal"
+
+
+class IosApiModelGenerator:
+    """Render Swift DTO + Domain scaffold files for a swagger document.
+
+    The generator is **pure**: :meth:`generate_dto_source` /
+    :meth:`generate_domain_source` / :meth:`generate_enum_source` return
+    strings. :meth:`write` does disk I/O and is the only side-effecting
+    method.
+
+    Caller responsibilities:
+
+    - Loop over each :class:`SwaggerDocument` and feed every schema/enum
+      to ``generate_*``
+    - Decide whether the Domain scaffold file already exists (the
+      generator does NOT touch existing scaffolds)
+    """
+
+    GENERATOR_NAME = "jui build (api model)"
+
+    def __init__(self, config: IosApiPlatformConfig):
+        self._config = config
+
+    @property
+    def _is_public(self) -> bool:
+        return self._config.access_level == "public"
+
+    def _access(self, lines: list[str]) -> list[str]:
+        """The lines as written, or with ``public`` on every declaration another module needs (see _publicize)."""
+        return _publicize(lines) if self._is_public else lines
+
+    @staticmethod
+    def with_imports(source: str, modules: "list[str] | tuple[str, ...]") -> str:
+        """*source* with ``import <module>`` after its ``import Foundation``, for a file that names a type a module
+        of DTOs holds. No modules: *source* unchanged."""
+        if not modules:
+            return source
+        extra = "".join(f"import {m}\n" for m in sorted(set(modules)))
+        if "import Foundation\n" not in source:
+            return extra + source
+        return source.replace("import Foundation\n", "import Foundation\n" + extra, 1)
+
+    def _format_enabled(self, doc: SwaggerDocument) -> bool:
+        """Per-doc format-aware mapping decision (opt-in + per-doc opt-out)."""
+        if not self._config.format_mapping:
+            return False
+        return Path(doc.source_path).name not in self._config.format_excluded_docs
+
+    # ----------------------------- paths ----------------------------- #
+
+    def dto_path(self, schema_name: str) -> Path:
+        return (
+            self._config.sources_root
+            / self._config.model_dir
+            / self._config.dto_subdir
+            / f"{schema_name}Dto.swift"
+        )
+
+    def enum_path(self, enum_name: str) -> Path:
+        return (
+            self._config.sources_root
+            / self._config.model_dir
+            / self._config.dto_subdir
+            / f"{enum_name}.swift"
+        )
+
+    def domain_path(self, schema_name: str) -> Path:
+        return (
+            self._config.sources_root
+            / self._config.model_dir
+            / f"{schema_name}.swift"
+        )
+
+    # ---------------------------- emit DTO --------------------------- #
+
+    def generate_dto_source(
+        self,
+        schema: SchemaDef,
+        doc: SwaggerDocument,
+    ) -> str:
+        """Return the Swift source for the DTO file (with @generated banner)."""
+        header = comment_header(
+            source=_relative_source(doc.source_path) + f"#{schema.source_pointer.rsplit('#', 1)[-1]}",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+
+        enums_by_name = {e.name: e for e in doc.enums}
+        enum_names = set(enums_by_name)
+
+        # A map alias (a top-level schema that is only a typed
+        # additionalProperties) is a typealias of the map — an alias, not a wrapper like a top-level array: the array needs a field name to hold it in a struct, a dictionary does not.
+        # It reads like a map written in place: ``dto.name["ja"]``.
+        if schema.is_map_alias and schema.wrapped_type is not None:
+            alias_lines: list[str] = []
+            if schema.description:
+                alias_lines.extend(_doc_comment_lines(schema.description))
+            if schema.deprecated:
+                alias_lines.append("@available(*, deprecated)")
+            mapped = _swift_type_with_enums(
+                schema.wrapped_type, enum_names, format_native=self._format_enabled(doc)
+            )
+            alias_lines.append(f"typealias {schema.name}Dto = {mapped}")
+            body = "\n".join(self._access(alias_lines))
+            return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
+        # Hashable is always declared so consumers can put DTOs in `Set` /
+        # `Dictionary` keys without having to write extensions. When the
+        # schema has a field Swift can't auto-synthesize on (map, array of
+        # map, etc.) we emit an explicit ``hash(into:)`` body that hashes
+        # the synthesis-safe subset — see ``_emit_hash_body`` below.
+        # Equatable / Sendable still respect their own flags; only
+        # Hashable is forced on.
+        conformances = ["Codable"]
+        if schema.is_sendable:
+            conformances.append("Sendable")
+        if schema.is_equatable:
+            conformances.append("Equatable")
+        conformances.append("Hashable")
+
+        body_lines: list[str] = []
+        if schema.description:
+            for ln in _doc_comment_lines(schema.description):
+                body_lines.append(ln)
+        if schema.deprecated:
+            body_lines.append("@available(*, deprecated)")
+        if schema.is_strict:
+            body_lines.append("// additionalProperties: false (strict — extra fields are dropped on decode)")
+
+        # `nonisolated`, because a DTO is a copy of the wire and holds no
+        # main-actor state. Under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+        # every conformance here would otherwise be main-actor isolated, and
+        # a nonisolated context — a test harness decoding a fixture — cannot
+        # use an isolated conformance ("this is an error in the Swift 6
+        # language mode"). The type already declares Sendable, which says
+        # the VALUE crosses isolation domains; without this the CONFORMANCE
+        # still could not, so it could be handed over but not decoded.
+        #
+        # The modifier goes on the type, not on `Codable` alone: scoping it
+        # to the conformance leaves Equatable and Hashable isolated, and
+        # comparing or hashing a DTO off the main actor then draws the same
+        # diagnostic (measured — 4 of them where the type-level spelling
+        # gives 0). Verified on Swift 6.3.2 and 6.3.3; which release first
+        # accepted the spelling was NOT measured, so read this as "known
+        # good there" rather than a floor. String/Int enums and enums nested
+        # inside this type need nothing — measured 0 either way.
+        body_lines.append(
+            f"nonisolated struct {schema.name}Dto: {', '.join(conformances)} {{"
+        )
+
+        fmt = self._format_enabled(doc)
+
+        # Wrapper schemas (top-level ``type: string`` / ``type: array`` etc.)
+        # take a separate emission path: a single stored property + a
+        # ``singleValueContainer``-based Codable so the wire format is the
+        # bare wrapped value rather than a JSON object envelope.
+        if schema.is_wrapper:
+            body_lines.extend(
+                _emit_swift_wrapper_body(schema, enum_names, format_native=fmt)
+            )
+            body_lines.append("}")
+            if fmt and _ftype_has_native_date(schema.fields[0].type):
+                body_lines.append("")
+                body_lines.extend(_SWIFT_ISO_DATE_HELPERS)
+            body = "\n".join(self._access(body_lines))
+            return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
+        has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
+        # Reasons for hand-writing init(from:)/encode(to:) form a set (plan
+        # 03): oneOf dispatch and/or native Date fields (the synthesized
+        # Codable would use the decoder's dateDecodingStrategy — default
+        # ``deferredToDate`` — instead of the wire's ISO 8601 strings).
+        # UUID / Data decode correctly through synthesized Codable (native
+        # Codable conformance / default ``.base64`` strategy), so they do
+        # not force the custom path on their own.
+        has_native_date = fmt and any(
+            _ftype_has_native_date(f.type) for f in schema.fields
+        )
+        # A swagger ``default:`` is "the value when the key is absent" — the
+        # reading kotlinx.serialization implements. Swift's synthesized
+        # Decodable NEVER decodes an immutable property with an initializer
+        # (the compiler even warns), so ``let type: String? = "chat"`` froze
+        # the default and silently discarded every wire value on ios while
+        # android decoded it. Any defaulted field therefore forces the custom
+        # ``init(from:)`` path, where it decodes as decodeIfPresent ?? default
+        # and the property loses its initializer (a custom init cannot assign
+        # an initialized let anyway).
+        has_defaulted_field = any(
+            not f.type.is_one_of_ref
+            and _field_default_literal(
+                f, enum_names, enums_by_name, format_native=fmt
+            )
+            is not None
+            for f in schema.fields
+        )
+        needs_custom_codable = has_oneof or has_native_date or has_defaulted_field
+
+        # Stored properties (one per field). On the custom-Codable path the
+        # default literal moves into init(from:) / the memberwise init — a
+        # custom init cannot assign an initialized let, and the initializer
+        # form is precisely what made synthesized decoding skip the field.
+        for f in schema.fields:
+            body_lines.extend(
+                _dto_field_lines(
+                    f,
+                    enum_names,
+                    enums_by_name,
+                    format_native=fmt,
+                    emit_default_literal=not needs_custom_codable,
+                )
+            )
+
+        # Nested ``enum {Field}: Codable`` declarations — one per oneOf field.
+        # Variants live alongside the parent type so consumers refer to them as
+        # ``StreamEventDto.Content.conversationId(...)``.
+        for f in schema.fields:
+            if f.type.is_one_of_ref and f.type.one_of is not None:
+                body_lines.extend(_emit_swift_oneof_nested_enum(f, f.type.one_of))
+
+        # Memberwise initializer — Swift suppresses the auto-synthesized one
+        # once we write a custom ``init(from decoder:)`` below, so explicitly
+        # restore it for consumers who construct DTOs at call sites.
+        # A public struct's synthesized memberwise init is internal, so code in another module could not build one:
+        # a public DTO always writes its own.
+        # And whenever a field may be omitted: Swift's synthesized memberwise
+        # init gives a `let` optional no default, so the init is written to
+        # carry `= nil` (_swift_omittable_without_default). A DTO whose
+        # fields are all required keeps the synthesized one, unchanged.
+        if (
+            needs_custom_codable
+            or self._is_public
+            or any(_swift_omittable_without_default(f) for f in schema.fields)
+        ):
+            body_lines.extend(
+                _emit_swift_memberwise_init(
+                    schema, enum_names, enums_by_name, format_native=fmt
+                )
+            )
+
+        # Custom CodingKeys when at least one field is renamed, OR always when
+        # the schema needs a custom ``init(from:)`` (the decoder needs the
+        # keys to dispatch / convert).
+        if needs_custom_codable or any(
+            _swift_property_name(f) != f.wire_name for f in schema.fields
+        ):
+            body_lines.append("")
+            body_lines.append("    enum CodingKeys: String, CodingKey {")
+            for f in schema.fields:
+                prop = _swift_property_name(f)
+                if prop == f.wire_name:
+                    body_lines.append(f"        case {prop}")
+                else:
+                    body_lines.append(f'        case {prop} = "{f.wire_name}"')
+            body_lines.append("    }")
+
+        # Single custom ``init(from:)`` + ``encode(to:)`` emitter driven by
+        # the reason set (oneOf dispatch and/or ISO date conversion) so the
+        # two features never emit duplicate initializers on one schema.
+        if needs_custom_codable:
+            body_lines.extend(
+                _emit_swift_custom_init_from_decoder(
+                    schema, enum_names, enums_by_name, format_native=fmt,
+                    open_enums=self._config.enum_unknown_case,
+                )
+            )
+            body_lines.extend(
+                _emit_swift_custom_encode_to_encoder(
+                    schema, enum_names, format_native=fmt
+                )
+            )
+
+        # Explicit ``hash(into:)`` when Swift auto-synthesis would fail —
+        # currently triggered by any map / array-of-map / nested-map field.
+        if _schema_needs_explicit_hash(schema):
+            body_lines.extend(_emit_hash_body_lines(schema))
+
+        body_lines.append("}")
+
+        if has_native_date:
+            body_lines.append("")
+            body_lines.extend(_SWIFT_ISO_DATE_HELPERS)
+
+        body = "\n".join(self._access(body_lines))
+        return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
+    # ---------------------------- emit union ------------------------- #
+
+    def generate_union_source(self, union: UnionDef, doc: SwaggerDocument) -> str:
+        """Swift source for a schema-level union (self-decoding enum).
+
+        The wire form is the variant payload itself with the discriminator
+        tag inside it, so the enum owns its own (de)coding: decode reads
+        the tag key first and dispatches into the matching variant's
+        ``init(from:)`` against the same decoder; encode writes the
+        variant payload flat and then (re)writes the tag key so
+        round-trips hold even when a variant schema does not declare the
+        tag property (explicit-mapping case). Unknown / missing tags
+        decode to ``.unknown`` (forward-compat, same convention as the
+        field-level oneOf enum); ``.unknown`` encodes as ``{}``.
+        """
+        header = comment_header(
+            source=_relative_source(doc.source_path)
+            + f"#{union.source_pointer.rsplit('#', 1)[-1]}",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+
+        lines: list[str] = []
+        if union.description:
+            lines.extend(_doc_comment_lines(union.description))
+        if union.deprecated:
+            lines.append("@available(*, deprecated)")
+        # Same reasoning as the struct emit: a union DTO is decoded from
+        # nonisolated contexts too.
+        lines.append(
+            f"nonisolated enum {union.name}Dto: Codable, Sendable, Equatable, Hashable {{"
+        )
+        for variant in union.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            lines.append(f"    case {case}({variant.ref_name}Dto)")
+        lines.append("    case unknown")
+        lines.append("")
+        lines.append("    private enum TagCodingKeys: String, CodingKey {")
+        lines.append(f'        case tag = "{union.discriminator_property}"')
+        lines.append("    }")
+        lines.append("")
+        lines.append("    init(from decoder: Decoder) throws {")
+        lines.append(
+            "        let container = try decoder.container(keyedBy: TagCodingKeys.self)"
+        )
+        lines.append(
+            "        let tag = try container.decodeIfPresent(String.self, forKey: .tag)"
+        )
+        lines.append("        switch tag {")
+        for variant in union.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            lines.append(f'        case "{variant.discriminator_value}":')
+            lines.append(
+                f"            self = .{case}(try {variant.ref_name}Dto(from: decoder))"
+            )
+        lines.append("        default:")
+        lines.append("            self = .unknown")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    func encode(to encoder: Encoder) throws {")
+        lines.append("        switch self {")
+        for variant in union.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            lines.append(f"        case .{case}(let value):")
+            lines.append("            try value.encode(to: encoder)")
+            lines.append(
+                "            var container = encoder.container(keyedBy: TagCodingKeys.self)"
+            )
+            lines.append(
+                f'            try container.encode("{variant.discriminator_value}", forKey: .tag)'
+            )
+        lines.append("        case .unknown:")
+        lines.append("            _ = encoder.container(keyedBy: TagCodingKeys.self)")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("}")
+
+        body = "\n".join(self._access(lines))
+        return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
+    def generate_union_domain_source(self, union: UnionDef) -> str:
+        """Domain scaffold for a union — same thin-wrapper shape as object
+        schemas (see plan ``02a-union-emit-design.md`` for why a sealed
+        Domain mirror was rejected), plus a dispatch hint.
+        """
+        return (
+            "import Foundation\n"
+            "\n"
+            f"struct {union.name} {{\n"
+            f"    let dto: {union.name}Dto\n"
+            "\n"
+            f"    init(dto: {union.name}Dto) {{\n"
+            "        self.dto = dto\n"
+            "    }\n"
+            "\n"
+            "    // User customization zone — add proxies, computed properties,\n"
+            "    // stored properties, methods, and conversions here.\n"
+            "    // Dispatch on the union with `switch dto { case ."
+            + _swift_oneof_case_ident(union.variants[0].discriminator_value)
+            + "(let value): ... }`.\n"
+            "}\n"
+        )
+
+    # ---------------------------- emit enum -------------------------- #
+
+    def generate_enum_source(self, enum: EnumDef, doc: SwaggerDocument) -> str:
+        """Return the Swift source for a standalone enum schema."""
+        header = comment_header(
+            source=_relative_source(doc.source_path) + f"#/components/schemas/{enum.name}",
+            generator=self.GENERATOR_NAME,
+        )
+        footer = comment_footer()
+
+        if self._config.enum_unknown_case:
+            lines = _swift_open_enum_lines(enum, doc)
+        elif enum.kind == PrimitiveKind.STRING:
+            raw_type = "String"
+            value_pairs = list(zip(enum.case_names, enum.string_values))
+            check_enum_case_identifiers(
+                enum, [escape_keyword(_swift_case_name(c), language="swift") for c, _ in value_pairs],
+                language="Swift", source=str(doc.source_path),
+            )
+            lines = [f"enum {enum.name}: {raw_type}, Codable, CaseIterable, Sendable {{"]
+            for case_name, raw_value in value_pairs:
+                escaped = escape_keyword(_swift_case_name(case_name), language="swift")
+                if escaped == raw_value or escaped.strip("`") == raw_value:
+                    lines.append(f"    case {escaped}")
+                else:
+                    lines.append(f'    case {escaped} = "{raw_value}"')
+            lines.append("}")
+        else:  # INTEGER
+            raw_type = "Int"
+            value_pairs_int = list(zip(enum.case_names, enum.integer_values))
+            check_enum_case_identifiers(
+                enum, [escape_keyword(_swift_case_name(c), language="swift") for c, _ in value_pairs_int],
+                language="Swift", source=str(doc.source_path),
+            )
+            lines = [f"enum {enum.name}: {raw_type}, Codable, CaseIterable, Sendable {{"]
+            for case_name, raw_int in value_pairs_int:
+                escaped = escape_keyword(_swift_case_name(case_name), language="swift")
+                lines.append(f"    case {escaped} = {raw_int}")
+            lines.append("}")
+
+        preamble: list[str] = []
+        if enum.description:
+            preamble.extend(_doc_comment_lines(enum.description))
+        if enum.deprecated:
+            preamble.append("@available(*, deprecated)")
+
+        body = "\n".join(self._access(preamble + lines))
+        return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
+    # --------------------------- emit Domain ------------------------- #
+
+    def generate_domain_source(self, schema: SchemaDef) -> str:
+        """Return the Swift source for the initial Domain scaffold.
+
+        This is the *first-time* output. Subsequent builds skip writing
+        when the file already exists — user edits are preserved.
+        """
+        return (
+            "import Foundation\n"
+            "\n"
+            f"struct {schema.name} {{\n"
+            f"    let dto: {schema.name}Dto\n"
+            "\n"
+            f"    init(dto: {schema.name}Dto) {{\n"
+            "        self.dto = dto\n"
+            "    }\n"
+            "\n"
+            "    // User customization zone — add proxies, computed properties,\n"
+            "    // stored properties, methods, and conversions here.\n"
+            "}\n"
+        )
+
+    # ----------------------------- writes ---------------------------- #
+
+    @dataclass(frozen=True)
+    class WriteResult:
+        """Summary of what changed on disk during a single ``write_*`` call."""
+
+        path: Path
+        wrote: bool
+        skipped_existing: bool = False
+
+    def write_dto(self, schema: SchemaDef, doc: SwaggerDocument) -> "IosApiModelGenerator.WriteResult":
+        path = self.dto_path(schema.name)
+        source = self.generate_dto_source(schema, doc)
+        wrote = atomic_write_text(path, source)
+        return self.WriteResult(path=path, wrote=wrote)
+
+    def write_enum(self, enum: EnumDef, doc: SwaggerDocument) -> "IosApiModelGenerator.WriteResult":
+        path = self.enum_path(enum.name)
+        source = self.generate_enum_source(enum, doc)
+        wrote = atomic_write_text(path, source)
+        return self.WriteResult(path=path, wrote=wrote)
+
+    def write_domain(self, schema: SchemaDef) -> "IosApiModelGenerator.WriteResult":
+        path = self.domain_path(schema.name)
+        if path.exists():
+            return self.WriteResult(path=path, wrote=False, skipped_existing=True)
+        source = self.generate_domain_source(schema)
+        wrote = atomic_write_text(path, source)
+        return self.WriteResult(path=path, wrote=wrote)
+
+    # ---------------------------- discovery -------------------------- #
+
+    def expected_dto_paths(self, doc: SwaggerDocument) -> set[Path]:
+        """All DTO + enum paths that should exist for *doc*.
+
+        Used by the orphan-prune step in ``build_cmd`` to remove DTOs
+        whose source schema disappeared from the swagger.
+        """
+        paths = {self.dto_path(s.name) for s in doc.schemas}
+        paths |= {self.enum_path(e.name) for e in doc.enums}
+        paths |= {self.dto_path(u.name) for u in doc.unions}
+        return paths
+
+
+# --------------------------------------------------------------------------- #
+# Internals (module-level so they can be unit-tested without instantiating
+# the generator class).
+# --------------------------------------------------------------------------- #
+
+
+def _relative_source(absolute_path: str) -> str:
+    """Best-effort relative path for the comment-header ``Source:`` line.
+
+    We don't have the project root in scope here; the build pipeline will
+    fix this up when wiring the generator. For now return the basename so
+    that snapshot tests don't depend on absolute paths.
+    """
+    return Path(absolute_path).name
+
+
+def _doc_comment_lines(text: str) -> list[str]:
+    """Convert *text* to Swift triple-slash doc comment lines."""
+    out: list[str] = []
+    for raw in text.splitlines() or [text]:
+        out.append(f"/// {raw}")
+    return out
+
+
+# What another module needs to see of a DTO, enum or union (``access_level: "public"``): the type itself, its stored
+# properties, its initializers, and every member that satisfies a protocol (Codable / Hashable / RawRepresentable /
+# CaseIterable). ``CodingKeys`` and ``TagCodingKeys`` stay internal (no API names them), and the ISO date helpers stay
+# fileprivate, their bodies untouched. Applied to the finished lines because the emitters own their whole text: a declaration starts at column
+# 0 (the type) or column 4 (a member, or a nested oneOf enum); function bodies start at column 8 and are never touched.
+_PUBLIC_TOP = ("nonisolated struct ", "nonisolated enum ", "enum ", "struct ", "typealias ")
+_PUBLIC_MEMBER = ("let ", "var ", "init(", "init?(", "func ", "static let ", "enum ")
+_INTERNAL_MEMBER = ("enum CodingKeys:",)
+
+
+def _publicize(lines: list[str]) -> list[str]:
+    out: list[str] = []
+    in_fileprivate = False   # a fileprivate helper's body, up to its closing brace at column 0: left as written
+    for line in lines:
+        if in_fileprivate or line.startswith("fileprivate "):
+            in_fileprivate = line != "}"
+            out.append(line)
+        elif line.startswith(_PUBLIC_TOP):
+            out.append("public " + line)
+        elif (
+            line.startswith("    ")
+            and not line.startswith("     ")
+            and line[4:].startswith(_PUBLIC_MEMBER)
+            and not line[4:].startswith(_INTERNAL_MEMBER)
+        ):
+            out.append("    public " + line[4:])
+        else:
+            out.append(line)
+    return out
+
+
+def _dto_field_lines(
+    field: FieldDef,
+    enum_names: set[str],
+    enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
+    emit_default_literal: bool = True,
+) -> list[str]:
+    """Lines emitted for one DTO stored property.
+
+    Includes:
+
+    - leading blank line for readability when annotations are present
+    - doc comment (if ``description`` set)
+    - ``@available(*, deprecated)`` annotation if marked
+    - ``let <name>: <Type>`` declaration with default literal when applicable
+    """
+    out: list[str] = []
+    if field.description or field.deprecated:
+        out.append("")  # blank line separator before annotated fields
+    if field.description:
+        for ln in _doc_comment_lines(field.description):
+            out.append(f"    {ln}")
+    if field.deprecated:
+        out.append("    @available(*, deprecated)")
+    if field.type.is_one_of_ref:
+        type_str = _swift_oneof_field_type(field)
+    else:
+        type_str = _swift_type_with_enums(
+            field.type, enum_names, format_native=format_native
+        )
+    name = _swift_property_name(field)
+    line = f"    let {name}: {type_str}"
+    if emit_default_literal:
+        default = _swift_default_literal(
+            field, type_str, enums_by_name, format_native=format_native
+        )
+        if default is not None:
+            line += f" = {default}"
+    out.append(line)
+    return out
+
+
+def _field_default_literal(
+    field: FieldDef,
+    enum_names: set[str],
+    enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
+) -> str | None:
+    """The field's Swift default literal, or None — type_str resolved here."""
+    type_str = _swift_type_with_enums(
+        field.type, enum_names, format_native=format_native
+    )
+    return _swift_default_literal(
+        field, type_str, enums_by_name, format_native=format_native
+    )
+
+
+def _swift_property_name(field: FieldDef) -> str:
+    """Wire ``snake_case`` → Swift ``camelCase`` + reserved-word escape."""
+    return escape_keyword(snake_to_camel(field.wire_name), language="swift")
+
+
+def _hash_safe(ftype: FieldType) -> bool:
+    """True when Swift can hash a field of this type without help.
+
+    Primitives, enums, object refs and oneOf union refs are safe — object
+    refs because every DTO now declares ``Hashable`` unconditionally (see
+    plan ``2026-05-27-ios-dto-hashable-explicit-body.md``), oneOf because
+    the nested enum we emit conforms to Hashable through its associated
+    DTO values. Arrays inherit safety from their element type. Maps
+    short-circuit to False — the auto-synthesis path bails on ``[K: V]``
+    even when both K and V are Hashable in many real-world Swift compiler
+    versions, so we keep the rule conservative.
+    """
+    if ftype.is_primitive:
+        return True
+    if ftype.is_enum_ref:
+        return True
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        return _hash_safe(ftype.alias_map)   # a map alias is the map it names
+    if ftype.is_object_ref:
+        return True
+    if ftype.is_one_of_ref:
+        return True
+    if ftype.is_map:
+        return False
+    if ftype.is_array and ftype.element is not None:
+        return _hash_safe(ftype.element)
+    return False
+
+
+def _schema_needs_explicit_hash(schema: SchemaDef) -> bool:
+    """True iff at least one field requires us to hand-write ``hash(into:)``."""
+    return any(not _hash_safe(f.type) for f in schema.fields)
+
+
+def _emit_hash_body_lines(schema: SchemaDef) -> list[str]:
+    """Emit the explicit ``hash(into:)`` body for *schema*.
+
+    Hash-safe fields are ``hasher.combine``'d in declaration order. Unsafe
+    fields are listed in a trailing comment so a reader can tell at a
+    glance which fields were dropped from the hash and why. The Equatable
+    auto-synthesis still considers every field, so ``a == b ⟹ hash(a) ==
+    hash(b)`` holds (if all fields equal, the safe subset is also equal,
+    so hashes match). The reverse — ``hash(a) == hash(b) ⟹ a == b`` — is
+    never required by the Hashable contract.
+    """
+    safe: list[str] = []
+    omitted: list[str] = []
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        if _hash_safe(f.type):
+            safe.append(name)
+        else:
+            omitted.append(name)
+
+    lines: list[str] = ["", "    func hash(into hasher: inout Hasher) {"]
+    for name in safe:
+        lines.append(f"        hasher.combine({name})")
+    if omitted:
+        lines.append(
+            "        // Omitted from hash (synthesis-incompatible types): "
+            + ", ".join(omitted)
+        )
+    lines.append("    }")
+    return lines
+
+
+def _swift_case_name(case_name: str) -> str:
+    """Enum case identifier; snake/kebab → camelCase + escape.
+
+    A number's minus sign is spelled ``minus`` first (``value_-1`` →
+    ``valueMinus1``; openapi_naming.enum_case_source), as Kotlin spells it
+    ``VALUE_MINUS_1``. Through jsonui-cli 1.9.5 the sign was dropped, so
+    -1 and 1 were both ``value1``.
+    """
+    return snake_to_camel(enum_case_source(case_name))
+
+
+def _swift_type(ftype: FieldType, *, format_native: bool = False) -> str:
+    """Render a :class:`FieldType` as a Swift type expression."""
+    if ftype.is_primitive:
+        base = _PRIMITIVE_TO_SWIFT[ftype.primitive]
+        if format_native and ftype.format is not None:
+            base = _FORMAT_TO_SWIFT.get(ftype.format, base)
+    elif ftype.is_object_ref or ftype.is_enum_ref:
+        # Object refs become ``<Name>Dto``; enum refs become just ``<Name>``.
+        # We don't have the enum/object disambiguation here without a doc-
+        # wide lookup, so we default to the DTO suffix and let the call
+        # site override when we know it's an enum. (Implemented below via
+        # _swift_type_with_enums.)
+        base = f"{ftype.ref_name}Dto"
+    elif ftype.is_array:
+        inner = (
+            _swift_type(ftype.element, format_native=format_native)
+            if ftype.element
+            else "String"
+        )
+        base = f"[{inner}]"
+    elif ftype.is_map:
+        inner = (
+            _swift_type(ftype.element, format_native=format_native)
+            if ftype.element
+            else "String"
+        )
+        base = f"[String: {inner}]"
+    else:
+        base = "String"
+    return f"{base}?" if ftype.nullable else base
+
+
+def _swift_type_with_enums(
+    ftype: FieldType,
+    enum_names: set[str],
+    *,
+    format_native: bool = False,
+    raw_dates: bool = False,
+) -> str:
+    """Like :func:`_swift_type` but treats enum refs without the ``Dto`` suffix.
+
+    Used when the generator has access to the doc-level enum name set
+    (most production callsites do). ``raw_dates`` spells the wire (String)
+    shape of a native-Date field for its hand-written decode / encode: a
+    map alias holding dates is then written out as its map, since the
+    alias's own name means the Date-valued map.
+    """
+    if (raw_dates and ftype.is_object_ref and ftype.alias_map is not None
+            and _ftype_has_native_date(ftype.alias_map)):
+        return _swift_type_with_enums(
+            FieldType(**{**ftype.alias_map.__dict__, "nullable": ftype.nullable}),
+            enum_names, raw_dates=True,
+        )
+    if (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enum_names:
+        base = ftype.ref_name
+        return f"{base}?" if ftype.nullable else base
+    if ftype.is_array and ftype.element:
+        inner = _swift_type_with_enums(
+            ftype.element, enum_names, format_native=format_native, raw_dates=raw_dates
+        )
+        rendered = f"[{inner}]"
+        return f"{rendered}?" if ftype.nullable else rendered
+    if ftype.is_map and ftype.element:
+        inner = _swift_type_with_enums(
+            ftype.element, enum_names, format_native=format_native, raw_dates=raw_dates
+        )
+        rendered = f"[String: {inner}]"
+        return f"{rendered}?" if ftype.nullable else rendered
+    return _swift_type(ftype, format_native=format_native)
+
+
+def _swift_default_literal(
+    field: FieldDef,
+    type_str: str,
+    enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
+) -> str | None:
+    """Render OpenAPI ``default`` to a Swift literal, or None if absent.
+
+    Enum-typed fields emit ``EnumName.caseName`` (or the keyword-escaped
+    form) instead of a raw string / integer literal. Required to compile
+    when a swagger schema uses ``allOf: [$ref: <enum>] + default: <value>``
+    on a Swift enum without ``ExpressibleByStringLiteral``.
+
+    Conservative: only emit literals for scalar defaults whose JSON shape
+    maps cleanly to Swift. Complex defaults (objects / arrays of objects)
+    are skipped — the decoder will fill them.
+    """
+    if not field.has_default:
+        return None
+    value = field.default
+    if value is None:
+        return "nil"
+
+    # Format-native fields (Date / UUID / Data) can't take the swagger's
+    # string default as a literal — skip it and let the decoder fill the
+    # value at runtime (matches the complex-default policy below).
+    if format_native and field.type.is_primitive and field.type.format is not None:
+        return None
+
+    # Enum-typed field → EnumName.caseName.
+    ftype = field.type
+    if (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enums_by_name:
+        enum = enums_by_name[ftype.ref_name]
+        case_name = resolve_enum_case_for_default(enum, value)
+        if case_name is None:
+            return None
+        ident = escape_keyword(_swift_case_name(case_name), language="swift")
+        return f"{enum.name}.{ident}"
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, str):
+        # Treat as string default — strip nothing, just quote.
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(value, list) and not value:
+        return "[]"
+    if isinstance(value, dict) and not value:
+        return "[:]"
+    return None
+
+
+_PRIMITIVE_TO_SWIFT: dict[PrimitiveKind, str] = {
+    PrimitiveKind.STRING: "String",
+    PrimitiveKind.INTEGER_32: "Int32",
+    PrimitiveKind.INTEGER_64: "Int64",
+    PrimitiveKind.INTEGER: "Int",
+    PrimitiveKind.FLOAT: "Float",
+    PrimitiveKind.DOUBLE: "Double",
+    PrimitiveKind.BOOLEAN: "Bool",
+}
+
+
+# --------------------------------------------------------------------------- #
+# format-aware mapping helpers (plan 2026-07-24-v1-unsupported/03)
+# --------------------------------------------------------------------------- #
+
+
+_FORMAT_TO_SWIFT: dict[str, str] = {
+    "date-time": "Date",
+    "uuid": "UUID",
+    "binary": "Data",
+}
+
+
+def _ftype_has_native_date(ftype: FieldType) -> bool:
+    """True when the type (through array / map nesting) holds a ``date-time``.
+
+    Object / enum / oneOf refs are excluded on purpose: referenced DTOs
+    own their own (de)coding, so a parent never converts on their behalf.
+    """
+    if ftype.is_primitive:
+        return ftype.format == "date-time"
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        # A map alias is a typealias with no (de)coding of its own: the
+        # parent converts its dates, as for a map written in place.
+        return _ftype_has_native_date(ftype.alias_map)
+    if (ftype.is_array or ftype.is_map) and ftype.element is not None:
+        return _ftype_has_native_date(ftype.element)
+    return False
+
+
+# fileprivate so per-DTO-file duplication never collides across the
+# generated module. Formatters are built per call instead of cached in a
+# ``static let`` — ISO8601DateFormatter is not Sendable, and a shared
+# mutable-class global would trip strict-concurrency checking.
+_SWIFT_ISO_DATE_HELPERS: tuple[str, ...] = (
+    "fileprivate func _juiParseIsoDate(_ raw: String, codingPath: [CodingKey]) throws -> Date {",
+    "    let formatter = ISO8601DateFormatter()",
+    "    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]",
+    "    if let date = formatter.date(from: raw) { return date }",
+    "    formatter.formatOptions = [.withInternetDateTime]",
+    "    if let date = formatter.date(from: raw) { return date }",
+    "    throw DecodingError.dataCorrupted(DecodingError.Context(",
+    "        codingPath: codingPath,",
+    '        debugDescription: "Invalid ISO 8601 date-time: \\(raw)"',
+    "    ))",
+    "}",
+    "",
+    "fileprivate func _juiFormatIsoDate(_ date: Date) -> String {",
+    "    let formatter = ISO8601DateFormatter()",
+    "    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]",
+    "    return formatter.string(from: date)",
+    "}",
+)
+
+
+def _swift_date_decode_expr(ftype: FieldType, src: str) -> str:
+    """Conversion expression: raw (String-shaped) value → native Date shape.
+
+    *src* is an expression of the raw type (``String`` / ``[String]`` /
+    ``[String: String]`` …). The returned expression carries its own
+    ``try`` prefixes so it is valid both as an assignment RHS and as a
+    closure body.
+    """
+    if ftype.is_primitive:
+        return f"try _juiParseIsoDate({src}, codingPath: decoder.codingPath)"
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        return _swift_date_decode_expr(ftype.alias_map, src)
+    if (ftype.is_array or ftype.is_map) and ftype.element is not None:
+        inner = _swift_date_decode_expr(ftype.element, "$0")
+        if ftype.element.nullable:
+            # ``[String?]`` → ``[Date?]``: a null element stays nil
+            # (Optional.map), it is not handed to the parser.
+            inner = f"try $0.map {{ {inner} }}"
+        each = "map" if ftype.is_array else "mapValues"
+        return f"try {src}.{each} {{ {inner} }}"
+    return src
+
+
+def _swift_date_encode_expr(ftype: FieldType, src: str) -> str:
+    """Conversion expression: native Date shape → raw (String-shaped) value."""
+    if ftype.is_primitive:
+        return f"_juiFormatIsoDate({src})"
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        return _swift_date_encode_expr(ftype.alias_map, src)
+    if (ftype.is_array or ftype.is_map) and ftype.element is not None:
+        inner = _swift_date_encode_expr(ftype.element, "$0")
+        if ftype.element.nullable:
+            inner = f"$0.map {{ {inner} }}"
+        each = "map" if ftype.is_array else "mapValues"
+        return f"{src}.{each} {{ {inner} }}"
+    return src
+
+
+# --------------------------------------------------------------------------- #
+# oneOf / discriminator helpers
+# --------------------------------------------------------------------------- #
+
+
+def _swift_oneof_nested_type_name(field: FieldDef) -> str:
+    """Nested enum name for a oneOf field — e.g. ``content`` → ``Content``."""
+    return snake_to_pascal(field.wire_name)
+
+
+def _swift_oneof_field_type(field: FieldDef) -> str:
+    """Render a oneOf field's type as a reference to the nested enum."""
+    base = _swift_oneof_nested_type_name(field)
+    return f"{base}?" if field.type.nullable else base
+
+
+def _swift_oneof_case_ident(discriminator_value: str) -> str:
+    """``conversation_id`` → ``conversationId`` (snake → camel + escape)."""
+    return escape_keyword(snake_to_camel(discriminator_value), language="swift")
+
+
+def _emit_swift_oneof_nested_enum(field: FieldDef, one_of: OneOfRef) -> list[str]:
+    """Emit ``enum Content: Codable, Sendable, Equatable, Hashable { ... }``.
+
+    Each variant carries the corresponding DTO type as associated value;
+    an ``unknown`` case provides forward-compatibility when the server
+    introduces a new discriminator value before the client is rebuilt.
+    """
+    type_name = _swift_oneof_nested_type_name(field)
+    lines: list[str] = [
+        "",
+        f"    enum {type_name}: Codable, Sendable, Equatable, Hashable {{",
+    ]
+    for variant in one_of.variants:
+        case = _swift_oneof_case_ident(variant.discriminator_value)
+        lines.append(f"        case {case}({variant.ref_name}Dto)")
+    lines.append("        case unknown")
+    lines.append("    }")
+    return lines
+
+
+def _swift_omittable_without_default(field: FieldDef) -> bool:
+    """A field the server may leave out, with no swagger ``default``: its
+    init parameter defaults to ``nil``, as Android's constructor parameter
+    defaults to ``null`` (android_api_model_generator._kotlin_default_literal
+    — the same rule: optional, not required). A required field, nullable or
+    not, stays a parameter every call names, as on Android.
+
+    Until jsonui-cli 2.5.32 no such parameter had a default, so each
+    optional field added to the swagger broke every hand-written call on
+    iOS while Android's still compiled. Ticket
+    jui-api-model-ios-init-optional-without-default-nil.
+    """
+    return field.type.nullable and not field.required and not field.has_default
+
+
+def _emit_swift_memberwise_init(
+    schema: SchemaDef,
+    enum_names: set[str],
+    enums_by_name: dict[str, EnumDef] | None = None,
+    *,
+    format_native: bool = False,
+) -> list[str]:
+    """Emit a memberwise ``init`` so consumers can build custom-Codable DTOs.
+
+    Swift suppresses the auto-synthesized memberwise initializer once a
+    custom ``init(from decoder:)`` is declared in the same type, so we
+    have to re-emit it manually. A swagger ``default:`` becomes the
+    PARAMETER default here — call sites may omit it, and unlike the old
+    property-initializer form the field stays assignable (the frozen-let
+    emit excluded these fields from the memberwise init entirely, so a
+    request DTO with defaulted fields had no way to carry a real value).
+    """
+    params: list[str] = []
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        if f.type.is_one_of_ref:
+            type_str = _swift_oneof_field_type(f)
+        else:
+            type_str = _swift_type_with_enums(
+                f.type, enum_names, format_native=format_native
+            )
+        param = f"{name}: {type_str}"
+        default = None
+        if enums_by_name is not None and not f.type.is_one_of_ref:
+            default = _swift_default_literal(
+                f, type_str, enums_by_name, format_native=format_native
+            )
+        if default is None and _swift_omittable_without_default(f):
+            default = "nil"
+        if default is not None:
+            param += f" = {default}"
+        params.append(param)
+    lines: list[str] = ["", f"    init({', '.join(params)}) {{"]
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        lines.append(f"        self.{name} = {name}")
+    lines.append("    }")
+    return lines
+
+
+def _emit_swift_custom_init_from_decoder(
+    schema: SchemaDef,
+    enum_names: set[str],
+    enums_by_name: dict[str, EnumDef],
+    *,
+    format_native: bool = False,
+    open_enums: bool = False,
+) -> list[str]:
+    """Emit the single custom ``init(from decoder:)`` for a DTO.
+
+    Driven by the reason set (plan 03): oneOf fields dispatch on their
+    discriminator sibling; when *format_native* is on, ``date-time``
+    fields decode their raw ISO 8601 strings through
+    ``_juiParseIsoDate``. Keeping one emitter for both reasons prevents
+    duplicate ``init(from:)`` definitions when a schema has oneOf and
+    Date fields at once.
+
+    When the discriminator sibling is an inline-derived enum (the common
+    case for swaggers that declare ``type: string, enum: [...]``), the
+    dispatch ``switch`` compares against enum case identifiers
+    (``case .conversationId``). When the sibling is a plain ``String``,
+    we keep the string-literal cases. Both forms preserve the
+    ``default: .unknown`` fallback for forward-compat with new server
+    values.
+    """
+    lines: list[str] = ["", "    init(from decoder: Decoder) throws {"]
+    lines.append("        let container = try decoder.container(keyedBy: CodingKeys.self)")
+
+    # Decode non-oneOf fields first — plain Codable, except native-Date
+    # shapes which decode their raw String form and convert.
+    for f in schema.fields:
+        if f.type.is_one_of_ref:
+            continue
+        name = _swift_property_name(f)
+        if format_native and _ftype_has_native_date(f.type):
+            raw = _swift_type_with_enums(f.type, enum_names, raw_dates=True).rstrip("?")
+            if f.type.nullable:
+                convert = _swift_date_decode_expr(f.type, "$0")
+                lines.append(
+                    f"        self.{name} = try container.decodeIfPresent({raw}.self, forKey: .{name}).map {{ {convert} }}"
+                )
+            else:
+                convert = _swift_date_decode_expr(
+                    f.type, f"(try container.decode({raw}.self, forKey: .{name}))"
+                )
+                lines.append(f"        self.{name} = {convert}")
+            continue
+        type_str = _swift_type_with_enums(
+            f.type, enum_names, format_native=format_native
+        )
+        bare = type_str.rstrip("?")
+        # swagger `default:` = the value when the key is ABSENT (the kotlinx
+        # reading) — decodeIfPresent ?? default, never a frozen initializer.
+        default = _swift_default_literal(
+            f, type_str, enums_by_name, format_native=format_native
+        )
+        if default is not None and default != "nil":
+            lines.append(
+                f"        self.{name} = try container.decodeIfPresent({bare}.self, forKey: .{name}) ?? {default}"
+            )
+        elif f.type.nullable:
+            lines.append(
+                f"        self.{name} = try container.decodeIfPresent({bare}.self, forKey: .{name})"
+            )
+        else:
+            lines.append(
+                f"        self.{name} = try container.decode({bare}.self, forKey: .{name})"
+            )
+
+    # Dispatch each oneOf field.
+    for f in schema.fields:
+        if not f.type.is_one_of_ref or f.type.one_of is None:
+            continue
+        prop = _swift_property_name(f)
+        disc_field = _find_field_by_wire_name(schema, f.type.one_of.discriminator_property)
+        disc_prop = _swift_property_name(disc_field) if disc_field else f.type.one_of.discriminator_property
+        disc_enum = None
+        # an inline enum (is_enum_ref) or a component enum's $ref (is_object_ref, ticket
+        # sjui-api-model-union-decoder-switch-misses-unknown: the $ref form switched on string literals and did not compile)
+        if (
+            disc_field is not None
+            and (disc_field.type.is_enum_ref or disc_field.type.is_object_ref)
+            and disc_field.type.ref_name in enums_by_name
+        ):
+            disc_enum = enums_by_name[disc_field.type.ref_name]
+
+        lines.append(f"        switch self.{disc_prop} {{")
+        covered_enum_cases: set[str] = set()
+        for variant in f.type.one_of.variants:
+            case = _swift_oneof_case_ident(variant.discriminator_value)
+            decode_call = (
+                f"try container.decode({variant.ref_name}Dto.self, forKey: .{prop})"
+                if not f.type.nullable
+                else f"try container.decodeIfPresent({variant.ref_name}Dto.self, forKey: .{prop}) ?? "
+                     f"{variant.ref_name}Dto()"
+            )
+            if disc_enum is not None:
+                # discriminator is enum-typed → reference the enum case
+                # identifier rather than a raw string literal so the
+                # ``switch self.type`` (typed) compiles.
+                enum_case_raw = resolve_enum_case_for_default(
+                    disc_enum, variant.discriminator_value
+                )
+                if enum_case_raw is None:
+                    raise ValueError(
+                        f"Schema {schema.name!r}: oneOf mapping value "
+                        f"{variant.discriminator_value!r} is not a case of "
+                        f"enum {disc_enum.name!r}. Add the value to the "
+                        f"enum or remove it from the discriminator mapping."
+                    )
+                covered_enum_cases.add(enum_case_raw)
+                enum_case = escape_keyword(
+                    _swift_case_name(enum_case_raw), language="swift"
+                )
+                lines.append(f"        case .{enum_case}:")
+            else:
+                lines.append(f'        case "{variant.discriminator_value}":')
+            lines.append(f"            self.{prop} = .{case}({decode_call})")
+        # A trailing ``default:`` is unreachable — and Swift warns "Default
+        # will never be executed", violating the zero-warning invariant —
+        # when the discriminator is an enum whose every case is mapped: the
+        # switch is already exhaustive, and an out-of-enum wire value fails
+        # earlier at ``decode(<Enum>.self)``. Omit the default in that case.
+        # For a string-typed (open) discriminator, or an enum that is only
+        # partially mapped, the default is reachable and still routes
+        # unmapped values to ``.unknown``.
+        # An open enum (api.enum_unknown_case) has ``unknown(<raw>)`` besides its cases: a discriminator the app does
+        # not know decodes, and its item's oneOf is ``.unknown`` (the response is read whole), so the default stays
+        # (ticket sjui-api-model-union-decoder-switch-misses-unknown: 2.5.15 left it out, "switch must be exhaustive").
+        enum_exhaustive = (
+            disc_enum is not None
+            and not open_enums
+            and set(disc_enum.case_names).issubset(covered_enum_cases)
+        )
+        if not enum_exhaustive:
+            lines.append("        default:")
+            lines.append(f"            self.{prop} = .unknown")
+        lines.append("        }")
+    lines.append("    }")
+    return lines
+
+
+def _emit_swift_custom_encode_to_encoder(
+    schema: SchemaDef,
+    enum_names: set[str],
+    *,
+    format_native: bool = False,
+) -> list[str]:
+    """Emit the symmetric ``encode(to:)`` for custom-Codable schemas.
+
+    Same reason-set driver as :func:`_emit_swift_custom_init_from_decoder`
+    — oneOf variants encode through their case payload, native-Date
+    shapes re-emit ISO 8601 strings via ``_juiFormatIsoDate``.
+    """
+    lines: list[str] = ["", "    func encode(to encoder: Encoder) throws {"]
+    lines.append("        var container = encoder.container(keyedBy: CodingKeys.self)")
+
+    for f in schema.fields:
+        name = _swift_property_name(f)
+        if f.type.is_one_of_ref and f.type.one_of is not None:
+            lines.append(f"        switch self.{name} {{")
+            for variant in f.type.one_of.variants:
+                case = _swift_oneof_case_ident(variant.discriminator_value)
+                lines.append(
+                    f"        case .{case}(let value): "
+                    f"try container.encode(value, forKey: .{name})"
+                )
+            lines.append(f"        case .unknown: try container.encodeNil(forKey: .{name})")
+            lines.append("        }")
+            continue
+        if format_native and _ftype_has_native_date(f.type):
+            if f.type.nullable:
+                convert = _swift_date_encode_expr(f.type, "$0")
+                lines.append(
+                    f"        try container.encodeIfPresent(self.{name}.map {{ {convert} }}, forKey: .{name})"
+                )
+            else:
+                convert = _swift_date_encode_expr(f.type, f"self.{name}")
+                lines.append(
+                    f"        try container.encode({convert}, forKey: .{name})"
+                )
+            continue
+        if f.type.nullable:
+            lines.append(
+                f"        try container.encodeIfPresent(self.{name}, forKey: .{name})"
+            )
+        else:
+            lines.append(
+                f"        try container.encode(self.{name}, forKey: .{name})"
+            )
+    lines.append("    }")
+    return lines
+
+
+def _find_field_by_wire_name(schema: SchemaDef, wire_name: str) -> FieldDef | None:
+    for f in schema.fields:
+        if f.wire_name == wire_name:
+            return f
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Non-object wrapper schemas (``type: string`` / ``type: array`` etc.)
+# --------------------------------------------------------------------------- #
+
+
+def _emit_swift_wrapper_body(
+    schema: SchemaDef,
+    enum_names: set[str],
+    *,
+    format_native: bool = False,
+) -> list[str]:
+    """Lines for the body of a wrapper DTO.
+
+    Emits a single stored property of the wrapped type, a memberwise
+    initializer (Swift suppresses the auto one once we declare a custom
+    ``init(from:)``), and a pair of ``singleValueContainer``-based
+    Codable methods so the wire format is just the bare value
+    (``"hello"`` / ``[1, 2, 3]``) — not a JSON object. Native-Date
+    wrapped shapes decode/encode through the ISO 8601 helpers.
+    """
+    field = schema.fields[0]
+    type_str = _swift_type_with_enums(
+        field.type, enum_names, format_native=format_native
+    )
+    name = field.wire_name
+
+    if format_native and _ftype_has_native_date(field.type):
+        raw = _swift_type_with_enums(field.type, enum_names, raw_dates=True)
+        decode_expr = _swift_date_decode_expr(
+            field.type, f"(try container.decode({raw}.self))"
+        )
+        encode_expr = _swift_date_encode_expr(field.type, f"self.{name}")
+        return [
+            f"    let {name}: {type_str}",
+            "",
+            f"    init({name}: {type_str}) {{",
+            f"        self.{name} = {name}",
+            "    }",
+            "",
+            "    init(from decoder: Decoder) throws {",
+            "        let container = try decoder.singleValueContainer()",
+            f"        self.{name} = {decode_expr}",
+            "    }",
+            "",
+            "    func encode(to encoder: Encoder) throws {",
+            "        var container = encoder.singleValueContainer()",
+            f"        try container.encode({encode_expr})",
+            "    }",
+        ]
+
+    return [
+        f"    let {name}: {type_str}",
+        "",
+        f"    init({name}: {type_str}) {{",
+        f"        self.{name} = {name}",
+        "    }",
+        "",
+        "    init(from decoder: Decoder) throws {",
+        "        let container = try decoder.singleValueContainer()",
+        f"        self.{name} = try container.decode({type_str}.self)",
+        "    }",
+        "",
+        "    func encode(to encoder: Encoder) throws {",
+        "        var container = encoder.singleValueContainer()",
+        f"        try container.encode(self.{name})",
+        "    }",
+    ]
+
+
+def _swift_open_enum_lines(enum: EnumDef, doc: SwaggerDocument) -> list[str]:
+    """An enum that takes a value it does not know (``api.enum_unknown_case``): the known cases, and
+    ``case unknown(<raw>)`` holding the value as it came, written back as it came. ``init?(rawValue:)`` and
+    ``allCases`` are the known cases only, as for a raw-value enum. Its conformances are written out (an enum with an
+    associated value gets no raw value of its own), nonisolated as the DTOs are."""
+    string = enum.kind == PrimitiveKind.STRING
+    raw_type = "String" if string else "Int"
+    values = list(enum.string_values) if string else list(enum.integer_values)
+    cases = [escape_keyword(_swift_case_name(c), language="swift") for c in enum.case_names]
+    check_enum_case_identifiers(enum, cases, language="Swift", source=str(doc.source_path))
+    if "unknown" in [c.strip("`") for c in cases]:
+        raise ValueError(
+            f"{doc.source_path}: enum {enum.name} has a value named `unknown`, which api.enum_unknown_case keeps for a "
+            f"value the app does not know. Name that value otherwise with x-enum-varnames, or set "
+            f"api.enum_unknown_case to false."
+        )
+    lit = (lambda v: json.dumps(v, ensure_ascii=False)) if string else str
+    name = enum.name
+    lines = [f"nonisolated enum {name}: RawRepresentable, Codable, CaseIterable, Sendable, Equatable, Hashable {{"]
+    lines += [f"    case {c}" for c in cases]
+    lines += [
+        "    /// A value this app does not know (the server added it after the app was built): kept as it came, and",
+        "    /// written back as it came.",
+        f"    case unknown({raw_type})",
+        "",
+        f"    static let allCases: [{name}] = [{', '.join('.' + c for c in cases)}]",
+        "",
+        f"    init?(rawValue: {raw_type}) {{",
+        "        switch rawValue {",
+    ]
+    lines += [f"        case {lit(v)}: self = .{c}" for c, v in zip(cases, values)]
+    lines += [
+        "        default: return nil",
+        "        }",
+        "    }",
+        "",
+        f"    var rawValue: {raw_type} {{",
+        "        switch self {",
+    ]
+    lines += [f"        case .{c}: return {lit(v)}" for c, v in zip(cases, values)]
+    lines += [
+        "        case .unknown(let value): return value",
+        "        }",
+        "    }",
+        "",
+        "    init(from decoder: Decoder) throws {",
+        f"        let value = try decoder.singleValueContainer().decode({raw_type}.self)",
+        f"        self = {name}(rawValue: value) ?? .unknown(value)",
+        "    }",
+        "",
+        "    func encode(to encoder: Encoder) throws {",
+        "        var container = encoder.singleValueContainer()",
+        "        try container.encode(rawValue)",
+        "    }",
+        "}",
+    ]
+    return lines
+

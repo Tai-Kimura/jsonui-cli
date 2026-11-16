@@ -1,0 +1,428 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'fileutils'
+require_relative '../logger'
+require_relative '../generated_marker'
+require_relative '../color_manager_core'
+require_relative '../swift_identifier'
+
+module SjuiTools
+  module Core
+    module Resources
+      # iOS profile over the shared color-manager body
+      # (lib/core/color_manager_core.rb — byte-identical mirror of
+      # shared/core/color_manager_core.rb, pinned by
+      # spec/core/shared_core_mirror_spec.rb). The themed colors.json
+      # model, extraction/rewrite pipeline and key naming live in the
+      # shared core; this class owns the generated ColorManager.swift.
+      class ColorManager < ::JsonUIShared::ColorManagerCore
+        def initialize(config, source_path, resources_dir)
+          @config = config
+          @source_path = source_path
+          @resources_dir = resources_dir
+          @colors_file = File.join(@resources_dir, 'colors.json')
+          @defined_colors_file = File.join(@resources_dir, 'defined_colors.json')
+
+          @extracted_colors = Hash.new { |h, k| h[k] = {} }
+          @undefined_colors = {}
+
+          load_colors_json
+          @defined_colors_data = load_defined_colors_json
+        end
+
+        # Every layout of the build. Extraction runs on the changed files only
+        # (ResourcesManager compares mtimes), but the ColorManager stubs and
+        # the ledger are what ALL the layouts reference now — read, not
+        # carried over in defined_colors.json (see collect_undefined_references).
+        attr_writer :layout_files
+
+        def process_colors(processed_files, processed_count, skipped_count, config)
+          if processed_files.any?
+            Core::Logger.info "Extracting colors from #{processed_count} files (#{skipped_count} skipped)..."
+
+            extract_colors(processed_files)
+
+            save_colors_json if any_extracted? || @migrated
+          end
+
+          collect_undefined_references(@layout_files || processed_files)
+          save_defined_colors_json
+
+          generate_color_manager_swift if @config['resource_manager_directory']
+        end
+
+        def apply_to_color_assets
+          save_colors_json if any_extracted? || @migrated
+          save_defined_colors_json
+
+          generate_color_manager_swift if @config['resource_manager_directory']
+        end
+
+        private
+
+        def logger
+          Core::Logger
+        end
+
+        # ======================================================================
+        # Swift code generation
+        # ======================================================================
+
+        def generate_color_manager_swift
+          return unless @config['resource_manager_directory']
+
+          resource_manager_dir = File.join(@source_path, @config['resource_manager_directory'])
+          FileUtils.mkdir_p(resource_manager_dir)
+
+          output_file = File.join(resource_manager_dir, 'ColorManager.swift')
+
+          merged_palettes = deep_clone_palettes
+          @defined_colors_data.each do |key, _|
+            merged_palettes[@extract_into_mode] ||= {}
+            merged_palettes[@extract_into_mode][key] ||= nil
+          end
+
+          File.write(output_file, generate_swift_code(merged_palettes))
+          Core::Logger.info "✓ Generated ColorManager.swift"
+        end
+
+        # A Swift dictionary literal, one entry per line. EMPTY IS `[:]`: a `[`
+        # and a `]` with nothing between them is an ARRAY literal to Swift, and
+        # a dictionary-typed declaration rejects it ("use [:] to get an empty
+        # dictionary literal"). A project with no colours, a mode whose palette
+        # is `{}` or all null, and a systemModeMapping that is `{}` — declared,
+        # or derived from modes that are neither light nor dark — each emitted
+        # that and did not compile
+        # (sjui-color-manager-emits-an-empty-dictionary-as-array-literal).
+        # Non-empty output is byte-identical to before.
+        def swift_dictionary_lines(prefix, entries, closing_indent, suffix = '')
+          return ["#{prefix}[:]#{suffix}"] if entries.empty?
+
+          ["#{prefix}["] + entries + ["#{closing_indent}]#{suffix}"]
+        end
+
+        def swift_enum_case(mode)
+          # `light` / `dark` / `highContrast` (camelCase).
+          snake_to_camel(mode)
+        end
+
+        # A palette's struct, beside the colours' members in the same scope
+        # (`uikit` / `swiftui`): the mode's name, unless a colour has that
+        # name too — a colour `light` and the palette `light` were one
+        # redeclared name, and the file did not compile (ticket
+        # sjui-resource-managers-emit-swift-that-does-not-compile). Then the
+        # palette is `<mode>Palette`; no other name changes.
+        def palette_struct_name(mode, all_keys)
+          name = swift_enum_case(mode)
+          colours = all_keys.map { |key| Core::SwiftIdentifier.reference(snake_to_camel(key)) }
+          colours.include?(name) ? "#{name}Palette" : name
+        end
+
+        # A colour mode's own pictures (jui build's image_modes.json beside
+        # colors.json: {"images": {name: {mode: asset}}}). Only a project that
+        # has one gets these lines; any other ColorManager.swift is what it was.
+        def image_modes
+          file = File.join(@resources_dir, 'image_modes.json')
+          return {} unless File.exist?(file)
+
+          images = JSON.parse(File.read(file))['images']
+          images.is_a?(Hash) ? images.select { |_, by_mode| by_mode.is_a?(Hash) && !by_mode.empty? } : {}
+        rescue JSON::ParserError
+          {}
+        end
+
+        def image_mode_lines
+          images = image_modes
+          return [] if images.empty?
+
+          entries = images.sort.map do |name, by_mode|
+            modes = by_mode.sort.map { |mode, asset| "#{mode.to_json}: #{asset.to_s.to_json}" }
+            "        #{name.to_s.to_json}: [#{modes.join(', ')}],"
+          end
+          [
+            '    // ========== Images ==========',
+            "    /// The asset an image named *name* is drawn from in the current mode: the mode's",
+            '    /// own picture (<name>.<mode>.svg), else *name*. A generated view reads it in its',
+            '    /// body, which runs again when the mode changes.',
+            '    public static func image(_ name: String) -> String {',
+            '        imageModes[name]?[_currentMode.rawValue] ?? name',
+            '    }',
+            '',
+            '    nonisolated private static let imageModes: [String: [String: String]] = [',
+            *entries,
+            '    ]',
+            ''
+          ]
+        end
+
+        def generate_swift_code(merged_palettes)
+          # Deterministic marker header — no timestamp. A Time.now header
+          # here used to make every build rewrite ColorManager.swift,
+          # breaking the "run twice, diff zero" idempotency invariant.
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "ColorManager (colors from #{File.basename(@colors_file)})",
+            generator: 'sjui build'
+          )
+          all_keys = all_color_keys(merged_palettes)
+
+          lines = []
+          lines.concat(marker_header.split("\n"))
+          lines << ''
+          lines << 'import UIKit'
+          lines << 'import SwiftUI'
+          # Combine is required because `ColorManager.Observable` uses
+          # `ObservableObject` + `@Published` to re-render SwiftUI views on
+          # mode switch. `SwiftUI` *usually* re-exports Combine, but under
+          # Xcode iOS SDK 26 / some toolchain versions that transitive
+          # import fails — `@Published` errors with "initializer
+          # 'init(wrappedValue:)' is not available due to missing import of
+          # defining module 'Combine'" at archive time. Emit it
+          # unconditionally; it's harmless when already in scope.
+          lines << 'import Combine'
+          lines << 'import SwiftJsonUI'
+          lines << ''
+          lines << 'public struct ColorManager {'
+          lines << '    private init() {}'
+          lines << ''
+
+          # ---- ColorMode enum ----
+          lines << '    /// Color modes discovered in colors.json. Add a new top-level mode object to colors.json to grow this list.'
+          lines << '    public enum ColorMode: String, CaseIterable, Sendable {'
+          @modes.each do |mode|
+            case_name = swift_enum_case(mode)
+            if case_name == mode
+              lines << "        case #{case_name}"
+            else
+              lines << "        case #{case_name} = \"#{mode}\""
+            end
+          end
+          lines << '    }'
+          lines << ''
+
+          # ---- Fallback + system mapping ----
+          lines << "    public static let fallbackMode: ColorMode = .#{swift_enum_case(@fallback_mode)}"
+          lines << ''
+          lines << '    /// Map from OS-reported appearance to project-specific mode.'
+          mapping_entries = (@system_mode_mapping || {}).map do |os_mode, project_mode|
+            os_case = os_mode == 'light' ? '.light' : (os_mode == 'dark' ? '.dark' : '.unspecified')
+            "        #{os_case}: .#{swift_enum_case(project_mode)},"
+          end
+          lines.concat(swift_dictionary_lines(
+            '    public static let systemModeMapping: [UIUserInterfaceStyle: ColorMode] = ',
+            mapping_entries, '    '
+          ))
+          lines << ''
+
+          # ---- Raw palettes ----
+          lines << '    /// Raw snake_case-keyed palette tables per mode.'
+          lines << '    fileprivate static let palettes: [ColorMode: [String: String]] = ['
+          @modes.each do |mode|
+            palette = merged_palettes[mode] || {}
+            entries = palette.keys.sort.reject { |key| palette[key].nil? }.map do |key|
+              value = palette[key]
+              value_lit = value.is_a?(String) ? "\"#{value}\"" : 'nil as String? ?? ""'
+              "            \"#{key}\": #{value_lit},"
+            end
+            lines.concat(swift_dictionary_lines("        .#{swift_enum_case(mode)}: ", entries, '        ', ','))
+          end
+          lines << '    ]'
+          lines << ''
+
+          # ---- Mutable state + observers ----
+          # The mode's state is not actor-protected (it never was): said so, or Swift 6 without
+          # MainActor refuses the statics (ticket 2026-10-23-sjui-swift6-nonisolated-colormanager-and-binding-dict).
+          # The default is the case itself — under MainActor isolation `fallbackMode` is main-actor state.
+          # A choice is kept (UserDefaults) and wins over the OS until followSystemMode
+          # goes back to true; the OS reaches the mode through the generated views'
+          # colorScheme, and a mode change draws them again through
+          # SwiftJsonUIConfiguration's theme mode, which they observe (ticket
+          # rjui-color-mode-never-sets-data-theme: setMode changed this struct only,
+          # no view asked for its colour again, and nothing followed the OS).
+          # nonisolated: they feed the nonisolated(unsafe) state's defaults, which
+          # a main-actor default (Swift 6 + MainActor) cannot.
+          lines << '    nonisolated fileprivate static let storageKey = "jsonui-color-mode"'
+          lines << '    nonisolated fileprivate static var keptChoice: String? { UserDefaults.standard.string(forKey: storageKey) }'
+          lines << "    nonisolated(unsafe) private static var _currentMode: ColorMode = keptChoice.flatMap { ColorMode(rawValue: $0) } ?? .#{swift_enum_case(@fallback_mode)}"
+          lines << '    nonisolated(unsafe) private static var _followSystemMode: Bool = keptChoice.flatMap { ColorMode(rawValue: $0) } == nil'
+          lines << '    nonisolated(unsafe) private static var _observers: [UUID: () -> Void] = [:]'
+          lines << '    nonisolated(unsafe) private static var _lastSystemStyle: UIUserInterfaceStyle?'
+          lines << ''
+          lines << '    public static var currentMode: ColorMode { _currentMode }'
+          # Changing the mode reaches UIKit and the Observable: the main actor's (a colour lookup is not).
+          lines << '    /// true goes back to the OS (and keeps that); false keeps the current mode as the choice.'
+          lines << '    @MainActor'
+          lines << '    public static var followSystemMode: Bool {'
+          lines << '        get { _followSystemMode }'
+          lines << '        set {'
+          lines << '            _followSystemMode = newValue'
+          lines << '            UserDefaults.standard.set(newValue ? "system" : _currentMode.rawValue, forKey: storageKey)'
+          lines << '            guard newValue else { return }'
+          lines << '            if let last = _lastSystemStyle, let mapped = systemModeMapping[last] { set(mapped) } else { applySystemMode() }'
+          lines << '        }'
+          lines << '    }'
+          lines << ''
+          lines << '    /// An explicit choice: kept, and the OS no longer changes it until followSystemMode = true.'
+          lines << '    @MainActor'
+          lines << '    public static func setMode(_ mode: ColorMode) {'
+          lines << '        _followSystemMode = false'
+          lines << '        UserDefaults.standard.set(mode.rawValue, forKey: storageKey)'
+          lines << '        set(mode)'
+          lines << '    }'
+          lines << ''
+          lines << '    @MainActor'
+          lines << '    private static func set(_ mode: ColorMode) {'
+          lines << '        // The generated views observe the theme mode: they draw again with this mode.'
+          lines << '        SwiftJsonUIConfiguration.shared.setThemeMode(mode.rawValue)'
+          lines << '        guard _currentMode != mode else { return }'
+          lines << '        _currentMode = mode'
+          lines << '        Observable.shared.publish(mode)'
+          lines << '        _observers.values.forEach { $0() }'
+          lines << '    }'
+          lines << ''
+          lines << '    /// Subscribe to mode changes. Returns a closure that unsubscribes.'
+          lines << '    @discardableResult'
+          lines << '    public static func subscribe(_ callback: @escaping () -> Void) -> () -> Void {'
+          lines << '        let id = UUID()'
+          lines << '        _observers[id] = callback'
+          lines << '        return { _observers.removeValue(forKey: id) }'
+          lines << '    }'
+          lines << ''
+          lines << '    /// Apply the OS appearance via systemModeMapping. Call this from the'
+          lines << '    /// app delegate or when the trait collection changes. Prefer'
+          lines << '    /// `applySystemMode(from:)` with the owning view/scene trait collection —'
+          lines << '    /// this no-argument overload falls back to walking the active window scene'
+          lines << '    /// (UIScreen.main was deprecated in iOS 16).'
+          lines << '    @MainActor'
+          lines << '    public static func applySystemMode() {'
+          lines << '        #if canImport(UIKit)'
+          lines << '        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }'
+          lines << '        let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first'
+          lines << '        guard let traits = scene?.traitCollection else { return }'
+          lines << '        applySystemMode(from: traits)'
+          lines << '        #endif'
+          lines << '    }'
+          lines << ''
+          lines << '    /// Explicit entry point — pass the trait collection of the owning view/scene.'
+          lines << '    /// SwiftUI: use `.onChange(of: colorScheme)` and call this with a cached'
+          lines << '    /// `UITraitCollection` or feed the mode directly via `setMode(_:)`.'
+          lines << '    @MainActor'
+          lines << '    public static func applySystemMode(from traits: UITraitCollection) {'
+          lines << '        #if canImport(UIKit)'
+          lines << '        _lastSystemStyle = traits.userInterfaceStyle'
+          lines << '        guard _followSystemMode else { return }'
+          lines << '        if let mapped = systemModeMapping[traits.userInterfaceStyle] {'
+          lines << '            set(mapped)'
+          lines << '        }'
+          lines << '        #endif'
+          lines << '    }'
+          lines << ''
+          lines << '    /// The SwiftUI entry point: the generated views call it with their colorScheme.'
+          lines << '    @MainActor'
+          lines << '    public static func applySystemMode(_ scheme: ColorScheme) {'
+          lines << '        // A kept choice still reaches SwiftJsonUIConfiguration (Dynamic draws with it).'
+          lines << '        let style: UIUserInterfaceStyle = scheme == .dark ? .dark : .light'
+          lines << '        _lastSystemStyle = style'
+          lines << '        let os = systemModeMapping[style]'
+          lines << '        set(_followSystemMode ? (os ?? _currentMode) : _currentMode)'
+          lines << '    }'
+          lines << ''
+
+          # ---- Observable wrapper for SwiftUI ----
+          lines << '    /// SwiftUI-friendly wrapper. Inject via `.environmentObject(ColorManager.Observable.shared)`'
+          lines << '    /// and observe `@EnvironmentObject var theme: ColorManager.Observable` in any View.'
+          lines << '    @MainActor'
+          lines << '    public final class Observable: ObservableObject {'
+          lines << '        public static let shared = Observable()'
+          lines << '        @Published public private(set) var currentMode: ColorMode = ColorManager.currentMode'
+          lines << '        fileprivate init() {}'
+          lines << '        fileprivate func publish(_ mode: ColorMode) { currentMode = mode }'
+          lines << '    }'
+          lines << ''
+
+          # ---- UIKit namespace ----
+          lines << '    // ========== UIKit ==========='
+          lines << '    public struct uikit {'
+          lines << '        private init() {}'
+          lines << ''
+          lines << '        /// Resolve a color key against the current mode with lenient fallback to `fallbackMode`.'
+          lines << '        public static func color(for key: String) -> UIColor? {'
+          lines << '            if key.hasPrefix("@{") && key.hasSuffix("}") { return nil }'
+          lines << '            let mode = ColorManager._currentMode'
+          lines << '            if let hex = ColorManager.palettes[mode]?[key] ?? ColorManager.palettes[ColorManager.fallbackMode]?[key], !hex.isEmpty {'
+          lines << '                return UIColor.colorWithHexString(hex)'
+          lines << '            }'
+          lines << '            return UIColor.colorWithHexString(key)'
+          lines << '        }'
+          lines << ''
+
+          # Dynamic current-mode accessors.
+          all_keys.each do |key|
+            camel = snake_to_camel(key)
+            lines << "        public static var #{Core::SwiftIdentifier.declaration(camel)}: UIColor? { color(for: \"#{key}\") }"
+          end
+          lines << ''
+
+          # Per-mode palette structs inside uikit.
+          @modes.each do |mode|
+            palette = merged_palettes[mode] || {}
+            struct_name = palette_struct_name(mode, all_keys)
+            lines << "        /// Fixed values from `#{mode}` palette (not affected by setMode)."
+            lines << "        public struct #{struct_name} {"
+            lines << '            private init() {}'
+            palette.keys.sort.each do |key|
+              camel = snake_to_camel(key)
+              hex = palette[key]
+              if hex.is_a?(String)
+                lines << "            public static var #{Core::SwiftIdentifier.declaration(camel)}: UIColor? { UIColor.colorWithHexString(\"#{hex}\") }"
+              else
+                lines << "            public static var #{Core::SwiftIdentifier.declaration(camel)}: UIColor? { nil }"
+              end
+            end
+            lines << '        }'
+          end
+          lines << '    }'
+          lines << ''
+
+          # ---- SwiftUI namespace ----
+          lines << '    // ========== SwiftUI ==========='
+          lines << '    public struct swiftui {'
+          lines << '        private init() {}'
+          lines << ''
+          lines << '        public static func color(for key: String) -> Color? {'
+          lines << '            if key.hasPrefix("@{") && key.hasSuffix("}") { return nil }'
+          lines << '            guard let ui = uikit.color(for: key) else { return nil }'
+          lines << '            return Color(uiColor: ui)'
+          lines << '        }'
+          lines << ''
+          all_keys.each do |key|
+            camel = snake_to_camel(key)
+            lines << "        public static var #{Core::SwiftIdentifier.declaration(camel)}: Color? { color(for: \"#{key}\") }"
+          end
+          lines << ''
+          @modes.each do |mode|
+            palette = merged_palettes[mode] || {}
+            struct_name = palette_struct_name(mode, all_keys)
+            lines << "        public struct #{struct_name} {"
+            lines << '            private init() {}'
+            palette.keys.sort.each do |key|
+              camel = snake_to_camel(key)
+              lines << "            public static var #{Core::SwiftIdentifier.declaration(camel)}: Color? { uikit.#{struct_name}.#{Core::SwiftIdentifier.reference(camel)}.map(Color.init(uiColor:)) }"
+            end
+            lines << '        }'
+          end
+          lines << '    }'
+          lines << ''
+          image_mode_lines.each { |line| lines << line }
+          lines << '}'
+          lines << ''
+          lines << '// Note: UIColor.colorWithHexString(_:) is provided by the SwiftJsonUI library.'
+          lines << ''
+          lines << Core::GeneratedMarker.comment_footer
+
+          lines.join("\n")
+        end
+      end
+    end
+  end
+end

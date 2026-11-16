@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/cornerRadius__0.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.cornerRadius (0)",
+    "description": "Conformance fixture for 'cornerRadius' on View (section: common, class: visual). Value under test: 0.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cornerRadius__0",
+      "description": "Conformance fixture for 'cornerRadius' on View (section: common, class: visual). Value under test: 0.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_cornerRadius__0"
+        }
+      ]
+    }
+  ]
+}

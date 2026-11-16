@@ -1,0 +1,422 @@
+# frozen_string_literal: true
+
+require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
+require 'react/responsive_helper'
+require 'react/react_generator'
+
+RSpec.describe RjuiTools::React::ResponsiveHelper do
+  describe '.build_responsive' do
+    context 'when component has no responsive block' do
+      it 'returns empty result' do
+        component = { 'type' => 'View', 'orientation' => 'vertical' }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to be_empty
+        expect(result[:stripped_keys]).to be_empty
+      end
+    end
+
+    # Regression: rjui-responsive-compact-overrides-emitted-unprefixed —
+    # the helper emits ONLY breakpoint-scoped override classes. Base values
+    # are emitted unprefixed by the converters' normal attribute mapping;
+    # re-emitting them here duplicated the class (p-5 ... p-5 p-4).
+    context 'with regular (lg:) breakpoint' do
+      it 'generates orientation responsive classes' do
+        component = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'regular' => { 'orientation' => 'horizontal' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:flex-row')
+        expect(result[:classes]).not_to include('flex-col')
+      end
+
+      it 'generates spacing responsive classes' do
+        component = {
+          'type' => 'View',
+          'spacing' => 8,
+          'responsive' => {
+            'regular' => { 'spacing' => 24 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:gap-[1.5rem]')
+        expect(result[:classes]).not_to include('gap-[0.5rem]')
+      end
+
+      it 'generates fontSize responsive classes' do
+        component = {
+          'type' => 'Label',
+          'fontSize' => 14,
+          'responsive' => {
+            'regular' => { 'fontSize' => 20 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:text-xl')
+        expect(result[:classes]).not_to include('text-sm')
+      end
+
+      it 'generates visibility responsive classes (hidden to visible)' do
+        component = {
+          'type' => 'View',
+          'visibility' => 'gone',
+          'responsive' => {
+            'regular' => { 'visibility' => 'visible' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        # Base `hidden` comes from build_class_name's normal visibility
+        # handling; the helper contributes only the scoped override.
+        #
+        # `visible` restores the component's NATURAL display, which the helper
+        # cannot know at this point, so it emits a sentinel that
+        # BaseConverter#finalize_classes substitutes. It used to hard-code
+        # `block`, which blockified flex components.
+        expect(result[:classes]).to include("lg:#{described_class::NATURAL_DISPLAY}")
+        expect(result[:classes]).not_to include('hidden')
+      end
+
+      it 'generates width responsive classes' do
+        component = {
+          'type' => 'View',
+          'width' => 'matchParent',
+          'responsive' => {
+            'regular' => { 'width' => 300 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:w-[300px]')
+        expect(result[:classes]).not_to include('w-full')
+      end
+
+      it 'generates background responsive classes' do
+        component = {
+          'type' => 'View',
+          'background' => '#FFFFFF',
+          'responsive' => {
+            'regular' => { 'background' => '#000000' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:bg-[#000000]')
+        expect(result[:classes]).not_to include('bg-[#FFFFFF]')
+      end
+
+      it 'generates textAlign responsive classes' do
+        component = {
+          'type' => 'Label',
+          'textAlign' => 'left',
+          'responsive' => {
+            'regular' => { 'textAlign' => 'center' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:text-center')
+        expect(result[:classes]).not_to include('text-left')
+      end
+    end
+
+    context 'with medium (md:) breakpoint' do
+      # medium is the 768..1023 band, `md:max-lg:` (it was `md:`, which also
+      # held on a regular window: rjui-responsive-medium-classes-hold-on-regular-windows).
+      it 'generates md:max-lg: prefixed classes' do
+        component = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'responsive' => {
+            'medium' => { 'orientation' => 'horizontal' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('md:max-lg:flex-row')
+        expect(result[:classes]).not_to include('flex-col')
+      end
+    end
+
+    # Regression: rjui-responsive-compact-overrides-emitted-unprefixed —
+    # compact overrides are scoped below the md breakpoint (max-md:), NOT
+    # emitted unprefixed (which applied them at every width and collided
+    # with the base classes).
+    context 'with compact (max-md:) breakpoint' do
+      it 'scopes orientation override below md' do
+        component = {
+          'type' => 'View',
+          'orientation' => 'horizontal',
+          'responsive' => {
+            'compact' => { 'orientation' => 'vertical' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:flex-col')
+        expect(result[:classes]).not_to include('flex-col')
+        expect(result[:classes]).not_to include('flex-row')
+      end
+
+      it 'emits max-md:hidden for compact visibility gone' do
+        component = {
+          'type' => 'View',
+          'responsive' => {
+            'compact' => { 'visibility' => 'gone' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:hidden')
+        expect(result[:classes]).not_to include('hidden')
+      end
+
+      it 'emits max-md:flex-none for compact weight 0 (ratio layout opt-out)' do
+        component = {
+          'type' => 'View',
+          'weight' => 1.5,
+          'responsive' => {
+            'compact' => { 'weight' => 0, 'width' => 'matchParent' }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:flex-none')
+        expect(result[:classes].join(' ')).not_to include('max-md:min-w-0')
+      end
+
+      it 'prefixes every utility for non-zero compact weight override' do
+        component = {
+          'type' => 'View',
+          'weight' => 1,
+          'responsive' => {
+            'compact' => { 'weight' => 2.5 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:flex-[2.5]', 'max-md:min-w-0', 'max-md:min-h-0')
+      end
+
+      it 'emits md:flex-1 for medium weight 1 override' do
+        component = {
+          'type' => 'View',
+          'weight' => 0,
+          'responsive' => {
+            'medium' => { 'weight' => 1 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('md:max-lg:flex-1', 'md:max-lg:min-w-0', 'md:max-lg:min-h-0')
+      end
+
+      # Regression: rjui-responsive-gravity-override-not-emitted — gravity was
+      # silently dropped (not in ATTRIBUTE_MAPPERS). It needs the effective
+      # orientation of the same block, wholesale-replace axis resets, and
+      # re-interpretation when only orientation is overridden.
+      context 'gravity overrides' do
+        it 'interprets gravity against the same block\'s orientation override' do
+          component = {
+            'type' => 'View', 'orientation' => 'horizontal', 'gravity' => 'centerVertical',
+            'responsive' => {
+              'compact' => { 'orientation' => 'vertical', 'gravity' => 'left' }
+            }
+          }
+          result = described_class.build_responsive(component)
+
+          # left under the compact-effective vertical axis = items-start
+          expect(result[:classes]).to include('max-md:items-start')
+          expect(result[:classes].join(' ')).not_to include('max-md:justify-start')
+        end
+
+        it 'resets an axis the base covered but the new gravity does not (wholesale replace)' do
+          component = {
+            'type' => 'View', 'orientation' => 'horizontal', 'gravity' => 'centerVertical',
+            'responsive' => {
+              'compact' => { 'gravity' => 'left' }
+            }
+          }
+          result = described_class.build_responsive(component)
+
+          # left in a row = justify-start; base items-center must be reset —
+          # to a row's default cross-axis start, not the flex default stretch
+          # (gravityDefaults; rjui-stack-stretches-children-on-the-cross-axis)
+          expect(result[:classes]).to include('max-md:justify-start')
+          expect(result[:classes]).to include('max-md:items-start')
+          expect(result[:classes]).not_to include('max-md:items-stretch')
+        end
+
+        it 're-emits base gravity when only orientation is overridden' do
+          component = {
+            'type' => 'View', 'orientation' => 'horizontal', 'gravity' => 'top',
+            'responsive' => {
+              'compact' => { 'orientation' => 'vertical' }
+            }
+          }
+          result = described_class.build_responsive(component)
+
+          # top in a row = items-start; under the vertical override the same
+          # intent is justify-start, and the stale items axis is reset
+          expect(result[:classes]).to include('max-md:justify-start')
+          expect(result[:classes]).to include('max-md:items-stretch')
+        end
+
+        it 'emits nothing when the override resolves to the base classes' do
+          component = {
+            'type' => 'View', 'orientation' => 'vertical', 'gravity' => 'left',
+            'responsive' => {
+              'regular' => { 'gravity' => 'left' }
+            }
+          }
+          result = described_class.build_responsive(component)
+
+          expect(result[:classes].join(' ')).not_to include('items-')
+          expect(result[:classes].join(' ')).not_to include('justify-')
+        end
+      end
+
+      it 'scopes padding override below md' do
+        component = {
+          'type' => 'View',
+          'padding' => 20,
+          'responsive' => {
+            'compact' => { 'padding' => 16 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('max-md:p-[1rem]')
+        expect(result[:classes]).not_to include('p-[1.25rem]')
+        expect(result[:classes]).not_to include('p-[1rem]')
+      end
+    end
+
+    context 'with multiple breakpoints' do
+      it 'generates classes for all breakpoints' do
+        component = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'spacing' => 4,
+          'responsive' => {
+            'medium' => { 'orientation' => 'horizontal', 'spacing' => 12 },
+            'regular' => { 'orientation' => 'horizontal', 'spacing' => 24 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        # Medium breakpoint
+        expect(result[:classes]).to include('md:max-lg:flex-row')
+        expect(result[:classes]).to include('md:max-lg:gap-[0.75rem]')
+
+        # Regular breakpoint
+        expect(result[:classes]).to include('lg:flex-row')
+        expect(result[:classes]).to include('lg:gap-[1.5rem]')
+
+        # Base values are NOT re-emitted by the helper
+        expect(result[:classes]).not_to include('flex-col')
+        expect(result[:classes]).not_to include('gap-[0.25rem]')
+      end
+    end
+
+    # A landscape key is written as media variants since jsonui-cli 2.3.30
+    # (landscape_variants), in the same list as the size classes': the
+    # run-time isLandscape fragment it replaced tied with the base classes.
+    context 'with landscape breakpoint' do
+      it 'scopes a landscape key by the landscape: variant' do
+        component = { 'type' => 'View', 'spacing' => 8, 'responsive' => { 'landscape' => { 'spacing' => 16 } } }
+        expect(described_class.build_responsive(component)[:classes]).to eq(['landscape:gap-[1rem]'])
+      end
+
+      it 'scopes a combination by its orientation and its band' do
+        component = { 'type' => 'View', 'orientation' => 'vertical',
+                      'responsive' => { 'regular-landscape' => { 'spacing' => 32 }, 'landscape' => { 'orientation' => 'horizontal' } } }
+        expect(described_class.build_responsive(component)[:classes])
+          .to contain_exactly('landscape:lg:gap-[2rem]', 'landscape:max-lg:flex-row')
+      end
+    end
+
+    context 'with padding responsive' do
+      it 'generates padding responsive classes for numeric values' do
+        component = {
+          'type' => 'View',
+          'padding' => 8,
+          'responsive' => {
+            'regular' => { 'padding' => 16 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:p-[1rem]')
+        expect(result[:classes]).not_to include('p-[0.5rem]')
+      end
+
+      it 'generates padding responsive classes for array values' do
+        component = {
+          'type' => 'View',
+          'padding' => [8, 16],
+          'responsive' => {
+            'regular' => { 'padding' => [16, 32] }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:classes]).to include('lg:py-[1rem]', 'lg:px-[2rem]')
+        expect(result[:classes]).not_to include('py-[0.5rem] px-[1rem]')
+      end
+    end
+
+    context 'stripped_keys tracking' do
+      it 'tracks overridden attribute keys' do
+        component = {
+          'type' => 'View',
+          'orientation' => 'vertical',
+          'spacing' => 8,
+          'responsive' => {
+            'regular' => { 'orientation' => 'horizontal', 'spacing' => 24 }
+          }
+        }
+        result = described_class.build_responsive(component)
+
+        expect(result[:stripped_keys]).to include('orientation')
+        expect(result[:stripped_keys]).to include('spacing')
+      end
+    end
+  end
+
+  # A screen with landscape keys, imports cut, under --strict: its landscape
+  # classes are static media variants, and it reads no hook (jsonui-cli
+  # 2.3.30; until then a `${isLandscape …}` fragment under a useMediaQuery).
+  it 'writes a screen that compiles with its landscape classes', :typescript_compile do
+    layout = {
+      'type' => 'View', 'id' => 'root', 'orientation' => 'vertical', 'spacing' => 8,
+      'responsive' => { 'landscape' => { 'orientation' => 'horizontal' }, 'regular-landscape' => { 'spacing' => 32 },
+                        'compact' => { 'padding' => 4 } },
+      'child' => [{ 'type' => 'Label', 'id' => 'title', 'text' => 'x',
+                    'responsive' => { 'landscape' => { 'fontSize' => 20 } } }]
+    }
+    screen = RjuiTools::React::ReactGenerator.new({ 'typescript' => true, 'use_tailwind' => true })
+                                             .generate('Home', layout, screen_id: 'home')
+    # Each key of a block with a landscape key holds where that key wins.
+    expect(screen).to include('landscape:max-lg:flex-row', 'landscape:lg:gap-[2rem]', 'portrait:max-md:p-[0.25rem]', 'landscape:text-xl')
+    expect(screen).not_to include('isLandscape', 'useMediaQuery')
+    template = File.read(File.expand_path('../../lib/react/templates/use_media_query.ts', __dir__))
+    signature = template[/^export function useMediaQuery\(([^)]*)\): (\w+)/]
+    expect(signature).to eq('export function useMediaQuery(query: string): boolean')
+    expect(screen.lines.reject { |l| l.start_with?('import ') }.join).to compile_as_typescript.with_ambient(<<~TS)
+      #{signature.sub('export function', 'declare function')};
+      interface HomeData {}
+      declare function createHomeData(): HomeData;
+      declare function useStringManager(): Record<string, string>;
+      declare function screenMarker(screenId: string): Record<string, string>;
+    TS
+  end
+end

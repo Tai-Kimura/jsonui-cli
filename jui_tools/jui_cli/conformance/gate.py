@@ -1,0 +1,1629 @@
+"""Pass/fail judgment for conformance runs (``jui conformance gate``).
+
+This is the logic that used to live twice as a Python heredoc — once in
+``ci.yml`` (web fail/error only) and once in ``conformance-mobile.yml``
+(the full 3-platform judgment). Housing it here makes the gate runnable
+locally, unit-testable, and impossible to drift between the two workflows:
+both now call the same command with different arguments.
+
+The gate renders REPORT.md (via :func:`generate_report`) and then judges
+**only the platforms selected with ``--platform``**. That scoping matters:
+the per-push web lane runs against committed iOS/Android results whose
+screenshots are not on the runner — judging those platforms there would
+fail them for artifacts that were never supposed to exist.
+
+Checks, per selected platform:
+
+- results file present / not stale / no fixture ids outside the manifest
+- zero ``fail`` / ``error`` results
+- with ``visual=True`` (the default): screenshots actually compared
+  (a comparison that could not run is not a pass), zero visual regressions
+  vs the committed baseline, zero attributes gone inert vs their control,
+  and the ``missing_artifact`` / ``no_baseline`` ratchets below
+- cross-platform mismatches, only when all three platforms are selected
+  (fewer selected platforms means the other results are not from this run)
+- with ``--cross-effect``: activeness agreement across the selected
+  platforms (see :mod:`.cross_effect`) — unrecorded findings and stale
+  ``cross_effect.json`` entries fail under env ``local``, notice elsewhere
+- with ``--frame-parity``: where each declared id was drawn, compared across
+  the selected platforms (see :mod:`.frame_parity`) — unrecorded
+  disagreements, stale ``frame_parity.json`` entries and a declared frames
+  host with no frames fail under every env (a frame is layout geometry, not a
+  renderer's pixels); what could not be compared is printed per reason
+
+Ratchets (``conformance/gate_ratchet.json``): ``missing_artifact`` counts
+baseline entries whose fixture produced no screenshot this run — the way a
+fixture silently exits visual coverage. The committed ceilings are the
+as-of-introduction reality; a count above its ceiling fails, a count below
+prints a reminder to tighten the ceiling. Lowering is routine, raising is a
+coverage regression that needs justification in the file itself.
+
+Render environments (``--env``): baselines live under ``baselines/<env>/``
+and every visual fact is relative to one environment's renderer. Ratchet
+ceilings nest by env for the same reason (a flat per-platform table is read
+as the ``local`` env). The attribute-effect ledger (control_diff.json) is
+asserted from local renders; under any other env an inert regression is
+reported as a notice, not a failure — the 2026-08-01 CI run showed 4 iOS
+entries (SelectBox/selectedValue, Switch statics) rendering identical to
+their control on the CI simulator while holding locally, i.e. the assertion
+itself is environment-scoped. Measurement still runs everywhere so the
+report keeps the visibility.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Sequence
+
+from .baseline import DEFAULT_ENV
+from .visual_stability import screenshot_name
+from . import cross_effect as cross_effect_mod
+from . import shared_core
+from . import frame_parity as frame_parity_mod
+from . import home_indicator as home_indicator_mod
+from .report import ReportSummary, generate_report
+
+RATCHET_FILENAME = "gate_ratchet.json"
+
+#: Metrics gate_ratchet.json may set per-platform ceilings for.
+RATCHET_METRICS = ("missing_artifact", "no_baseline")
+
+_ALL_PLATFORMS = frozenset({"android", "ios", "web"})
+
+#: Platforms whose host is expected to report a ``webMarkers`` census in its
+#: results. THIS IS A DECLARATION, not a description — a platform listed here
+#: FAILS the gate when its census goes missing, which is the only way a
+#: regression to zero can be told apart from a host that never adopted it.
+#: Grow it in the same commit that teaches a host to emit one; the notice
+#: below asks for exactly that when an undeclared host starts reporting.
+#: ios adopted it in SwiftJsonUI ConformanceHost (2026-09-15).
+#: android adopted it in KotlinJsonUI conformance-host (2026-09-15, KJUI 2.31.0)
+#: and the run that declared it is 34995640569: BOTH android legs reported
+#: `markerAbsent 0` with `waitedThenSettled 2` — the dynamic leg from 2.31.0 and
+#: the codegen leg from 2.32.0, which is the release that carried the signal
+#: into `library` so the generated WebView could reach it at all. The previous
+#: run had the codegen leg at `markerAbsent 2`, so this declaration is made on
+#: a census that has been seen both broken and fixed.
+EXPECTED_WEB_MARKER_HOSTS = frozenset({"ios", "android"})
+
+
+@dataclass
+class GateOutcome:
+    """What the gate decided, and why."""
+
+    problems: list[str] = field(default_factory=list)  # each one fails the gate
+    notices: list[str] = field(default_factory=list)  # informational only
+    summary: ReportSummary | None = None
+
+    @property
+    def ok(self) -> bool:
+        return not self.problems
+
+
+def load_ratchet(conformance_dir: Path) -> dict[str, dict[str, int]]:
+    """Read ratchet ceilings; a missing file means every ceiling is 0.
+
+    Returned as read (flat per-platform, or nested per-env) — resolution to
+    one env's per-platform table happens in :func:`ratchet_for_env`, so both
+    the file and direct ``judge(ratchet=...)`` callers may use either shape.
+    """
+    path = Path(conformance_dir) / RATCHET_FILENAME
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    ceilings: dict[str, dict] = {}
+    for metric in RATCHET_METRICS:
+        values = data.get(metric)
+        if isinstance(values, dict):
+            ceilings[metric] = values
+    return ceilings
+
+
+def ratchet_for_env(ratchet: dict, env: str) -> dict[str, dict[str, int]]:
+    """Resolve a ratchet table to ``{metric: {platform: ceiling}}`` for *env*.
+
+    Two accepted shapes per metric:
+
+    - nested by env: ``{"local": {"android": 12}, "ci": {"android": 0}}``
+    - flat per platform: ``{"android": 12}`` — the pre-env shape, read as
+      the ``local`` env (that is what every flat ceiling was measured on).
+
+    An env with no entry means every ceiling is 0 — a fresh environment
+    starts strict and earns slack only by committing measured reality.
+    """
+    resolved: dict[str, dict[str, int]] = {}
+    for metric in RATCHET_METRICS:
+        values = ratchet.get(metric)
+        if not isinstance(values, dict):
+            continue
+        nested = any(isinstance(v, dict) for v in values.values())
+        table = values.get(env, {}) if nested else (values if env == DEFAULT_ENV else {})
+        if isinstance(table, dict):
+            resolved[metric] = {
+                platform: int(ceiling)
+                for platform, ceiling in table.items()
+                if isinstance(ceiling, (int, float)) and not isinstance(ceiling, bool)
+            }
+    return resolved
+
+
+#: The notice a gate run without ``--frame-parity`` prints. CI passes the flag
+#: by default (conformance-mobile.yml input ``frame_parity``, default true);
+#: this line is how a run that did not shows it.
+FRAME_PARITY_NOT_JUDGED = "frame parity: NOT judged (--frame-parity not given)"
+
+
+def evaluate(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    out_path: Path | None = None,
+    visual: bool = True,
+    ratchet: dict[str, dict[str, int]] | None = None,
+    env: str = DEFAULT_ENV,
+    parity: bool = False,
+    cross_effect: bool = False,
+    frame_parity: bool = False,
+    inert_complete: bool = False,
+    codegen_effect: bool = False,
+    ledger_keys: bool = True,
+    value_discrimination: bool = False,
+    rendered_by: dict[str, str] | None = None,
+    repo_root: Path | None = None,
+    ruby: str = "ruby",
+    definitions_path: Path | None = None,
+    semantics_path: Path | None = None,
+) -> GateOutcome:
+    """Render REPORT.md and judge *platforms*. Raises ReportError on bad inputs."""
+    conformance_dir = Path(conformance_dir)
+    summary = generate_report(
+        conformance_dir, results_dir=results_dir, out_path=out_path, env=env
+    )
+    if ratchet is None:
+        ratchet = load_ratchet(conformance_dir)
+    outcome = judge(summary, platforms, visual=visual, ratchet=ratchet, env=env)
+
+    # The iOS baselines assume the home indicator is never drawn (they hash the
+    # bottom of the picture); a screenshot that shows it is a run that changed
+    # what they compare (home_indicator).
+    if visual:
+        # afterFirstDraw (after_first_draw.py): a declaring fixture whose
+        # result does not say the host fired was photographed at its first
+        # draw, which every other check would read as the fixture.
+        from . import after_first_draw as after_first_draw_mod
+
+        problems, notices = after_first_draw_mod.judge(
+            conformance_dir, platforms, results_dir=results_dir, codegen=parity
+        )
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
+
+    if visual and "ios" in platforms:
+        problems, notices = home_indicator_mod.judge(conformance_dir)
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
+
+    if cross_effect:
+        if not visual:
+            outcome.problems.append(
+                "--cross-effect needs the visual checks: activeness verdicts come "
+                "from the fixture-vs-control comparison, which --no-visual skips"
+            )
+        elif missing := shared_core.missing_for(
+            conformance_dir,
+            [shared_core.SEMANTICS, shared_core.DEFINITIONS],
+            asked="--cross-effect",
+        ):
+            # Both are read beside conformance/ (contract here, enum values in
+            # generate_report); either one absent changes the counts silently.
+            outcome.problems.extend(missing)
+        else:
+            ledger = cross_effect_mod.load_ledger(
+                cross_effect_mod.ledger_path(conformance_dir)
+            )
+            contract = cross_effect_mod.load_contract(
+                cross_effect_mod.contract_path(conformance_dir)
+            )
+            problems, notices = judge_cross_effect(
+                summary, platforms, ledger, contract=contract, env=env
+            )
+            outcome.problems.extend(problems)
+            outcome.notices.extend(notices)
+
+    if frame_parity:
+        problems, notices = judge_frame_parity(
+            conformance_dir, platforms, results_dir=results_dir
+        )
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
+    else:
+        # Said, not left silent: a run without the flag printed no frame-parity
+        # line at all, so "judged and agreed" and "never asked" read the same.
+        outcome.notices.append(FRAME_PARITY_NOT_JUDGED)
+
+    if inert_complete:
+        if not visual:
+            outcome.problems.append(
+                "--inert-complete needs the visual checks: an inert verdict IS "
+                "the fixture-vs-control comparison, which --no-visual skips"
+            )
+        else:
+            problems, notices = judge_inert_complete(
+                conformance_dir,
+                platforms,
+                results_dir=results_dir,
+                definitions_path=definitions_path,
+                semantics_path=semantics_path,
+                env=env,
+            )
+            outcome.problems.extend(problems)
+            outcome.notices.extend(notices)
+
+    if value_discrimination:
+        if not visual:
+            outcome.problems.append(
+                "--value-discrimination needs the visual checks: it compares two "
+                "values' screenshots, which --no-visual does not produce"
+            )
+        else:
+            problems, notices = judge_value_discrimination(
+                conformance_dir,
+                platforms,
+                results_dir=results_dir,
+                definitions_path=definitions_path,
+                env=env,
+            )
+            outcome.problems.extend(problems)
+            outcome.notices.extend(notices)
+
+    if ledger_keys:
+        outcome.problems.extend(judge_ledger_keys(conformance_dir, semantics_path))
+        # Same class of check: pure ledger hygiene, no renders, no device.
+        problems, notices = judge_adjudication_backlog(conformance_dir)
+        outcome.problems.extend(problems)
+        outcome.notices.extend(notices)
+
+    if visual and rendered_by:
+        outcome.notices.extend(
+            library_drift_notices(conformance_dir, platforms, summary, rendered_by, env)
+        )
+
+    if codegen_effect:
+        # Judged from emitted TEXT, so unlike every other check here it needs
+        # no renders and does not care about --no-visual.
+        import json as _json
+
+        if definitions_path is None or not Path(definitions_path).is_file():
+            outcome.problems.append(
+                "--codegen-effect needs attribute_definitions.json "
+                f"(looked at {definitions_path})"
+            )
+        else:
+            companion_specs = None
+            if semantics_path and Path(semantics_path).is_file():
+                from . import companions as comp
+
+                semantics = _json.loads(
+                    Path(semantics_path).read_text(encoding="utf-8")
+                ).get("semantics", {})
+                # Companions come from the adjudication ledger, never a hand
+                # list: an attribute ruled inert on its own can otherwise only
+                # ever measure the ruling.
+                companion_specs = comp.derive(semantics, _json.loads(
+                    Path(definitions_path).read_text(encoding="utf-8")
+                ))
+            sub = judge_codegen_effect(
+                conformance_dir,
+                _json.loads(Path(definitions_path).read_text(encoding="utf-8")),
+                Path(repo_root) if repo_root else Path(definitions_path).parents[2],
+                platforms,
+                companion_specs=companion_specs,
+                ruby=ruby,
+            )
+            outcome.problems.extend(sub.problems)
+            outcome.notices.extend(sub.notices)
+
+    if parity and visual:
+        # dynamic ≡ codegen, judged per selected platform against this run's
+        # own dynamic renders. Requested explicitly (--parity) — a missing
+        # codegen artifacts dir is then a failure, not a silent skip: the
+        # lane that asks for parity must actually have run the codegen host.
+        from . import parity as parity_mod
+
+        from . import image_memo
+
+        ledger = parity_mod.load_ledger(parity_mod.ledger_path(conformance_dir))
+        # web's host already renders through codegen. The faces are measured
+        # in parallel and judged in this order (image_memo.per_face).
+        parity_faces = [p for p in dict.fromkeys(platforms) if p in parity_mod.PARITY_PLATFORMS]
+        measured = dict(zip(parity_faces, image_memo.per_face(
+            lambda p: parity_mod.measure(conformance_dir, p, env=env), parity_faces)))
+        for p in list(dict.fromkeys(platforms)):
+            if p not in parity_mod.PARITY_PLATFORMS:
+                continue  # web's host already renders through codegen
+            result = measured[p]
+            verdict = parity_mod.check(result, ledger)
+            if verdict.error:
+                outcome.problems.append(f"{p}: parity not measured — {verdict.error}")
+                continue
+            # The denominator, out loud. Every exclusion below (one-sided,
+            # baseline-only) is reported with its count, and an empty
+            # denominator is a failure: zero comparisons cannot support a
+            # parity verdict, however green the ledger arithmetic comes out —
+            # the intersection being empty means the two pipelines rendered
+            # no screenshot in common, which is a broken run, not agreement.
+            compared = len(result.matched) + len(result.mismatched)
+            if compared == 0:
+                outcome.problems.append(
+                    f"{p}: parity compared NOTHING — no screenshot was rendered by "
+                    f"both pipelines (one-sided {len(result.missing) + len(result.codegen_only)}, "
+                    f"baseline-only {len(result.baseline_only)}); zero comparisons "
+                    f"cannot support a parity verdict"
+                )
+            # 🔻 THE PAIRS THE DISTANCE CANNOT JUDGE. `hamming(h, 0) ==
+            # popcount(h)`, so a blank codegen render sits within the threshold
+            # of any dynamic render whose popcount is at or below it — and the
+            # fainter the dynamic picture, the more blank codegen renders it
+            # accepts. These land in `matched` with no ledger entry and no
+            # deviation, which is agreement claimed for the wrong reason.
+            # Measured 2026-09-15 on the committed artifacts: ci/ios 2 pairs
+            # (both Web, codegen ink 0 against dynamic 533 and 205), ci/android
+            # 6 — and 5 of those android pairs were sitting in `matched`.
+            if result.ink_mismatched:
+                shown = ", ".join(
+                    f"{n} (codegen {c} / dynamic {d})"
+                    for n, c, d in result.ink_mismatched[:5]
+                ) + (" …" if len(result.ink_mismatched) > 5 else "")
+                outcome.problems.append(
+                    f"{p}: {len(result.ink_mismatched)} pair(s) where one pipeline drew "
+                    f"nothing and the other drew something, while their hashes stayed "
+                    f"within the threshold — the distance cannot see this: {shown}"
+                )
+            # NOT "nothing to check". When the dynamic renders are absent the
+            # comparison falls back to committed hashes, and a hash cannot be
+            # asked how much ink it has — so these matched pairs were never
+            # judged, and saying nothing would let the fallback read as a full
+            # check.
+            if result.blank_check_unavailable:
+                outcome.notices.append(
+                    f"{p}: parity fell back to committed hashes, so "
+                    f"{result.blank_check_unavailable} matched pair(s) were NOT checked for "
+                    f"one pipeline drawing nothing — there is no second image to measure"
+                )
+            if verdict.unrecorded:
+                shown = ", ".join(verdict.unrecorded[:5]) + (
+                    " …" if len(verdict.unrecorded) > 5 else ""
+                )
+                outcome.problems.append(
+                    f"{p}: {len(verdict.unrecorded)} codegen-parity deviation(s) not in "
+                    f"{parity_mod.LEDGER_NAME} — dynamic and generated code no longer "
+                    f"draw the same thing: {shown}"
+                )
+            if verdict.one_sided:
+                shown = ", ".join(verdict.one_sided[:5]) + (
+                    " …" if len(verdict.one_sided) > 5 else ""
+                )
+                outcome.problems.append(
+                    f"{p}: {len(verdict.one_sided)} fixture(s) rendered by only one "
+                    f"pipeline — nothing was compared for them, so this is not a "
+                    f"drawing difference but a host that skipped work (or artifacts "
+                    f"of two different vintages): {shown}"
+                )
+            if verdict.stale:
+                shown = ", ".join(verdict.stale[:5]) + (
+                    " …" if len(verdict.stale) > 5 else ""
+                )
+                outcome.problems.append(
+                    f"{p}: {len(verdict.stale)} stale {parity_mod.LEDGER_NAME} entr(y/ies) — "
+                    f"codegen now matches; prune with `jui conformance parity --update "
+                    f"--platform {p}`: {shown}"
+                )
+            if result.source == "baseline":
+                outcome.notices.append(
+                    f"{p}: parity fell back to the committed baseline — this run has "
+                    f"no dynamic renders in artifacts/{p}, so the measurement carries "
+                    f"the baseline's drift as well as the invariant"
+                )
+            if result.baseline_only:
+                outcome.notices.append(
+                    f"{p}: {len(result.baseline_only)} baseline name(s) neither "
+                    f"pipeline produced — rename/deletion residue, cleared by the "
+                    f"next bake; not counted as a deviation"
+                )
+            if verdict.ok and compared:
+                outcome.notices.append(
+                    f"{p}: codegen parity OK — {len(result.matched)} matched of "
+                    f"{compared} compared, {verdict.accepted} accepted deviation(s) "
+                    f"on ledger"
+                )
+    return outcome
+
+
+#: Ledgers keyed by a fixture id, and the field that holds it. A rename
+#: moves the fixture and leaves the row pointing nowhere: the entry is still
+#: there, the gate still runs, and nothing it says is ever checked again.
+FIXTURE_KEYED_LEDGERS = (
+    ("control_diff.json", "fixture"),
+    ("cross_effect.json", "fixture"),
+    ("frame_parity.json", "fixture"),
+    ("inert_audit.json", "fixture"),
+)
+
+#: Same, keyed by screenshot name instead (`a/b__c` -> `a_b__c.png`).
+SCREENSHOT_KEYED_LEDGERS = (("codegen_parity.json", "screenshot"),)
+
+#: Reason/owner marker an `--update` writes for a finding nobody has ruled
+#: on yet.
+UNREVIEWED_MARKER = "unreviewed-initial-measurement"
+
+#: Adjudication ledgers and the fields that carry the review verdict. A row
+#: whose verdict is still :data:`UNREVIEWED_MARKER` is measured but unjudged.
+ADJUDICATION_LEDGERS = (
+    ("cross_effect.json", ("reason",)),
+    ("frame_parity.json", ("reason",)),
+    ("inert_audit.json", ("reason",)),
+    ("value_discrimination.json", ("owner", "reason")),
+    ("codegen_effect.json", ("owner", "reason")),
+)
+
+
+def judge_adjudication_backlog(
+    conformance_dir: Path,
+) -> tuple[list[str], list[str]]:
+    """Ratchet the count of measured-but-unjudged ledger rows.
+
+    Measured 2026-08-07, not assumed: the adjudication ledgers were already
+    ratcheted against a finding arriving with NO row (`check()` reports it
+    unrecorded and the gate fails) and against a row the measurement no
+    longer supports (stale, also fails). But `--update` folds a brand-new
+    finding in as a row whose reason is :data:`UNREVIEWED_MARKER`, and
+    `check()` counts that row as *accepted* — so the gate is green. That is
+    the whole path by which the backlog went from the "unreviewed 0" of plan
+    33 back to 126 rows after the fixture expansion: nobody bypassed
+    anything, the device simply had no opinion about a row that records a
+    finding and rules on nothing.
+
+    Ceilings are per ledger and do NOT nest by env: how many findings are
+    unjudged is a fact about the repository, not about a renderer.
+
+    The ceiling is committed at today's reality, so this cannot turn the
+    gate red on the day it lands — the lane discipline is that gating an
+    unconsumed queue makes red the normal color. What it does is make the
+    queue monotonically non-increasing: a new unreviewed row fails, and
+    burning rows down prints a notice to lower the ceiling.
+    """
+    conformance_dir = Path(conformance_dir)
+    ceilings = load_unreviewed_ceilings(conformance_dir)
+    problems: list[str] = []
+    notices: list[str] = []
+
+    for name, fields in ADJUDICATION_LEDGERS:
+        path = conformance_dir / name
+        if not path.is_file():
+            continue
+        entries = json.loads(path.read_text(encoding="utf-8")).get("entries", [])
+        count = sum(
+            1
+            for e in entries
+            if isinstance(e, dict)
+            and any(e.get(f) == UNREVIEWED_MARKER for f in fields)
+        )
+        ceiling = ceilings.get(name, 0)
+        if count > ceiling:
+            problems.append(
+                f"{name}: {count} unreviewed row(s) > ratchet ceiling {ceiling} — "
+                f"an `--update` recorded findings it did not rule on. Rule on them "
+                f"(replace the '{UNREVIEWED_MARKER}' verdict) or, if the ceiling is "
+                f"genuinely wrong, raise it in {RATCHET_FILENAME} with a comment "
+                f"saying why the backlog is allowed to grow"
+            )
+        elif count < ceiling:
+            notices.append(
+                f"{name}: {count} unreviewed row(s) < ceiling {ceiling} — "
+                f"lower the ceiling in {RATCHET_FILENAME} to hold the ground"
+            )
+    return problems, notices
+
+
+def load_unreviewed_ceilings(conformance_dir: Path) -> dict[str, int]:
+    """``{ledger filename: ceiling}``; a missing table means every ceiling is 0.
+
+    Read straight from the ratchet file rather than through
+    :func:`load_ratchet` / :func:`ratchet_for_env`: those resolve the
+    env-then-platform nesting the visual metrics need, and this metric has
+    neither axis.
+    """
+    path = Path(conformance_dir) / RATCHET_FILENAME
+    if not path.is_file():
+        return {}
+    table = json.loads(path.read_text(encoding="utf-8")).get("unreviewed", {})
+    if not isinstance(table, dict):
+        return {}
+    return {
+        name: int(ceiling)
+        for name, ceiling in table.items()
+        if isinstance(ceiling, (int, float)) and not isinstance(ceiling, bool)
+    }
+
+
+def judge_value_discrimination(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    definitions_path: Path | None = None,
+    env: str = DEFAULT_ENV,
+) -> tuple[list[str], list[str]]:
+    """Two declared values of one attribute must not draw the same picture.
+
+    The gap the other checks leave: a value that is read, reacted to, and
+    then mapped onto the same layout as its sibling satisfies every one of
+    them. `distribution` sat there with four declared values and three
+    distinct renders until someone compared them by hand.
+
+    Only pairs where BOTH values are active against their control are
+    judged — if either is inert the attribute is not discriminating at all,
+    and --inert-complete owns that. Alias cases, bound cases, and values the
+    SSoT calls the same are excluded before comparing.
+    """
+    import hashlib
+    import json as _json
+
+    from . import control_diff as cd
+    from . import value_discrimination as vd
+    from .report import load_platform_results, manifest_identity
+
+    conformance_dir = Path(conformance_dir)
+    problems: list[str] = []
+    notices: list[str] = []
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return ([f"value-discrimination: no manifest ({manifest_path})"], [])
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash, render_equivalent = manifest_identity(manifest_path, conformance_dir)
+
+    definitions = {}
+    if definitions_path and Path(definitions_path).is_file():
+        definitions = _json.loads(Path(definitions_path).read_text(encoding="utf-8"))
+
+    results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+    ledger = vd.load_ledger(vd.ledger_path(conformance_dir))
+
+    for platform in dict.fromkeys(platforms):
+        pr = loaded.get(platform)
+        if pr is None:
+            continue
+        active = set(
+            cd.compare(conformance_dir, platform, manifest, pr.results, env=env).active
+        )
+        result = vd.measure(
+            conformance_dir,
+            platform,
+            manifest,
+            pr.results,
+            env=env,
+            definitions=definitions,
+            active=active,
+        )
+        # env is passed so a row scoped to one render environment is neither
+        # demanded nor called stale in the other — see vd.applies_in.
+        verdict = vd.check(result, ledger, env=env)
+        # The count on its own reads backwards. A platform where an attribute
+        # stopped working drops every one of its pairs out of this check —
+        # both sides have to be active for the question to mean anything — so
+        # the more broken the platform, the smaller the number here. iOS
+        # reported 6 against android's 33 in run 30990560599 and looked like
+        # the healthy one; it had 783 pairs it could not measure at all,
+        # because contentMode had gone inert on 15 of 16 fixtures. Whoever
+        # reads the failure has to see both numbers or they will read a
+        # regression as good news.
+        unmeasurable = result.excluded.get("not-both-active", 0)
+        if verdict.unrecorded:
+            shown = "; ".join(verdict.unrecorded[:5]) + (
+                " ..." if len(verdict.unrecorded) > 5 else ""
+            )
+            problems.append(
+                f"{platform}: {len(verdict.unrecorded)} declared value(s) that draw "
+                f"what another declared value draws, not in {vd.LEDGER_NAME} - the "
+                f"SSoT says they differ and the render says they do not "
+                f"({result.compared} pair(s) compared; {unmeasurable} more could not "
+                f"be, one side being inert against its control): {shown}"
+            )
+        if verdict.stale:
+            shown = ", ".join(verdict.stale[:5]) + (" ..." if len(verdict.stale) > 5 else "")
+            problems.append(
+                f"{platform}: {len(verdict.stale)} stale {vd.LEDGER_NAME} entr(y/ies) - "
+                f"the values discriminate now, so the row goes: {shown}"
+            )
+        if verdict.incomplete:
+            problems.append(
+                f"{platform}: {len(verdict.incomplete)} {vd.LEDGER_NAME} entr(y/ies) "
+                f"without an owner or a reason"
+            )
+        if result.compared == 0 and result.groups:
+            problems.append(
+                f"{platform}: value discrimination compared NOTHING - all "
+                f"{result.groups} attribute(s) with two declared values had at "
+                f"least one side inert against its control. A silent zero here "
+                f"is the worst possible reading: it means the check ran and "
+                f"could say nothing, not that the values discriminate"
+            )
+        notices.append(
+            f"{platform}: value discrimination - {result.compared} pair(s) compared "
+            f"over {result.groups} attribute(s), {unmeasurable} pair(s) unmeasurable "
+            f"(one side inert), {verdict.accepted} accepted collapse(s) on ledger, "
+            f"excluded {result.excluded}"
+        )
+    return problems, notices
+
+
+def judge_ledger_keys(conformance_dir: Path, semantics_path: Path | None = None) -> list[str]:
+    """Every ledger key must name a fixture the manifest still has.
+
+    Three renames in one wave broke three different things this way: the
+    committed baselines, a control shape, and a semantics contract whose
+    member pointed at a fixture whose representative value had been flipped.
+    The contract was on the ledger, the gate was running, and it had not
+    been checked once since the rename.
+
+    Dangling rows are reported, never deleted. Whoever renamed the fixture
+    knows what the row was for; a device that quietly drops it destroys the
+    only record that something was being tracked.
+    """
+    conformance_dir = Path(conformance_dir)
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return [f"ledger keys: no manifest to check against ({manifest_path})"]
+
+    fixtures = json.loads(manifest_path.read_text(encoding="utf-8")).get("fixtures", [])
+    ids = {f.get("id") for f in fixtures if f.get("id")}
+    shots = {screenshot_name(i) for i in ids}
+
+    problems: list[str] = []
+
+    def sweep(path: Path, field: str, universe: set, noun: str) -> None:
+        if not path.is_file():
+            return
+        entries = json.loads(path.read_text(encoding="utf-8")).get("entries", [])
+        dangling = sorted(
+            {e.get(field) for e in entries if e.get(field) and e.get(field) not in universe}
+        )
+        if dangling:
+            shown = ", ".join(dangling[:5]) + (" …" if len(dangling) > 5 else "")
+            problems.append(
+                f"{path.name}: {len(dangling)} entr(y/ies) name a {noun} the manifest "
+                f"no longer has — the fixture was renamed or removed and the row was "
+                f"left behind, so nothing it claims has been checked since: {shown}"
+            )
+
+    for name, field in FIXTURE_KEYED_LEDGERS:
+        sweep(conformance_dir / name, field, ids, "fixture")
+    for name, field in SCREENSHOT_KEYED_LEDGERS:
+        sweep(conformance_dir / name, field, shots, "screenshot")
+
+    if semantics_path and Path(semantics_path).is_file():
+        semantics = json.loads(
+            Path(semantics_path).read_text(encoding="utf-8")
+        ).get("semantics", {})
+        dangling = sorted(
+            {
+                f"{topic}:{key}"
+                for topic, body in semantics.items()
+                if isinstance(body, dict)
+                for key in (body.get("observable") or {})
+                if key not in ids
+            }
+        )
+        if dangling:
+            shown = ", ".join(dangling[:5]) + (" …" if len(dangling) > 5 else "")
+            problems.append(
+                f"attribute_semantics.json: {len(dangling)} observable key(s) name a "
+                f"fixture the manifest no longer has — the contract reads as live and "
+                f"measures nothing: {shown}"
+            )
+    return problems
+
+
+def _short_rendered_by(value: str) -> str:
+    """Render a rendered_by value short enough to read, keeping its kind.
+
+    Values are `tree:<hash>` (the drawing source) or, on baselines baked
+    before 2026-09-04, a bare checkout SHA. Truncating blindly would hide
+    which kind it is, and the two are not comparable.
+    """
+    if value.startswith("tree:"):
+        return "tree:" + "+".join(part[:8] for part in value[5:].split("+"))
+    return value[:8]
+
+
+def library_drift_notices(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    summary: ReportSummary,
+    rendered_by: dict[str, str],
+    env: str = DEFAULT_ENV,
+) -> list[str]:
+    """Say when a regression might be the library moving, not the code.
+
+    What identifies a library here is the **tree hash of its drawing source**
+    (`tree:<hash>`), not the commit that happened to be checked out. Those are
+    different questions and this field answers the first: on 2026-09-04 three
+    commits that touched only the conformance host would have moved a checkout
+    SHA while `Sources/` stayed byte-identical, which reads as "the library
+    moved" and starts an investigation with nothing at the end of it.
+
+    conformance-mobile checks the libraries out at `master` / `main`, so the
+    pictures a baseline holds were drawn by whatever was on those branches
+    that day. Nothing recorded which, and thirteen regressions in one run
+    turned out to be neither fixture nor codegen — two lanes got there by
+    elimination because the device could not point at it.
+
+    A notice, never a failure: the library is supposed to move and the
+    baseline is supposed to be rebaked, so "newer than the bake" is a state,
+    not a defect. Emitted only when there is something to explain — on a
+    clean run it would be noise every time, and a line people learn to skip
+    is worse than no line.
+    """
+    from .baseline import load_baseline
+
+    notices: list[str] = []
+    for platform in dict.fromkeys(platforms):
+        if not summary.visual_regressions.get(platform, 0):
+            continue
+        baseline = load_baseline(conformance_dir, platform, env)
+        if baseline is None:
+            continue
+        baked = baseline.get("rendered_by") or {}
+        if not baked:
+            notices.append(
+                f"{platform}: {summary.visual_regressions[platform]} regression(s), "
+                f"and this baseline predates library-version recording — whether "
+                f"the library moved since the bake cannot be answered from it"
+            )
+            continue
+        # `name in baked` also carries the migration: entries baked under the
+        # old key (a checkout SHA) are simply not compared against the new one
+        # (a source tree hash), instead of reporting a move on the first run
+        # after the meaning changed.
+        moved = [
+            f"{name} {_short_rendered_by(baked[name])}->{_short_rendered_by(sha)}"
+            for name, sha in sorted(rendered_by.items())
+            if name in baked and baked[name] != sha
+        ]
+        if moved:
+            notices.append(
+                f"{platform}: {summary.visual_regressions[platform]} regression(s) "
+                f"measured against a baseline drawn by a different library "
+                f"({', '.join(moved)}) — some of them may be library-side rather "
+                f"than fixture or codegen"
+            )
+    return notices
+
+
+def judge_codegen_effect(
+    conformance_dir: Path,
+    definitions: dict,
+    repo_root: Path,
+    platforms: Sequence[str],
+    *,
+    companion_specs: dict | None = None,
+    ruby: str = "ruby",
+) -> GateOutcome:
+    """C0/C1/C2/C3 against `codegen_effect.json`, both directions.
+
+    Renders nothing: the probes drive the production converters over layout
+    dicts, so this runs on any machine with ruby in seconds. That is why it
+    belongs on per-push CI rather than the weekly mobile run — the defects
+    it finds are in emitted text, and text is available long before a
+    simulator is.
+    """
+    from . import codegen_effect as ce
+
+    outcome = GateOutcome()
+    platforms = tuple(p for p in dict.fromkeys(platforms) if p in ce.PLATFORMS)
+    if not platforms:
+        outcome.problems.append(
+            "codegen-effect: no probeable platform selected — it judges emitted "
+            f"text for {', '.join(ce.PLATFORMS)}"
+        )
+        return outcome
+
+    try:
+        result = ce.check(
+            definitions,
+            repo_root,
+            platforms=platforms,
+            ruby=ruby,
+            companion_specs=companion_specs,
+        )
+    except ce.ProbeError as exc:
+        outcome.problems.append(f"codegen-effect: probe did not run — {exc}")
+        return outcome
+
+    ledger = ce.load_ledger(ce.ledger_path(conformance_dir))
+    verdict = ce.check_ledger(result, ledger, platforms=platforms)
+
+    if verdict.errors:
+        shown = "; ".join(verdict.errors[:3]) + (" …" if len(verdict.errors) > 3 else "")
+        outcome.problems.append(
+            f"{len(verdict.errors)} probe error(s) — the converter raised, so every "
+            f"judgement about that attribute is vacuous and no ledger entry can "
+            f"stand in for it: {shown}"
+        )
+    if verdict.unrecorded:
+        shown = "; ".join(verdict.unrecorded[:5]) + (
+            " …" if len(verdict.unrecorded) > 5 else ""
+        )
+        outcome.problems.append(
+            f"{len(verdict.unrecorded)} codegen defect(s) not in {ce.LEDGER_NAME} — "
+            f"fix the converter, or record the defect with an owner and a reason: {shown}"
+        )
+    if verdict.stale:
+        shown = ", ".join(verdict.stale[:5]) + (" …" if len(verdict.stale) > 5 else "")
+        outcome.problems.append(
+            f"{len(verdict.stale)} stale {ce.LEDGER_NAME} entr(y/ies) — the defect is "
+            f"gone, so DELETE those rows, in the commit that fixed it. Do not reach "
+            f"for `--update` to do it: that rewrites the platform's rows from the "
+            f"current measurement, which also records every defect nobody has "
+            f"accepted yet: {shown}"
+        )
+    if verdict.incomplete:
+        shown = "; ".join(verdict.incomplete[:5]) + (
+            " …" if len(verdict.incomplete) > 5 else ""
+        )
+        outcome.problems.append(
+            f"{len(verdict.incomplete)} {ce.LEDGER_NAME} entr(y/ies) without an owner "
+            f"or a reason — an accepted defect nobody owns is a permanent one: {shown}"
+        )
+    if verdict.ok:
+        outcome.notices.append(
+            f"codegen-effect OK — {result.checks_run} judgement(s) over "
+            f"{result.probes} probe(s), {verdict.accepted} accepted defect(s) on ledger"
+        )
+    return outcome
+
+
+def _web_marker_population_problems(summary, platforms) -> tuple[list[str], list[str]]:
+    """Judge the census's population against the manifest's declaration."""
+    problems: list[str] = []
+    notices: list[str] = []
+    for p in dict.fromkeys(platforms):
+        if p not in EXPECTED_WEB_MARKER_HOSTS:
+            continue
+        census = summary.web_markers.get(p) or {}
+        runnable = census.get("webFixturesRunnable")
+        if not isinstance(runnable, int):
+            continue  # absence is handled by the other web-marker checks
+        declared = summary.declared_web_fixtures.get(p)
+        if declared is None:
+            continue  # the report did not compute it (no manifest in that path)
+        if runnable == declared:
+            continue
+        run_filter = summary.run_filters.get(p)
+        if run_filter is not None and run_filter not in ("all", ""):
+            # ⚠️ A FILTERED RUN BREAKS THIS LEGITIMATELY, and saying nothing
+            # would mean the check disappears whenever a filter is passed.
+            notices.append(
+                f"{p}: NOT APPLICABLE — the run recorded filter '{run_filter}', so its "
+                f"{runnable} Web fixture(s) against the manifest's {declared} is the "
+                f"filter, not a missing fixture"
+            )
+            continue
+        # ⚠️ WHAT THIS CAN AND CANNOT TELL APART. `filter: "all"` is a run
+        # saying it narrowed nothing, so the difference is a missing fixture.
+        # NO filter field at all is a host that does not record one — the
+        # difference is then a missing fixture OR an unrecorded narrowing, and
+        # claiming the first would be asserting something the results do not
+        # contain.
+        if run_filter in ("all", ""):
+            why = (
+                "the run recorded filter 'all', so it narrowed nothing and a fixture "
+                "left the population"
+            )
+        else:
+            why = (
+                "the run records NO filter, so this is either a fixture that left the "
+                "population or a narrowed run that does not say so — the results do "
+                "not carry enough to tell them apart"
+            )
+        problems.append(
+            f"{p}: the manifest declares {declared} Web-hosted fixture(s) for this "
+            f"platform but the run counted {runnable} as runnable. {why}. Every "
+            f"in-run check stays green either way, because they all compare against "
+            f"`runnable`"
+        )
+    return problems, notices
+
+
+def _web_marker_problems(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Fail when a Web capture had no load marker to wait on at all.
+
+    🔻 NO PICTURE ARM CAN SEE THIS. A web view exists the instant it is made,
+    so a capture taken mid-load is blank — and a blank fixture still DIFFERS
+    from its control, so control_diff calls the attribute active and a re-bake
+    of the same race calls itself a pass. Both sides of that race sat in
+    committed iOS baselines under a green gate.
+
+    ⚠️ THE FIRST VERSION OF THIS CHECK COUNTED THE WRONG THING AND CRIED WOLF
+    ON ITS FIRST REAL RUN. It read a `pendingObserved` count, and pending is a
+    TRANSIENT state: a local `loadHTMLString` settles before the runner's first
+    query, so the tree carried only the *loaded* marker and the census reported
+    0 of 2 while the pictures were byte-identical to the baseline. The host now
+    detects Web fixtures from the manifest (`host == "Web"`, a declared and
+    stable fact that names the control too) and sorts each one into a bucket
+    whose zero means one thing:
+
+    ``alreadySettled``      painted before the runner looked — correct, common
+    ``waitedThenSettled``   the wait ran and the page arrived — correct
+    ``timedOut``            the page never arrived — a NOTICE, see below
+    ``markerAbsent``        no marker ever appeared — THE failure
+
+    A timeout is not failed on purpose: the capture is still judged by
+    fixture-vs-control, which is readable, and failing here would make a slow
+    page indistinguishable from a broken marker.
+    """
+    out: list[str] = []
+    for platform in selected:
+        census = summary.web_markers.get(platform) or {}
+        reached = census.get("webFixturesReachedCapture")
+        if not isinstance(reached, int):
+            continue  # no census from this host — see _web_marker_absence_problems
+
+        buckets = ("alreadySettled", "waitedThenSettled", "timedOut", "markerAbsent")
+        values = [census.get(name) for name in buckets]
+        if not all(isinstance(value, int) for value in values):
+            out.append(
+                f"{platform}: web load-marker census is missing bucket counts "
+                f"({', '.join(n for n, v in zip(buckets, values) if not isinstance(v, int))})"
+            )
+            continue
+
+        # Conservation, checked here as well as in the host: a future branch
+        # that falls through every bucket would shrink the population, and a
+        # judgment with nothing left to judge passes.
+        if sum(values) != reached:
+            out.append(
+                f"{platform}: web load-marker census does not add up — "
+                f"{sum(values)} bucketed vs {reached} that reached capture"
+            )
+
+        absent = census["markerAbsent"]
+        if absent:
+            out.append(
+                f"{platform}: {absent} Web fixture(s) presented no load marker at "
+                "all, so their screenshots were taken without waiting for the "
+                "page to paint — the blank-page race the marker exists to remove"
+            )
+    return out
+
+
+def _web_marker_timeout_notices(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Report pages that never finished loading. Not a failure — see above."""
+    out: list[str] = []
+    for platform in selected:
+        census = summary.web_markers.get(platform) or {}
+        timed_out = census.get("timedOut")
+        if isinstance(timed_out, int) and timed_out:
+            out.append(
+                f"{platform}: {timed_out} Web fixture(s) were captured on the load "
+                "timeout rather than on a finished page — judged by "
+                "fixture-vs-control, but slower than expected"
+            )
+    return out
+
+
+def _web_marker_absence_problems(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Fail when a host DECLARED to emit the census did not emit one.
+
+    🔻 WHY A DECLARATION AND NOT "WHOEVER REPORTED LAST RUN". The obvious
+    shape — stay quiet until some host reports, then name the ones that do
+    not — cannot tell a REGRESSION from PRE-ADOPTION: the run where the census
+    disappears has zero reporting hosts, which is the same state as the run
+    before any host implemented it, so it goes silent exactly when something
+    broke. And the thing that makes it disappear is not only a dropped env
+    flag (the host's own assertion catches that) but the census code being
+    reverted — which removes the assertion too, so host AND gate both fall
+    quiet.
+
+    So the expectation is DECLARED, in the same shape control_diff.json uses
+    for "this fixture must differ from its control": state it, and let absence
+    be a named refusal rather than an inferred state. Adoption is an edit to
+    :data:`EXPECTED_WEB_MARKER_HOSTS`, which makes the migration a visible
+    diff instead of a property of whatever happened to run.
+    """
+    out: list[str] = []
+    for platform in selected:
+        if platform not in EXPECTED_WEB_MARKER_HOSTS:
+            continue
+        census = summary.web_markers.get(platform) or {}
+        if isinstance(census.get("webFixturesReachedCapture"), int):
+            continue
+        what = "an unreadable one" if census else "none at all"
+        out.append(
+            f"{platform}: declared to report a web load-marker census and emitted "
+            f"{what} — its Web captures are no longer asserted to have waited for "
+            "the page to paint. Either the host regressed (env flag, library "
+            "version, the census itself removed) or the declaration in "
+            "EXPECTED_WEB_MARKER_HOSTS is stale"
+        )
+    return out
+
+
+def _web_marker_notices(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Say when an undeclared host starts reporting — the migration advancing.
+
+    The counterpart to the problem above, and the only other state worth a
+    line: a platform nobody declared is now producing a census, so the
+    declaration should grow. Everything else is silence by construction —
+    declared-and-reporting is the steady state, undeclared-and-not-reporting
+    is a host that has not adopted yet.
+    """
+    arrived = [
+        platform
+        for platform in selected
+        if platform not in EXPECTED_WEB_MARKER_HOSTS and summary.web_markers.get(platform)
+    ]
+    if not arrived:
+        return []
+    return [
+        f"{', '.join(arrived)}: now report(s) a web load-marker census but is not in "
+        "EXPECTED_WEB_MARKER_HOSTS — add it so its disappearance would fail"
+    ]
+
+
+def judge(
+    summary: ReportSummary,
+    platforms: Sequence[str],
+    *,
+    visual: bool = True,
+    ratchet: dict[str, dict[str, int]] | None = None,
+    env: str = DEFAULT_ENV,
+) -> GateOutcome:
+    """The pure judgment: summary in, problems/notices out. No filesystem."""
+    ratchet = ratchet_for_env(ratchet or {}, env)
+    selected = list(dict.fromkeys(platforms))
+    outcome = GateOutcome(summary=summary)
+    problems, notices = outcome.problems, outcome.notices
+
+    present = set(summary.platforms)
+    missing = [p for p in selected if p not in present]
+    if missing:
+        problems.append(f"missing platform results: {', '.join(missing)}")
+
+    for p in selected:
+        if p in summary.stale_platforms:
+            problems.append(
+                f"{p}: stale results (manifestHash != current manifest) — re-run the {p} suite"
+            )
+        elif p in summary.drifted_platforms:
+            # NOT a problem, and NOT silence either. The manifest moved while
+            # `fixtures/` and the fixture ids did not, which is what a prose
+            # edit to the SSoT does — measured 2026-09-15: 0 fixture files
+            # changed, 1 manifest line changed, three faces red, ~56 minutes
+            # of rendering to get back to green. Counted in its own line so
+            # that accepting the equivalence stays visible: a fallback nobody
+            # counts is a third state that sediments.
+            notices.append(
+                f"{p}: results name a different manifest, but manifest_lineage.json "
+                f"records the same fixtures/ tree and fixture ids — judged against the "
+                f"current manifest, NOT re-rendered"
+            )
+        ids = summary.unknown_ids.get(p)
+        if ids:
+            problems.append(f"{p}: {len(ids)} fixture id(s) not in manifest")
+        tally = summary.status_tallies.get(p)
+        if tally is not None:
+            bad = tally.get("fail", 0) + tally.get("error", 0)
+            if bad:
+                problems.append(f"{p}: {bad} fail/error result(s)")
+
+    # 🔻 `judge` READS NO FILES — its docstring is the contract. The
+    # declaration this compares against is counted by the report, which has the
+    # manifest open already; passing the manifest down here would have made the
+    # cheapest available check the one that broke the contract.
+    _pop_problems, _pop_notices = _web_marker_population_problems(summary, selected)
+    problems.extend(_pop_problems)
+    notices.extend(_pop_notices)
+    problems.extend(_web_marker_problems(summary, selected))
+    problems.extend(_web_marker_absence_problems(summary, selected))
+    notices.extend(_web_marker_timeout_notices(summary, selected))
+    notices.extend(_web_marker_notices(summary, selected))
+
+    # Cross-platform mismatch needs every platform's results to come from this
+    # run; with a partial selection the others are committed snapshots and a
+    # mismatch against them is the full lane's business, not this one's.
+    if _ALL_PLATFORMS <= set(selected) and summary.mismatch_count:
+        problems.append(
+            f"{summary.mismatch_count} cross-platform mismatch(es) — see REPORT.md"
+        )
+
+    if visual:
+        for p in selected:
+            # A comparison that could not run is not a pass. Silence here is
+            # what let the visual check sit inert in CI (Pillow missing) while
+            # an iOS runner upgrade re-rendered every fixture.
+            why = summary.baseline_errors.get(p)
+            if why:
+                problems.append(f"{p}: screenshots were not compared — {why}")
+            count = summary.visual_regressions.get(p, 0)
+            if count:
+                env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
+                # 🔴 THE RECIPE BELOW IS HANDED OVER AT THE WORST POSSIBLE
+                # MOMENT — N visual regressions have just been MEASURED, and
+                # this line tells the operator how to write them into the
+                # baseline. `--fail-on-moved` is what makes that bake stop and
+                # name the count instead of absorbing it; the command's own
+                # help says "a regression that gets absorbed stops being a
+                # regression", and here the regression is already on screen.
+                #
+                # ⚠️ KEPT ON ONE SOURCE LINE. Split across f-string fragments
+                # the recipe is invisible to every line-oriented scanner —
+                # this repo's own gate read it as `baseline update ` with no
+                # `--platform` and did not classify it as a recipe at all,
+                # which is how it kept the flag off while that gate was green.
+                problems.append(
+                    f"{p}: {count} visual regression(s) vs committed baseline — if intended, re-baseline with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` and commit baselines/{env}/{p}.hashes.json"
+                )
+            # 🔻 THE POPULATION THE HAMMING COMPARISON ABOVE IS BLIND TO.
+            # An entry whose committed hash has popcount <= threshold is
+            # within the threshold of a blank page, so `count` above stays 0
+            # however empty it gets. Measured 2026-09-15 at threshold 8: 115
+            # of 867 ci/ios entries, 106/816 android, 221/818 web — and 96,
+            # 97 and 218 of those respectively DRAW something, so that is
+            # what the ink predicate puts back under judgment.
+            blanked = summary.ink_regressions.get(p) or []
+            if blanked:
+                shown = ", ".join(
+                    f"{name} ({recorded}->{measured}, {kind})"
+                    for name, recorded, measured, kind in blanked[:8]
+                )
+                more = f" … {len(blanked) - 8} more" if len(blanked) > 8 else ""
+                problems.append(
+                    f"{p}: {len(blanked)} picture(s) went blank (or stopped being "
+                    f"blank) without moving their hash — the Hamming comparison "
+                    f"cannot see these: {shown}{more}"
+                )
+            # The migration state, as its own number rather than folded into
+            # "0 regressions". A baseline baked before ink existed carries
+            # none, and reading its absence as zero ink would let every
+            # pre-ink face claim coverage it does not have. A notice, not a
+            # failure — the fix is a re-bake, which is not urgent — but it
+            # means this face is NOT fully judged and the count says so.
+            # 🔴 A LANE WHERE THE QUESTION CANNOT BE ASKED IS NOT A COVERED
+            # LANE. The blind population is derived from "distance to an
+            # all-zero hash", which is only the right question where a blank
+            # picture hashes to zero. Measured 2026-09-15: local/android keeps
+            # an uncropped status bar in every frame, so its 816 hashes all sit
+            # at popcount >= 14 and the derivation returned 0 — indistinguishable
+            # from full coverage. Say the number left unjudged instead.
+            unaskable = summary.blank_check_unavailable.get(p, 0)
+            if unaskable:
+                notices.append(
+                    f"{p}: the blank-page check could not run on this lane — {unaskable} "
+                    f"entr(y/ies) unjudged. No committed hash here is all zeros, so nothing "
+                    f"shows a blank picture reaches zero and distance-from-zero is the wrong "
+                    f"question. This is NOT 'no blind entries'"
+                )
+            v_uncovered = summary.vertical_uncovered.get(p, 0)
+            if v_uncovered:
+                env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
+                notices.append(
+                    f"{p}: {v_uncovered} compared screenshot(s) have no committed vertical hash, so a move inside their column was NOT checked (vertical hash judged {summary.vertical_checked.get(p, 0)}) — re-bake with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` to cover them"
+                )
+            uncovered = summary.ink_uncovered.get(p, 0)
+            if uncovered:
+                env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
+                notices.append(
+                    f"{p}: {uncovered} of {summary.blind_to_blanking.get(p, 0)} entries that the hash cannot tell from a blank page carry no committed ink, so they were NOT judged — re-bake with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` to cover them"
+                )
+
+            ids = summary.inert_regressions.get(p) or []
+            if ids:
+                shown = ", ".join(ids[:5]) + (" …" if len(ids) > 5 else "")
+                message = (
+                    f"{p}: {len(ids)} attribute(s) no longer change what is rendered "
+                    f"(identical to their control): {shown}"
+                )
+                if env == DEFAULT_ENV:
+                    problems.append(message)
+                else:
+                    # The expected-to-differ ledger is asserted from local
+                    # renders; on another renderer an identical render can be
+                    # the environment, not a regression (measured: 4 iOS
+                    # entries held locally and went inert on the CI sim).
+                    # Keep the measurement visible, don't fail on it.
+                    notices.append(
+                        message
+                        + f" — ledger assertions are local-env; informational under env '{env}'"
+                    )
+            unrecorded = summary.inert_unrecorded.get(p, 0)
+            if unrecorded:
+                notices.append(
+                    f"{p}: {unrecorded} fixture(s) render identically to their control "
+                    "and are not yet recorded in control_diff.json"
+                )
+
+        for metric, values in (
+            ("missing_artifact", summary.missing_artifact),
+            ("no_baseline", summary.no_baseline),
+        ):
+            ceilings = ratchet.get(metric, {})
+            for p in selected:
+                if p in summary.baseline_errors or p not in present:
+                    continue  # nothing was measured — already reported above
+                count = values.get(p, 0)
+                ceiling = ceilings.get(p, 0)
+                if count > ceiling:
+                    problems.append(
+                        f"{p}: {metric} {count} > ratchet ceiling {ceiling} — "
+                        f"fixture(s) quietly exited visual coverage (see REPORT.md; "
+                        f"ceilings live in {RATCHET_FILENAME})"
+                    )
+                elif count < ceiling:
+                    notices.append(
+                        f"{p}: {metric} {count} < ceiling {ceiling} — "
+                        f"tighten {RATCHET_FILENAME}"
+                    )
+
+    return outcome
+
+
+def judge_inert_complete(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    definitions_path: Path | None = None,
+    semantics_path: Path | None = None,
+    env: str = DEFAULT_ENV,
+) -> tuple[list[str], list[str]]:
+    """Judge inert COMPLETENESS: every unattributed inert verdict is on file.
+
+    The other lanes each answer "is this specific thing still true". This one
+    answers the question none of them can: is there an inert verdict nobody
+    has an opinion about? An attribute that silently stops rendering produces
+    exactly that — a fixture identical to its control, no ledger entry, no
+    contract line, and no failure anywhere.
+
+    Both directions, like every other ratchet here: an unattributed inert
+    verdict missing from inert_audit.json fails, and an entry the measurement
+    no longer supports fails too (a fixed attribute must not keep an excuse
+    on file). Asserted under env `local` — activeness verdicts come from
+    local renders, same reasoning as cross-effect.
+    """
+    import hashlib
+    import json as _json
+
+    from . import control_diff as control_diff_mod
+    from . import cross_effect as ce_mod
+    from . import inert_audit as ia
+    from . import rules as rules_mod
+    from .report import load_platform_results, manifest_identity
+
+    problems: list[str] = []
+    notices: list[str] = []
+    conformance_dir = Path(conformance_dir)
+    selected = list(dict.fromkeys(platforms))
+
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        problems.append(f"--inert-complete: manifest not found: {manifest_path}")
+        return problems, notices
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash, render_equivalent = manifest_identity(manifest_path, conformance_dir)
+
+    results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+    diffs = {}
+    for platform in selected:
+        pr = loaded.get(platform)
+        if pr is None:
+            continue
+        diffs[platform] = control_diff_mod.compare(
+            conformance_dir, platform, manifest, pr.results, env=env
+        )
+
+    # A platform that produced no results leaves the denominator, and a
+    # denominator that shrinks silently is how a completeness check stops
+    # being one. Say what left; and if the manifest holds fixtures in the
+    # selected scope while NOTHING was measured, that is a failed audit, not
+    # zero findings — the same rule value-discrimination applies to a run
+    # that compared no pairs.
+    absent = [p for p in selected if p not in loaded]
+    in_scope = sum(
+        1
+        for entry in manifest.get("fixtures", [])
+        if not entry.get("isControl")
+        and any(p in (entry.get("platforms") or []) for p in selected)
+    )
+    if absent and in_scope:
+        if len(absent) == len(selected):
+            problems.append(
+                f"--inert-complete measured NOTHING — no selected platform has "
+                f"results ({', '.join(absent)}) while the manifest holds "
+                f"{in_scope} fixture(s) in their scope; a completeness verdict "
+                f"from an empty measurement covers none of them"
+            )
+            return problems, notices
+        notices.append(
+            f"--inert-complete: no results for {', '.join(absent)} — their "
+            f"verdicts are absent from the audit's denominator, not clean"
+        )
+    for platform in selected:
+        diff = diffs.get(platform)
+        if diff is None:
+            continue
+        if diff.error:
+            problems.append(
+                f"--inert-complete: {platform} comparison errored — {diff.error} "
+                f"— its verdicts are absent, not clean"
+            )
+        excluded = len(diff.no_control) + len(diff.unmeasured)
+        if excluded:
+            notices.append(
+                f"{platform}: {excluded} fixture(s) excluded from the completeness "
+                f"audit — control produced no screenshot ({len(diff.no_control)}), "
+                f"recorded assertion unmeasured ({len(diff.unmeasured)})"
+            )
+
+    definitions: dict = {}
+    if definitions_path and Path(definitions_path).is_file():
+        definitions = _json.loads(Path(definitions_path).read_text(encoding="utf-8"))
+
+    coverage_path = conformance_dir / "coverage.json"
+    coverage_doc = (
+        _json.loads(coverage_path.read_text(encoding="utf-8"))
+        if coverage_path.is_file()
+        else {}
+    )
+
+    verdicts = ce_mod.verdicts_from_diffs(diffs)
+    result = ia.audit(
+        manifest,
+        verdicts,
+        selected,
+        control_diff_ledger=control_diff_mod.load_ledger_all(
+            control_diff_mod.ledger_path(conformance_dir)
+        ),
+        cross_effect_ledger=ce_mod.load_ledger(ce_mod.ledger_path(conformance_dir)),
+        contract=ce_mod.load_contract(semantics_path) if semantics_path else {},
+        coverage=ia.coverage_gaps(coverage_doc),
+        enum_values=ce_mod.enum_fixture_values(manifest, definitions),
+    )
+    ia.triage(
+        result,
+        defaults=ia.attribute_defaults(definitions),
+        control_identical=ia.control_identical_fixtures(conformance_dir, manifest),
+        manifest=manifest,
+        fallback_values=(rules_mod.DEFAULT_STRING, rules_mod.DEFAULT_NUMBER),
+        sibling_active=ia.sibling_value_evidence(manifest, verdicts, result),
+    )
+
+    ledger_file = ia.ledger_path(conformance_dir)
+    unrecorded, stale = ia.check_ledger(result, ia.load_ledger(ledger_file))
+
+    def _report(message: str) -> None:
+        if env == DEFAULT_ENV:
+            problems.append(message)
+        else:
+            notices.append(
+                message
+                + f" — inert verdicts are asserted local-env; informational under env '{env}'"
+            )
+
+    if unrecorded:
+        shown = ", ".join(item.fixture for item in unrecorded[:5]) + (
+            " …" if len(unrecorded) > 5 else ""
+        )
+        _report(
+            f"{len(unrecorded)} inert verdict(s) no ledger accounts for "
+            f"({ia.LEDGER_FILENAME}) — an attribute that stops rendering looks "
+            f"exactly like this; adjudicate or record with `jui conformance "
+            f"inert-audit --update`: {shown}"
+        )
+    if stale:
+        shown = ", ".join(stale[:5]) + (" …" if len(stale) > 5 else "")
+        _report(
+            f"{len(stale)} stale {ia.LEDGER_FILENAME} entr(y/ies) — the fixture is "
+            f"no longer an unattributed inert; prune with `jui conformance "
+            f"inert-audit --update`: {shown}"
+        )
+    if not unrecorded and not stale:
+        notices.append(
+            f"inert completeness OK ({', '.join(selected)}): "
+            f"{sum(result.unattributed.values())} unattributed inert verdict(s), "
+            "all on the ledger"
+        )
+    return problems, notices
+
+
+def judge_cross_effect(
+    summary: ReportSummary,
+    platforms: Sequence[str],
+    ledger: dict,
+    *,
+    contract: dict | None = None,
+    env: str = DEFAULT_ENV,
+) -> tuple[list[str], list[str]]:
+    """Judge cross-platform activeness agreement. Pure: (problems, notices).
+
+    Comparison spans the *selected* platforms only — results for unselected
+    platforms are committed snapshots, not this run's (same reasoning as the
+    status-mismatch check). Activeness verdicts, like the control_diff
+    ledger, are asserted from local renders: under any other env a finding
+    is a notice, not a failure (measured 2026-08-01: attributes hold locally
+    and go inert on the CI simulator).
+    """
+    problems: list[str] = []
+    notices: list[str] = []
+    selected = list(dict.fromkeys(platforms))
+    if len(selected) < 2:
+        problems.append(
+            "--cross-effect needs at least two selected platforms — activeness "
+            f"agreement across {selected or ['(none)']} compares nothing"
+        )
+        return problems, notices
+
+    result = cross_effect_mod.measure(
+        summary.effect_scope,
+        summary.effect_verdicts,
+        selected,
+        summary.effect_enum_values,
+    )
+    verdict = cross_effect_mod.check(result, ledger, contract)
+
+    def _report(message: str) -> None:
+        if env == DEFAULT_ENV:
+            problems.append(message)
+        else:
+            notices.append(
+                message
+                + f" — activeness is asserted local-env; informational under env '{env}'"
+            )
+
+    if verdict.contract_violations:
+        shown = "; ".join(verdict.contract_violations[:5]) + (
+            " …" if len(verdict.contract_violations) > 5 else ""
+        )
+        _report(
+            f"{len(verdict.contract_violations)} semantics-contract violation(s) "
+            f"({cross_effect_mod.CONTRACT_NAME}) — fix the platform or change the "
+            f"contract, a ledger reason cannot excuse these: {shown}"
+        )
+    if verdict.contract_unverified:
+        shown = ", ".join(verdict.contract_unverified[:5]) + (
+            " …" if len(verdict.contract_unverified) > 5 else ""
+        )
+        notices.append(
+            f"{len(verdict.contract_unverified)} contract expectation(s) could not "
+            f"be verified this run (fixture not compared everywhere): {shown}"
+        )
+    if verdict.unrecorded:
+        shown = "; ".join(verdict.unrecorded[:5]) + (
+            " …" if len(verdict.unrecorded) > 5 else ""
+        )
+        _report(
+            f"{len(verdict.unrecorded)} cross-platform attribute-effect finding(s) "
+            f"not in {cross_effect_mod.LEDGER_NAME} — fix the platform or record + "
+            f"justify with `jui conformance cross-effect --update`: {shown}"
+        )
+    if verdict.stale:
+        shown = ", ".join(verdict.stale[:5]) + (" …" if len(verdict.stale) > 5 else "")
+        _report(
+            f"{len(verdict.stale)} stale {cross_effect_mod.LEDGER_NAME} entr(y/ies) — "
+            f"the measurement no longer supports them; prune with "
+            f"`jui conformance cross-effect --update`: {shown}"
+        )
+    if verdict.unverified:
+        shown = ", ".join(verdict.unverified[:5]) + (
+            " …" if len(verdict.unverified) > 5 else ""
+        )
+        notices.append(
+            f"{len(verdict.unverified)} {cross_effect_mod.LEDGER_NAME} entr(y/ies) "
+            f"could not be verified this run (fixture not compared everywhere): {shown}"
+        )
+    if verdict.ok:
+        judged = len(result.consistent) + len(result.mismatched)
+        notices.append(
+            f"cross-effect OK ({', '.join(selected)}): {judged} fixture(s) judged, "
+            f"{verdict.accepted} accepted finding(s) on ledger, "
+            f"{verdict.contract_verified} contract expectation(s) verified"
+        )
+    return problems, notices
+
+
+def judge_frame_parity(
+    conformance_dir: Path,
+    platforms: Sequence[str],
+    *,
+    results_dir: Path | None = None,
+    ledger: dict | None = None,
+    expected_hosts: frozenset[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Judge cross-platform frame parity. ``(problems, notices)``.
+
+    Fails in every env: a frame is the layout engine's geometry, which does
+    not move with the renderer's pixels the way activeness does.
+    """
+    from .report import load_platform_results, manifest_identity
+
+    problems: list[str] = []
+    notices: list[str] = []
+    conformance_dir = Path(conformance_dir)
+    selected = list(dict.fromkeys(platforms))
+    if len(selected) < 2:
+        problems.append(
+            "--frame-parity needs at least two selected platforms — frames on "
+            f"{selected or ['(none)']} alone compare nothing"
+        )
+        return problems, notices
+    manifest_path = conformance_dir / "manifest.json"
+    if not manifest_path.is_file():
+        problems.append(f"--frame-parity: manifest not found: {manifest_path}")
+        return problems, notices
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_hash, render_equivalent = manifest_identity(manifest_path, conformance_dir)
+    results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
+    results = {p: loaded[p].results for p in selected if p in loaded}
+
+    result = frame_parity_mod.measure(conformance_dir, manifest, results, selected)
+    if ledger is None:
+        ledger = frame_parity_mod.load_ledger(frame_parity_mod.ledger_path(conformance_dir))
+    verdict = frame_parity_mod.check(result, ledger)
+    hosts = frame_parity_mod.EXPECTED_FRAME_HOSTS if expected_hosts is None else expected_hosts
+
+    for p in selected:
+        wrote = result.frames_by_platform.get(p, 0)
+        missing = result.missing_by_platform.get(p, 0)
+        if p in hosts and missing:
+            problems.append(
+                f"frame parity: {p} is a declared frames host "
+                f"(frame_parity.EXPECTED_FRAME_HOSTS) and wrote no frames for {missing} "
+                f"visual fixture(s) — the driver stopped writing them, or the declaration is stale"
+            )
+        elif p not in hosts and wrote:
+            notices.append(
+                f"frame parity: {p} wrote frames for {wrote} fixture(s) but is not in "
+                "frame_parity.EXPECTED_FRAME_HOSTS — declare it so that losing them fails"
+            )
+
+    if result.fallbacks:
+        problems.append(
+            f"frame parity: {len(result.fallbacks)} id(s) read by a driver fallback, not the "
+            f"way the frames' `source` declares (Android: no TestTagElement found — a Compose "
+            f"upgrade renamed it, and the reader is back to semantics bounds): "
+            f"{'; '.join(result.fallbacks[:8])}{' …' if len(result.fallbacks) > 8 else ''}"
+        )
+    if verdict.unrecorded:
+        shown = "\n    ".join(d.table() for d in verdict.unrecorded[:10])
+        more = f"\n    … {len(verdict.unrecorded) - 10} more" if len(verdict.unrecorded) > 10 else ""
+        problems.append(
+            f"frame parity: {len(verdict.unrecorded)} id(s) drawn in different places "
+            f"(* = outlier) and not in {frame_parity_mod.LEDGER_NAME} — fix the platform, "
+            f"or record the platform idiom with a reason:\n    {shown}{more}"
+        )
+    if verdict.stale:
+        problems.append(
+            f"frame parity: {len(verdict.stale)} stale {frame_parity_mod.LEDGER_NAME} "
+            f"entr(y/ies) — the measurement no longer supports them: {'; '.join(verdict.stale[:8])}"
+        )
+    if verdict.unverified:
+        notices.append(
+            f"frame parity: {len(verdict.unverified)} {frame_parity_mod.LEDGER_NAME} "
+            f"entr(y/ies) not compared this run: {', '.join(verdict.unverified[:8])}"
+        )
+    notices.append(frame_parity_mod.summarize(result, verdict))
+    notices.extend(frame_parity_mod.not_compared_lines(result))
+    if result.fixtures_compared == 0:
+        # A requested judgment with nothing to judge fails: "OK" over an empty
+        # population is the silent pass this check exists to remove.
+        problems.append(
+            "frame parity: 0 fixtures compared — nothing was judged (see the "
+            "not-compared lines); a check that judged nothing is not a pass"
+        )
+    return problems, notices
