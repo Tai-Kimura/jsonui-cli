@@ -125,3 +125,71 @@ def test_a_type_the_body_names_is_imported_and_a_qualified_use_needs_none(tmp_pa
     nothing = tmp_path / "None.kt"
     nothing.write_text("package a\n\nclass N\n", encoding="utf-8")
     assert _ensure_impl_imports("android", nothing, ["import a.model.StubItem"], ARGS) is False
+
+
+# A file that only passes another module's names on (``export type { X } from "m"``) binds no X of its own,
+# so the name is not used here and an import of it would be unused (no-unused-vars on every build).
+# Every re-export shape, on one line, over several lines or with no semicolon; ``export * from`` names nothing.
+_REEXPORTS = (
+    'export type { StubResult } from "@/lib/stub";\n',
+    'export { StubResult } from "@/lib/stub";\n',
+    'export { StubResult as StubOther } from "@/lib/stub";\n',
+    'export { StubOther as StubResult } from "@/lib/stub";\n',
+    'export * from "@/lib/stub";\n',
+    'export * as StubResult from "@/lib/stub";\n',
+    'export type {\n  StubResult,\n  StubOther,\n} from "@/lib/stub";\n',
+    'export { StubResult } from "@/lib/stub"\n',
+    "export { StubService } from '@/lib/stub';\nexport type { StubResult, StubOther } from '@/lib/stub';\n",
+)
+_STUB_LINE = 'import type { StubResult } from "@/models/StubResult";'
+
+
+def test_a_file_that_only_re_exports_a_name_gets_no_import_of_it(tmp_path):
+    for i, src in enumerate(_REEXPORTS):
+        ts = tmp_path / f"Re{i}.ts"
+        ts.write_text(src, encoding="utf-8")
+        assert _ensure_impl_imports("web", ts, [_STUB_LINE], ARGS) is False, src
+        assert ts.read_text(encoding="utf-8") == src
+
+
+def test_a_re_exported_name_the_body_also_uses_is_still_imported(tmp_path):
+    """A re-export binds nothing locally: a body that names the type needs the import, or it does not compile."""
+    ts = tmp_path / "Both.ts"
+    src = ('export type { StubResult } from "@/lib/stub";\n\n'
+           "export class StubRepo {\n  async load(): Promise<StubResult> { throw new Error(\"\"); }\n}\n")
+    ts.write_text(src, encoding="utf-8")
+    assert _ensure_impl_imports("web", ts, [_STUB_LINE], ARGS) is True
+    assert ts.read_text(encoding="utf-8") == f"{_STUB_LINE}\n" + src
+    local = tmp_path / "Local.ts"                     # ``export { X };`` (no from) exports the file's own X
+    local.write_text("export { StubResult };\n", encoding="utf-8")
+    assert _ensure_impl_imports("web", local, [_STUB_LINE], ARGS) is True
+
+
+def test_an_ordinary_repository_still_gets_its_import(tmp_path):
+    ts = tmp_path / "Repo.ts"
+    src = ('import { ApiClient } from "@/core/network/apiClient";\n\n'
+           "export class StubRepo {\n  async load(): Promise<StubResult> { throw new Error(\"\"); }\n}\n")
+    ts.write_text(src, encoding="utf-8")
+    assert _ensure_impl_imports("web", ts, [_STUB_LINE], ARGS) is True
+    assert ts.read_text(encoding="utf-8") == src.replace(
+        'apiClient";\n', f'apiClient";\n{_STUB_LINE}\n', 1)
+    assert _ensure_impl_imports("web", ts, [_STUB_LINE], ARGS) is False
+
+
+def test_an_import_over_several_lines_or_with_no_semicolon_already_binds_the_name(tmp_path):
+    for i, head in enumerate(('import {\n  StubResult,\n} from "@/lib/stub";\n',
+                              'import { StubResult } from "@/lib/stub"\n',
+                              'import type {\n  StubOther,\n  StubResult\n} from "@/lib/stub"\n')):
+        ts = tmp_path / f"Imp{i}.ts"
+        src = head + "\nexport class StubRepo {\n  load(): StubResult { return null! }\n}\n"
+        ts.write_text(src, encoding="utf-8")
+        assert _ensure_impl_imports("web", ts, [_STUB_LINE], ARGS) is False, head
+        assert ts.read_text(encoding="utf-8") == src
+
+
+def test_kotlin_has_no_re_export_and_a_typealias_still_holds_the_name(tmp_path):
+    kt = tmp_path / "Repo.kt"
+    src = "package a.repository\n\ntypealias StubResult = a.lib.StubResult\n\nclass Repo { fun f(): StubResult = TODO() }\n"
+    kt.write_text(src, encoding="utf-8")
+    assert _ensure_impl_imports("android", kt, ["import a.model.StubResult"], ARGS) is False
+    assert kt.read_text(encoding="utf-8") == src

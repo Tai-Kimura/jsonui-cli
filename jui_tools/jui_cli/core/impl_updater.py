@@ -213,10 +213,24 @@ _TS_IMPORT_LINE_RE = re.compile(r"^import[^\n]*;[ \t]*$", re.MULTILINE)
 _TS_NAMED_IMPORT_RE = re.compile(r"^import\s+(?:type\s+)?\{\s*([A-Za-z_$][\w$]*)\s*\}")
 
 
+# One TypeScript import statement, over several lines or with no semicolon:
+# ``import X, { A, B as C } from "m"``, ``import * as N from "m"``, ``import "m"``.
+_TS_IMPORT_STMT_RE = re.compile(
+    r"""^[ \t]*import\s+(?:type\s+)?(?:[\w$]+\s*,?\s*)?(?:\{[^}]*\}|\*\s*as\s+[\w$]+)?\s*(?:from\s*)?["'][^"'\n]*["'][ \t]*;?""",
+    re.MULTILINE)
+
+# One TypeScript re-export, over several lines or with no semicolon:
+# ``export { A, B as C } from "m"``, ``export type { A } from "m"``, ``export * (as N) from "m"``.
+# It binds nothing in the file: a name it lists is neither imported nor used here.
+_TS_REEXPORT_STMT_RE = re.compile(
+    r"""^[ \t]*export\s+(?:type\s+)?(?:\{[^}]*\}|\*(?:\s*as\s+[\w$]+)?)\s*from\s*["'][^"'\n]*["'][ \t]*;?""",
+    re.MULTILINE)
+
+
 def _ts_has_name(source: str, name: str) -> bool:
     """The file already imports or declares *name* (any module, any form)."""
     word = re.compile(rf"\b{re.escape(name)}\b")
-    imports = "\n".join(m.group(0) for m in re.finditer(r"^import[^;]*;", source, re.MULTILINE))
+    imports = "\n".join(m.group(0) for m in _TS_IMPORT_STMT_RE.finditer(source))
     declared = re.search(rf"^\s*(?:export\s+)?(?:declare\s+)?(?:interface|type|class|enum)\s+{re.escape(name)}\b",
                          source, re.MULTILINE)
     return bool(word.search(imports) or declared)
@@ -255,11 +269,15 @@ _LINE_COMMENT_RE = re.compile(r"//[^\n]*")
 
 def name_used_in_body(source: str, name: str) -> bool:
     """*name* appears as a word in the file outside its ``package`` / ``import``
-    lines and its comments: an import for it would be used. An old Impl may hold
+    lines, its comments and its TypeScript re-exports: an import for it would be used. An old Impl may hold
     only some of the spec's methods, and an import for a type no method of the
     file names is an unused import the author's linter reports."""
     body = _BLOCK_COMMENT_RE.sub(" ", source)
     body = _LINE_COMMENT_RE.sub(" ", body)
+    # A TypeScript import or re-export statement may run over several lines; a
+    # re-export (``export type { X } from "m"``) names X without using it here.
+    body = _TS_IMPORT_STMT_RE.sub(" ", body)
+    body = _TS_REEXPORT_STMT_RE.sub(" ", body)
     body = "\n".join(line for line in body.splitlines()
                      if not re.match(r"^\s*(?:import|package)\b", line))
     return re.search(rf"(?<![\w$.]){re.escape(name)}(?![\w$])", body) is not None
