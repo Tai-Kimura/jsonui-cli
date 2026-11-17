@@ -127,10 +127,32 @@ function sfFlowHTML(s) {
     + (note ? `<p class="sf-why">${esc(note)}</p>` : '')
     + (Number(s.toldAt) > 0 ? `<p class="dev-note">${esc(tl('sf.flow.told', { at: sfClock(s.toldAt), n: Number(s.told) || 0 }))}</p>` : '')
     + (by.length ? `<ul class="sf-bins">${binsHTML}</ul>` : '')
-    + (recent.length ? `<ol class="sf-msgs">${rowsHTML}</ol>` : `<p class="sf-none">${esc(tl('sf.flow.none'))}</p>`);
+    + (recent.length ? `<ol class="sf-msgs">${rowsHTML}</ol>` : `<p class="sf-none">${esc(tl('sf.flow.none'))}</p>`)
+    + sfUnsortedHTML(a);
+}
+/* What the router could not decide (_unsorted/): its own list, closed under a line that says how many. Each row says
+   what the router guessed and how sure it was, or that it only followed its thread's first message. */
+function sfUnsortedHTML(a) {
+  const n = Number(a.unsorted) || 0, rows = Array.isArray(a.unsortedRecent) ? a.unsortedRecent : [];
+  if (!n) return '';
+  const pct = (c) => (typeof c === 'number' ? `${Math.round(c * 100)}%` : '?');
+  const why = (r) => (r.followed ? tl('sf.unsorted.followed', { guess: String(r.guess || '?'), sure: pct(r.confidence) })
+    : tl('sf.unsorted.guess', { guess: String(r.guess || '?'), sure: pct(r.confidence) }));
+  const rowsHTML = rows.map((r) => `<li class="sf-msg" data-sf-msg="${esc(String(r.path || ''))}"><span class="sf-to sf-to-none">${esc(tl('sf.unsorted.tag'))}</span>`
+    + `<span class="sf-from">${esc(String(r.channel || ''))} · ${esc(String(r.user || ''))}</span>`
+    + (r.broken ? '' : `<span class="sf-why-row">${esc(why(r))}</span>`)
+    + `<span class="sf-head">${esc(r.broken ? tl('sf.flow.broken') : String(r.head || ''))}</span></li>`).join('');
+  return `<details class="sf-unsorted"><summary>${esc(tl('sf.unsorted.summary', { n }))}</summary>`
+    + `<p class="dev-note">${esc(tl('sf.unsorted.note', { shown: rows.length, n }))}</p>`
+    + `<ol class="sf-msgs">${rowsHTML}</ol></details>`;
 }
 function sfRenderFlow(s) {
+  // the not-sorted list stays open when a new arrival draws the panel again
+  const was = $('sf-flow-body').querySelector('details.sf-unsorted');
+  const open = !!(was && was.open);
   keyed($('sf-flow-body'), JSON.stringify([s.arrivals, s.note, s.toldAt, s.told]), () => sfFlowHTML(s));
+  const now = $('sf-flow-body').querySelector('details.sf-unsorted');
+  if (now && open) now.open = true;
   sfRenderIntake();
 }
 /* Stage 1's own state (the slice slack, slack/intake.py): the last and the next fetch, one running, why it cannot run;

@@ -4,7 +4,8 @@ on the page only what it sorts, a way to tell it something, and the task board (
 
 What it reads, all under ``<orchestrationDir>`` (``slack.json``'s, default ~/slack-orchestration; stage 1 writes it):
   * ``projects/<projectId>/<ts>-<workspace>-<channel>.json`` — a message sorted to a project, already filtered;
-  * ``_unsorted/`` — only counted;
+  * ``_unsorted/`` — what the router could not decide: counted, and shown in a list of its own (the router's guess,
+    and whether it only followed its thread's first message); never told to the robot, never a task's source;
   * ``tasks/<taskId>.json`` — the task-making robot writes them (the §7 shape), this module changes the status fields.
 What it writes:
   * ``tasks/<taskId>.json`` — the note's edits from the board, and status / startedAt / endedAt / doneAt / target;
@@ -379,7 +380,7 @@ class Scanner:
         return value
 
     def scan(self, root: Path) -> dict:
-        out: dict = {"exists": root.is_dir(), "arrivals": [], "tasks": [], "unsorted": 0, "broken": 0}
+        out: dict = {"exists": root.is_dir(), "arrivals": [], "tasks": [], "unsorted": 0, "unsortedRows": [], "broken": 0}
         if not out["exists"]:
             return out
         seen: set[str] = set()
@@ -409,7 +410,30 @@ class Scanner:
                     out["arrivals"].append(row)
                     out["broken"] += 1 if row.get("broken") else 0
         unsorted = root / "_unsorted"
-        out["unsorted"] = sum(1 for f in unsorted.glob("*.json")) if unsorted.is_dir() else 0
+        for f in unsorted.glob("*.json") if unsorted.is_dir() else []:
+            if f.name.startswith("."):
+                continue
+            seen.add(str(f))
+
+            def read_unsorted(path, st, rel=f"_unsorted/{f.name}"):
+                data = _read_small(path, st)
+                row = {"path": rel, "mtime": int(st.st_mtime * 1000)}
+                if data is None:
+                    return {**row, "broken": True}
+                router = data.get("router") if isinstance(data.get("router"), dict) else {}
+                conf = router.get("confidence")
+                return {**row, "channel": str(data.get("channel") or ""), "user": str(data.get("user") or ""),
+                        "ts": str(data.get("ts") or ""), "head": _head(plain_text(data)),
+                        "permalink": str(data.get("permalink") or ""),
+                        "guess": str(router.get("choice") or ""),
+                        "confidence": conf if isinstance(conf, (int, float)) and not isinstance(conf, bool) else None,
+                        # intake: a reply goes where its thread's first message went, without the router
+                        "followed": router.get("adapter") == "thread"}
+            row = self._cached(f, read_unsorted)
+            if row:
+                out["unsortedRows"].append(row)
+        out["unsortedRows"].sort(key=lambda r: (r["mtime"], r["path"]))
+        out["unsorted"] = len(out["unsortedRows"])
         tasks = root / "tasks"
         for f in tasks.glob("*.json") if tasks.is_dir() else []:
             if f.name.startswith(".") or not TASK_ID.match(f.stem):
@@ -440,7 +464,7 @@ class SlackRoom:
         self.cfg: dict = {}
         self.cfg_why: str | None = "missing"
         self.root: Path = factory_dir({})
-        self.scanned: dict = {"exists": False, "arrivals": [], "tasks": [], "unsorted": 0, "broken": 0}
+        self.scanned: dict = {"exists": False, "arrivals": [], "tasks": [], "unsorted": 0, "unsortedRows": [], "broken": 0}
         # started: tasks 開始 sent (only these are followed); forwarded: a reply's path -> {task, at, state} (forward_replies)
         self.board: dict = {"notified": [], "sawBusy": {}, "started": {}, "forwarded": {}}
         self.held: set[str] = set()      # replies waiting to go to their session: the robot is not told of them
@@ -991,7 +1015,8 @@ class SlackRoom:
             "dir": tilde(str(self.root)), "dirExists": self.scanned["exists"],
             "robot": robot, "robotLaunch": with_home(with_name(f"cd {_sh(tilde(str(self.root)))} && {LAUNCH_COMMAND}", self.robot_name())), "launch": with_home(LAUNCH_COMMAND),
             "arrivals": {"total": len(arrivals), "byProject": by_project, "unsorted": self.scanned["unsorted"],
-                         "broken": self.scanned["broken"], "pending": len(self.pending()), "recent": arrivals[-RECENT_MAX:][::-1]},
+                         "broken": self.scanned["broken"], "pending": len(self.pending()), "recent": arrivals[-RECENT_MAX:][::-1],
+                         "unsortedRecent": self.scanned["unsortedRows"][-RECENT_MAX:][::-1]},
             "toldAt": self.last_told_at, "told": len(self.last_told), "note": home_to_tilde(self.note),
             "tasks": tasks, "sourceHeads": heads, "targets": [dict(t, cwd=tilde(str(t["cwd"]))) for t in self.targets()],
             "prompts": prompts_of(self.cfg),

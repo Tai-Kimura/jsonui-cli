@@ -1189,3 +1189,29 @@ def test_the_note_for_a_reply_that_could_not_go_stays_short(lang, key):
     said = table["sf.note.forward_failed"].replace("{n}", "99").replace("{why}", table[f"sf.forward.why.{key}"])
     assert "{" not in said and table[f"sf.forward.why.{key}"] in said
     assert len(said) < 60, said
+
+
+def test_the_not_sorted_are_listed_with_the_routers_guess_and_never_told(home, factory):
+    """_unsorted/ (what the router could not decide) is shown, not only counted: each row with the router's guess and
+    how sure it was, or that it only followed its thread's first message; newest first; never a pending arrival."""
+    world = FakeWorld()
+    world.add("bot", "~/orch", label="a1")
+    message(factory, "shop", "1-w-C1.json", text="sorted")
+    un = factory / "_unsorted"
+    un.mkdir()
+    (un / "10-w-C9.json").write_text(json.dumps({"channel": "C9", "user": "U7", "ts": "10", "text": "a  weak\nguess",
+                                                 "router": {"adapter": "jev", "choice": "shop", "confidence": 0.42}}))
+    (un / "11-w-C9.json").write_text(json.dumps({"channel": "C9", "user": "U7", "ts": "11", "text": "```\ncode\n```",
+                                                 "router": {"adapter": "thread", "choice": "shop", "confidence": 0.42}}))
+    (un / "12-w-C9.json").write_text("{broken")
+    (un / ".tmp-x.json").write_text("{}")                       # a write in progress: not a message
+    os.utime(un / "10-w-C9.json", (1, 1)); os.utime(un / "11-w-C9.json", (2, 2)); os.utime(un / "12-w-C9.json", (3, 3))
+    room = room_for(world)
+    a = room.slice()["arrivals"]
+    assert a["unsorted"] == 3 and a["total"] == 1
+    rows = a["unsortedRecent"]
+    assert [r["path"] for r in rows] == ["_unsorted/12-w-C9.json", "_unsorted/11-w-C9.json", "_unsorted/10-w-C9.json"]
+    assert rows[0]["broken"] is True
+    assert {k: rows[1][k] for k in ("guess", "confidence", "followed", "head")} == {"guess": "shop", "confidence": 0.42, "followed": True, "head": "``` code ```"}
+    assert {k: rows[2][k] for k in ("guess", "confidence", "followed", "head")} == {"guess": "shop", "confidence": 0.42, "followed": False, "head": "a weak guess"}
+    assert room.pending() == ["projects/shop/1-w-C1.json"]       # the robot is told of the sorted one only

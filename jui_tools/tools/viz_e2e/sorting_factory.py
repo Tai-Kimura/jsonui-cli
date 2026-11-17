@@ -7,6 +7,8 @@ Sessions: BOT (cwd in the folder: the factory's robot), DEV (a project's, starte
 naming no channel); each "process" a sleeping python whose argv carries the flags, named by a session file.
 Checked:
   * the header's Slack button, after デバイス, its count the tasks waiting on a person; the demo page has none;
+  * what the router could not decide (_unsorted/): closed under its count; opened, each row with the router's guess
+    and how sure, or that it followed its thread's first message; still open after a new arrival draws the panel;
   * the robot's room is no floor's (the rooms the 3D has) and BOT is the factory's robot;
   * the room over the whole page (the floors' 3D not drawn under it): the 3D with the robot and a bin per project, the
     robot's line, what was sorted, the whiteboard's six lanes (やり取り中 first) with each note in its lane;
@@ -221,7 +223,15 @@ async def run_sorting_factory(pw, out, failures):
     orch = home / "a-long-folder-for-the-orchestration-of-the-slack-intake" / "slack-orchestration"
     (orch / "tasks").mkdir(parents=True, exist_ok=True)
     (orch / "_unsorted").mkdir(exist_ok=True)
-    (orch / "_unsorted" / "1793500100-examplews-C9.json").write_text("{}")
+    # what the router could not decide: one it guessed too weakly, and a reply that only followed its thread's first message
+    for name, text, router in (
+            ("1793500100-examplews-C9.json", "請求書の PDF の出力が遅い件、手元のログを貼ります",
+             {"adapter": "haiku", "choice": "booking", "confidence": 0.42}),
+            ("1793500160-examplews-C9.json", "```\nERROR export timed out after 30s\n  at render (pdf.js:120)\n```",
+             {"adapter": "thread", "choice": "booking", "confidence": 0.42})):
+        ts = name.split("-")[0]
+        (orch / "_unsorted" / name).write_text(json.dumps({"workspace": "examplews", "channel": "C9", "user": "U7", "ts": ts, "threadTs": "1793500100",
+                                                           "text": text, "permalink": "", "removedFiles": 0, "redactions": 0, "router": router}, ensure_ascii=False))
     cwds = {BOT: str(orch), DEV: "/work/shop-app", PLAIN: "/work/booking-site"}
     (state / "slack.json").write_text(json.dumps({
         # manual only and no workspace: stage 1's fetch (今すぐ取る) runs and reaches nothing outside
@@ -382,8 +392,21 @@ async def run_sorting_factory(pw, out, failures):
           seen: ['sf-canvas', 'sf-wb', 'sf-say'].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 30));
             return !!e && (e.id === id || !!e.closest('#' + id)); }) })""")
         check(texts["lanes"] == [T(f"sf.lane.{k}") for k in ("talking", "draft", "ready", "working", "ended", "done")], f"the lanes: {texts['lanes']}")
-        check(T("sf.flow.counts", total=5, pending=0, unsorted=1) in texts["flow"] and "カートの合計金額" in texts["flow"] and bot in texts["robot"],
+        check(T("sf.flow.counts", total=5, pending=0, unsorted=2) in texts["flow"] and "カートの合計金額" in texts["flow"] and bot in texts["robot"],
               f"what was sorted and the robot: {texts['flow'][:200]} / {texts['robot']}")
+        # the not sorted (_unsorted/): closed under its count; opened, each row says what the router guessed and how sure,
+        # or that it only followed its thread's first message; the body as written; none of them a bin, a belt or a task
+        uns = res["unsorted"] = await page.evaluate("""() => { const d = document.querySelector('#sf-flow-body details.sf-unsorted');
+          if (!d) return null; const closed = !d.open; d.open = true;
+          return { closed, summary: d.querySelector('summary').textContent, rows: [...d.querySelectorAll('.sf-msg')].map((r) => ({
+            path: r.dataset.sfMsg, tag: r.querySelector('.sf-to').textContent, why: (r.querySelector('.sf-why-row') || {}).textContent, head: r.querySelector('.sf-head').textContent })) }; }""")
+        check(uns and uns["closed"] and uns["summary"] == T("sf.unsorted.summary", n=2)
+              and [(r["path"], r["tag"], r["why"]) for r in uns["rows"]] == [
+                  ("_unsorted/1793500160-examplews-C9.json", T("sf.unsorted.tag"), T("sf.unsorted.followed", guess="booking", sure="42%")),
+                  ("_unsorted/1793500100-examplews-C9.json", T("sf.unsorted.tag"), T("sf.unsorted.guess", guess="booking", sure="42%"))]
+              and uns["rows"][0]["head"].startswith("``` ERROR export timed out") and uns["rows"][1]["head"] == "請求書の PDF の出力が遅い件、手元のログを貼ります",
+              f"the not sorted, newest first, each with its reason: {uns}")
+        await page.evaluate("() => { document.querySelector('#sf-flow-body details.sf-unsorted').open = false; }")
         # the robot's session named as its start command names it (claude -n, the room's name by default): the box shows it
         rname = res["robot-name"] = await page.evaluate("() => (document.querySelector('#sf-robot .sf-robot-name') || {}).textContent")
         check(rname == T("page.sf.title"), f"the robot's session name on its line: {rname!r}")
@@ -617,6 +640,17 @@ async def run_sorting_factory(pw, out, failures):
         check(tb2["fetchSeen"] and tb2["fetchTop"] == tb0["fetchTop"], f"the fetch bar does not scroll away with the pane: {tb2}")
         await page.evaluate("() => { document.getElementById('sf-pane-flow').scrollTop = 0; }")
         await shot(page, "slack-room-tab-flow", out, failures)
+        # the not sorted opened on the flow tab: in the pane, nothing sideways
+        await page.click("#sf-flow-body details.sf-unsorted > summary")
+        await page.evaluate("() => document.querySelector('#sf-flow-body details.sf-unsorted').scrollIntoView({ block: 'start' })")
+        await page.wait_for_timeout(300)
+        un2 = res["unsorted-on-tab"] = await page.evaluate("""() => { const d = document.querySelector('#sf-flow-body details.sf-unsorted'), p = document.getElementById('sf-pane-flow').getBoundingClientRect();
+          const rows = [...d.querySelectorAll('.sf-msg')].map((r) => r.getBoundingClientRect());
+          return { open: d.open, rows: rows.length, inside: rows.every((r) => r.left >= p.left - 1 && r.right <= p.right + 1 && r.height > 0) }; }""")
+        check(un2["open"] and un2["rows"] == 2 and un2["inside"], f"the not sorted opened by its line, its rows in the pane: {un2}")
+        await shot(page, "slack-room-unsorted", out, failures)
+        await page.click("#sf-flow-body details.sf-unsorted > summary")
+        await page.evaluate("() => { document.getElementById('sf-pane-flow').scrollTop = 0; document.getElementById('sf-flow-h').focus(); }")
         await page.keyboard.press("ArrowLeft")                                          # the tabs' own arrows (focus on the tab)
         check((await page.evaluate(TABS))["selected"] == ["talk"], "← on the tabs goes to the other tab")
         # the connector's warning (2026-11-02-viz-slack-connector-mode-note-not-shown-in-room): shown while mode is connector
@@ -662,6 +696,7 @@ async def run_sorting_factory(pw, out, failures):
         # a message comes: the robot is told of it, a parcel rides the belt
         hook(BOT, hook_event_name="UserPromptSubmit", prompt="x")
         hook(BOT, hook_event_name="Stop")
+        await page.evaluate("() => { document.querySelector('#sf-flow-body details.sf-unsorted').open = true; }")
         m4 = message(orch, "shop", "1793500004-examplews-C1.json", "商品詳細の画像が出ない")
         await wait(page, "() => window.__dbg.sfState().parcels.length > 0", timeout=15000, label="a parcel on its way")
         told = poll(channels[BOT])
@@ -676,6 +711,11 @@ async def run_sorting_factory(pw, out, failures):
         await stage_shot(page, "slack-room-doing-carry", out, failures)
         await wait(page, "() => window.__dbg.sfState().parcels.length === 0 && window.__dbg.sfState().bins.find((b) => b.project === 'shop').n === 3",
                    timeout=20000, label="the parcel in shop's bin")
+        kept = res["unsorted-kept-open"] = await page.evaluate("""() => { const d = document.querySelector('#sf-flow-body details.sf-unsorted');
+          return { open: !!(d && d.open), counts: document.querySelector('#sf-flow-body .sf-counts').textContent }; }""")
+        check(kept["open"] and kept["counts"] == T("sf.flow.counts", total=6, pending=0, unsorted=2),
+              f"the not-sorted list stays open while a new arrival draws the panel again: {kept}")
+        await page.evaluate("() => { document.querySelector('#sf-flow-body details.sf-unsorted').open = false; }")
         await doing_arms(page, orch, out, failures, res, check)
 
         # what is typed on a draft is kept

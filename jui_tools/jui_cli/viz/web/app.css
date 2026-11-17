@@ -2052,6 +2052,11 @@ body.sd-on { overflow: hidden; }
 .sf-msg .sf-head { grid-column: 1 / -1; color: var(--ink); overflow-wrap: anywhere; }
 .sf-from { color: var(--ink-soft); font: 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
 .sf-to { display: inline-block; padding: 0 6px; border: 2px solid; border-radius: 4px; font: 700 11px/1.5 var(--font-mono); }
+/* _unsorted/: closed under its count; the tag dashed in the soft ink, the router's guess on its own line */
+.sf-unsorted { margin: 8px 0 0; }
+.sf-unsorted > summary { cursor: pointer; font-weight: 700; color: var(--ink); }
+.sf-to-none { border-style: dashed; border-color: var(--ink-soft); color: var(--ink-soft); }
+.sf-msg .sf-why-row { grid-column: 1 / -1; color: var(--ink-soft); font-size: 12px; overflow-wrap: anywhere; }
 /* the whiteboard: an aluminium frame, five lanes headed in marker, the notes pinned with a magnet */
 .sf-board { min-width: 0; min-height: 0; overflow: auto; padding: 10px 14px; background: var(--bg); }
 .sf-wb { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 0; min-height: calc(100% - 40px); padding: 10px 6px; border: 10px solid var(--sf-frame); border-radius: 8px;
