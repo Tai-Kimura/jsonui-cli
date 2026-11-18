@@ -1195,6 +1195,32 @@
       "reason": "font line-height metrics: no SSoT line-height rule — triage L"
     },
     {
+      "fixture": "Label/fontSize__static_long",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
+      "fixture": "Label/fontSize__static_long_with_partial",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "font line-height metrics: no SSoT line-height rule — triage L"
+    },
+    {
       "fixture": "Label/fontWeight__600",
       "id": "target",
       "outliers": [
@@ -1262,6 +1288,17 @@
     },
     {
       "fixture": "Label/highlightAttributes__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "the highlight's lineHeightMultiple 1.5 on L at its own fontSize 24 (ruling B): android 31.2 x 1.5 on the pixel grid (47), web 32 x 1.5 (48); iOS keeps the first line at L (28.67), pinned narrowly by the iOS lineHeightMultiple ruling"
+    },
+    {
+      "fixture": "Label/highlightAttributes__static_with_partial",
       "id": "target",
       "outliers": [
         "ios"
@@ -1479,6 +1516,17 @@
     },
     {
       "fixture": "Label/lineSpacing__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "five lines with lineSpacing 16 between them only (ruling B, lineSpacingBetween): 5 L + 4 x 16 = ios 165.67 / android and web 184; ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/lineSpacing__static_with_partial",
       "id": "target",
       "outliers": [
         "ios"
@@ -5304,6 +5352,17 @@
       "reason": "the same five wrapped lines with a colour range (the with_partial control, 2.5.52): five wrapped lines: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "__control/Label__partialAttributes-5561bca6_text-Sample-text-that-wraps",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "__control/Label__root.textScale-2.0",
       "id": "target",
       "outliers": [
@@ -5348,6 +5407,17 @@
         "height"
       ],
       "reason": "the linkable text without linkable: each OS's own line-break opportunities (see Label/linkable__*); ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label__text-Sample-text-that-wraps",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
       "fixture": "__control/Label__wrap-max",

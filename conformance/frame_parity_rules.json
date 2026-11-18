@@ -742,7 +742,7 @@
       "reason": "five lines with lineSpacing 16 between them only (ruling B, lineSpacingBetween): 5 L + 4 x 16 = ios 165.67 / android and web 184; ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
-      "fixture": "Label/highlightAttributes__static",
+      "fixture": "Label/highlightAttributes__static*",
       "id": "target",
       "fields": [
         "height"
