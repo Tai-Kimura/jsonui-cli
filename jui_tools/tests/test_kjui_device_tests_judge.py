@@ -526,3 +526,26 @@ class KjuiDeviceTestsNamedClasses(unittest.TestCase):
         self.assertEqual("library\tcom.example.ATest\nlibrary-dynamic\tcom.example.BTest\n", out.getvalue())
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(2, K.main(["select", str(self.tree.root), "NoSuchTest"]))
+
+
+class KjuiDeviceTestsNamedClassesLoop(unittest.TestCase):
+    """The shell runs one gradle per named module. Read on stdin, the first gradle
+    took the rest of the list and the second module never ran (run 44391822580:
+    library-dynamic ran, library did not). The list is read on fd 3; this runs
+    the script's own loop with a stand-in that drains stdin, as gradle does."""
+
+    def test_every_named_module_runs_although_the_command_reads_stdin(self):
+        import re
+        import subprocess
+        script = (REPO_ROOT / ".github" / "scripts" / "kjui_device_tests.sh").read_text(encoding="utf-8")
+        loop = re.search(r"\n(  while IFS=\$'\\t' read -r module classes.*?\n  done [^\n]*)\n", script, re.S)
+        self.assertIsNotNone(loop, "the per-module loop is not where this test looks")
+        body = loop.group(1)
+        body = re.sub(r"\(cd \"\$kjui\".*?\) \|\| rcm=\$\?", 'cat >/dev/null; echo "ran $module"', body, flags=re.S)
+        prog = ("selected=$(printf 'library-dynamic\\tx.A\\nlibrary\\tx.B')\nrc=0\n"
+                f"{body}\n")
+        out = subprocess.run(["bash", "-c", prog], input="stdin the command reads\n" * 50,
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assertEqual(["ran library-dynamic", "ran library"],
+                         [l for l in out.stdout.splitlines() if l.startswith("ran ")])

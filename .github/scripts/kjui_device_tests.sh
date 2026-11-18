@@ -120,7 +120,7 @@ selected=""
 if [ -n "${KJUI_TEST_CLASSES:-}" ]; then
   selected=$(python3 "$here/kjui_device_tests.py" select "$kjui" "$KJUI_TEST_CLASSES") || exit 2
   echo "named classes only (android_test_classes=$KJUI_TEST_CLASSES):"
-  printf '  %s\n' "$selected"
+  while IFS= read -r line; do echo "  $line"; done <<<"$selected"
 fi
 not_class=$(python3 "$here/kjui_device_tests.py" not-class "$kjui") || exit 2
 [ -z "$selected" ] && echo "left out of this invocation (another job runs it, or the second invocation below): $not_class"
@@ -139,8 +139,11 @@ rc=0
 if [ -n "$selected" ]; then
   # One invocation per module that holds a named class, with that module's
   # `class` argument (a per-module filter: another module's instrumentation
-  # would fail on a class its APK does not hold).
-  while IFS=$'\t' read -r module classes; do
+  # would fail on a class its APK does not hold). The list is read on fd 3:
+  # on stdin, the first gradle took the rest of it, and the second module never
+  # ran (run 44391822580: library-dynamic ran, library did not, the judge said
+  # NOT RUN).
+  while IFS=$'\t' read -r module classes <&3; do
     [ -n "$module" ] || continue
     rcm=0
     (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
@@ -151,7 +154,7 @@ if [ -n "$selected" ]; then
       ${args[@]+"${args[@]}"}) || rcm=$?
     echo "gradle exit ($module): $rcm$([ "$rcm" = 124 ] && echo ' (stopped by the watch: the cases stopped moving)')"
     [ "$rcm" = 0 ] || rc=$rcm
-  done <<<"$selected"
+  done 3<<<"$selected"
 else
 (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
   --idle "${KJUI_IDLE_SECONDS:-600}" --focus "${KJUI_FOCUS_SECONDS:-15}" --evidence "$evidence" -- \
