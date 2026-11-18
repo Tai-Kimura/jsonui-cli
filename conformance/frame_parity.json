@@ -1030,7 +1030,20 @@
       "fields": [
         "height"
       ],
-      "reason": "line height only: the (1) defect (Android forcing one line and shrinking) is fixed in KotlinJsonUI 2.43.5; the remaining 96 vs 120 is the height of the same four wrapped lines by each face's font metrics (family L)"
+      "reason": "each face wraps the text by its own font metrics, ruling 5 (user, 2026-10-05): ios five lines (108.33, SF 17pt with its 1.67 leading), android four lines of 24 (autoSize draws at its 14sp ceiling and keeps the 24 line, KotlinJsonUI 2.64.0 LabelLineHeight.shrinking), web five lines of 24 (CSS does not shrink); a partial Label is the same Label (_with_partial, 2.5.52). Through SwiftJsonUI 10.45.1 / jsonui-cli 2.5.51 iOS forced one shrunk line (an implicit lineLimit 1), and before KotlinJsonUI 2.43.5 Android did"
+    },
+    {
+      "fixture": "Label/autoShrink__true_with_partial",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "each face wraps the text by its own font metrics, ruling 5 (user, 2026-10-05): ios five lines (108.33, SF 17pt with its 1.67 leading), android four lines of 24 (autoSize draws at its 14sp ceiling and keeps the 24 line, KotlinJsonUI 2.64.0 LabelLineHeight.shrinking), web five lines of 24 (CSS does not shrink); a partial Label is the same Label (_with_partial, 2.5.52). Through SwiftJsonUI 10.45.1 / jsonui-cli 2.5.51 iOS forced one shrunk line (an implicit lineLimit 1), and before KotlinJsonUI 2.43.5 Android did"
     },
     {
       "fixture": "Label/disabledFontColor__binding",
@@ -1055,7 +1068,29 @@
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "Label/disabledFontColor__static_with_partial",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "Label/edgeInset__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one line plus the declared 8 + 8 inset: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/edgeInset__static_with_partial",
       "id": "target",
       "outliers": [
         "ios"
@@ -1259,6 +1294,17 @@
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "Label/highlightColor__static_with_partial",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "Label/hintAttributes__static",
       "id": "target",
       "outliers": [
@@ -1366,6 +1412,17 @@
       "reason": "five wrapped lines (lineBreakMode does not cap the count; lineBreakModeLines ruling): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "Label/lineBreakMode__tail_with_partial",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "five wrapped lines (lineBreakMode does not cap the count; lineBreakModeLines ruling): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "Label/lineBreakMode__word",
       "id": "target",
       "outliers": [
@@ -1389,6 +1446,17 @@
     },
     {
       "fixture": "Label/lineHeightMultiple__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "iOS draws no multiple on the first line (SwiftUI has no per-line height; 2026-10-05 user instruction, attribute_semantics lineHeightMultipleBase): five lines of L 20.33 at m 1.8 are L + 4 x m x L = 166.71, (m - 1) x L = 16.27 short of 5 x m x L. Android draws each line on the pixel grid (KotlinJsonUI LabelLineHeight: 43.2 dp is 86.4 px, drawn 86 at density 2 on conf_ci and the CI pixel_tablet), 0.2 short a line: 215.0 for five. Web draws the declared 5 x m x L = 216.0. All three are pinned (naming two would leave the third compared with nothing): any other height on any face is refused"
+    },
+    {
+      "fixture": "Label/lineHeightMultiple__static_with_partial",
       "id": "target",
       "outliers": [
         "ios"
@@ -1433,6 +1501,17 @@
     },
     {
       "fixture": "Label/lines__static",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "two lines (lines: 2): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/lines__static_with_partial",
       "id": "target",
       "outliers": [
         "ios"
@@ -1599,6 +1678,17 @@
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "Label/strikethrough__true_with_partial",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "Label/textAlign__binding",
       "id": "target",
       "outliers": [
@@ -1687,6 +1777,17 @@
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "Label/textShadow__static_with_partial",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "Label/underline__double",
       "id": "target",
       "outliers": [
@@ -1710,6 +1811,17 @@
     },
     {
       "fixture": "Label/underline__styled",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "a styled underline: iOS measured 22.33, 2 more than its plain line (the mechanism is not identified); ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/underline__styled_with_partial",
       "id": "target",
       "outliers": [
         "ios"
@@ -5102,6 +5214,17 @@
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "__control/Label__enabled-False_partialAttributes-5561bca6",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "__control/Label__highlightAttributes-cb049517",
       "id": "target",
       "outliers": [
@@ -5157,6 +5280,28 @@
         "height"
       ],
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label__partialAttributes-5561bca6_selected-True",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label__partialAttributes-5561bca6_text-1d8efd05",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "the same five wrapped lines with a colour range (the with_partial control, 2.5.52): five wrapped lines: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
       "fixture": "__control/Label__root.textScale-2.0",

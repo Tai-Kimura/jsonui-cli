@@ -471,12 +471,23 @@
       "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
     },
     {
-      "fixture": "Label/autoShrink__true",
+      "fixture": "Label/autoShrink__true*",
       "id": "target",
       "fields": [
         "height"
       ],
-      "reason": "line height only: the (1) defect (Android forcing one line and shrinking) is fixed in KotlinJsonUI 2.43.5; the remaining 96 vs 120 is the height of the same four wrapped lines by each face's font metrics (family L)"
+      "reason": "each face wraps the text by its own font metrics, ruling 5 (user, 2026-10-05): ios five lines (108.33, SF 17pt with its 1.67 leading), android four lines of 24 (autoSize draws at its 14sp ceiling and keeps the 24 line, KotlinJsonUI 2.64.0 LabelLineHeight.shrinking), web five lines of 24 (CSS does not shrink); a partial Label is the same Label (_with_partial, 2.5.52). Through SwiftJsonUI 10.45.1 / jsonui-cli 2.5.51 iOS forced one shrunk line (an implicit lineLimit 1), and before KotlinJsonUI 2.43.5 Android did",
+      "expected": {
+        "ios": {
+          "height": 108.33
+        },
+        "android": {
+          "height": 96
+        },
+        "web": {
+          "height": 120
+        }
+      }
     },
     {
       "fixture": "Label/fontSize__*",
@@ -560,7 +571,7 @@
       "reason": "a declared font family's own line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
-      "fixture": "Label/underline__styled",
+      "fixture": "Label/underline__styled*",
       "id": "target",
       "fields": [
         "height"
@@ -579,7 +590,7 @@
       "reason": "a styled underline: iOS measured 22.33, 2 more than its plain line (the mechanism is not identified); ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
-      "fixture": "Label/edgeInset__static",
+      "fixture": "Label/edgeInset__static*",
       "id": "target",
       "fields": [
         "height"
@@ -672,6 +683,25 @@
         }
       },
       "reason": "five wrapped lines: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/Label__partialAttributes-5561bca6_text-1d8efd05",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 108.33
+        },
+        "android": {
+          "height": 120
+        },
+        "web": {
+          "height": 120
+        }
+      },
+      "reason": "the same five wrapped lines with a colour range (the with_partial control, 2.5.52): five wrapped lines: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
       "fixture": "common/maxWidth__wrap",
