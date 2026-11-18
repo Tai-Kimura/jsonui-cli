@@ -315,6 +315,8 @@ module KjuiTools
             style_parts << "lineHeight = #{theme_line_height}"
           end
 
+          shrink_line_height!(style_parts, json_data, required_imports, drawn_size)
+
           if style_parts.any?
             # LocalTextStyle.current.copy, never a bare TextStyle(): the bare
             # one discards the Material defaults (letterSpacing 0.5sp among
@@ -981,6 +983,23 @@ module KjuiTools
           end
         end
 
+        # Under autoShrink / minimumScaleFactor the line follows the glyphs TextAutoSize shrinks (ticket
+        # kjui-autoshrink-keeps-the-line-height): Compose shrinks the font size only, so a line height in sp — the
+        # theme's 24sp, fontSize x 1.3, a lineHeightMultiple — stayed and a bounded Label fitted fewer shrunk lines
+        # than web (the autoShrink canon). KotlinJsonUI's LabelLineHeight.shrinking turns it into a share of the size
+        # drawn (em), the same height unshrunk; the dynamic face calls the same.
+        def self.shrink_line_height!(style_parts, json_data, required_imports, size_expr)
+          return unless json_data['autoShrink'] || json_data['minimumScaleFactor']
+
+          index = style_parts.index { |part| part.start_with?('lineHeight = ') }
+          return unless index
+
+          required_imports&.add(:label_line_height)
+          required_imports&.add(:local_text_style)
+          value = style_parts[index].delete_prefix('lineHeight = ')
+          style_parts[index] = "lineHeight = LabelLineHeight.shrinking(#{value}, #{size_expr}, LocalTextStyle.current.fontSize)"
+        end
+
         # `(expr)` for an `if` expression nested in another, the value itself otherwise.
         def self.wrap_if(expr)
           expr&.start_with?('if (') ? "(#{expr})" : expr
@@ -1044,6 +1063,9 @@ module KjuiTools
             style_parts << "textAlign = #{align}"
           end
           style_parts.concat(wide[:style])
+
+          shrink_line_height!(style_parts, json_data, required_imports,
+                              Helpers::FontScale.wrap("#{wide[:font_ref]}.size ?: TextUnit.Unspecified", json_data, required_imports))
 
           if style_parts.any?
             # Same theme-preserving base as the main Label emit.
@@ -1304,6 +1326,9 @@ module KjuiTools
             style_parts << "textAlign = #{align}"
           end
           style_parts.concat(wide[:style])
+
+          shrink_line_height!(style_parts, json_data, required_imports,
+                              Helpers::FontScale.wrap("#{wide[:font_ref]}.size ?: TextUnit.Unspecified", json_data, required_imports))
 
           if style_parts.any?
             # Same theme-preserving base as the main Label emit.
