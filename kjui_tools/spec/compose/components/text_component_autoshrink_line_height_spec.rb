@@ -27,7 +27,11 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       lines.each do |line, line_attrs|
         it "the #{path} Label under #{shrink} with #{line} passes its line height through LabelLineHeight.shrinking" do
           code, imports = gen(base.merge(path_attrs, shrink_attrs, line_attrs))
-          expect(code).to match(/lineHeight = LabelLineHeight\.shrinking\(.+, LocalTextStyle\.current\.fontSize\)/)
+          # the share is of the size autoSize starts from (its maxFontSize), so an unshrunk Label keeps its line
+          json = base.merge(path_attrs, shrink_attrs, line_attrs)
+          ceiling = described_class.auto_size_ceiling(json, Set.new)
+          expect(code).to include("maxFontSize = #{ceiling})")
+          expect(code[/lineHeight = LabelLineHeight\.shrinking\(.*/]).to include(", #{ceiling})")
           expect(code.scan('lineHeight = LabelLineHeight.shrinking(').length).to eq(1)
           expect(imports).to include(:label_line_height)
         end
@@ -62,7 +66,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       object LabelLineHeight {
           fun multiple(fontSize: Float?, multiple: Float, style: TextStyle, density: Density): TextUnit = TextUnit()
           fun spaced(fontSize: Float?, spacing: Float, style: TextStyle, density: Density): TextUnit = TextUnit()
-          fun shrinking(lineHeight: TextUnit, fontSize: TextUnit, fallbackFontSize: TextUnit): TextUnit = lineHeight
+          fun shrinking(lineHeight: TextUnit, ceiling: TextUnit): TextUnit = lineHeight
       }
       val TextStyle.fontFamily: FontFamily? get() = null
       val TextStyle.fontWeight: FontWeight? get() = null
