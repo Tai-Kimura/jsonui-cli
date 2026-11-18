@@ -119,6 +119,16 @@ on:
         required: false
         default: false
         type: boolean
+      # The classes a fix touched, or a suspected flake, without the job's other
+      # ~700 cases (2026-11-19: two classes to check took the whole 70-minute job;
+      # requester: "次からCIでも特定のやつだけ打てるようにするべき"). Each name must
+      # resolve to exactly one class with @Test in library, library-dynamic or
+      # conformance-host (kjui_device_tests.py select), or the job stops red.
+      android_test_classes:
+        description: 'android-library-tests runs ONLY these KotlinJsonUI device-test classes (comma-separated; simple or fully qualified, optional #method), and judges only them. Pair with android_library_only=true. Empty = every class'
+        required: false
+        default: ''
+        type: string
 
 env:
   # 🔻 THE iOS JOBS RUN AS SHARDS. One iOS job took 108-114 min (run
@@ -1088,6 +1098,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ANDROID_PROBES: ${{ (inputs.only == '' && (inputs.android_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
+          KJUI_TEST_CLASSES: ${{ inputs.android_test_classes }}
         # API 35, not the conformance jobs' 34 (those keep 34 for their
         # baselines; this job has none). Measured 2026-09-26, same
         # KotlinJsonUI 329f5d6 and the same runner image. Only the classes

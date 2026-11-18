@@ -110,8 +110,20 @@ else
 fi
 
 # The classes another job runs (kjui_device_tests.py RUN_ELSEWHERE).
+# android_test_classes (KJUI_TEST_CLASSES): run only the named classes, each in its
+# own module, and judge only those. A whole run is the default; this is for checking
+# the one or two classes a fix touched, or a suspected flake, without the other
+# ~700 cases (2026-11-19 requester: "次からCIでも特定のやつだけ打てるようにするべき").
+# A name that resolves to nothing, to two classes, or to a class this invocation
+# does not run stops here (exit 2) instead of coming back green for nothing.
+selected=""
+if [ -n "${KJUI_TEST_CLASSES:-}" ]; then
+  selected=$(python3 "$here/kjui_device_tests.py" select "$kjui" "$KJUI_TEST_CLASSES") || exit 2
+  echo "named classes only (android_test_classes=$KJUI_TEST_CLASSES):"
+  printf '  %s\n' "$selected"
+fi
 not_class=$(python3 "$here/kjui_device_tests.py" not-class "$kjui") || exit 2
-echo "left out of this invocation (another job runs it, or the second invocation below): $not_class"
+[ -z "$selected" ] && echo "left out of this invocation (another job runs it, or the second invocation below): $not_class"
 
 # Can the IME show at all? Asked on a known field before the tests, so a
 # device whose IME never shows is red for the environment, by name, and not
@@ -124,6 +136,23 @@ if ! python3 "$here/kjui_device_tests.py" ime --budget "${KJUI_IME_BUDGET_SECOND
 fi
 
 rc=0
+if [ -n "$selected" ]; then
+  # One invocation per module that holds a named class, with that module's
+  # `class` argument (a per-module filter: another module's instrumentation
+  # would fail on a class its APK does not hold).
+  while IFS=$'\t' read -r module classes; do
+    [ -n "$module" ] || continue
+    rcm=0
+    (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
+      --idle "${KJUI_IDLE_SECONDS:-600}" --focus "${KJUI_FOCUS_SECONDS:-15}" --evidence "$evidence/$module" -- \
+      ./gradlew --no-daemon ":$module:connectedDebugAndroidTest" \
+      -Pandroid.testInstrumentationRunnerArguments.class="$classes" \
+      -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+      ${args[@]+"${args[@]}"}) || rcm=$?
+    echo "gradle exit ($module): $rcm$([ "$rcm" = 124 ] && echo ' (stopped by the watch: the cases stopped moving)')"
+    [ "$rcm" = 0 ] || rc=$rcm
+  done <<<"$selected"
+else
 (cd "$kjui" && python3 "$here/kjui_device_tests.py" watch \
   --idle "${KJUI_IDLE_SECONDS:-600}" --focus "${KJUI_FOCUS_SECONDS:-15}" --evidence "$evidence" -- \
   ./gradlew --no-daemon --continue \
@@ -133,13 +162,15 @@ rc=0
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
   ${args[@]+"${args[@]}"}) || rc=$?
 echo "gradle exit: $rc$([ "$rc" = 124 ] && echo ' (stopped by the watch: the cases stopped moving)')"
+fi
 
 # The classes that run only in another build type of their module
 # (kjui_device_tests.py SECOND_BUILD): today conformance-host's gate-closed arm
 # of the test bridge, in the gateClosed build (not debuggable, no
 # SCREEN_MARKER meta-data). Left out of the debug invocation above; run alone
 # here. The judge requires them in the results either way.
-gate_closed=$(python3 "$here/kjui_device_tests.py" gate-closed-classes "$kjui") || exit 2
+gate_closed=""
+[ -z "$selected" ] && { gate_closed=$(python3 "$here/kjui_device_tests.py" gate-closed-classes "$kjui") || exit 2; }
 if [ -n "$gate_closed" ]; then
   echo "second invocation (gateClosed build): $gate_closed"
   rc2=0
@@ -151,11 +182,14 @@ if [ -n "$gate_closed" ]; then
     -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true) || rc2=$?
   echo "gradle exit (gateClosed): $rc2"
   [ "$rc2" = 0 ] || rc=$rc2
+elif [ -n "$selected" ]; then
+  echo "second invocation (gateClosed build): not run — only the named classes run"
 else
   echo "second invocation (gateClosed build): none — the checkout declares no SECOND_BUILD class"
 fi
 
 collect_evidence || echo "warning: evidence collection failed; the verdict is unchanged"
 
+[ -n "${KJUI_TEST_CLASSES:-}" ] && judge_args+=(--only "$KJUI_TEST_CLASSES")
 python3 "$here/kjui_device_tests.py" judge "$kjui" ${judge_args[@]+"${judge_args[@]}"} || rc=1
 exit "$rc"

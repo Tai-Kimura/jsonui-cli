@@ -179,6 +179,64 @@ def _declared(kjui: Path, module: str) -> set[str]:
     return names
 
 
+PACKAGE = re.compile(r"^[ \t]*package[ \t]+([A-Za-z0-9_.]+)", re.M)
+
+
+def _test_classes_by_file(kjui: Path, module: str) -> list[str]:
+    """Fully qualified names of the classes holding an @Test, file by file (the
+    same ownership rule as _declared: the last top-level class before the @Test)."""
+    found: list[str] = []
+    for path in _sources(kjui, module):
+        text = path.read_text(encoding="utf-8")
+        pkg = PACKAGE.search(text)
+        decls = [(m.start(), m.group(2), "abstract" in m.group(1)) for m in CLASS.finditer(text)]
+        names: list[str] = []
+        for t in TEST.finditer(text):
+            owner = [d for d in decls if d[0] < t.start()]
+            if owner and not owner[-1][2] and owner[-1][1] not in names:
+                names.append(owner[-1][1])
+        found += [f"{pkg.group(1)}.{n}" if pkg else n for n in names]
+    return found
+
+
+class SelectError(ValueError):
+    pass
+
+
+def select(kjui: Path, spec: str) -> dict[str, list[str]]:
+    """The device-test classes a dispatch names (android_test_classes), by module.
+
+    Each comma-separated entry is a class, simple (DynamicFaceLayoutFidelityTest) or
+    fully qualified, optionally with `#method`. It must name exactly one class with an
+    @Test in one of MODULES, and not one this job leaves to another job or runs in its
+    second build: those are refused rather than quietly dropped, so a run that names
+    one never comes back green for a class it did not run. The value per module is the
+    instrumentation `class` argument (fully qualified, `#method` kept)."""
+    index: list[tuple[str, str]] = [(m, fq) for m in MODULES for fq in _test_classes_by_file(kjui, m)]
+    chosen: dict[str, list[str]] = {}
+    entries = [e.strip() for e in spec.split(",") if e.strip()]
+    if not entries:
+        raise SelectError("android_test_classes names no class")
+    for entry in entries:
+        cls, _, method = entry.partition("#")
+        hits = [(m, fq) for (m, fq) in index if fq == cls or ("." not in cls and fq.rsplit(".", 1)[-1] == cls)]
+        if not hits:
+            raise SelectError(f"{entry}: no class with @Test of that name in {', '.join(MODULES)}")
+        if len(hits) > 1:
+            raise SelectError(f"{entry}: names {len(hits)} classes ({', '.join(fq for _, fq in hits)}); "
+                              "write it fully qualified")
+        module, fq = hits[0]
+        if (module, fq) in RUN_ELSEWHERE:
+            raise SelectError(f"{entry}: this job does not run it — {RUN_ELSEWHERE[(module, fq)]}")
+        if (module, fq) in SECOND_BUILD:
+            raise SelectError(f"{entry}: runs only in its own build ({SECOND_BUILD[(module, fq)].split(' — ')[0]}); "
+                              "run the whole job for it")
+        arg = f"{fq}#{method}" if method else fq
+        if arg not in chosen.setdefault(module, []):
+            chosen[module].append(arg)
+    return chosen
+
+
 def second_build_classes(kjui: Path) -> list[str]:
     """The SECOND_BUILD classes the checkout declares (fully qualified, sorted)."""
     return sorted(fq for (m, fq) in SECOND_BUILD if fq.rsplit(".", 1)[-1] in _declared(kjui, m))
@@ -246,8 +304,11 @@ def focus_stop(events: Path) -> dict | None:
     return {"requests": requests, "entered": entered, "longest": longest, "since": since}
 
 
-def judge(kjui: Path, probes_raised: bool = False) -> int:
+def judge(kjui: Path, probes_raised: bool = False, only: dict[str, list[str]] | None = None) -> int:
     problems: list[str] = []
+    if only is not None:
+        named = "; ".join(m + ": " + ",".join(a) for m, a in only.items())
+        print(f"== named classes only (android_test_classes): {named}")
     focus = focus_stop(kjui / "device-evidence" / "logcat-events.txt")
     if focus is None:
         print("== device input: window focus not read (no focus line in device-evidence/logcat-events.txt)")
@@ -262,8 +323,12 @@ def judge(kjui: Path, probes_raised: bool = False) -> int:
         if not (entry.get("why") or "").strip() or not (entry.get("when") or "").strip():
             problems.append(f"RAISED_SKIPS {key}: declares no why or no when")
     for module in MODULES:
+        if only is not None and module not in only:
+            print(f"== {module}: not run — no class of it was named")
+            continue
         files = _results(kjui, module)
-        declared = test_classes(kjui, module)
+        declared = (test_classes(kjui, module) if only is None
+                    else {a.split('#', 1)[0].rsplit('.', 1)[-1] for a in only[module]})
         passed = failed = skipped = 0
         failures: list[str] = []
         skips: list[str] = []
@@ -624,12 +689,35 @@ def main(argv: list[str]) -> int:
         return _watch_main(argv[1:])
     if argv[:1] == ["ime"]:
         return _ime_main(argv[1:])
-    raised = argv[0:1] == ["judge"] and argv[2:] == ["--probes-raised"]
-    if raised:
-        argv = argv[:2]
+    if argv[:1] == ["select"]:
+        if len(argv) != 3:
+            print("usage: kjui_device_tests.py select <KotlinJsonUI checkout> <class[#method],...>", file=sys.stderr)
+            return 2
+        try:
+            chosen = select(Path(argv[1]), argv[2])
+        except SelectError as e:
+            print(f"error: android_test_classes: {e}", file=sys.stderr)
+            return 2
+        for module, args in chosen.items():
+            print(f"{module}\t{','.join(args)}")
+        return 0
+    raised = False
+    only_spec = None
+    if argv[:1] == ["judge"]:
+        rest, i = [], 2
+        while i < len(argv):
+            if argv[i] == "--probes-raised":
+                raised = True
+            elif argv[i] == "--only" and i + 1 < len(argv):
+                only_spec = argv[i + 1]
+                i += 1
+            else:
+                rest.append(argv[i])
+            i += 1
+        argv = argv[:2] + rest
     if len(argv) != 2 or argv[0] not in ("flags", "judge", "not-class", "gate-closed-classes"):
-        print("usage: kjui_device_tests.py flags|judge|not-class|gate-closed-classes <KotlinJsonUI checkout> "
-              "(judge also takes --probes-raised)", file=sys.stderr)
+        print("usage: kjui_device_tests.py flags|judge|not-class|gate-closed-classes|select <KotlinJsonUI checkout> "
+              "(judge also takes --probes-raised and --only <class[#method],...>)", file=sys.stderr)
         return 2
     kjui = Path(argv[1])
     if not (kjui / "library").is_dir():
@@ -650,7 +738,14 @@ def main(argv: list[str]) -> int:
         print(",".join(second_build_classes(kjui)))
         return 0
     print(f"probes raised: {'yes — an undeclared skip is red' if raised else 'no'}")
-    return judge(kjui, probes_raised=raised)
+    only = None
+    if only_spec is not None:
+        try:
+            only = select(kjui, only_spec)
+        except SelectError as e:
+            print(f"error: android_test_classes: {e}", file=sys.stderr)
+            return 2
+    return judge(kjui, probes_raised=raised, only=only)
 
 
 if __name__ == "__main__":

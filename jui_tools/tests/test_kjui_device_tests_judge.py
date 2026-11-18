@@ -435,3 +435,94 @@ class RaisedProbes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KjuiDeviceTestsNamedClasses(unittest.TestCase):
+    """android_test_classes: a dispatch that names the classes a fix touched runs
+    and judges only them (2026-11-19: two classes to check took the whole job).
+    A name that resolves to nothing, to two classes, or to a class this job does
+    not run in its debug invocation is refused, never dropped: a run that named
+    one must not come back green for a class it did not run."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tree = _Tree(Path(self._tmp.name))
+        for module, cls in (("library", "ATest"), ("library-dynamic", "BTest"), ("conformance-host", "HProbeTest")):
+            self.tree.source(module, cls, TEST_CLASS.format(name=cls))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _judge(self, only) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = K.judge(self.tree.root, only=only)
+        return rc, out.getvalue() + err.getvalue()
+
+    def test_a_simple_name_resolves_to_its_module_and_fully_qualified_class(self):
+        self.assertEqual({"library-dynamic": ["com.example.BTest"]}, K.select(self.tree.root, "BTest"))
+
+    def test_a_method_and_a_second_module_are_kept(self):
+        self.assertEqual({"library": ["com.example.ATest#one"], "library-dynamic": ["com.example.BTest"]},
+                         K.select(self.tree.root, " ATest#one , com.example.BTest"))
+
+    def test_an_unknown_name_is_refused(self):
+        with self.assertRaisesRegex(K.SelectError, "no class with @Test"):
+            K.select(self.tree.root, "NoSuchTest")
+
+    def test_a_name_two_modules_hold_is_refused(self):
+        self.tree.source("library-dynamic", "ATest", TEST_CLASS.format(name="ATest").replace(
+            "package com.example", "package com.other"))
+        with self.assertRaisesRegex(K.SelectError, "names 2 classes"):
+            K.select(self.tree.root, "ATest")
+        self.assertEqual({"library-dynamic": ["com.other.ATest"]}, K.select(self.tree.root, "com.other.ATest"))
+
+    def test_a_class_another_job_runs_is_refused(self):
+        (module, fq), = K.RUN_ELSEWHERE.keys()
+        simple = fq.rsplit(".", 1)[-1]
+        self.tree.source(module, simple, TEST_CLASS.format(name=simple).replace(
+            "package com.example", "package " + fq.rsplit(".", 1)[0]))
+        with self.assertRaisesRegex(K.SelectError, "this job does not run it"):
+            K.select(self.tree.root, simple)
+
+    def test_a_second_build_class_is_refused(self):
+        (module, fq), = K.SECOND_BUILD.keys()
+        simple = fq.rsplit(".", 1)[-1]
+        self.tree.source(module, simple, TEST_CLASS.format(name=simple).replace(
+            "package com.example", "package " + fq.rsplit(".", 1)[0]))
+        with self.assertRaisesRegex(K.SelectError, "runs only in its own build"):
+            K.select(self.tree.root, simple)
+
+    def test_only_the_named_classes_are_judged(self):
+        # The other modules have sources and no results: a whole-job judge is red
+        # on them (no results / NOT RUN), the named judge leaves them out.
+        self.tree.results("library-dynamic", "\n".join([_case("BTest", "one"), _case("BTest", "two")]))
+        rc, text = self._judge(K.select(self.tree.root, "BTest"))
+        self.assertEqual(0, rc, text)
+        self.assertIn("== library: not run — no class of it was named", text)
+        self.assertIn("classes with @Test in source 1, seen in results 1", text)
+        self.assertEqual(1, self._whole_judge_rc())
+
+    def _whole_judge_rc(self) -> int:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return K.judge(self.tree.root)
+
+    def test_a_named_class_with_no_results_is_red(self):
+        self.tree.results("library-dynamic", _case("OtherTest", "one"))
+        rc, text = self._judge(K.select(self.tree.root, "BTest"))
+        self.assertEqual(1, rc, text)
+        self.assertIn("NOT RUN  BTest", text)
+
+    def test_a_named_failure_is_red(self):
+        self.tree.results("library-dynamic", _case("BTest", "one", "<failure>java.lang.AssertionError: x</failure>"))
+        rc, text = self._judge(K.select(self.tree.root, "BTest#one"))
+        self.assertEqual(1, rc, text)
+        self.assertIn("FAILED   BTest.one", text)
+
+    def test_the_cli_prints_module_tab_classes_and_refuses_with_exit_2(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, K.main(["select", str(self.tree.root), "ATest,BTest"]))
+        self.assertEqual("library\tcom.example.ATest\nlibrary-dynamic\tcom.example.BTest\n", out.getvalue())
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(2, K.main(["select", str(self.tree.root), "NoSuchTest"]))

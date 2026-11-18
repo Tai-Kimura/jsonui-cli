@@ -204,6 +204,12 @@
   検査も一緒に飛んでいた。jui_tools/tests/test_the_schedule_raises_the_probes.py が各式を両方の event で評価する）。
   `android_library_only=true` は android-library-tests だけを走らせる（ほかの job と report は止まる）。
   KotlinJsonUI の device test だけを繰り返すとき用（conformance の job は 1 本も走らない）
+  `android_test_classes=<class>[#method],…`（2026-11-19）は、その job の中でも名指したクラスだけを撃ち、名指したクラスだけで判定する。
+  直しが触った 1〜2 クラスや揺れの疑いの確かめに、残りの約 700 本（約 70 分）を流さないため（依頼者「次からCIでも特定のやつだけ打てるようにするべき」）。
+  `android_library_only=true` と組で使う。名前は単純名か完全修飾名で、library・library-dynamic・conformance-host のどれか 1 つのクラスに
+  当たらなければ job が赤で止まる（当たらない・2 つに当たる・別の job で撃つ ConformanceSuiteTest・2 本目の build で撃つ
+  TestBridgeGateClosedE2ETest は拒む。`kjui_device_tests.py select`）。例:
+  `gh workflow run conformance-mobile.yml --ref <枝> -f kotlinjsonui_ref=<枝> -f android_library_only=true -f android_test_classes=DynamicFaceLayoutFidelityTest,KjuiNetworkImageNoSrcTest`
   ⚠️ 同じ枝へ続けて撃つと消える: workflow の concurrency は枝（ref）ごとで、GitHub は同じ group に実行中 1 本＋待機 1 本しか
   持たず、3 本目が来ると待機中の run を cancel する（`cancel-in-progress: false` が守るのは実行中だけ）。2026-10-07 に
   同じ枝へ 3 本ずつ撃ち、2 本目が job 0 本のまま cancelled（37618377022 / 37618381831）。まとめて撃つなら 1 本ずつ別の枝から
