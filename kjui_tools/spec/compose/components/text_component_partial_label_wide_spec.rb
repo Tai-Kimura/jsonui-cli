@@ -2,6 +2,8 @@
 
 require 'set'
 require 'compose/components/text_component'
+require_relative '../../support/kotlin_compiler'
+require_relative '../../support/compose_stub_universe'
 
 # A Label's own attributes on a partial / linkable Label (ticket kjui-label-underline-dropped-with-partial-attributes):
 # the two branches drew only the font, its size, colour and alignment and dropped the rest without a word, while
@@ -16,7 +18,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     described_class.generate(json, 0, Set.new, nil)
   end
 
-  EXPECTED = {
+  label_wide_cases = {
     'underline' => [{ 'underline' => true }, 'textDecoration = TextDecoration.Underline'],
     'strikethrough' => [{ 'strikethrough' => true }, 'textDecoration = TextDecoration.LineThrough'],
     'both lines' => [{ 'underline' => true, 'strikethrough' => true },
@@ -35,7 +37,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     'hint' => [{ 'text' => '@{name}', 'hint' => 'type a name' }, '.isEmpty()) "type a name" else labelText'],
   }.freeze
 
-  EXPECTED.each do |name, (extra, fragment)|
+  label_wide_cases.each do |name, (extra, fragment)|
     it "the partial Label applies #{name} as the plain one does" do
       plain = gen(base.merge(extra))
       expect(gen(base.merge(extra).merge(partial))).to include(fragment)
@@ -73,5 +75,61 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
                           'partialAttributes' => [{ 'range' => 'hello world', 'underline' => { 'lineStyle' => 'Single' } }]))
     expect(code).to include('textDecoration = TextDecoration.Underline', "underline = true,\n")
     expect(code.scan('TextDecoration.Underline').length).to eq(1)
+  end
+
+  # What the arms above read, handed to a compiler: PartialAttributesText and PartialAttribute.fromJsonRange mirror
+  # the library's signatures (KotlinJsonUI 2.64.0, library/.../components/PartialAttributesText.kt), so an argument
+  # the library does not take does not type-check. textShadow is left out: the stub universe's Shadow is the
+  # modifier's (a Dp radius), not the text's. Types only — a green says well-typed against these stubs.
+  it 'emits Kotlin that compiles' do
+    emits = label_wide_cases.reject { |name, _| name == 'textShadow' }.flat_map do |_, (extra, _)|
+      [gen(base.merge(extra).merge(partial)), gen(base.merge(extra).merge(linkable))]
+    end
+    emits << gen(base.merge('edgeInset' => 8, 'background' => '#EEEEEE').merge(partial))
+    all = emits.join("\n")
+    stubs = ComposeStubUniverse.common_stages(all)
+    body = emits.each_with_index.map { |e, i| "fun emitted#{i}(data: WideData) {\n#{e}\n}" }.join("\n")
+    expect(<<~KOTLIN).to compile_as_kotlin
+      #{stubs}
+      class WideData(val isOn: Boolean = false, val name: String = "")
+      class TextDecoration { companion object {
+          val Underline = TextDecoration(); val LineThrough = TextDecoration()
+          fun combine(decorations: List<TextDecoration>) = TextDecoration()
+      } }
+      class TextAlign { companion object { val Center = TextAlign(); val Start = TextAlign(); val End = TextAlign(); val Unspecified = TextAlign() } }
+      interface TextAutoSize { companion object { fun StepBased(minFontSize: TextUnit, maxFontSize: TextUnit): TextAutoSize = object : TextAutoSize {} } }
+      class TextLayoutResult
+      class StyledLine(val color: Color, val style: String)
+      class StyledLineState { var layout: TextLayoutResult? = null }
+      fun Modifier.styledTextLines(state: StyledLineState, underline: StyledLine? = null, strikethrough: StyledLine? = null): Modifier = this
+      fun Modifier.lineSpacingBetween(spacing: Float): Modifier = this
+      class Density
+      object LocalDensity { val current = Density() }
+      object LabelLineHeight {
+          fun multiple(fontSize: Float?, multiple: Float, style: TextStyle, density: Density): TextUnit = TextUnit()
+          fun spaced(fontSize: Float?, spacing: Float, style: TextStyle, density: Density): TextUnit = TextUnit()
+          fun shrinking(lineHeight: TextUnit, fontSize: TextUnit, fallbackFontSize: TextUnit): TextUnit = lineHeight
+      }
+      val TextStyle.fontFamily: FontFamily? get() = null
+      val TextStyle.fontWeight: FontWeight? get() = null
+      val TextStyle.fontStyle: FontStyle? get() = null
+      fun TextStyle.copy(color: Color = this.color, fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
+                         fontSize: TextUnit = this.fontSize, letterSpacing: Any? = null, fontStyle: FontStyle? = null,
+                         lineHeight: Any? = null, textAlign: TextAlign? = null, textDecoration: TextDecoration? = null): TextStyle = this
+      class PartialAttribute {
+          companion object {
+              fun fromJsonRange(range: Any, text: String, fontColor: String? = null, fontSize: Int? = null,
+                                fontWeight: String? = null, background: String? = null, underline: Boolean = false,
+                                strikethrough: Boolean = false, onClick: (() -> Unit)? = null): PartialAttribute? = null
+          }
+      }
+      fun PartialAttributesText(text: String, partialAttributes: List<PartialAttribute> = emptyList(),
+                                linkable: Boolean = false, modifier: Modifier = Modifier,
+                                style: TextStyle = TextStyle(), linksEnabled: Boolean = true,
+                                fontScaling: Boolean? = null, maxFontScale: Float? = null,
+                                maxLines: Int = Int.MAX_VALUE, overflow: TextOverflow = TextOverflow.Clip,
+                                autoSize: TextAutoSize? = null, onTextLayout: ((TextLayoutResult) -> Unit)? = null) {}
+      #{body}
+    KOTLIN
   end
 end
