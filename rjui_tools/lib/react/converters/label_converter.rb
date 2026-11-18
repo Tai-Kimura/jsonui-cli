@@ -776,7 +776,12 @@ module RjuiTools
 
           lines = []
           lines << "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>"
-          lines << "#{indent_str(indent + 2)}{partialText(#{text_expr}, #{specs})}"
+          # The runs go in the lineSpacing block as the plain text does
+          # (line_spacing_wrap): through jsonui-cli 2.5.51 they did not, and a
+          # Label with partialAttributes kept the half spacing above its first
+          # line and below its last — one spacing taller than the same Label
+          # without them.
+          lines << "#{indent_str(indent + 2)}#{line_spacing_wrap("{partialText(#{text_expr}, #{specs})}")}"
           lines << "#{indent_str(indent)}</span>"
           lines.join("\n")
         end
@@ -917,7 +922,19 @@ module RjuiTools
         # (rjui-label-linkable-binding-renders-raw). URL/phone regexes, tel:
         # sanitization and newline preservation live in the template so both
         # shapes share one implementation and cannot drift.
+        #
+        # With lineSpacing, the Label is the plain shape's span and the links
+        # go in its lineSpacing block (line_spacing_wrap), so the half spacing
+        # above the first line and below the last is taken back as it is for
+        # plain text. Through jsonui-cli 2.5.51 a linkable Label with
+        # lineSpacing was one spacing taller than the same Label without
+        # linkable. Without lineSpacing the shape is unchanged.
         def render_linkable_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
+          unless attributes['lineSpacing'].nil?
+            links = "<LinkifyText#{linkify_text_prop}#{link_color_prop} />"
+            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>#{line_spacing_wrap(links)}</span>"
+          end
+
           "#{indent_str(indent)}<LinkifyText#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}#{linkify_text_prop}#{link_color_prop} />"
         end
 
