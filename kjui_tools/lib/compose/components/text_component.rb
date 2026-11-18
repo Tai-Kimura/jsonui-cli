@@ -37,6 +37,9 @@ module KjuiTools
         # The KotlinJsonUI release that ships LabelLineHeight and
         # Modifier.lineSpacingBetween, which a Label's line height emits.
         LABEL_LINE_HEIGHT_MIN_LIBRARY_VERSION = '2.43.5'
+        # The KotlinJsonUI release whose PartialAttributesText takes a Label's line rules (maxLines, overflow,
+        # autoSize, onTextLayout) and keeps the Label's own decoration on its ranges.
+        PARTIAL_LINE_RULES_MIN_LIBRARY_VERSION = '2.64.0'
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # Check if component should be skipped entirely (static gone only;
@@ -460,6 +463,31 @@ module KjuiTools
           # produced duplicate named args and kotlinc halted with
           # "named arg specified twice".
           # Regression: kjui-label-lines-and-linebreakmode-double-overflow-emit.
+          line_rule_args(json_data, required_imports).each do |arg|
+            component_code += ",\n" + indent(arg, depth + 1)
+          end
+
+          component_code += "\n" + indent(")", depth)
+
+          # No VisibilityWrapper here: the exit that draws the node
+          # (ComposeBuilder#generate_component / a responsive branch's
+          # generate_non_responsive_component) wraps it, in the parent's scope,
+          # as it wraps an Image. A second one here put this wrapper — and the
+          # alignment it hoists, `Modifier.align(Alignment.Start)` on one line —
+          # inside the outer wrapper's BoxScope, where a Column's alignment
+          # does not compile (kjui-label-with-visibility-and-parent-alignment-
+          # does-not-compile).
+          component_code
+        end
+
+        private
+
+        # The Text arguments of a Label's line rules, in emit order: `autoSize` (autoShrink /
+        # minimumScaleFactor), `maxLines` (lines) and `overflow` (lines / lineBreakMode). One reading for the
+        # plain Label and the partial / linkable one (PartialAttributesText takes the same three since
+        # KotlinJsonUI 2.64.0; ticket kjui-label-underline-dropped-with-partial-attributes).
+        def self.line_rule_args(json_data, required_imports)
+          args = []
           max_lines_value = nil
           overflow_value = nil
 
@@ -517,7 +545,7 @@ module KjuiTools
             max_font_size = scaled_sp(json_data['fontSize'] || 14, 1)
             min_font_size = Helpers::FontScale.wrap(min_font_size, json_data, required_imports)
             max_font_size = Helpers::FontScale.wrap(max_font_size, json_data, required_imports)
-            component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}, maxFontSize = #{max_font_size})", depth + 1)
+            args << "autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}, maxFontSize = #{max_font_size})"
           end
 
           # `lineBreakMode`, when explicitly set, takes precedence over the
@@ -534,28 +562,13 @@ module KjuiTools
             end
           end
 
-          if max_lines_value
-            component_code += ",\n" + indent("maxLines = #{max_lines_value}", depth + 1)
-          end
+          args << "maxLines = #{max_lines_value}" if max_lines_value
           if overflow_value
             required_imports&.add(:text_overflow)
-            component_code += ",\n" + indent("overflow = #{overflow_value}", depth + 1)
+            args << "overflow = #{overflow_value}"
           end
-
-          component_code += "\n" + indent(")", depth)
-
-          # No VisibilityWrapper here: the exit that draws the node
-          # (ComposeBuilder#generate_component / a responsive branch's
-          # generate_non_responsive_component) wraps it, in the parent's scope,
-          # as it wraps an Image. A second one here put this wrapper — and the
-          # alignment it hoists, `Modifier.align(Alignment.Start)` on one line —
-          # inside the outer wrapper's BoxScope, where a Column's alignment
-          # does not compile (kjui-label-with-visibility-and-parent-alignment-
-          # does-not-compile).
-          component_code
+          args
         end
-
-        private
 
         # The styling that takes over while the label is selected.
         #
@@ -810,6 +823,169 @@ module KjuiTools
           nil
         end
 
+        # The Label's own attributes on a partial / linkable Label (ticket
+        # kjui-label-underline-dropped-with-partial-attributes): these two branches drew only the font, its size,
+        # colour and alignment, and dropped underline, strikethrough, lines, lineBreakMode, lineHeightMultiple,
+        # lineSpacing, textShadow, autoShrink, minimumScaleFactor, edgeInset, disabledFontColor, the highlight and the
+        # hint without a word — iOS (one PartialAttributedText for every Label) and the web applied them. Each one is
+        # read as the plain branch reads it and emitted only when it is declared, so a partial Label that declares
+        # none of them is the code it was. KotlinJsonUI Dynamic (DynamicTextComponent#labelWide) applies the same.
+        #
+        # Returns { pre:, font_ref:, text:, color:, style:, line_height:, args:, modifiers: }:
+        #   pre        code before the call (the highlight / hint resolve blocks, the hint's text, the line state)
+        #   font_ref   the resolved font to read (the highlight's while selected, the hint's while it shows)
+        #   text       the text expression (the hint while the text is empty)
+        #   color      the colour expression when the colour is chosen (disabled / highlight / hint), else nil
+        #   style      extra LocalTextStyle.copy parts (textDecoration, shadow, the highlight's textAlign)
+        #   line_height  the Label's own line height when it declares one, else nil (the theme's, as before)
+        #   args       extra PartialAttributesText arguments (maxLines, overflow, autoSize, onTextLayout)
+        #   modifiers  modifiers after the Label's own (edgeInset, lineSpacingBetween, the drawn lines, the offset)
+        def self.label_wide(json_data, depth, required_imports, var_name, text_expr, edge_inset: true)
+          out = { pre: +'', font_ref: var_name, text: text_expr, color: nil, style: [], line_height: nil, args: [], modifiers: [] }
+
+          highlight = highlight_overrides(json_data)
+          condition = selected_condition(json_data)
+          highlight = nil unless condition
+          always = condition == 'true'
+          if highlight&.key?(:font_attrs)
+            hl_var = next_resolved_var
+            out[:pre] += Helpers::FontSpecHelper.emit_resolve_block(hl_var, Helpers::FontSpecHelper.build_font_spec_args(json_data.merge(highlight[:font_attrs]), required_imports), depth, required_imports) + "\n"
+            out[:font_ref] = always ? hl_var : "(if (#{condition}) #{hl_var} else #{var_name})"
+          end
+
+          hint = hint_overrides(json_data)
+          hint_condition = nil
+          if hint
+            hint_var = "labelText#{@counter}"
+            out[:pre] += indent("val #{hint_var} = #{text_expr}", depth) + "\n"
+            hint_condition = "#{hint_var}.isEmpty()"
+            out[:text] = "if (#{hint_condition}) #{Helpers::ResourceResolver.process_text(hint[:text], required_imports)} else #{hint_var}"
+            if hint[:font_attrs].any?
+              hint_font_var = next_resolved_var
+              out[:pre] += Helpers::FontSpecHelper.emit_resolve_block(hint_font_var, Helpers::FontSpecHelper.build_font_spec_args(json_data.merge(hint[:font_attrs]), required_imports), depth, required_imports) + "\n"
+              out[:font_ref] = "(if (#{hint_condition}) #{hint_font_var} else #{out[:font_ref]})"
+            end
+          end
+
+          # The colour, chosen as the plain branch chooses it — only when something chooses (else the fontColor as before)
+          plain = json_data['fontColor'] ? Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports) : nil
+          gate = json_data['disabledFontColor'] ? Helpers::ModifierBuilder.enabled_expression(json_data) : nil
+          color = plain
+          if gate
+            disabled = Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
+            color = gate == 'false' ? disabled : "if (#{gate}) #{plain || 'Color.Unspecified'} else #{disabled}"
+          end
+          if highlight && highlight[:font_color]
+            hl_color = Helpers::ResourceResolver.process_color(highlight[:font_color], required_imports)
+            color = always ? hl_color : "if (#{condition}) #{hl_color} else #{wrap_if(color) || 'Color.Unspecified'}"
+          end
+          if hint
+            hint_color = if hint[:font_color]
+                           Helpers::ResourceResolver.process_color(hint[:font_color], required_imports)
+                         else
+                           required_imports&.add(:configuration)
+                           'Configuration.TextField.defaultPlaceholderColor'
+                         end
+            color = "if (#{hint_condition}) #{hint_color} else #{wrap_if(color) || 'Color.Unspecified'}"
+          end
+          if color != plain
+            required_imports&.add(:color)
+            out[:color] = color
+          end
+
+          # the highlight's alignment while selected
+          if highlight && (hl_align = compose_text_align(highlight[:text_align], 'Label', %w[highlightAttributes textAlign]))
+            required_imports&.add(:text_align)
+            base_align = compose_text_align(json_data['textAlign'], json_data['type']) || gravity_text_align(json_data)
+            out[:style] << (always ? "textAlign = #{hl_align}" : "textAlign = if (#{condition}) #{hl_align} else #{base_align || 'TextAlign.Unspecified'}")
+          end
+
+          # underline / strikethrough: the native decoration, or the drawn face for one that declares a colour
+          fallback = plain || 'androidx.compose.material3.LocalContentColor.current'
+          underline_line = decoration_line_expression(json_data['underline'], required_imports, fallback)
+          strike_line = decoration_line_expression(json_data['strikethrough'], required_imports, fallback)
+          decorations = []
+          decorations << 'TextDecoration.Underline' if decoration_on?(json_data['underline']) && underline_line.nil?
+          decorations << 'TextDecoration.LineThrough' if decoration_on?(json_data['strikethrough']) && strike_line.nil?
+          if decorations.any?
+            required_imports&.add(:text_decoration)
+            out[:style] << (decorations.length > 1 ? "textDecoration = TextDecoration.combine(listOf(#{decorations.join(', ')}))" : "textDecoration = #{decorations.first}")
+          end
+          line_state = nil
+          if underline_line || strike_line
+            required_imports&.add(:styled_text_lines)
+            required_imports&.add(:remember)
+            line_state = var_name.sub('resolved_', 'lineState_')
+            out[:pre] += indent("val #{line_state} = remember { StyledLineState() }", depth) + "\n"
+          end
+
+          if json_data['textShadow']
+            required_imports&.add(:shadow_style)
+            out[:style] << text_shadow_expression(json_data['textShadow'], required_imports)
+          end
+
+          # its own line height (lineHeightMultiple / lineSpacing, the highlight's multiple); none: the theme's as before
+          drawn = Helpers::FontScale.wrap("#{out[:font_ref]}.size ?: TextUnit.Unspecified", json_data, required_imports)
+          own = base_line_height_expression(json_data, required_imports, drawn)
+          if highlight && highlight[:line_height_multiple]
+            hl_size = highlight.dig(:font_attrs, 'fontSize') || json_data['fontSize']
+            hl_line = Helpers::FontScale.line_height(json_data, required_imports, font: drawn,
+                                                     line: multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports))
+            own = always ? hl_line : "if (#{condition}) #{hl_line} else #{own || Helpers::FontScale.line_height(json_data, required_imports, font: drawn)}"
+          end
+          out[:line_height] = own
+
+          args = line_rule_args(json_data, required_imports)
+          args << "onTextLayout = { #{line_state}.layout = it }" if line_state
+          out[:args] = args
+
+          if edge_inset && json_data['edgeInset']
+            insets = json_data['edgeInset']
+            if insets.is_a?(Array) && insets.length == 4
+              out[:modifiers] << ".padding(top = #{Helpers::BoundValue.dp(insets[0])}, end = #{Helpers::BoundValue.dp(insets[1])}, bottom = #{Helpers::BoundValue.dp(insets[2])}, start = #{Helpers::BoundValue.dp(insets[3])})"
+            elsif insets.is_a?(Numeric)
+              out[:modifiers] << ".padding(#{Helpers::BoundValue.dp(insets)})"
+            end
+          end
+          if json_data['lineSpacing'] && !json_data['lineHeightMultiple']
+            required_imports&.add(:line_spacing_between)
+            spacing = Helpers::BoundValue.float(json_data['lineSpacing'], fallback: 0)
+            if highlight && highlight[:line_height_multiple] && !always
+              out[:modifiers] << ".lineSpacingBetween(if (#{condition}) 0f else #{spacing})"
+            elsif !(highlight && highlight[:line_height_multiple] && always)
+              out[:modifiers] << ".lineSpacingBetween(#{spacing})"
+            end
+          end
+          if line_state
+            margs = [line_state]
+            margs << "underline = #{underline_line}" if underline_line
+            margs << "strikethrough = #{strike_line}" if strike_line
+            out[:modifiers] << ".styledTextLines(#{margs.join(', ')})"
+          end
+          if (offset = decoration_line_offset(json_data['underline'])) && offset != 0
+            required_imports&.add(:graphics_layer)
+            out[:modifiers] << ".graphicsLayer { translationY = -#{Helpers::BoundValue.dp(offset)}.toPx() }"
+          end
+          out
+        end
+
+        # PartialAttributesText's line-rule arguments, with the KotlinJsonUI release that takes them.
+        def self.partial_line_rule_lines(args, level, leading_comma: false)
+          return '' if args.empty?
+
+          note = indent("// Requires KotlinJsonUI >= #{PARTIAL_LINE_RULES_MIN_LIBRARY_VERSION} (PartialAttributesText maxLines / overflow / autoSize / onTextLayout)", level)
+          if leading_comma
+            ",\n" + note + "\n" + args.map { |arg| indent(arg, level) }.join(",\n")
+          else
+            "\n" + note + "\n" + args.map { |arg| indent("#{arg},", level) }.join("\n")
+          end
+        end
+
+        # `(expr)` for an `if` expression nested in another, the value itself otherwise.
+        def self.wrap_if(expr)
+          expr&.start_with?('if (') ? "(#{expr})" : expr
+        end
+
         def self.generate_with_partial_attributes_for_linkable(json_data, depth, required_imports, parent_type)
           required_imports&.add(:partial_attributes_text)
 
@@ -822,8 +998,10 @@ module KjuiTools
           code = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
           code += "\n"
 
+          wide = label_wide(json_data, depth, required_imports, var_name, "\"#{escape_string(text)}\"", edge_inset: false)
+          code += wide[:pre]
           code += indent("PartialAttributesText(", depth)
-          code += "\n" + indent("text = \"#{escape_string(text)}\",", depth + 1)
+          code += "\n" + indent("text = #{wide[:text]},", depth + 1)
           code += partial_font_scale_lines(json_data, depth + 1)
           # `linkable` is `["boolean", "binding"]`. The literal `true` froze a
           # bound declaration permanently ON (plan 49 lane C: Label.linkable) —
@@ -840,7 +1018,9 @@ module KjuiTools
           # Build style
           style_parts = []
 
-          if json_data['fontColor']
+          if wide[:color]
+            style_parts << "color = #{wide[:color]}"
+          elsif json_data['fontColor']
             color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
             style_parts << "color = #{color_value}" if color_value
           end
@@ -848,12 +1028,14 @@ module KjuiTools
           # Always pass through resolved font fields (centralised mapping).
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
-          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports, json_data))
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(wide[:font_ref], required_imports, json_data))
           # The theme's line by the text size rule as the size is (ticket
           # kjui-theme-line-height-scales-under-font-scaling-false), relative to the size drawn.
-          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: Helpers::FontScale.wrap("#{var_name}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports))}"
+          style_parts << "lineHeight = #{wide[:line_height] || Helpers::FontScale.line_height(json_data, required_imports, font: Helpers::FontScale.wrap("#{wide[:font_ref]}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports))}"
 
-          if json_data['textAlign']
+          if wide[:style].any? { |part| part.start_with?('textAlign = ') }
+            # the highlight's alignment while selected (label_wide) carries the base one in its else
+          elsif json_data['textAlign']
             required_imports&.add(:text_align)
             align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
@@ -861,12 +1043,14 @@ module KjuiTools
             required_imports&.add(:text_align)
             style_parts << "textAlign = #{align}"
           end
+          style_parts.concat(wide[:style])
 
           if style_parts.any?
             # Same theme-preserving base as the main Label emit.
             required_imports&.add(:local_text_style)
             code += "\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')}),", depth + 1)
           end
+          code += partial_line_rule_lines(wide[:args], depth + 1)
 
           # Build modifiers
           modifiers = []
@@ -914,6 +1098,7 @@ module KjuiTools
             end
           end
 
+          modifiers.concat(wide[:modifiers])
           if modifiers.any?
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           else
@@ -942,8 +1127,10 @@ module KjuiTools
           code = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
           code += "\n"
 
+          wide = label_wide(json_data, depth, required_imports, var_name, processed_text, edge_inset: false)
+          code += wide[:pre]
           code += indent("PartialAttributesText(", depth)
-          code += "\n" + indent("text = #{processed_text},", depth + 1)
+          code += "\n" + indent("text = #{wide[:text]},", depth + 1)
           code += partial_font_scale_lines(json_data, depth + 1)
 
           # Build partial attributes list
@@ -1064,6 +1251,15 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          # edgeInset is the Label's internal padding, inside the background, as the plain Label places it
+          if json_data['edgeInset']
+            insets = json_data['edgeInset']
+            if insets.is_a?(Array) && insets.length == 4
+              modifiers << ".padding(top = #{Helpers::BoundValue.dp(insets[0])}, end = #{Helpers::BoundValue.dp(insets[1])}, bottom = #{Helpers::BoundValue.dp(insets[2])}, start = #{Helpers::BoundValue.dp(insets[3])})"
+            elsif insets.is_a?(Numeric)
+              modifiers << ".padding(#{Helpers::BoundValue.dp(insets)})"
+            end
+          end
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           # The text sits in a taller frame by its gravity, inside the background
           # and the padding (label_vertical_alignment; the orchestrator's ruling 2026-09-27, round 17).
@@ -1072,6 +1268,7 @@ module KjuiTools
             required_imports&.add(:alignment)
             modifiers << valign
           end
+          modifiers.concat(wide[:modifiers])
 
           if modifiers.any?
             code += Helpers::ModifierBuilder.format(modifiers, depth)
@@ -1082,19 +1279,23 @@ module KjuiTools
           # Add style — always include resolved font fragments so the Configuration
           # provider is honoured even without explicit JSON font attrs.
           style_parts = []
-          if json_data['fontColor']
+          if wide[:color]
+            style_parts << "color = #{wide[:color]}"
+          elsif json_data['fontColor']
             color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
             style_parts << "color = #{color_value}" if color_value
           end
 
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
-          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports, json_data))
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(wide[:font_ref], required_imports, json_data))
           # The theme's line by the text size rule as the size is (ticket
           # kjui-theme-line-height-scales-under-font-scaling-false), relative to the size drawn.
-          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: Helpers::FontScale.wrap("#{var_name}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports))}"
+          style_parts << "lineHeight = #{wide[:line_height] || Helpers::FontScale.line_height(json_data, required_imports, font: Helpers::FontScale.wrap("#{wide[:font_ref]}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports))}"
 
-          if json_data['textAlign']
+          if wide[:style].any? { |part| part.start_with?('textAlign = ') }
+            # the highlight's alignment while selected (label_wide) carries the base one in its else
+          elsif json_data['textAlign']
             required_imports&.add(:text_align)
             align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
@@ -1102,12 +1303,14 @@ module KjuiTools
             required_imports&.add(:text_align)
             style_parts << "textAlign = #{align}"
           end
+          style_parts.concat(wide[:style])
 
           if style_parts.any?
             # Same theme-preserving base as the main Label emit.
             required_imports&.add(:local_text_style)
             code += ",\n" + indent("style = LocalTextStyle.current.copy(#{style_parts.join(', ')})", depth + 1)
           end
+          code += partial_line_rule_lines(wide[:args], depth + 1, leading_comma: true)
 
           code += "\n" + indent(")", depth)
 

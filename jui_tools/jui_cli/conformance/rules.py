@@ -2490,6 +2490,14 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
             ],
         },
     },
+    # A Label's own attributes on a partial Label (ticket kjui-label-underline-dropped-with-partial-attributes): the
+    # android partial / linkable paths drew only the font, its size, colour and alignment and dropped these, while
+    # ios (one PartialAttributedText for every Label) and web applied them. One variant each, the range's own style
+    # kept apart from the attribute (a colour, no line), so what the attribute draws is the Label's.
+    **{("Label", attr): {"with_partial": {"partialAttributes": [{"range": [0, 3], "fontColor": "#FF0000"}]}}
+       for attr in ("underline", "strikethrough", "lines", "lineBreakMode", "lineHeightMultiple", "lineSpacing",
+                    "textShadow", "autoShrink", "minimumScaleFactor", "edgeInset", "disabledFontColor",
+                    "highlightColor", "highlightAttributes")},
     # A HORIZONTAL collection carries `insetHorizontal` down a different
     # channel: the stack view's `insetLeading` / `insetTrailing`, while the
     # content-padding channel is fed only on the vertical axis
@@ -2655,6 +2663,30 @@ def bound_union_data_entry(section: str, attribute: str) -> dict[str, Any] | Non
         "class": cls,
         "defaultValue": BOUND_UNION_SEED,
     }
+
+
+#: A VARIANT_CASES suffix repeated for some cases of an attribute only, keyed by ``(section, attribute, suffix)``:
+#: the base case names that get it. Without an entry every case is repeated. The Label's own attributes with
+#: partials take one value each (ticket kjui-label-underline-dropped-with-partial-attributes): the question is
+#: whether the partial path applies the attribute at all, which one value answers; every value again would only
+#: repeat the plain fixtures' question at three platforms' baselines each.
+VARIANT_ONLY: dict[tuple[str, str, str], frozenset[str]] = {
+    ("Label", attr, "with_partial"): frozenset({case})
+    for attr, case in (
+        ("underline", "styled"), ("strikethrough", "true"), ("lines", "static"),
+        ("lineBreakMode", "tail"), ("lineHeightMultiple", "static"),
+        ("lineSpacing", "static"), ("textShadow", "static"), ("autoShrink", "true"),
+        ("minimumScaleFactor", "static"), ("edgeInset", "static"),
+        ("disabledFontColor", "static"), ("highlightColor", "static"),
+        ("highlightAttributes", "static"),
+    )
+}
+
+
+def variant_applies(section: str, attribute: str, suffix: str, case_name: str) -> bool:
+    """Whether the ``suffix`` variant repeats this case (VARIANT_ONLY)."""
+    only = VARIANT_ONLY.get((section, attribute, suffix))
+    return only is None or case_name in only
 
 
 def variant_bases_for(section: str, attribute: str) -> dict[str, dict[str, Any]]:
@@ -3890,6 +3922,8 @@ def plan_attribute(
         # variant family measures one half of the domain and the pair the
         # variant exists to compare cannot be formed at all.
         for suffix in variant_bases_for(section, attribute):
+            if not variant_applies(section, attribute, suffix, name):
+                continue
             cases.append(
                 CasePlan(
                     name=f"{name}_{suffix}",
@@ -4008,7 +4042,7 @@ def _with_variant_cases(
     out = list(cases)
     for suffix in variant_bases_for(section, attribute):
         for case in cases:
-            if case.alias_of is not None:
+            if case.alias_of is not None or not variant_applies(section, attribute, suffix, case.name):
                 continue
             out.append(
                 CasePlan(

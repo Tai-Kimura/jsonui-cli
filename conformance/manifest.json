@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "3b190212c308f555ac99c03f4140a52e972b1865e4f353df07bf1144ba06a43e",
   "counts": {
-    "fixtures": 1378,
+    "fixtures": 1395,
     "assertable": 57,
-    "visual": 1048,
+    "visual": 1061,
     "interactive": 41,
-    "control": 154,
+    "control": 158,
     "declarationOnly": 77,
     "skipped": 165,
     "promoted": {
@@ -8305,6 +8305,30 @@
       "control": "__control/Label__text-1d8efd05"
     },
     {
+      "id": "Label/lines__static_with_partial",
+      "component": "Label",
+      "attribute": "lines",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lines",
+      "aliasOf": null,
+      "value": 2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lines__static_with_partial.layout.json",
+      "test": "fixtures/Label/lines__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_text-1d8efd05"
+    },
+    {
       "id": "Label/lines__binding",
       "component": "Label",
       "attribute": "lines",
@@ -8473,6 +8497,30 @@
       "control": "__control/Label__text-1d8efd05"
     },
     {
+      "id": "Label/lineBreakMode__tail_with_partial",
+      "component": "Label",
+      "attribute": "lineBreakMode",
+      "case": "tail_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lineBreakMode",
+      "aliasOf": null,
+      "value": "Tail",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lineBreakMode__tail_with_partial.layout.json",
+      "test": "fixtures/Label/lineBreakMode__tail_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_text-1d8efd05"
+    },
+    {
       "id": "Label/lineHeightMultiple__static",
       "component": "Label",
       "attribute": "lineHeightMultiple",
@@ -8495,6 +8543,30 @@
       "promotedFrom": null,
       "peerGroup": "Label/lineHeightMultiple@Label__text-1d8efd05",
       "control": "__control/Label__text-1d8efd05"
+    },
+    {
+      "id": "Label/lineHeightMultiple__static_with_partial",
+      "component": "Label",
+      "attribute": "lineHeightMultiple",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lineHeightMultiple",
+      "aliasOf": null,
+      "value": 1.8,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lineHeightMultiple__static_with_partial.layout.json",
+      "test": "fixtures/Label/lineHeightMultiple__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_text-1d8efd05"
     },
     {
       "id": "Label/lineHeightMultiple__binding",
@@ -8543,6 +8615,30 @@
       "promotedFrom": null,
       "peerGroup": "Label/lineSpacing@Label__text-1d8efd05",
       "control": "__control/Label__text-1d8efd05"
+    },
+    {
+      "id": "Label/lineSpacing__static_with_partial",
+      "component": "Label",
+      "attribute": "lineSpacing",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "lineSpacing",
+      "aliasOf": null,
+      "value": 16,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/lineSpacing__static_with_partial.layout.json",
+      "test": "fixtures/Label/lineSpacing__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_text-1d8efd05"
     },
     {
       "id": "Label/lineSpacing__binding",
@@ -8596,6 +8692,35 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Label"
+    },
+    {
+      "id": "Label/edgeInset__static_with_partial",
+      "component": "Label",
+      "attribute": "edgeInset",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "edgeInset",
+      "aliasOf": null,
+      "value": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/edgeInset__static_with_partial.layout.json",
+      "test": "fixtures/Label/edgeInset__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6"
     },
     {
       "id": "Label/underline__true",
@@ -8700,6 +8825,34 @@
       "promotedFrom": null,
       "peerGroup": "Label/underline@Label",
       "control": "__control/Label"
+    },
+    {
+      "id": "Label/underline__styled_with_partial",
+      "component": "Label",
+      "attribute": "underline",
+      "case": "styled_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "underline",
+      "aliasOf": null,
+      "value": {
+        "color": "#FF0000",
+        "lineStyle": "Single",
+        "lineOffset": 2
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/underline__styled_with_partial.layout.json",
+      "test": "fixtures/Label/underline__styled_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6"
     },
     {
       "id": "Label/underline__false",
@@ -8829,6 +8982,30 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/strikethrough__true_with_partial",
+      "component": "Label",
+      "attribute": "strikethrough",
+      "case": "true_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "strikethrough",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/strikethrough__true_with_partial.layout.json",
+      "test": "fixtures/Label/strikethrough__true_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6"
+    },
+    {
       "id": "Label/strikethrough__false",
       "component": "Label",
       "attribute": "strikethrough",
@@ -8877,6 +9054,30 @@
       "control": "__control/Label__text-1d8efd05"
     },
     {
+      "id": "Label/autoShrink__true_with_partial",
+      "component": "Label",
+      "attribute": "autoShrink",
+      "case": "true_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "autoShrink",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/autoShrink__true_with_partial.layout.json",
+      "test": "fixtures/Label/autoShrink__true_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_text-1d8efd05"
+    },
+    {
       "id": "Label/autoShrink__false",
       "component": "Label",
       "attribute": "autoShrink",
@@ -8923,6 +9124,30 @@
       "promotedFrom": null,
       "peerGroup": "Label/minimumScaleFactor@Label__autoShrink-True_height-40_text-1d8efd05",
       "control": "__control/Label__autoShrink-True_height-40_text-1d8efd05"
+    },
+    {
+      "id": "Label/minimumScaleFactor__static_with_partial",
+      "component": "Label",
+      "attribute": "minimumScaleFactor",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "minimumScaleFactor",
+      "aliasOf": null,
+      "value": 0.25,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/minimumScaleFactor__static_with_partial.layout.json",
+      "test": "fixtures/Label/minimumScaleFactor__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__autoShrink-True_height-40_partialAttributes-5561bca6_text-1d8efd05"
     },
     {
       "id": "Label/minimumScaleFactor__binding",
@@ -9052,6 +9277,37 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/textShadow__static_with_partial",
+      "component": "Label",
+      "attribute": "textShadow",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "textShadow",
+      "aliasOf": null,
+      "value": {
+        "color": "#000000",
+        "blur": 4,
+        "offset": [
+          2,
+          2
+        ]
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/textShadow__static_with_partial.layout.json",
+      "test": "fixtures/Label/textShadow__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6"
+    },
+    {
       "id": "Label/hintColor__static",
       "component": "Label",
       "attribute": "hintColor",
@@ -9130,6 +9386,36 @@
       "control": "__control/Label__selected-True"
     },
     {
+      "id": "Label/highlightAttributes__static_with_partial",
+      "component": "Label",
+      "attribute": "highlightAttributes",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "highlightAttributes",
+      "aliasOf": null,
+      "value": {
+        "font": "bold",
+        "fontSize": 24,
+        "fontColor": "#FF0000",
+        "lineHeightMultiple": 1.5,
+        "textAlign": "Center"
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/highlightAttributes__static_with_partial.layout.json",
+      "test": "fixtures/Label/highlightAttributes__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_selected-True"
+    },
+    {
       "id": "Label/highlightColor__static",
       "component": "Label",
       "attribute": "highlightColor",
@@ -9152,6 +9438,30 @@
       "promotedFrom": null,
       "peerGroup": "Label/highlightColor@Label__selected-True",
       "control": "__control/Label__selected-True"
+    },
+    {
+      "id": "Label/highlightColor__static_with_partial",
+      "component": "Label",
+      "attribute": "highlightColor",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "highlightColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/highlightColor__static_with_partial.layout.json",
+      "test": "fixtures/Label/highlightColor__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_selected-True"
     },
     {
       "id": "Label/highlightColor__binding",
@@ -9358,6 +9668,30 @@
       "promotedFrom": null,
       "peerGroup": "Label/disabledFontColor@Label__enabled-False",
       "control": "__control/Label__enabled-False"
+    },
+    {
+      "id": "Label/disabledFontColor__static_with_partial",
+      "component": "Label",
+      "attribute": "disabledFontColor",
+      "case": "static_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "disabledFontColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/disabledFontColor__static_with_partial.layout.json",
+      "test": "fixtures/Label/disabledFontColor__static_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__enabled-False_partialAttributes-5561bca6"
     },
     {
       "id": "Label/disabledFontColor__binding",
@@ -29349,6 +29683,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__autoShrink-True_height-40_partialAttributes-5561bca6_text-1d8efd05",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__autoShrink-True_height-40_partialAttributes-5561bca6_text-1d8efd05.layout.json",
+      "test": "fixtures/__control/Label__autoShrink-True_height-40_partialAttributes-5561bca6_text-1d8efd05.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Label__autoShrink-True_height-40_text-1d8efd05",
       "component": "__control",
       "attribute": null,
@@ -29469,6 +29827,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__enabled-False_partialAttributes-5561bca6",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__enabled-False_partialAttributes-5561bca6.layout.json",
+      "test": "fixtures/__control/Label__enabled-False_partialAttributes-5561bca6.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Label__highlightAttributes-cb049517",
       "component": "__control",
       "attribute": null,
@@ -29583,6 +29965,54 @@
       "deprecated": null,
       "layout": "fixtures/__control/Label__partialAttributes-5561bca6.layout.json",
       "test": "fixtures/__control/Label__partialAttributes-5561bca6.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__partialAttributes-5561bca6_selected-True",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__partialAttributes-5561bca6_selected-True.layout.json",
+      "test": "fixtures/__control/Label__partialAttributes-5561bca6_selected-True.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__partialAttributes-5561bca6_text-1d8efd05",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__partialAttributes-5561bca6_text-1d8efd05.layout.json",
+      "test": "fixtures/__control/Label__partialAttributes-5561bca6_text-1d8efd05.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
