@@ -51,6 +51,20 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     end
   end
 
+  it 'a partial or linkable Label with a font size of its own draws the plain Label\'s line (size x 1.3), not the theme\'s' do
+    plain = gen(base)
+    expect(plain).to include('lineHeight = 18.2.sp')
+    expect(gen(base.merge(partial))).to include('lineHeight = 18.2.sp')
+    expect(gen(base.merge(linkable))).to include('lineHeight = 18.2.sp')
+  end
+
+  it 'the hint bag\'s font size gives the hint its line as the plain Label\'s does' do
+    json = base.merge('text' => '@{name}', 'hint' => 'type', 'hintAttributes' => { 'fontSize' => 24 })
+    expect(gen(json)).to include('lineHeight = 31.2.sp')
+    expect(gen(json.merge(partial))).to include('lineHeight = 31.2.sp')
+    expect(gen(json.merge(linkable))).to include('lineHeight = 31.2.sp')
+  end
+
   it 'the partial Label puts edgeInset inside its background, before its padding' do
     code = gen(base.merge('edgeInset' => 8, 'background' => '#EEEEEE').merge(partial))
     expect(code).to include('.padding(8.dp)')
