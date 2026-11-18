@@ -544,9 +544,8 @@ module KjuiTools
             # given, StepBased took its default 112.sp, and a short text grew
             # to fill its box (kjui-minimum-scale-factor-grows-text-past-its-
             # font-size; seen on a device).
-            max_font_size = scaled_sp(json_data['fontSize'] || 14, 1)
+            max_font_size = auto_size_ceiling(json_data, required_imports)
             min_font_size = Helpers::FontScale.wrap(min_font_size, json_data, required_imports)
-            max_font_size = Helpers::FontScale.wrap(max_font_size, json_data, required_imports)
             args << "autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}, maxFontSize = #{max_font_size})"
           end
 
@@ -986,9 +985,9 @@ module KjuiTools
         # Under autoShrink / minimumScaleFactor the line follows the glyphs TextAutoSize shrinks (ticket
         # kjui-autoshrink-keeps-the-line-height): Compose shrinks the font size only, so a line height in sp — the
         # theme's 24sp, fontSize x 1.3, a lineHeightMultiple — stayed and a bounded Label fitted fewer shrunk lines
-        # than web (the autoShrink canon). KotlinJsonUI's LabelLineHeight.shrinking turns it into a share of the size
-        # drawn (em), the same height unshrunk; the dynamic face calls the same.
-        def self.shrink_line_height!(style_parts, json_data, required_imports, size_expr)
+        # than web (the autoShrink canon). KotlinJsonUI's LabelLineHeight.shrinking turns it into a share of the
+        # autoSize ceiling (em), the same height unshrunk; the dynamic face calls the same.
+        def self.shrink_line_height!(style_parts, json_data, required_imports, _size_expr = nil)
           return unless json_data['autoShrink'] || json_data['minimumScaleFactor']
 
           index = style_parts.index { |part| part.start_with?('lineHeight = ') }
@@ -997,7 +996,15 @@ module KjuiTools
           required_imports&.add(:label_line_height)
           required_imports&.add(:local_text_style)
           value = style_parts[index].delete_prefix('lineHeight = ')
-          style_parts[index] = "lineHeight = LabelLineHeight.shrinking(#{value}, #{size_expr}, LocalTextStyle.current.fontSize)"
+          style_parts[index] = "lineHeight = LabelLineHeight.shrinking(#{value}, #{auto_size_ceiling(json_data, required_imports)})"
+        end
+
+        # The size TextAutoSize starts from and never grows past (its maxFontSize): the declared fontSize, or 14 — the
+        # one expression autoSize's maxFontSize and LabelLineHeight.shrinking both take, so a Label that does not
+        # shrink keeps its line to the dp (a share of the theme's 16sp body put a 24sp line at 21 under the 14sp
+        # ceiling; KotlinJsonUI's LabelLineHeight.AUTO_SIZE_DEFAULT_CEILING is the same 14).
+        def self.auto_size_ceiling(json_data, required_imports)
+          Helpers::FontScale.wrap(scaled_sp(json_data['fontSize'] || 14, 1), json_data, required_imports)
         end
 
         # `(expr)` for an `if` expression nested in another, the value itself otherwise.

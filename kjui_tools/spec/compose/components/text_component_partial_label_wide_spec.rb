@@ -108,7 +108,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       object LabelLineHeight {
           fun multiple(fontSize: Float?, multiple: Float, style: TextStyle, density: Density): TextUnit = TextUnit()
           fun spaced(fontSize: Float?, spacing: Float, style: TextStyle, density: Density): TextUnit = TextUnit()
-          fun shrinking(lineHeight: TextUnit, fontSize: TextUnit, fallbackFontSize: TextUnit): TextUnit = lineHeight
+          fun shrinking(lineHeight: TextUnit, ceiling: TextUnit): TextUnit = lineHeight
       }
       val TextStyle.fontFamily: FontFamily? get() = null
       val TextStyle.fontWeight: FontWeight? get() = null
