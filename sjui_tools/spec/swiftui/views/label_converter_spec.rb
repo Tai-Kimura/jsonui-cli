@@ -292,6 +292,55 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
       end
     end
 
+    # autoShrink shrinks only until the text fits its box (attribute_semantics
+    # autoShrink, web canon): it adds no line limit, so a wrapContent height
+    # wraps as on Android and web. Through jsonui-cli 2.5.51 it emitted
+    # `lineLimit: 1` and iOS drew one shrunk line ending in an ellipsis.
+    context 'with autoShrink and no lines' do
+      it 'adds no line limit' do
+        code = described_class.new('type' => 'Label', 'width' => 200, 'text' => 'Long text', 'autoShrink' => true).convert
+        expect(code).not_to include('lineLimit')
+        expect(code).to include('.minimumScaleFactor(0.5)')
+      end
+
+      it 'keeps the lines it declares' do
+        code = described_class.new('type' => 'Label', 'width' => 200, 'text' => 'Long text', 'autoShrink' => true, 'lines' => 1).convert
+        expect(code).to include('lineLimit: 1,')
+      end
+    end
+
+    # One line of a selected Label sits where its frame puts it, so the
+    # highlight's textAlign reaches the frame as it reaches the lines. Through
+    # jsonui-cli 2.5.51 the frame took the Label rule only and a highlight's
+    # Center stayed at the start of a fixed width.
+    context 'with a highlightAttributes textAlign' do
+      let(:component) do
+        { 'type' => 'Label', 'width' => 200, 'text' => 'Sample',
+          'highlightAttributes' => { 'font' => 'bold', 'textAlign' => 'Center' } }
+      end
+
+      it 'places a selected label by the highlight' do
+        code = described_class.new(component.merge('selected' => true)).convert
+        expect(code).to include('.frame(width: 200, alignment: .center)')
+      end
+
+      it 'places a bound selected label by the highlight while it is selected' do
+        code = described_class.new(component.merge('selected' => '@{isOn}')).convert
+        expect(code).to include('.frame(width: 200, alignment: (data.isOn ? Alignment.center : Alignment.topLeading))')
+      end
+
+      it 'leaves a label that is never selected by the Label rule' do
+        code = described_class.new(component).convert
+        expect(code).to include('.frame(width: 200, alignment: .topLeading)')
+      end
+
+      it 'carries the highlight into the weight frame' do
+        code = described_class.new(component.merge('selected' => true, 'weight' => 1, 'width' => 0,
+                                                   'parent_orientation' => 'horizontal')).convert
+        expect(code).to include('alignment: .center)')
+      end
+    end
+
     context 'with partialAttributes' do
       let(:component) do
         {

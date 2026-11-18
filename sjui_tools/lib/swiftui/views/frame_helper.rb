@@ -552,8 +552,52 @@ module SjuiTools
         end
 
         # Label/Text用: textAlignとgravityを組み合わせてframe alignmentを決定
+        # The frame alignment of a Label: by the Label rule, and while it is
+        # selected, by its highlightAttributes.textAlign when it declares one
+        # - one line of the text sits where the frame puts it, so the
+        # highlight's alignment has to reach the frame as it reaches the lines
+        # (TextHighlightAttributes.textAlignment). A bound `selected` gives a
+        # conditional; through jsonui-cli 2.5.51 the frame took the Label rule
+        # only, and one line of a selected Label with a highlight's Center
+        # stayed at the start of a fixed width, where Android and web centre it.
         def label_frame_alignment(both_infinity: false)
-          text_align = @component['textAlign']
+          base = label_frame_alignment_for(label_horizontal, both_infinity: both_infinity)
+          highlight_aware_alignment(base, label_highlight_horizontal) do |h|
+            label_frame_alignment_for(h, both_infinity: both_infinity)
+          end
+        end
+
+        # `base`, or the alignment `yield` gives for the highlight's horizontal
+        # while the Label is selected: itself for a literal `selected: true`,
+        # a conditional for a bound one.
+        def highlight_aware_alignment(base, highlight_h)
+          return base if highlight_h.nil?
+
+          highlighted = yield(highlight_h)
+          return base if highlighted == base
+
+          condition = respond_to?(:highlight_condition, true) ? highlight_condition : 'false'
+          return base if condition == 'false'
+          return highlighted if condition == 'true'
+
+          "(#{condition} ? Alignment#{highlighted} : Alignment#{base})"
+        end
+
+        # The horizontal a Label's highlightAttributes.textAlign names -
+        # 'leading', 'center', 'trailing' - or nil.
+        def label_highlight_horizontal
+          return nil unless @component['type'] == 'Label'
+
+          attrs = @component['highlightAttributes']
+          return nil unless attrs.is_a?(Hash) && attrs['textAlign']
+          return nil unless respond_to?(:text_alignment_to_swiftui, true)
+
+          { '.leading' => 'leading', '.center' => 'center', '.trailing' => 'trailing' }[
+            text_alignment_to_swiftui(attrs['textAlign'], %w[highlightAttributes textAlign])
+          ]
+        end
+
+        def label_frame_alignment_for(h, both_infinity: false)
 
           # The vertical position: in a frame that sizes the height
           # (`both_infinity`, a min / max height bound) the Label rule —
@@ -562,9 +606,7 @@ module SjuiTools
           # change.
           v = both_infinity ? label_vertical : (label_vertical_named || 'top')
 
-          # 横位置: the Label rule (label_horizontal)
-          h = label_horizontal
-
+          # 横位置: `h`, the Label rule (label_horizontal) or the highlight's
           map = {
             %w[top leading] => '.topLeading',
             %w[top center] => both_infinity ? '.top' : '.center',

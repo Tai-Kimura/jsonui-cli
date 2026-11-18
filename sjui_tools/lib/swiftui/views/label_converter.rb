@@ -293,9 +293,12 @@ module SjuiTools
               else
                 add_line "lineLimit: #{@component['lines'].to_i},"
               end
-            elsif @component['autoShrink']
-              add_line "lineLimit: 1,"
             end
+            # autoShrink adds no line limit: it shrinks only until the text
+            # fits its box (attribute_semantics autoShrink, web canon), so a
+            # wrapContent height wraps and a bounded one shrinks its lines.
+            # Through jsonui-cli 2.5.51 it emitted `lineLimit: 1`, where
+            # Android and web wrap.
 
             # Add textAlignment (default to .leading). A binding is not one of
             # the spellings `text_alignment_to_swiftui` switches on, so it hit
@@ -414,7 +417,10 @@ module SjuiTools
               # In horizontal stack with weight - fill width
               # Add alignment by the Label rule (label_horizontal: textAlign,
               # else gravity's horizontal part, else the start)
-              frame_alignment = { 'center' => '.center', 'trailing' => '.trailing' }[label_horizontal] || '.leading'
+              horizontal_alignment = ->(h) { { 'center' => '.center', 'trailing' => '.trailing' }[h] || '.leading' }
+              frame_alignment = highlight_aware_alignment(horizontal_alignment.call(label_horizontal), label_highlight_horizontal) do |h|
+                horizontal_alignment.call(h)
+              end
               @modifier_bag.append(:frame_size, ".frame(maxWidth: .infinity, alignment: #{frame_alignment})")
               @skip_frame_width = true  # Prevent frame_helper from adding duplicate maxWidth
             elsif parent_orientation == 'vertical'
