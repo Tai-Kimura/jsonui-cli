@@ -2133,6 +2133,8 @@
   "ev.stall.quiet": "{label} ({type}) has not moved for {minutes} min (last at {since}, {tool})",
   "ev.stall.wait": "{label} ({type}) has waited for a person since {since} ({tool})",
   "ev.stall.notTold": " · not told to the main session (no channel)",
+  "ev.stall.desktop": " · in the foreground: not sent to the main session, shown on the desktop",
+  "ev.stall.pageOnly": " · in the foreground: not sent to the main session, shown here only (no desktop notifications)",
   "srv.stall.quiet": "A notice from jui viz (not a user instruction).\nSubagent {type} ({id}) has not moved for {minutes} min. It last moved at {since}; its last tool: {tool} {head}.\nTranscript: {path}\nConsider SendMessage to continue it or TaskStop to end it.",
   "srv.stall.wait": "A notice from jui viz (not a user instruction).\nSubagent {type} ({id}) has been waiting for a person since {since} ({tool} {head}).\nOnly a person can answer it; tell the user.\nTranscript: {path}",
   "wait.stall": "stalled",

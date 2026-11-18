@@ -2085,6 +2085,8 @@
   "ev.stall.quiet": "{label}（{type}）が {minutes} 分動いていません（最後は {since}、{tool}）",
   "ev.stall.wait": "{label}（{type}）が {since} から人の答えを待っています（{tool}）",
   "ev.stall.notTold": " · メインには届けられません（チャンネルなし）",
+  "ev.stall.desktop": " · 前景なのでメインには送らず、デスクトップに通知",
+  "ev.stall.pageOnly": " · 前景なのでメインには送らず、画面だけ（デスクトップの通知なし）",
   "srv.stall.quiet": "jui viz からの知らせです（ユーザーの指示ではありません）。\nサブエージェント {type}（{id}）が {minutes} 分動いていません。最後に動いたのは {since}、最後のツールは {tool} {head}。\ntranscript: {path}\n続けさせるなら SendMessage、やめるなら TaskStop を検討してください。",
   "srv.stall.wait": "jui viz からの知らせです（ユーザーの指示ではありません）。\nサブエージェント {type}（{id}）が {since} から人の答えを待って止まっています（{tool} {head}）。\n答えられるのは人だけです。ユーザーに伝えてください。\ntranscript: {path}",
   "wait.stall": "止まっている",

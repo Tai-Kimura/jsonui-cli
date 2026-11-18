@@ -248,6 +248,8 @@ class World:
         self.codex_end = None   # async session id -> (status, note or why): the Codex link's 退勤 (viz_cmd sets it)
         # a subagent that stopped moving: told to its main session and shown (subwatch.py; viz_cmd sets the minutes)
         self.subwatch = SubagentWatch()
+        # (title, text) -> shown: a desktop notification for a foreground subagent's stall (viz_cmd sets it)
+        self.desktop_notify = None
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
@@ -949,8 +951,12 @@ class World:
         use_id = _s(payload.get("tool_use_id"))
         if aid and kind not in ("SubagentStop", "SessionEnd"):
             if self.subwatch.hook(aid, sid, at, kind, tool=tool, tool_input=tool_input, use_id=use_id,
-                                path=self._agent_paths.get(aid), agent_type=agent_type, question=tool == QUESTION_TOOL):
+                                  path=self._agent_paths.get(aid), agent_type=agent_type, question=tool == QUESTION_TOOL,
+                                  main_transcript=_s(payload.get("transcript_path")),
+                                  foreground=self._called_in_foreground(sid, agent_type) if kind == "SubagentStart" else None):
                 self._unstuck(agent)
+        if kind in ("Stop", "StopFailure") and not aid and isinstance(payload.get("background_tasks"), list):
+            self.subwatch.background([b for b in payload["background_tasks"] if isinstance(b, dict)])
         if kind in ("PreToolUse", "PostToolUse") and tool_input:
             self._note_paths(sid, tool_input, at)
         cat = "tool" if kind in TOOL_EVENTS else "session"
@@ -1225,6 +1231,15 @@ class World:
 
     # ---------------------------------------------------------------- a subagent that stopped moving (subwatch.py)
 
+    def _called_in_foreground(self, sid: str, agent_type: str | None) -> bool:
+        """A subagent that starts while its main waits on an Agent call made without run_in_background: the main is
+        inside that call, so a channel text reaches it only when the call returns (measured 11-18: a queued text waits
+        for the open tool, up to 590 s). A Workflow's agents never are."""
+        if agent_type == "workflow-subagent":
+            return False
+        return any(self._open_tool.get(u) in robots.LAUNCH_TOOLS and not (self._open_input.get(u) or {}).get("run_in_background")
+                   for u in self._open.get(sid, []))
+
     def _unstuck(self, agent: dict) -> None:
         if agent.pop("stall", None) is not None:
             self._dirty.add("agents")
@@ -1244,16 +1259,26 @@ class World:
             if agent is None or session is None or "leftAt" in agent or session.get("status") == "ended":
                 self.subwatch.drop(n["agentId"])
                 continue
-            words = {"type": n["agentType"] or "subagent", "id": n["agentId"][:8], "label": agent.get("label") or n["agentId"][:8],
+            kind_words = n["agentType"] or "subagent"
+            if n["description"]:
+                kind_words = f"{kind_words} {n['description']}"
+            words = {"type": kind_words, "id": n["agentId"][:8], "label": agent.get("label") or n["agentId"][:8],
                      "minutes": n["minutes"], "since": clock_hhmm(n["since"]),
                      "tool": n["tool"] or "-", "head": n["head"], "path": n["path"] or "-"}
             quiet = n["kind"] == "quiet"
-            told = self._notify_main(n["sessionId"], i18n.tl("srv.stall.quiet" if quiet else "srv.stall.wait", **words), at)
-            agent["stall"] = {"kind": n["kind"], "since": n["since"], "at": at, "told": told}
+            line = i18n.tl("ev.stall.quiet" if quiet else "ev.stall.wait", **words)
+            if n["foreground"]:
+                # the main is inside the call (requester 11-18: 前景は画面＋デスクトップの通知、メインには送らない)
+                told = False
+                shown = self.desktop_notify is not None and self.desktop_notify(i18n.tl("wait.stall"), line)
+                how = "ev.stall.desktop" if shown else "ev.stall.pageOnly"
+            else:
+                told = self._notify_main(n["sessionId"], i18n.tl("srv.stall.quiet" if quiet else "srv.stall.wait", **words), at)
+                how = None if told else "ev.stall.notTold"
+            agent["stall"] = {"kind": n["kind"], "since": n["since"], "at": at, "told": told, "foreground": n["foreground"]}
             self._dirty.add("agents")
             self.state.add_event({"at": at, "sessionId": n["sessionId"], "agentId": n["agentId"], "kind": "SubagentStall",
-                                  "cat": "perm", "text": robots._clip(i18n.tl("ev.stall.quiet" if quiet else "ev.stall.wait", **words)
-                                                                     + ("" if told else i18n.tl("ev.stall.notTold")), 200)})
+                                  "cat": "perm", "text": robots._clip(line + (i18n.tl(how) if how else ""), 200)})
 
     def _notify_main(self, sid: str, text: str, at: int) -> bool:
         """A notice from viz itself to a session's channel queue (not the page's prompt: no PromptSent line). False when

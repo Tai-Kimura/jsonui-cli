@@ -249,3 +249,94 @@ def test_the_watch_is_cheap_when_nothing_is_watched():
         if w.due(T + i * 500):
             w.check(T + i * 500)
     assert stat.calls == 0 and w.watched == {} and os.environ is not None
+
+
+# ---------------------------------------------------------------- where the transcript is, foreground or not (11-18)
+
+def test_the_transcript_is_found_under_the_main_s_folder(tmp_path):
+    """A subagent's own hooks carry the main's transcript_path only (claude 2.1.327): its file is found under it."""
+    main = tmp_path / "proj" / "sess.jsonl"
+    sub = tmp_path / "proj" / "sess" / "subagents" / f"agent-{AID}.jsonl"
+    run_ = tmp_path / "proj" / "sess" / "subagents" / "workflows" / "wf_1" / "agent-wf00000000000001.jsonl"
+    for p in (main, sub, run_):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}\n")
+    w = SubagentWatch()
+    w.hook(AID, SID, T, "SubagentStart", main_transcript=str(main))
+    w.hook("wf00000000000001", SID, T, "SubagentStart", agent_type="workflow-subagent", main_transcript=str(main))
+    w.hook("a-not-written-yet", SID, T, "SubagentStart", main_transcript=str(main))
+    w.check(T)
+    assert w.watched[AID]["path"] == str(sub)
+    assert w.watched["wf00000000000001"]["path"] == str(run_)
+    assert w.watched["a-not-written-yet"]["path"] is None
+
+
+def foreground_world(tmp_path, notify=None, channel=True):
+    world, ch, stat = world_with(tmp_path, channel=channel)
+    world.desktop_notify = notify
+    hook(world, "UserPromptSubmit", T, prompt="go")
+    return world, ch
+
+
+def test_a_foreground_subagent_is_shown_on_the_desktop_and_never_sent_to_the_main(tmp_path):
+    shown = []
+    world, ch = foreground_world(tmp_path, notify=lambda title, text: shown.append((title, text)) or True)
+    hook(world, "PreToolUse", T, tool_name="Agent", tool_input={"subagent_type": "Explore", "prompt": "look"}, tool_use_id="call1")
+    hook(world, "SubagentStart", T + 100, agent_id=AID, agent_type="Explore")
+    tick_to(world, T + 21 * MIN, T)
+    assert ch.inbox == []
+    assert len(shown) == 1 and shown[0][0] == i18n.tl("wait.stall")
+    ev = [e for e in world.state.events if e["kind"] == "SubagentStall"]
+    assert len(ev) == 1 and ev[0]["text"].endswith(i18n.tl("ev.stall.desktop")) and shown[0][1] in ev[0]["text"]
+    assert world.agents[AID]["stall"]["foreground"] is True
+
+
+def test_without_desktop_notifications_a_foreground_one_is_on_the_page_only(tmp_path):
+    world, ch = foreground_world(tmp_path, notify=None)
+    hook(world, "PreToolUse", T, tool_name="Agent", tool_input={"subagent_type": "Explore", "prompt": "look"}, tool_use_id="call1")
+    hook(world, "SubagentStart", T + 100, agent_id=AID, agent_type="Explore")
+    tick_to(world, T + 21 * MIN, T)
+    ev = [e for e in world.state.events if e["kind"] == "SubagentStall"]
+    assert ch.inbox == [] and len(ev) == 1 and ev[0]["text"].endswith(i18n.tl("ev.stall.pageOnly"))
+
+
+def test_a_background_call_and_a_workflow_s_agents_go_to_the_main(tmp_path):
+    shown = []
+    world, ch = foreground_world(tmp_path, notify=lambda title, text: shown.append(text) or True)
+    hook(world, "PreToolUse", T, tool_name="Agent", tool_input={"subagent_type": "Explore", "prompt": "look", "run_in_background": True}, tool_use_id="bg1")
+    hook(world, "SubagentStart", T + 100, agent_id="b0000000000000001", agent_type="Explore")
+    hook(world, "PostToolUse", T + 200, tool_name="Agent", tool_input={"run_in_background": True}, tool_use_id="bg1")
+    hook(world, "PreToolUse", T + 300, tool_name="Agent", tool_input={"subagent_type": "Explore", "prompt": "look"}, tool_use_id="fg1")
+    hook(world, "SubagentStart", T + 400, agent_id="w0000000000000001", agent_type="workflow-subagent")   # a Workflow's, while a foreground call is open
+    hook(world, "PostToolUse", T + 500, tool_name="Agent", tool_input={}, tool_use_id="fg1")
+    tick_to(world, T + 21 * MIN, T)
+    assert shown == [] and len(ch.inbox) == 2
+
+
+def test_the_main_s_stop_names_its_background_work(tmp_path):
+    world, ch = foreground_world(tmp_path)
+    hook(world, "PreToolUse", T, tool_name="Agent", tool_input={"subagent_type": "Explore", "prompt": "look"}, tool_use_id="call1")
+    hook(world, "SubagentStart", T + 100, agent_id=AID, agent_type="Explore")   # seen as foreground at its start
+    hook(world, "Stop", T + 200, background_tasks=[{"id": AID, "type": "subagent", "status": "running", "description": "Find  the\\ncart code"}])
+    tick_to(world, T + 21 * MIN, T)
+    assert len(ch.inbox) == 1 and "Explore Find the\\ncart code" in ch.inbox[0]["text"]
+
+
+def test_the_desktop_notifier(tmp_path, monkeypatch):
+    from jui_cli.viz import subwatch
+    monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path))
+    rec = subwatch.desktop_notifier({"JUI_VIZ_E2E": "1"})
+    assert rec("t", "x") is True and (tmp_path / "desktop-notices.e2e.jsonl").read_text().strip() == '{"title": "t", "text": "x"}'
+    monkeypatch.setattr(subwatch.sys if hasattr(subwatch, "sys") else __import__("sys"), "platform", "linux")
+    assert subwatch.desktop_notifier({}) is None
+    monkeypatch.setattr(__import__("sys"), "platform", "darwin")
+    monkeypatch.setattr(__import__("shutil"), "which", lambda name: "/usr/bin/osascript")
+    got = []
+    show = subwatch.desktop_notifier({}, run=got.append)
+    assert show("jui viz", "it's \"quoted\"; end run") is True
+    import time as _t
+    for _ in range(50):
+        if got:
+            break
+        _t.sleep(0.02)
+    assert got and got[0][-2:] == ["jui viz", "it's \"quoted\"; end run"] and got[0][0] == "osascript"   # words as arguments, never in the script

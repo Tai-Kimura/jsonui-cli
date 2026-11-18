@@ -10,6 +10,8 @@ over with two background subagents: A goes quiet, B asks for a permission. Check
     while it stays quiet; its robot's bubble "zz"; one line in the event log;
   * A's transcript grows: the bubble goes; quiet again: a second notice;
   * B: the srv.stall.wait words (only a person can answer), its robot's permission bubble;
+  * C, started inside a foreground Agent call: never the main's channel; one desktop notification (recorded, not shown,
+    under JUI_VIZ_E2E) and its event line says so;
   * A stops (SubagentStop): no more notices after it;
   * stills: light and dark.
 No console error; nothing outside the server."""
@@ -30,6 +32,7 @@ from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, ready  # noqa:
 MAIN = "5a110000-0000-4000-8000-0000000000a1"
 A = "aa11c0ffee000a01"
 B = "bb22d00d00000b02"
+C = "cc33f00f00000c03"   # a foreground call: the main is inside it
 CWD = "/work/stall-app"
 
 
@@ -147,29 +150,45 @@ async def run_subagent_quiet(pw, out, failures):
              tool_response={"stdout": "ok"})
         hook(hook_event_name="PreToolUse", agent_id=B, agent_type="general-purpose", tool_name="Write", tool_input={"file_path": "/work/stall-app/x.txt", "content": "x"}, tool_use_id="ub1")
         hook(hook_event_name="PermissionRequest", agent_id=B, agent_type="general-purpose", tool_name="Write", tool_input={"file_path": "/work/stall-app/x.txt", "content": "x"})
-        hook(hook_event_name="Stop", background_tasks=[{"id": A}, {"id": B}])   # the main's turn over, both in the background
+        hook(hook_event_name="Stop", background_tasks=[{"id": A, "type": "subagent", "status": "running", "description": "テストの失敗を調べる"},
+                                                       {"id": B, "type": "subagent", "status": "running"}])   # the main's turn over, both in the background
+        # the next turn: a foreground call; C starts inside it and goes quiet (the main waits on the call)
+        hook(hook_event_name="UserPromptSubmit", prompt="もう一つ")
+        hook(hook_event_name="PreToolUse", tool_name="Agent", tool_input={"subagent_type": "Plan", "prompt": "plan it"}, tool_use_id="fg1")
+        hook(hook_event_name="SubagentStart", agent_id=C, agent_type="Plan")
         t_quiet = time.time()
 
         # B waits on a person: told after 3 s; A quiet: told after 6 s. Both, once.
         got = taken(2, 30)
         res["first"] = [g[:240] for g in got]
         head_line = T("srv.stall.wait", type="general-purpose", id=B[:8], since="", tool="Write", head="", path="-").split("\n")[0]   # 「jui viz からの知らせ…（ユーザーの指示ではありません）」
-        quiet = [g for g in got if f"Explore（{A[:8]}）" in g or f"Explore ({A[:8]})" in g]
+        quiet = [g for g in got if A[:8] in g]
         waits = [g for g in got if f"({B[:8]})" in g or f"（{B[:8]}）" in g]
-        check(failures, len(got) == 2 and len(quiet) == 1 and len(waits) == 1, f"one notice each for A and B: {res['first']}")
+        check(failures, len(got) == 2 and len(quiet) == 1 and len(waits) == 1 and not any(C[:8] in g for g in got),
+              f"one notice each for A and B, none for the foreground C: {res['first']}")
+        desk = state / "desktop-notices.e2e.jsonl"
+        for _ in range(100):
+            if desk.exists():
+                break
+            time.sleep(0.1)
+        notes = res["desktop"] = [json.loads(l) for l in desk.read_text().splitlines()] if desk.exists() else []
+        check(failures, len(notes) == 1 and notes[0]["title"] == T("wait.stall") and "Plan" in notes[0]["text"],
+              f"C, in the foreground: one desktop notification, not the main's channel: {notes}")
         if quiet:
-            check(failures, "npm test" in quiet[0] and str(ta) in quiet[0] and quiet[0].split("\n")[0] == head_line,
+            check(failures, "npm test" in quiet[0] and str(ta) in quiet[0] and quiet[0].split("\n")[0] == head_line and "テストの失敗を調べる" in quiet[0],
                   f"A's notice: its last tool, its transcript, the not-a-user-instruction head: {quiet[0][:300]}")
         if waits:
             check(failures, "/work/stall-app/x.txt" in waits[0] and "Write" in waits[0], f"B's notice: the call it waits on: {waits[0][:300]}")
         res["told-after-s"] = round(time.time() - t_quiet, 1)
         la = await page.evaluate("(a) => window.__dbg.labelOfAgent(a)", A)
         lb = await page.evaluate("(a) => window.__dbg.labelOfAgent(a)", B)
+        lc = await page.evaluate("(a) => window.__dbg.labelOfAgent(a)", C)
         await wait(page, "(id) => { const w = window.__dbg.waitLook(id); return w && w.kind === 'stall' && w.bubble === 'zz'; }", arg=la, label="A's zz bubble")
-        look = res["looks"] = await page.evaluate("(ids) => ids.map((id) => window.__dbg.waitLook(id))", [la, lb])
-        check(failures, look[0]["kind"] == "stall" and look[1]["kind"] == "perm", f"A stalled, B's permission bubble: {look}")
+        await wait(page, "(id) => { const w = window.__dbg.waitLook(id); return w && w.kind === 'stall'; }", arg=lc, label="C's zz bubble")
+        look = res["looks"] = await page.evaluate("(ids) => ids.map((id) => window.__dbg.waitLook(id))", [la, lb, lc])
+        check(failures, look[0]["kind"] == "stall" and look[1]["kind"] == "perm" and look[2]["kind"] == "stall", f"A and C stalled, B's permission bubble: {look}")
         stalls = res["log"] = await page.evaluate("() => window.__dbg.logOf('SubagentStall')")
-        check(failures, sorted(x["who"] for x in stalls) == sorted([la, lb]) and any(x["who"] == la and "npm test" not in x["what"] and "Bash" in x["what"] for x in stalls),
+        check(failures, sorted(x["who"] for x in stalls) == sorted([la, lb, lc]) and any(x["who"] == lc and x["what"].endswith(T("ev.stall.desktop")) for x in stalls) and any(x["who"] == la and "npm test" not in x["what"] and "Bash" in x["what"] for x in stalls),
               f"one line each in the event log, A's naming its last tool: {stalls}")
         await page.wait_for_timeout(600)
         await page.screenshot(path=str(out / "stall-light.png"))
@@ -192,6 +211,7 @@ async def run_subagent_quiet(pw, out, failures):
         # A stops: nothing more
         hook(hook_event_name="SubagentStop", agent_id=A, agent_type="Explore", last_assistant_message="done")
         hook(hook_event_name="SubagentStop", agent_id=B, agent_type="general-purpose", last_assistant_message="done")
+        hook(hook_event_name="SubagentStop", agent_id=C, agent_type="Plan", last_assistant_message="done")
         after = taken(1, 10)
         check(failures, after == [], f"no notice after they stopped: {[a[:120] for a in after]}")
     finally:

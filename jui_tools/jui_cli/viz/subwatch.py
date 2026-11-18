@@ -22,6 +22,7 @@ NOTICES_MAX times per subagent:
 """
 from __future__ import annotations
 
+import glob
 import os
 
 QUIET_MIN = 20.0
@@ -68,17 +69,28 @@ class SubagentWatch:
 
     def hook(self, aid: str, sid: str, at: int, kind: str, *, tool: str | None = None, tool_input=None,
              use_id: str | None = None, path: str | None = None, agent_type: str | None = None,
-             question: bool = False) -> bool:
+             question: bool = False, main_transcript: str | None = None, foreground: bool | None = None,
+             description: str | None = None) -> bool:
         """One hook of a subagent that goes on. True when this ended a stretch that was told (the page's mark goes)."""
         w = self.watched.get(aid)
         if w is None:
             if self.quiet_ms <= 0 and self.perm_ms <= 0:
                 return False
-            w = self.watched[aid] = {"sid": sid, "lastAt": at, "size": None, "mtimeMs": 0, "path": None, "type": None,
+            w = self.watched[aid] = {"sid": sid, "lastAt": at, "size": None, "mtimeMs": 0, "path": None, "type": None, "base": None,
+                                     "foreground": False, "description": "",
                                      "calls": {}, "waitSince": 0, "waitTool": "", "waitHead": "", "tool": "", "head": "",
                                      "told": None, "notices": 0}
         if path:
             w["path"] = path
+        elif not w["base"] and main_transcript and main_transcript.endswith(".jsonl"):
+            # A subagent's own hooks carry the main's transcript_path, never its own (only SubagentStop has
+            # agent_transcript_path; claude 2.1.327, measured 11-18): it is <main>/subagents/agent-<id>.jsonl, a
+            # Workflow's under <main>/subagents/workflows/<run>/ — looked for at the check until found.
+            w["base"] = main_transcript[: -len(".jsonl")]
+        if foreground is not None:
+            w["foreground"] = foreground
+        if description:
+            w["description"] = description
         if agent_type:
             w["type"] = agent_type
         w["lastAt"] = max(w["lastAt"], at)
@@ -115,6 +127,27 @@ class SubagentWatch:
         w["told"] = None
         return True
 
+    @staticmethod
+    def find(base: str, aid: str) -> str | None:
+        """The subagent's transcript under its main's folder: subagents/agent-<id>.jsonl, or a Workflow's
+        subagents/workflows/<run>/agent-<id>.jsonl (one glob of the runs, only while it is not found)."""
+        name = f"agent-{aid}.jsonl"
+        direct = os.path.join(base, "subagents", name)
+        if os.path.exists(direct):
+            return direct
+        runs = glob.glob(os.path.join(glob.escape(base), "subagents", "workflows", "*", glob.escape(name)))
+        return runs[0] if runs else None
+
+    def background(self, tasks: list[dict]) -> None:
+        """The main's Stop listed its background work ({id, type, status, description}; type subagent or workflow):
+        none of those is a foreground call, and its description names it in the notice."""
+        for task in tasks:
+            w = self.watched.get(str(task.get("id")))
+            if w is not None:
+                w["foreground"] = False
+                if isinstance(task.get("description"), str) and task["description"].strip():
+                    w["description"] = " ".join(task["description"].split())[:HEAD_MAX]
+
     # ------------------------------------------------------------ the check
 
     def every_ms(self) -> int:
@@ -131,6 +164,8 @@ class SubagentWatch:
         self.next_check = now + self.every_ms()
         notices, moved = [], []
         for aid, w in list(self.watched.items()):
+            if not w["path"] and w["base"]:
+                w["path"] = self.find(w["base"], aid)
             if w["path"]:
                 try:
                     st = self.stat(w["path"])
@@ -160,5 +195,44 @@ class SubagentWatch:
                 w["told"] = notice["since"]
                 w["notices"] += 1
                 notices.append({**notice, "agentId": aid, "sessionId": w["sid"], "agentType": w["type"] or "",
+                                "foreground": w["foreground"], "description": w["description"],
                                 "path": w["path"] or "", "minutes": max(1, (now - notice["since"]) // 60_000)})
         return notices, moved
+
+
+def desktop_notifier(environ=None, run=None):
+    """(title, text) -> shown, for a foreground subagent's stall (requester 11-18: 画面＋デスクトップの通知; no new
+    dependency): macOS's own `osascript -e 'display notification …'`, the words passed as arguments (never put into
+    the script), run off the loop with a 10 s limit. None where there is no osascript (the page alone shows it).
+    Under JUI_VIZ_E2E=1 nothing is shown: each one is a line in <viz home>/desktop-notices.e2e.jsonl for the test."""
+    import json
+    import shutil
+    import subprocess
+    import sys
+    import threading
+
+    from . import paths
+    env = os.environ if environ is None else environ
+    if env.get("JUI_VIZ_E2E") == "1":
+        log = paths.viz_home() / "desktop-notices.e2e.jsonl"
+
+        def record(title: str, text: str) -> bool:
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"title": title, "text": text}, ensure_ascii=False) + "\n")
+            return True
+        return record
+    if sys.platform != "darwin" or not shutil.which("osascript"):
+        return None
+    script = ["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run"]
+    runner = run or (lambda argv: subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                                 stderr=subprocess.DEVNULL, timeout=10, check=False))
+
+    def show(title: str, text: str) -> bool:
+        def go():
+            try:
+                runner(["osascript", *script, str(title)[:120], str(text)[:400]])
+            except (OSError, subprocess.SubprocessError):
+                pass
+        threading.Thread(target=go, name="viz-desktop-notify", daemon=True).start()
+        return True
+    return show
