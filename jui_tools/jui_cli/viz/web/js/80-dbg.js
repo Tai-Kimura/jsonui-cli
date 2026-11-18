@@ -723,6 +723,8 @@ window.__dbg = {
   closeTaskBoard: () => closeTaskBoard(),
   towerStateOf: (id) => (SOURCE.mode === 'live' ? towerState(id) : null),
   // a session's main robot and a robot's project, as the page has them (tools/viz_e2e/project_switch.py)
+  logOf: (kind) => logItems.filter((e) => e.kind === kind).map((e) => ({ who: e.who, what: e.what })),   // the event log's lines of one kind
+  labelOfAgent: (aid) => (typeof AGENT_ID === 'undefined' ? null : Object.keys(AGENT_ID).find((l) => AGENT_ID[l] === aid) || null),   // a subagent's robot (subagent_quiet.py)
   labelOfSession: (sid) => (typeof SESSION_UUID === 'undefined' ? null : Object.keys(SESSION_UUID).find((l) => SESSION_UUID[l] === sid) || null),
   robotProject: (id) => projectOfRobot(id) || null,
   // the デバイス pane (tools/viz_e2e/devices_pane.py): the picked robot, the project, the server's machine slice, the

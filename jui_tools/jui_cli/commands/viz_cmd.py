@@ -733,6 +733,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz.paths import claude_home
     from ..viz.sources import history, transcripts
     world = World(ctx.state, config.toolInputMaxChars, session_start=transcripts.session_start(claude_home() / "projects"))
+    world.subwatch.configure(config.subagentStallMin, config.subagentWaitMin)
     # the JsonUI rooms' files are read in a worker, never on the loop (ticket
     # 2026-10-24-viz-serve-loop-stalls-in-spec-summaries-stat); a replay keeps reading them on the spot
     world.off_loop = not replay

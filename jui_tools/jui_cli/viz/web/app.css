@@ -273,6 +273,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .wait-bubble[data-wait-kind="perm"] { background: #ffb020; border-color: #7a4b00; color: #1f1400; }
 .wait-bubble[data-wait-kind="ask"] { background: #b48cff; border-color: #4b2a8f; color: #14062e; }
 .wait-bubble[data-wait-kind="input"] { background: #e8ecf1; border-color: #6b7a90; color: #13233a; }
+.wait-bubble[data-wait-kind="stall"] { background: #cfe3ff; border-color: #2c5a9e; color: #0b1d3a; }
 .wait-bubble:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* a skill in use (45-spirits.js): the badge by the tag, and the spirit's bubble, its tail at who says it */
 .skill-badge { position: absolute; left: 0; top: 0; padding: 1px 8px; border-radius: 9px; background: rgba(20, 28, 40, .82);

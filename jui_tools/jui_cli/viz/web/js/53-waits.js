@@ -2,16 +2,17 @@
    Requester: 「今こっちの返答や許可待ちになってるbotが3dの見た目でもわかるようにしてほしい。質問、許可、入力待ちでそれぞれUI用意して」
    and 「ボットの頭に追加の吹き出し用意して、そこからボード遷移もできるといい」; answers: an input's wait may go to play (the
    bubble goes with it), an auto mode denial is a permission's bubble, the colour is ours, the bubble opens the panel's card.
-   One robot shows one wait, permission > question > input (the panel's order):
+   One robot shows one wait, permission > question > input > stall (the panel's order):
      * perm  — a permission prompt (state waiting, not a question) or a stopped call's card (51-denials.js): "!", amber
      * ask   — a question (state waiting on AskUserQuestion): "?" and how many choices, violet; the lamp violet too
      * input — the session's turn ended and nobody answered (Notification idle_prompt: the server's inputWaitAt, until it
                moves again), on its main robot, until it is opened on this page since: "…"
+     * stall — a subagent that has not moved for the configured minutes (subwatch.py, 11-18), until it moves again: "zz"
    The pose (10-robot-core.js) follows r.waitKind: perm the raised hand, ask a hand to the chin, input leaning back. The
    bubble is a button over the tag (placeRobotTags keeps it on the tag's box), in front of everything 3D; a press opens
    the wait's card in the panel — the question card, the permission (or the stopped call's) card — or the session's
    talk. A press on the robot or its tag does what it did. Text 4.5:1 on each bubble, light and dark (fixed colours). */
-const WAIT = { picked: null, mark: { perm: '!', ask: '?', input: '…' }, name: { perm: tl('status.waiting'), ask: tl('status.asking'), input: tl('status.input') } };
+const WAIT = { picked: null, mark: { perm: '!', ask: '?', input: '…', stall: 'zz' }, name: { perm: tl('status.waiting'), ask: tl('status.asking'), input: tl('status.input'), stall: tl('wait.stall') } };
 function waitKindOf(id) {
   const st = robotState[id];
   if (!st || !DEF[id]) return null;
@@ -23,6 +24,9 @@ function waitKindOf(id) {
     const since = sess ? Number(sess.inputWaitAt) || 0 : 0;
     if (since && !((NOTIFY.opened.get(id) || 0) >= since)) return 'input';   // seen on this page since: no bubble
   }
+  // a subagent that stopped moving (subwatch.py; ticket 2026-11-18-viz-notify-main-when-a-subagent-quiets): the last of the
+  // four, until it moves again; a press opens its talk, as an input's does
+  if (st.stall && DEF[id].kind === 'sub') return 'stall';
   return null;
 }
 /* The question waiting for this robot (the one its bubble opens), or null. */
@@ -76,7 +80,7 @@ function openWaitBoard(opener, waits) {
 /* A press on a bubble: the panel's card of that wait, scrolled to and focused (the side panel opened first), or the
    session's talk. WAIT.picked says what was picked (the e2e reads it). */
 function waitOpen(id, kind) {
-  if (kind === 'input') {
+  if (kind === 'input' || kind === 'stall') {
     selectRobot(id, document.getElementById('scene-canvas'));
     const until = Date.now() + 4000;
     const talk = () => { if (rbState.id !== id) return; if (rbEl.hidden) { if (Date.now() < until) requestAnimationFrame(talk); return; } talkShow(true); WAIT.picked = { kind, id }; };

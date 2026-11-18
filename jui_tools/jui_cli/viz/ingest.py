@@ -24,6 +24,7 @@ from .calls import CallBook, peer_name
 from .denials import DenialBook
 from .permissions import PROMPTS_QUEUED_MAX, PermissionBook
 from .questions import QuestionBook
+from .subwatch import SubagentWatch
 from .sources import devices as devices_mod
 from .sources import launch, processes
 from .sources.history import sent_files as history_sent_files
@@ -52,6 +53,12 @@ def perm_wait() -> str:
 
 def question_wait() -> str:
     return i18n.tl("status.asking")
+
+
+def clock_hhmm(ms: int) -> str:
+    """HH:MM in this machine's time, for a stall notice (when the subagent last moved)."""
+    from datetime import datetime
+    return datetime.fromtimestamp(ms / 1000).strftime("%H:%M")
 #: How much of a prompt sent from the page goes into the event log (the rest is never stored).
 PROMPT_HEAD = 40
 #: A session process whose argv could not be read is tried again after 1 s, then 2, 4 … up to 30 s apart.
@@ -239,6 +246,8 @@ class World:
         self.codex_history = None   # (agent id, end, stop) -> history rows
         self.codex_stop = None   # session id -> bool: the Codex link's interrupt (viz_cmd sets it), the page's 停止
         self.codex_end = None   # async session id -> (status, note or why): the Codex link's 退勤 (viz_cmd sets it)
+        # a subagent that stopped moving: told to its main session and shown (subwatch.py; viz_cmd sets the minutes)
+        self.subwatch = SubagentWatch()
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
@@ -471,6 +480,9 @@ class World:
         """The session has ended (SessionEnd, or 退勤 from the page): ended, and its robot walks out of the door."""
         sid = session["id"]
         self._background_off(session, at)
+        for aid in self.subwatch.drop_session(sid):
+            if aid in self.agents:
+                self.agents[aid].pop("stall", None)
         self.perms.session_stopped(sid, at)
         self._dirty.add("perms")
         self.attachments.session_ended(sid, at)
@@ -935,6 +947,10 @@ class World:
         tool = _s(payload.get("tool_name"))
         tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
         use_id = _s(payload.get("tool_use_id"))
+        if aid and kind not in ("SubagentStop", "SessionEnd"):
+            if self.subwatch.hook(aid, sid, at, kind, tool=tool, tool_input=tool_input, use_id=use_id,
+                                path=self._agent_paths.get(aid), agent_type=agent_type, question=tool == QUESTION_TOOL):
+                self._unstuck(agent)
         if kind in ("PreToolUse", "PostToolUse") and tool_input:
             self._note_paths(sid, tool_input, at)
         cat = "tool" if kind in TOOL_EVENTS else "session"
@@ -1149,6 +1165,8 @@ class World:
             self._skill_forked_to(sid, agent, at)
             text = i18n.tl("ev.subagent.in", agent=agent_type or aid)
         elif kind == "SubagentStop":
+            self.subwatch.drop(agent["id"])
+            agent.pop("stall", None)
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
             self._read_sub_transcript(agent["id"], agent, at)   # its last results say how its cards ended, when they do
             if self.perms.agent_stopped(sid, agent["id"], at):
@@ -1205,6 +1223,50 @@ class World:
             event["detail"] = clip_strings(tool_input, self.tool_input_max)
         return self.state.add_event(event)
 
+    # ---------------------------------------------------------------- a subagent that stopped moving (subwatch.py)
+
+    def _unstuck(self, agent: dict) -> None:
+        if agent.pop("stall", None) is not None:
+            self._dirty.add("agents")
+
+    def _subwatch_tick(self, at: int) -> None:
+        """Once a minute while a subagent is watched: each one quiet past its limit, or waiting on a person past its
+        limit, is told to its main session's channel (when that session takes one) and shown: one line in the event
+        log and the robot's bubble (agent["stall"]), until it moves again."""
+        if not self.subwatch.due(at):
+            return
+        notices, moved = self.subwatch.check(at)
+        for aid in moved:
+            if aid in self.agents:
+                self._unstuck(self.agents[aid])
+        for n in notices:
+            agent, session = self.agents.get(n["agentId"]), self.sessions.get(n["sessionId"])
+            if agent is None or session is None or "leftAt" in agent or session.get("status") == "ended":
+                self.subwatch.drop(n["agentId"])
+                continue
+            words = {"type": n["agentType"] or "subagent", "id": n["agentId"][:8], "label": agent.get("label") or n["agentId"][:8],
+                     "minutes": n["minutes"], "since": clock_hhmm(n["since"]),
+                     "tool": n["tool"] or "-", "head": n["head"], "path": n["path"] or "-"}
+            quiet = n["kind"] == "quiet"
+            told = self._notify_main(n["sessionId"], i18n.tl("srv.stall.quiet" if quiet else "srv.stall.wait", **words), at)
+            agent["stall"] = {"kind": n["kind"], "since": n["since"], "at": at, "told": told}
+            self._dirty.add("agents")
+            self.state.add_event({"at": at, "sessionId": n["sessionId"], "agentId": n["agentId"], "kind": "SubagentStall",
+                                  "cat": "perm", "text": robots._clip(i18n.tl("ev.stall.quiet" if quiet else "ev.stall.wait", **words)
+                                                                     + ("" if told else i18n.tl("ev.stall.notTold")), 200)})
+
+    def _notify_main(self, sid: str, text: str, at: int) -> bool:
+        """A notice from viz itself to a session's channel queue (not the page's prompt: no PromptSent line). False when
+        that session cannot take one (no channel, a Codex session, its queue full): the page still shows it."""
+        session = self.sessions.get(sid)
+        if session is None or session.get("cli") == "codex" or self.prompt_refusal(sid) is not None:
+            return False
+        channel = self.perms.prompt_channel(sid)
+        if channel is None or len(channel.inbox) >= PROMPTS_QUEUED_MAX:
+            return False
+        channel.inbox.append({"text": text, "at": at})
+        return True
+
     def _limited(self, session: dict, agent: dict, at: int) -> None:
         """上限で停止 (ticket 2026-10-29-viz-limit-stopped-robot-dazed): the turn ended on the plan's usage limit — Claude
         Code's StopFailure with ``error: rate_limit`` (claude 2.1.312: the hook's own error field; server_error and the
@@ -1236,6 +1298,8 @@ class World:
             # An interrupted subagent sends no SubagentStop; with nothing in
             # the background, none of this session's subagents is still working.
             for sub in [a for a in self.agents.values() if a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a]:
+                self.subwatch.drop(sub["id"])
+                sub.pop("stall", None)
                 self._clear_open(sub["id"])
                 self._set(sub, at, "done", i18n.tl("status.done"), leftAt=at)
                 self._until[sub["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
@@ -2241,6 +2305,7 @@ class World:
                 if agent and agent["state"] == "thinking":
                     self._set(agent, at, "idle", i18n.tl("status.idle"))
         self._background_cap(at)
+        self._subwatch_tick(at)
         self._heavy(at)
 
     # ---------------------------------------------------------------- the cardboard box: git push / pull (2.3.4)

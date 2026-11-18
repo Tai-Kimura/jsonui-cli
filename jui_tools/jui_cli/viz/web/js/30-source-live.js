@@ -1029,7 +1029,9 @@ function rebuildRobots(initial) {
       limitWords: a.state === 'limited' && typeof a.lastMessage === 'string' ? a.lastMessage.slice(0, 300) : '',
       // a skill in use (the spirit, 45-spirits.js): its name and when it began (the key of one skill's spirit)
       skill: a.skill && typeof a.skill.name === 'string' && Number(a.skill.since) > 0 ? { name: a.skill.name, since: Number(a.skill.since), forked: a.skill.forked === true } : null,
-      git: a.git && typeof a.git === 'object' && a.git.id ? a.git : null };   // the box (2.3.4): its last push / pull
+      git: a.git && typeof a.git === 'object' && a.git.id ? a.git : null,   // the box (2.3.4): its last push / pull
+      // a subagent that stopped moving (subwatch.py, 2.5.50): the server's notice, until it moves again (53-waits.js)
+      stall: a.stall && typeof a.stall === 'object' && Number(a.stall.since) > 0 ? { kind: a.stall.kind === 'wait' ? 'wait' : 'quiet', since: Number(a.stall.since), told: a.stall.told === true } : null };
     // a deletion it ran (10-19): the page walks it to the shredder once per new at
     if (a.shred && typeof a.shred === 'object' && Number(a.shred.at) > 0) {
       st.shred = { at: Number(a.shred.at), ok: a.shred.ok === true, label: String(a.shred.label || ''), count: Math.max(1, Number(a.shred.count) || 1), folder: a.shred.folder === true };

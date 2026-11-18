@@ -44,6 +44,11 @@ class VizConfig:
     # from). Read when the server starts.
     language: str = ""
     strings: str = ""
+    # A subagent that stopped moving (stalls.py, ticket 2026-11-18-viz-notify-main-when-a-subagent-stalls; requester
+    # 11-18: 20 min): quiet this many minutes, or waiting on a person's answer that many, it is told to its main
+    # session and shown. 0 turns one off.
+    subagentStallMin: float = 20.0
+    subagentWaitMin: float = 5.0
 
 
 #: the page's choices for askWaitSec: 20 s, 1, 3, 10, 30 min, and 0 = until answered
