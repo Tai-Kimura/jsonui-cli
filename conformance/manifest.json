@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "3b190212c308f555ac99c03f4140a52e972b1865e4f353df07bf1144ba06a43e",
   "counts": {
-    "fixtures": 1395,
+    "fixtures": 1399,
     "assertable": 57,
-    "visual": 1061,
+    "visual": 1063,
     "interactive": 41,
-    "control": 158,
+    "control": 160,
     "declarationOnly": 77,
     "skipped": 165,
     "promoted": {
@@ -7734,6 +7734,54 @@
       "promotedFrom": null,
       "peerGroup": "Label/fontSize@Label",
       "control": "__control/Label"
+    },
+    {
+      "id": "Label/fontSize__static_long",
+      "component": "Label",
+      "attribute": "fontSize",
+      "case": "static_long",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": 20,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontSize__static_long.layout.json",
+      "test": "fixtures/Label/fontSize__static_long.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__text-Sample-text-that-wraps"
+    },
+    {
+      "id": "Label/fontSize__static_long_with_partial",
+      "component": "Label",
+      "attribute": "fontSize",
+      "case": "static_long_with_partial",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": 20,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontSize__static_long_with_partial.layout.json",
+      "test": "fixtures/Label/fontSize__static_long_with_partial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__partialAttributes-5561bca6_text-Sample-text-that-wraps"
     },
     {
       "id": "Label/fontSize__binding",
@@ -30019,6 +30067,30 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__partialAttributes-5561bca6_text-Sample-text-that-wraps",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__partialAttributes-5561bca6_text-Sample-text-that-wraps.layout.json",
+      "test": "fixtures/__control/Label__partialAttributes-5561bca6_text-Sample-text-that-wraps.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Label__root.textScale-2.0",
       "component": "__control",
       "attribute": null,
@@ -30110,6 +30182,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Label__text-5ed92def.layout.json",
       "test": "fixtures/__control/Label__text-5ed92def.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__text-Sample-text-that-wraps",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__text-Sample-text-that-wraps.layout.json",
+      "test": "fixtures/__control/Label__text-Sample-text-that-wraps.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

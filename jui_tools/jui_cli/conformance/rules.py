@@ -2494,6 +2494,14 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     # android partial / linkable paths drew only the font, its size, colour and alignment and dropped these, while
     # ios (one PartialAttributedText for every Label) and web applied them. One variant each, the range's own style
     # kept apart from the attribute (a colour, no line), so what the attribute draws is the Label's.
+    # A partial Label with a font size of its own draws the plain Label's line (size x 1.3), not the theme's: the
+    # android partial faces kept the theme's 24 under a declared size. The pair shares one two-line text, so the
+    # partial one's frame is held to the plain one's on every face.
+    ("Label", "fontSize"): {
+        "long": {"text": "Sample text that wraps"},
+        "long_with_partial": {"text": "Sample text that wraps",
+                              "partialAttributes": [{"range": [0, 3], "fontColor": "#FF0000"}]},
+    },
     **{("Label", attr): {"with_partial": {"partialAttributes": [{"range": [0, 3], "fontColor": "#FF0000"}]}}
        for attr in ("underline", "strikethrough", "lines", "lineBreakMode", "lineHeightMultiple", "lineSpacing",
                     "textShadow", "autoShrink", "minimumScaleFactor", "edgeInset", "disabledFontColor",
@@ -2680,7 +2688,7 @@ VARIANT_ONLY: dict[tuple[str, str, str], frozenset[str]] = {
         ("disabledFontColor", "static"), ("highlightColor", "static"),
         ("highlightAttributes", "static"),
     )
-}
+} | {("Label", "fontSize", suffix): frozenset({"static"}) for suffix in ("long", "long_with_partial")}
 
 
 def variant_applies(section: str, attribute: str, suffix: str, case_name: str) -> bool:
