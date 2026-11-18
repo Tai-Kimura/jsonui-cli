@@ -35,6 +35,8 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     'highlightColor' => [{ 'selected' => '@{isOn}', 'highlightColor' => '#00FF00' }, 'color = if (data.isOn) Color(android.graphics.Color.parseColor("#00FF00"))'],
     'highlightAttributes' => [{ 'selected' => true, 'highlightAttributes' => { 'fontSize' => 20 } }, 'size = 20.sp'],
     'hint' => [{ 'text' => '@{name}', 'hint' => 'type a name' }, '.isEmpty()) "type a name" else labelText'],
+    'the hint bag\'s lineHeightMultiple' => [{ 'text' => '@{name}', 'hint' => 'type a name', 'hintAttributes' => { 'lineHeightMultiple' => 1.5 } },
+                                          '.isEmpty()) jsonUILineHeight(jsonUIFontSize(resolved_text1.size ?: TextUnit.Unspecified), lineHeight = LabelLineHeight.multiple(14f, 1.5f'],
   }.freeze
 
   label_wide_cases.each do |name, (extra, fragment)|
