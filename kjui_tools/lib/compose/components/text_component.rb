@@ -933,6 +933,12 @@ module KjuiTools
             hl_line = Helpers::FontScale.line_height(json_data, required_imports, font: drawn,
                                                      line: multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports))
             own = always ? hl_line : "if (#{condition}) #{hl_line} else #{own || Helpers::FontScale.line_height(json_data, required_imports, font: drawn)}"
+          elsif hint && hint[:line_height_multiple]
+            # the hint bag's lineHeightMultiple while the hint shows, of the hint's size, as the plain Label reads it
+            hint_size = hint.dig(:font_attrs, 'fontSize') || json_data['fontSize']
+            hint_line = Helpers::FontScale.line_height(json_data, required_imports, font: drawn,
+                                                       line: multiple_line_height(hint_size, hint[:line_height_multiple], required_imports))
+            own = "if (#{hint_condition}) #{hint_line} else #{own || Helpers::FontScale.line_height(json_data, required_imports, font: drawn)}"
           end
           out[:line_height] = own
 
