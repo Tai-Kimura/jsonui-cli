@@ -332,11 +332,11 @@ def test_the_desktop_notifier(tmp_path, monkeypatch):
     monkeypatch.setattr(__import__("sys"), "platform", "darwin")
     monkeypatch.setattr(__import__("shutil"), "which", lambda name: "/usr/bin/osascript")
     got = []
-    show = subwatch.desktop_notifier({}, run=got.append)
+    show = subwatch.desktop_notifier({}, run=lambda title, text: got.append([title, text]))
     assert show("jui viz", "it's \"quoted\"; end run") is True
     import time as _t
     for _ in range(50):
         if got:
             break
         _t.sleep(0.02)
-    assert got and got[0][-2:] == ["jui viz", "it's \"quoted\"; end run"] and got[0][0] == "osascript"   # words as arguments, never in the script
+    assert got == [["jui viz", "it's \"quoted\"; end run"]]   # the words go as osascript's arguments, never into its script

@@ -223,14 +223,16 @@ def desktop_notifier(environ=None, run=None):
         return record
     if sys.platform != "darwin" or not shutil.which("osascript"):
         return None
-    script = ["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run"]
-    runner = run or (lambda argv: subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                                 stderr=subprocess.DEVNULL, timeout=10, check=False))
+    def osascript(title: str, text: str) -> None:
+        subprocess.run(["osascript", "-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+                        "-e", "end run", title, text],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False)
+    runner = run or osascript
 
     def show(title: str, text: str) -> bool:
         def go():
             try:
-                runner(["osascript", *script, str(title)[:120], str(text)[:400]])
+                runner(str(title)[:120], str(text)[:400])
             except (OSError, subprocess.SubprocessError):
                 pass
         threading.Thread(target=go, name="viz-desktop-notify", daemon=True).start()
