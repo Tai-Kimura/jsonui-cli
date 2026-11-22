@@ -136,9 +136,7 @@ module KjuiTools
                                  "import androidx.compose.runtime.setValue",
                                  "import androidx.compose.ui.input.pointer.pointerInput"],
             # onPan drag detector (ModifierBuilder.build_pannable).
-            pan_gesture: ["import androidx.compose.foundation.gestures.detectDragGestures",
-                          "import androidx.compose.ui.geometry.Offset",
-                          "import androidx.compose.ui.input.pointer.pointerInput"],
+            pan_gesture: ["import com.kotlinjsonui.components.jsonUIPanGesture"],
             # onPinch zoom loop (ModifierBuilder.build_pinchable).
             # calculateZoom is a top-level function in foundation.gestures.
             pinch_gesture: ["import androidx.compose.foundation.gestures.awaitEachGesture",

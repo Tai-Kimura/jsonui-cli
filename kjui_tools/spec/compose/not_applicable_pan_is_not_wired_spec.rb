@@ -32,7 +32,7 @@ RSpec.describe 'kjui codegen: onPan is not wired where the SSoT declares it not 
   end
 
   it 'still emits the pan on a type the declaration does not name (control)' do
-    %w[Label View Button Image].each { |type| expect(pan(type).join).to include('detectDragGestures'), type }
+    %w[Label View Button Image].each { |type| expect(pan(type).join).to include('jsonUIPanGesture'), type }
   end
 
   it 'the pan it still emits compiles (control)' do
@@ -43,11 +43,7 @@ RSpec.describe 'kjui codegen: onPan is not wired where the SSoT declares it not 
           operator fun plus(o: Offset) = Offset(x + o.x, y + o.y)
           companion object { val Zero = Offset(0f, 0f) }
       }
-      class PointerInputChange { fun consume() {} }
-      class PointerInputScope {
-          fun detectDragGestures(onDragStart: (Offset) -> Unit = {}, onDrag: (PointerInputChange, Offset) -> Unit) {}
-      }
-      fun Modifier.pointerInput(key1: Any?, block: PointerInputScope.() -> Unit): Modifier = this
+      fun Modifier.jsonUIPanGesture(key: Any?, onPan: (Offset) -> Unit): Modifier = this
       class Data(val h: (() -> Unit)? = null)
       fun host(data: Data): Modifier = Modifier
       #{chain}
@@ -61,6 +57,6 @@ RSpec.describe 'kjui codegen: onPan is not wired where the SSoT declares it not 
     validator.instance_variable_set(:@definitions, swapped)
     PAN_MB.instance_variable_set(:@not_applicable_validator, validator)
     expect(pan('Label')).to eq([])
-    expect(pan('TextView').join).to include('detectDragGestures')
+    expect(pan('TextView').join).to include('jsonUIPanGesture')
   end
 end

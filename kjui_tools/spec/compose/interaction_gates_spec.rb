@@ -75,7 +75,7 @@ RSpec.describe 'kjui interaction gates' do
   end
 
   # The node's own long press, pan and pinch: either flag shuts them.
-  gestures = { 'onLongPress' => 'longPressed', 'onPan' => 'detectDragGestures', 'onPinch' => 'calculateZoom' }
+  gestures = { 'onLongPress' => 'longPressed', 'onPan' => 'jsonUIPanGesture', 'onPinch' => 'calculateZoom' }
   flags = { 'userInteractionEnabled' => 'u', 'enabled' => 'on' }
 
   gestures.each do |event, marker|

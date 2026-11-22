@@ -1545,7 +1545,7 @@ module KjuiTools
         # drag event with the cumulative translation since the gesture began
         # (an Offset — accumulated from per-event deltas so the payload matches
         # SwiftUI's DragGesture.Value.translation). Declaring onPan means this
-        # node owns drags: detectDragGestures consumes them, so a surrounding
+        # node owns drags: jsonUIPanGesture consumes them, so a surrounding
         # scroll container will not also scroll from touches on this node —
         # same trade a native drag handler makes.
         #
@@ -1570,17 +1570,14 @@ module KjuiTools
           handler_call = get_event_handler_invocation(handler, view_id(json_data), 'total')
           handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
+          # KotlinJsonUI's jsonUIPanGesture (>= 2.65.0), as the dynamic face calls
+          # it: how a drag is read is written there once. Compose UI 1.13 began
+          # dispatching moves that went nowhere; a bare detectDragGestures left
+          # them unconsumed and a finger held still on the pan scrolled the
+          # list around it (ticket kjui-slider-deprecated-in-material3-1-5).
           gesture = <<~KOTLIN.rstrip
-            .pointerInput(data) {
-                var total = Offset.Zero
-                detectDragGestures(
-                    onDragStart = { total = Offset.Zero },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        total += dragAmount
-                        #{handler_call}
-                    }
-                )
+            .jsonUIPanGesture(data) { total ->
+                #{handler_call}
             }
           KOTLIN
           [gesture]

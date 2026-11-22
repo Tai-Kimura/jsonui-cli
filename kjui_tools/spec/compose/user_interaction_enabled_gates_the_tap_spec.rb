@@ -99,7 +99,7 @@ RSpec.describe 'kjui userInteractionEnabled gates the click as canTap does' do
   # detectors take the first down in the Initial pass without requiring it
   # unconsumed, so the blocker around them did not stop them. `false` around
   # attaches none; a binding around gates each where it fires.
-  { 'onLongPress' => 'longPressed', 'onPan' => 'detectDragGestures', 'onPinch' => 'calculateZoom' }.each do |event, marker|
+  { 'onLongPress' => 'longPressed', 'onPan' => 'jsonUIPanGesture', 'onPinch' => 'calculateZoom' }.each do |event, marker|
     describe event do
       gesture = ->(more = {}) { { 'type' => 'View', 'id' => 'g', event => '@{onG}' }.merge(more) }
 

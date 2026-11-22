@@ -200,9 +200,8 @@ module ComposeStubUniverse
           operator fun plus(other: Offset): Offset = this
           companion object { val Zero = Offset(0f, 0f) }
       }
-      suspend fun PointerInputScope.detectDragGestures(onDragStart: (Offset) -> Unit = {}, onDragEnd: () -> Unit = {},
-                                                       onDragCancel: () -> Unit = {},
-                                                       onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit) {}
+      // KotlinJsonUI's jsonUIPanGesture (>= 2.65.0): onPan is emitted as this, never as a bare detectDragGestures.
+      fun Modifier.jsonUIPanGesture(key: Any?, onPan: (Offset) -> Unit): Modifier = this
       fun Modifier.pointerInput(key1: Any?, block: suspend PointerInputScope.() -> Unit): Modifier = this
       class FocusState(val isFocused: Boolean)
       fun Modifier.onFocusChanged(onFocusChanged: (FocusState) -> Unit): Modifier = this

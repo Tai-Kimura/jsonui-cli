@@ -1014,20 +1014,20 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
     end
 
-    it 'emits a drag detector accumulating cumulative translation per gesture' do
+    it "emits KotlinJsonUI's jsonUIPanGesture keyed on data, never a bare drag detector" do
       imports = Set.new
       result = described_class.build_pannable({ 'onPan' => '@{onSurfacePan}' }, imports)
 
       expect(result.length).to eq(1)
       gesture = result.first
-      expect(gesture).to include('.pointerInput(data) {')
-      expect(gesture).to include('var total = Offset.Zero')
-      # Reset per gesture: the payload is translation since THIS gesture began
-      expect(gesture).to include('onDragStart = { total = Offset.Zero }')
-      expect(gesture).to include('change.consume()')
-      expect(gesture).to include('total += dragAmount')
+      # The translation since the gesture began is jsonUIPanGesture's (KotlinJsonUI >= 2.65.0): it also consumes the
+      # moves that went nowhere, which a bare detectDragGestures let through to the scroll around the node.
+      expect(gesture).to include('.jsonUIPanGesture(data) { total ->')
+      expect(gesture).not_to include('detectDragGestures')
       expect(gesture).to include('data.onSurfacePan?.invoke()')
       expect(imports).to include(:pan_gesture)
+      expect(KjuiTools::Compose::Helpers::ImportManager.get_imports_map[:pan_gesture])
+        .to eq(['import com.kotlinjsonui.components.jsonUIPanGesture'])
     end
 
     it 'passes the Offset payload when the handler declares it' do
@@ -1092,7 +1092,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
       result = described_class.build_clickable(json_data, imports)
 
       expect(result.length).to eq(3)
-      expect(result[0]).to include('detectDragGestures')
+      expect(result[0]).to include('jsonUIPanGesture')
       expect(result[1]).to include('calculateZoom')
       expect(result[2]).to include('.clickable { data.onTap?.invoke() }')
     end
@@ -1100,7 +1100,7 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
     it 'emits gesture detectors on a container with no onClick' do
       result = described_class.build_clickable({ 'onPan' => '@{onDrag}' }, Set.new)
       expect(result.length).to eq(1)
-      expect(result.first).to include('detectDragGestures')
+      expect(result.first).to include('jsonUIPanGesture')
       expect(result.join).not_to include('.clickable')
     end
   end
