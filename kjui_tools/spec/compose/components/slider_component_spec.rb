@@ -16,6 +16,21 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
   end
 
   describe '.generate' do
+    # material3 1.5 deprecates the value form of Slider and the SliderState form it points to is not in 1.4: the
+    # codegen calls KotlinJsonUI's JsonUISlider, which holds the material3 call (ticket
+    # kjui-slider-deprecated-in-material3-1-5).
+    it 'calls KotlinJsonUI\'s JsonUISlider, never material3\'s Slider, and imports it' do
+      [{ 'type' => 'Slider' }, { 'type' => 'Slider', 'value' => '@{v}', 'minValue' => 0, 'maxValue' => 10, 'onValueChange' => '@{onV}' }].each do |json|
+        imports = Set.new
+        code = described_class.generate(json, 0, imports)
+        expect(code).to include('JsonUISlider(')
+        expect(code).not_to match(/(^|[^A-Za-z])Slider\(/)
+        expect(imports).to include(:jsonui_slider)
+      end
+      require 'compose/helpers/import_manager'
+      expect(KjuiTools::Compose::Helpers::ImportManager.get_imports_map[:jsonui_slider]).to eq('import com.kotlinjsonui.components.JsonUISlider')
+    end
+
     # A static value (or none — the minimum) is the seed of the slider's own
     # state, which a change writes (ticket
     # static-valued-controls-do-not-change-on-a-users-tap: it was emitted as
@@ -120,9 +135,10 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
     it 'generates Slider with thumbTintColor' do
       json_data = { 'type' => 'Slider', 'thumbTintColor' => '#007AFF' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('colors = SliderDefaults.colors(')
+      # JsonUISlider's own colour parameters: no material3 SliderDefaults in generated code.
       expect(result).to include('thumbColor =')
-      expect(required_imports).to include(:slider_colors)
+      expect(result).not_to include('SliderDefaults')
+      expect(required_imports).not_to include(:slider_colors)
     end
 
     it 'generates Slider with minimumTrackTintColor' do

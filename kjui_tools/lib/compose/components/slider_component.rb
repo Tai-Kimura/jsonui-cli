@@ -52,7 +52,12 @@ module KjuiTools
         end
 
         def self.generate_body(json_data, depth, required_imports, parent_type, value, min_value, max_value, seeded)
-          code = indent("Slider(", depth)
+          # KotlinJsonUI's JsonUISlider, not material3's Slider: material3 1.5 deprecates the value form every call here
+          # takes, and the SliderState form it points to is not in 1.4, so no call compiles without a warning against
+          # both; JsonUISlider holds the material3 call inside KotlinJsonUI (>= 2.65.0), with the same parameters
+          # (ticket kjui-slider-deprecated-in-material3-1-5).
+          required_imports&.add(:jsonui_slider)
+          code = indent("JsonUISlider(", depth)
           code += "\n" + indent("value = #{value},", depth + 1)
           
           # onValueChange handler
@@ -153,9 +158,9 @@ module KjuiTools
           inactive_tint = json_data['trackTintColor']
           # The thumb and the filled track are the accent: the Slider's own,
           # else the tint a container handed down (InheritedTint) — so the
-          # colors are always emitted.
+          # colors are always emitted. They are JsonUISlider's own colour
+          # parameters (no material3 SliderDefaults in generated code).
           begin
-            required_imports&.add(:slider_colors)
             colors_params = []
 
             thumbcolor_resolved = if thumb_tint
@@ -178,9 +183,7 @@ module KjuiTools
             end
             
             if colors_params.any?
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SliderDefaults.colors(", depth + 1))
-              code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
-              code += "\n" + indent(")", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + colors_params.map { |param| indent(param, depth + 1) }.join(",\n"))
             end
           end
           

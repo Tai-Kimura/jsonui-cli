@@ -299,9 +299,12 @@ module ComposeStubUniverse
       object SliderDefaults {
           fun colors(thumbColor: Color = Color(), activeTrackColor: Color = Color(), inactiveTrackColor: Color = Color()) = SliderColors()
       }
-      fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-                 valueRange: ClosedFloatingPointRange<Float> = 0f..1f, onValueChangeFinished: (() -> Unit)? = null,
-                 steps: Int = 0, colors: SliderColors = SliderColors()) {}
+      // KotlinJsonUI's JsonUISlider (>= 2.65.0), not material3's Slider: the codegen calls only this, so an emit that
+      // went back to material3's deprecated value form does not resolve here (ticket kjui-slider-deprecated-in-material3-1-5)
+      fun JsonUISlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+                       valueRange: ClosedFloatingPointRange<Float> = 0f..1f, steps: Int = 0,
+                       onValueChangeFinished: (() -> Unit)? = null, thumbColor: Color = Color.Unspecified,
+                       activeTrackColor: Color = Color.Unspecified, inactiveTrackColor: Color = Color.Unspecified) {}
       fun LinearProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
       // the determinate overload (Material3: `progress: () -> Float` first)
       fun LinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}

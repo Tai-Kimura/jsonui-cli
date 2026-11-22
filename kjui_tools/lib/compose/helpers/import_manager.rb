@@ -93,6 +93,7 @@ module KjuiTools
                            "import androidx.compose.ui.geometry.Offset"],
             switch_colors: "import androidx.compose.material3.SwitchDefaults",
             slider_colors: "import androidx.compose.material3.SliderDefaults",
+            jsonui_slider: "import com.kotlinjsonui.components.JsonUISlider",
             checkbox_colors: "import androidx.compose.material3.CheckboxDefaults",
             dropdown_menu: ["import androidx.compose.material3.DropdownMenu",
                             "import androidx.compose.material3.DropdownMenuItem",
