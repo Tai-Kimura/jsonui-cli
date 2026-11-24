@@ -21,7 +21,8 @@ otherwise draw nothing and look like a run. The full manifest is kept beside
 it (FULL_NAME) for `stage-cells`.
 
 `plan` is the run's first job (only_plan): it narrows without writing and says
-how many of the kept fixtures each face draws (web, ios, android; the codegen
+how many of the named fixtures each face draws (their controls are not
+counted: a control is drawn with its fixture, never for itself) (web, ios, android; the codegen
 faces draw their platform's), as GITHUB_OUTPUT lines when that is set. A face
 with none is skipped by its job's `if`, green, with its merge: a run named
 with Android-only fixtures failed its web job (rjui emitted no theme.css for
@@ -92,9 +93,16 @@ def face_counts(fixtures: list[dict]) -> dict[str, int]:
 
 
 def plan(conformance: Path, text: str) -> dict[str, int]:
-    """The faces' counts for a dispatch's ids; the manifest is not written."""
+    """Each face's count of the NAMED fixtures (refusing an id as `narrow` does); the manifest is not written.
+
+    A control is drawn with its fixture, never for itself: a control is often every platform's while its fixture
+    is one platform's (common/glass__true is iOS's, its control all three), and counting it ran web and Android
+    for a picture nobody named."""
     manifest = json.loads((conformance / "manifest.json").read_text(encoding="utf-8"))
-    return face_counts(narrowed(manifest, parse_ids(text))["fixtures"])
+    ids = parse_ids(text)
+    narrowed(manifest, ids)
+    by_id = {f["id"]: f for f in manifest["fixtures"]}
+    return face_counts([by_id[i] for i in dict.fromkeys(ids)])
 
 
 FULL_NAME = "manifest.full.json"

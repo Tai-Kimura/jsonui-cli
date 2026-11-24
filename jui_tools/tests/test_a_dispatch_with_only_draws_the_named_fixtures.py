@@ -87,11 +87,21 @@ class Plan(unittest.TestCase):
 
     def test_an_android_only_fixture_leaves_web_and_ios_nothing_to_draw(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(only.plan(self._dir(d), "SelectBox/a"), {"web": 0, "ios": 0, "android": 2})
+            self.assertEqual(only.plan(self._dir(d), "SelectBox/a"), {"web": 0, "ios": 0, "android": 1})
             self.assertEqual(only.plan(self._dir(d), "web/c"), {"web": 1, "ios": 0, "android": 0})
-            self.assertEqual(only.plan(self._dir(d), "common/b,SelectBox/a"), {"web": 1, "ios": 1, "android": 3})
+            self.assertEqual(only.plan(self._dir(d), "common/b,SelectBox/a"), {"web": 1, "ios": 1, "android": 2})
             # plan never writes the manifest
             self.assertEqual(json.loads((Path(d) / "manifest.json").read_text()), self.MANIFEST)
+
+    def test_a_control_on_every_platform_does_not_start_a_face_its_fixture_is_not_on(self):
+        # The shape of run 45358251836: common/glass__true is iOS's, its control all three faces'.
+        manifest = {"fixtures": [{"id": "__control/All", "platforms": ["ios", "android", "web"]},
+                                 {"id": "common/glass", "control": "__control/All", "platforms": ["ios"]}]}
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self.assertEqual(only.plan(Path(d), "common/glass"), {"web": 0, "ios": 1, "android": 0})
+            # named on its own, a control is drawn where it is
+            self.assertEqual(only.plan(Path(d), "__control/All"), {"web": 1, "ios": 1, "android": 1})
 
     def test_an_id_the_manifest_does_not_have_is_still_refused(self):
         with tempfile.TemporaryDirectory() as d:
@@ -106,7 +116,7 @@ class Plan(unittest.TestCase):
             out = Path(d) / "out"
             with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(out)}):
                 self.assertEqual(only.main(["plan", str(self._dir(d)), "SelectBox/a"]), 0)
-            self.assertEqual(out.read_text().splitlines(), ["web=0", "ios=0", "android=2"])
+            self.assertEqual(out.read_text().splitlines(), ["web=0", "ios=0", "android=1"])
 
 
 class StageCells(unittest.TestCase):
