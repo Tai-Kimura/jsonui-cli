@@ -15,7 +15,8 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
     it 'generates basic Switch component' do
       json_data = { 'type' => 'Switch' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('Switch(')
+      expect(result).to include('JsonUISwitch(')
+      expect(required_imports).to include(:jsonui_switch)
     end
 
     it 'generates Switch with checked state binding' do
@@ -36,10 +37,13 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
       expect(result).to include('onCheckedChange')
     end
 
-    it 'adds switch_colors import when onTintColor specified' do
+    it 'passes onTintColor as JsonUISwitch\'s own flat checkedTrackColor, with no material3 SwitchDefaults' do
       json_data = { 'type' => 'Switch', 'onTintColor' => '#007AFF' }
-      described_class.generate(json_data, 0, required_imports)
-      expect(required_imports).to include(:switch_colors)
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to match(/^\s+checkedTrackColor = .+$/)
+      expect(result).not_to include('SwitchDefaults')
+      expect(result).not_to include('colors =')
+      expect(required_imports).to include(:jsonui_switch)
     end
   end
 
@@ -149,18 +153,18 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
 
     it 'puts the label before the Switch by default' do
       code = emit({})
-      expect(code.index('Text(')).to be < code.index('Switch(')
+      expect(code.index('Text(')).to be < code.index('JsonUISwitch(')
     end
 
     it 'puts the label after the Switch for trailing' do
       code = emit('labelPosition' => 'trailing')
-      expect(code.index('Switch(')).to be < code.index('Text(')
+      expect(code.index('JsonUISwitch(')).to be < code.index('Text(')
     end
 
     it 'treats an unknown value as leading rather than dropping the label' do
       code = emit('labelPosition' => 'sideways')
       expect(code).to include('Text(')
-      expect(code.index('Text(')).to be < code.index('Switch(')
+      expect(code.index('Text(')).to be < code.index('JsonUISwitch(')
     end
   end
 

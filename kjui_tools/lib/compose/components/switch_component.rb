@@ -52,7 +52,11 @@ module KjuiTools
         end
 
         def self.generate_switch_only(json_data, depth, required_imports, parent_type, checked, seeded: nil)
-          code = indent("Switch(", depth)
+          # KotlinJsonUI's JsonUISwitch, not material3's Switch: the colours are its own flat parameters, so generated
+          # code names no material3 type and a change of material3's API is absorbed in the library (>= 2.66.0, ticket
+          # kjui-wrap-material3-calls-next).
+          required_imports&.add(:jsonui_switch)
+          code = indent("JsonUISwitch(", depth)
           code += "\n" + indent("checked = #{checked},", depth + 1)
 
           # onCheckedChange handler
@@ -89,7 +93,6 @@ module KjuiTools
           # container handed down (InheritedTint) — so the colors are always
           # emitted.
           begin
-            required_imports&.add(:switch_colors)
             colors_params = []
 
             checkedtrackcolor_resolved = if track_color
@@ -112,10 +115,9 @@ module KjuiTools
               colors_params << "uncheckedThumbColor = #{checkedthumbcolor_resolved}"
             end
 
-            if colors_params.any?
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SwitchDefaults.colors(", depth + 1))
-              code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
-              code += "\n" + indent(")", depth + 1)
+            # JsonUISwitch's own colour parameters, one argument each.
+            colors_params.each do |param|
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent(param, depth + 1))
             end
           end
 
@@ -165,7 +167,9 @@ module KjuiTools
           code += label_code unless label_position == 'trailing'
 
           # Switch
-          code += "\n" + indent("Switch(", depth + 1)
+          # JsonUISwitch, as in generate_switch_only.
+          required_imports&.add(:jsonui_switch)
+          code += "\n" + indent("JsonUISwitch(", depth + 1)
           code += "\n" + indent("checked = #{checked},", depth + 2)
 
           # onCheckedChange handler
@@ -180,7 +184,6 @@ module KjuiTools
           # container handed down (InheritedTint) — so the colors are always
           # emitted.
           begin
-            required_imports&.add(:switch_colors)
             colors_params = []
 
             checkedtrackcolor_resolved = if track_color
@@ -203,10 +206,9 @@ module KjuiTools
               colors_params << "uncheckedThumbColor = #{checkedthumbcolor_resolved}"
             end
 
-            if colors_params.any?
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SwitchDefaults.colors(", depth + 2))
-              code += "\n" + colors_params.map { |param| indent(param, depth + 3) }.join(",\n")
-              code += "\n" + indent(")", depth + 2)
+            # JsonUISwitch's own colour parameters, one argument each.
+            colors_params.each do |param|
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent(param, depth + 2))
             end
           end
 

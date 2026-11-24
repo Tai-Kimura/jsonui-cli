@@ -47,7 +47,7 @@ module KjuiTools
           has_custom_icon = json_data['src'] || json_data['icon'] ||
                             Core::Normalization.attr_lookup(json_data, 'selectedIcon', 'onSrc')
 
-          # If custom icons are specified, use IconToggleButton instead of Checkbox
+          # If custom icons are specified, use JsonUIIconToggleButton instead of JsonUICheckbox
           if has_custom_icon
             return generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded)
           end
@@ -77,8 +77,11 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
             code += "\n" + indent(") {", depth)
 
-            # Checkbox
-            code += "\n" + indent("Checkbox(", depth + 1)
+            # KotlinJsonUI's JsonUICheckbox, not material3's Checkbox: the colours are its own flat parameters, so
+            # generated code names no material3 type and a change of material3's API is absorbed in the library
+            # (>= 2.66.0, ticket kjui-wrap-material3-calls-next).
+            required_imports&.add(:jsonui_checkbox)
+            code += "\n" + indent("JsonUICheckbox(", depth + 1)
             code += "\n" + indent("checked = #{checked},", depth + 2)
 
             # onCheckedChange handler
@@ -142,8 +145,9 @@ module KjuiTools
 
             code += "\n" + indent("}", depth)
           else
-            # Checkbox without label
-            code = indent("Checkbox(", depth)
+            # Checkbox without label: JsonUICheckbox, as in the labelled branch.
+            required_imports&.add(:jsonui_checkbox)
+            code = indent("JsonUICheckbox(", depth)
             code += "\n" + indent("checked = #{checked},", depth + 1)
 
             # onCheckedChange handler
@@ -189,14 +193,14 @@ module KjuiTools
           code
         end
 
-        # `colors = CheckboxDefaults.colors(...)`. Extracted so the LABELLED
+        # JsonUICheckbox's colour arguments (checkedColor / uncheckedColor / checkmarkColor, flat: the wrapper takes
+        # them as its own parameters, not as a material3 CheckboxColors). Extracted so the LABELLED
         # branch can emit it too — it never did, and the conformance fixture
         # base carries `text`, so `checkedColor` / `uncheckedColor` /
         # `iconColor` measured as unread on android (plan 49 lane C).
         def self.checkbox_colors_arg(json_data, required_imports, depth)
           checked_color_value = json_data['checkColor'] || json_data['checkedColor'] || json_data['tintColor'] || json_data['onTintColor']
 
-          required_imports&.add(:checkbox_colors)
           colors_params = []
 
           # The box's accent: the CheckBox's own, else the tint a container
@@ -222,9 +226,7 @@ module KjuiTools
 
           return '' if colors_params.empty?
 
-          code = ",\n" + indent("colors = CheckboxDefaults.colors(", depth + 1)
-          code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
-          code + "\n" + indent(")", depth + 1)
+          colors_params.map { |param| ",\n" + indent(param, depth + 1) }.join
         end
 
         # `iconSize` is `["number", "binding"]`. The static path keeps its
@@ -253,8 +255,11 @@ module KjuiTools
 
         # Generate checkbox with custom icon/selectedIcon
         def self.generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded = nil)
-          required_imports&.add(:icon_toggle_button)
-          required_imports&.add(:icon)
+          # KotlinJsonUI's JsonUIIconToggleButton and JsonUIIcon, not material3's IconToggleButton and Icon: generated
+          # code calls no material3 control, so a change of material3's API is absorbed in the library (>= 2.66.0,
+          # ticket kjui-wrap-material3-calls-next).
+          required_imports&.add(:jsonui_icon_toggle_button)
+          required_imports&.add(:jsonui_icon)
 
           # Each state falls back to the OTHER supplied asset, not to a Material
           # icon name: this branch only runs when the layout named at least one
@@ -271,7 +276,7 @@ module KjuiTools
           icon_res = "#{Helpers::ResourceResolver.drawable_id(icon)}"
           selected_icon_res = "#{Helpers::ResourceResolver.drawable_id(selected_icon)}"
 
-          code = indent("IconToggleButton(", depth)
+          code = indent("JsonUIIconToggleButton(", depth)
           code += "\n" + indent("checked = #{checked},", depth + 1)
 
           # onCheckedChange handler
@@ -309,7 +314,7 @@ module KjuiTools
           code += "\n" + indent(") {", depth)
 
           # Icon content - switch based on checked state
-          code += "\n" + indent("Icon(", depth + 1)
+          code += "\n" + indent("JsonUIIcon(", depth + 1)
           # A bound icon is looked up by its name at run time (ResourceResolver.drawable_painter).
           if Helpers::BindingExpression.whole_binding?(icon) || Helpers::BindingExpression.whole_binding?(selected_icon)
             on = Helpers::ResourceResolver.drawable_painter(selected_icon, required_imports)

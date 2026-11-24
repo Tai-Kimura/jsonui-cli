@@ -62,8 +62,9 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     it 'generates basic Button component' do
       json_data = { 'type' => 'Button', 'text' => 'Click Me' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('Button(')
+      expect(result).to include('JsonUIButton(')
       expect(result).to include('Click Me')
+      expect(required_imports).to include(:jsonui_button)
     end
 
     it 'generates Button with onClick handler' do
@@ -186,9 +187,14 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     it 'generates Button with background color' do
       json_data = { 'type' => 'Button', 'text' => 'Test', 'background' => '#007AFF' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('colors = ButtonDefaults.buttonColors')
-      expect(result).to include('containerColor')
-      expect(required_imports).to include(:button_colors)
+      # JsonUIButton's own flat colour parameters, no material3 ButtonDefaults.
+      expect(result).to match(/^\s+containerColor = .+$/)
+      expect(result).to match(/^\s+disabledContainerColor = .+$/)
+      expect(result).to match(/^\s+contentColor = .+$/)
+      expect(result).to match(/^\s+disabledContentColor = .+$/)
+      expect(result).not_to include('ButtonDefaults')
+      expect(result).not_to include('colors =')
+      expect(required_imports).to include(:jsonui_button)
     end
 
     it 'generates Button with disabledBackground' do

@@ -118,7 +118,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
   path('TabView tab.title — icon contentDescription', around: 'contentDescription = %s') { |t| tabview('title' => t) }
   path('TabView tab.title — label', around: 'label = { Text(%s) },') { |t| tabview('title' => t) }
   path('TabView tab.title — content placeholder', kind: :body, around: 'Text("%s content")') { |t| tabview('title' => t) }
-  path('TabView tab.badge — kotlin_string_literal', around: 'Badge { Text(%s) }') { |t| tabview('title' => 'a', 'badge' => t) }
+  path('TabView tab.badge — kotlin_string_literal', around: 'JsonUIBadgedBox(badge = %s) {') { |t| tabview('title' => 'a', 'badge' => t) }
 
   # ---- data model defaults ----------------------------------------------
   path('DataModelUpdater String defaultValue — bare') { |t| updater.send(:format_default_value, t, 'String') }

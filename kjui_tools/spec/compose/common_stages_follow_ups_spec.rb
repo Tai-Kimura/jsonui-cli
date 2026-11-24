@@ -308,13 +308,13 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
   it 'C: Indicator draws each declared indicatorStyle, its size in the size slot after the margins' do
     { 'small' => '.size(16.dp)', 'large' => '.size(48.dp)' }.each do |style, size|
       code = indicator.call('indicatorStyle' => style)
-      expect(code).to include('CircularProgressIndicator(')
+      expect(code).to include('JsonUICircularProgressIndicator(')
       expect(code.index(size)).to be > margins_at.call(code), code
     end
     medium = indicator.call('indicatorStyle' => 'medium')
-    expect(medium).to include('CircularProgressIndicator(')
+    expect(medium).to include('JsonUICircularProgressIndicator(')
     expect(medium).not_to match(/\.size\(/)
-    expect(indicator.call('indicatorStyle' => 'linear')).to include('LinearProgressIndicator(')
+    expect(indicator.call('indicatorStyle' => 'linear')).to include('JsonUILinearProgressIndicator(')
     # a declared size wins over the style's
     sized = indicator.call('indicatorStyle' => 'large', 'width' => 40, 'height' => 40)
     expect(sized).to include('.requiredWidth(40.dp)')

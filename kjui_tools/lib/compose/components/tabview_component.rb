@@ -14,13 +14,12 @@ module KjuiTools
         # generators but currently unused — TabView emits a Scaffold whose
         # `modifier` parameter is not yet caller-wired. Top-level screens
         # rarely use TabView as their root layout. If/when a consumer
-        # screen does, thread `is_root` into the `Scaffold(modifier =
+        # screen does, thread `is_root` into the `JsonUITabScaffold(modifier =
         # modifier, ...)` call here.
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
-          # TabView maps to NavigationBar with NavigationBarItem in Compose (Material 3)
-          required_imports&.add(:navigation_bar)
+          # TabView maps to KotlinJsonUI's JsonUITabScaffold / JsonUITabBar / JsonUITabBarItem (material3's Scaffold,
+          # NavigationBar and NavigationBarItem inside the library); their imports are added where they are emitted.
           required_imports&.add(:remember_state)
-          required_imports&.add(:scaffold)
           required_imports&.add(:painter_resource)
           required_imports&.add(:r_class)
           required_imports&.add(:safe_area_config)
@@ -40,7 +39,7 @@ module KjuiTools
           state_var = "selectedTab"
           selected_binding = Core::Normalization.attr_lookup(json_data, 'selectedIndex', 'selectedTabIndex')
 
-          code = indent("// TabView with NavigationBar", depth)
+          code = indent("// TabView with its tab bar", depth)
 
           # If there's a binding, use it; otherwise create local state seeded
           # with the DECLARED static index — a literal selectedIndex used to
@@ -94,7 +93,14 @@ module KjuiTools
           # (kjui-dynamic-components-that-skip-the-common-modifiers, B7).
           tabs_enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
 
-          code += "\n\n" + indent("Scaffold(", depth)
+          # KotlinJsonUI's JsonUITabScaffold, JsonUITabBar, JsonUITabBarItem, JsonUIIcon and JsonUIBadgedBox, not
+          # material3's Scaffold, NavigationBar, NavigationBarItem, Icon and BadgedBox: the item's colours are its own
+          # flat parameters, so generated code names no material3 type and a change of material3's API is absorbed in
+          # the library (>= 2.66.0, ticket kjui-wrap-material3-calls-next).
+          required_imports&.add(:jsonui_tab_scaffold)
+          required_imports&.add(:jsonui_tab_bar)
+          required_imports&.add(:jsonui_icon)
+          code += "\n\n" + indent("JsonUITabScaffold(", depth)
           # The Scaffold carries the node's common stages in the View order:
           # testTag → (blocker) → margins → size → offset → alpha → shadow →
           # background → click → padding. Only the blocker used to reach it —
@@ -129,8 +135,8 @@ module KjuiTools
           code += Helpers::ModifierBuilder.format(modifiers, depth) + ',' if modifiers.any?
           code += "\n" + indent("bottomBar = {", depth + 1)
 
-          # NavigationBar
-          code += "\n" + indent("NavigationBar(", depth + 2)
+          # The tab bar
+          code += "\n" + indent("JsonUITabBar(", depth + 2)
 
           # Tab bar background color
           if json_data['tabBarBackground']
@@ -140,7 +146,7 @@ module KjuiTools
 
           code += "\n" + indent(") {", depth + 2)
 
-          # Generate NavigationBarItem for each tab
+          # Generate a JsonUITabBarItem for each tab
           tabs.each_with_index do |tab, index|
             title = tab['title'] || "Tab #{index + 1}"
             icon = tab['icon'] || 'circle'
@@ -156,7 +162,7 @@ module KjuiTools
               code += "\n" + indent("val #{badge[:var]}: String? = #{badge[:expr]}", depth + 3)
             end
 
-            code += "\n" + indent("NavigationBarItem(", depth + 3)
+            code += "\n" + indent("JsonUITabBarItem(", depth + 3)
             code += "\n" + indent("selected = #{state_expr} == #{index},", depth + 4)
             # The tab's index is put in by the call, not by a text substitution:
             # `gsub('it', index)` rewrote every "it" of the setter, so a bound
@@ -191,7 +197,7 @@ module KjuiTools
                         else
                           "painterResource(#{Helpers::ResourceResolver.drawable_id(icon)})"
                         end
-              ["Icon(", "    painter = #{painter},", "    contentDescription = #{kotlin_string_literal(title)}", ")"]
+              ["JsonUIIcon(", "    painter = #{painter},", "    contentDescription = #{kotlin_string_literal(title)}", ")"]
             else
               # Use Material Icons (system)
               required_imports&.add(:material_icons)
@@ -202,7 +208,7 @@ module KjuiTools
               # dynamic component's filled/outlined drawable pair does the
               # same; emitting Filled unconditionally left unselected tabs
               # solid (parity family kjui-codegen-tabview).
-              ["Icon(",
+              ["JsonUIIcon(",
                "    imageVector = if (#{state_expr} == #{index}) Icons.Filled.#{material_selected_icon} else Icons.Outlined.#{material_icon},",
                "    contentDescription = #{kotlin_string_literal(title)}",
                ")"]
@@ -218,12 +224,14 @@ module KjuiTools
             if badge.nil?
               icon_lines.each { |l| code += "\n" + indent(l, depth + 5) }
             elsif badge[:kind] == :static
-              code += "\n" + indent("BadgedBox(badge = { Badge { Text(#{badge[:literal]}) } }) {", depth + 5)
+              required_imports&.add(:jsonui_badged_box)
+              code += "\n" + indent("JsonUIBadgedBox(badge = #{badge[:literal]}) {", depth + 5)
               icon_lines.each { |l| code += "\n" + indent(l, depth + 6) }
               code += "\n" + indent("}", depth + 5)
             else
               code += "\n" + indent("if (#{badge[:var]} != null) {", depth + 5)
-              code += "\n" + indent("BadgedBox(badge = { Badge { Text(#{badge[:var]}) } }) {", depth + 6)
+              required_imports&.add(:jsonui_badged_box)
+              code += "\n" + indent("JsonUIBadgedBox(badge = #{badge[:var]}) {", depth + 6)
               icon_lines.each { |l| code += "\n" + indent(l, depth + 7) }
               code += "\n" + indent("}", depth + 6)
               code += "\n" + indent("} else {", depth + 5)
@@ -249,12 +257,11 @@ module KjuiTools
             # down (InheritedTint), then theme primary.
             tint = json_data['tintColor'] ? Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports) : Helpers::InheritedTint.accent(required_imports)
             unselected = json_data['unselectedColor'] ? Helpers::ResourceResolver.process_color(json_data['unselectedColor'], required_imports) : 'MaterialTheme.colorScheme.onSurfaceVariant'
-            code += "\n" + indent("colors = NavigationBarItemDefaults.colors(", depth + 4)
-            code += "\n" + indent("selectedIconColor = #{tint},", depth + 5)
-            code += "\n" + indent("selectedTextColor = #{tint},", depth + 5)
-            code += "\n" + indent("unselectedIconColor = #{unselected},", depth + 5)
-            code += "\n" + indent("unselectedTextColor = #{unselected}", depth + 5)
-            code += "\n" + indent(")", depth + 4)
+            # JsonUITabBarItem's own colour parameters, one argument each.
+            code += "\n" + indent("selectedIconColor = #{tint},", depth + 4)
+            code += "\n" + indent("selectedTextColor = #{tint},", depth + 4)
+            code += "\n" + indent("unselectedIconColor = #{unselected},", depth + 4)
+            code += "\n" + indent("unselectedTextColor = #{unselected}", depth + 4)
 
             code += "\n" + indent(")", depth + 3)
           end

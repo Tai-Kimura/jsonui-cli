@@ -19,8 +19,13 @@ module KjuiTools
           literal = json_data['progress']
           has_value = literal
 
+          # KotlinJsonUI's JsonUILinearProgressIndicator, not material3's LinearProgressIndicator: determinate with
+          # `progress`, indeterminate without it, so generated code names no material3 control and a change of
+          # material3's API is absorbed in the library (>= 2.66.0, ticket kjui-wrap-material3-calls-next).
+          required_imports&.add(:jsonui_linear_progress_indicator)
+
           if has_value
-            # Determinate progress (LinearProgressIndicator)
+            # Determinate progress
             value = if literal && literal.to_s.match(/@\{([^}]+)\}/)
               variable = $1
               "data.#{variable}.toFloat()"
@@ -30,14 +35,14 @@ module KjuiTools
               '0f'
             end
             
-            code = indent("LinearProgressIndicator(", depth)
+            code = indent("JsonUILinearProgressIndicator(", depth)
             code += "\n" + indent("progress = { #{value} },", depth + 1)
           else
             # Indeterminate progress — a bar, as the determinate one is.
             # `style` is the style file's name (common.style), not a shape:
             # Progress declares none, and a style named `circular` / `large`
             # drew a spinner here while every other path drew a bar.
-            code = indent("LinearProgressIndicator(", depth)
+            code = indent("JsonUILinearProgressIndicator(", depth)
           end
           
           # Build modifiers

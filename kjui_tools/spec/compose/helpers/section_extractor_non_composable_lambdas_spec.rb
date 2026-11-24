@@ -72,7 +72,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
             propagateMinConstraints: Boolean = false, content: BoxScope.() -> Unit = {}) {}
     fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) {}
     fun Text(text: String, color: Color = Color.Gray, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
-    fun CircularProgressIndicator() {}
+    fun JsonUICircularProgressIndicator() {}
     object android { object util { object Log { fun e(tag: String, msg: String): Int = 0 } } }
     object DynamicModeManager { fun isActive(): Boolean = false }
     fun SafeDynamicView(layoutName: String, modifier: Modifier = Modifier, data: Map<String, Any> = emptyMap(),

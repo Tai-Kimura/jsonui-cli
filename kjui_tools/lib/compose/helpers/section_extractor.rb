@@ -134,12 +134,12 @@ module KjuiTools
           '.alignByBaseline(' => %i[row column], '.matchParentSize(' => %i[box],
           '.fillParentMaxSize(' => %i[lazy_item], '.fillParentMaxWidth(' => %i[lazy_item],
           '.fillParentMaxHeight(' => %i[lazy_item], '.animateItemPlacement(' => %i[lazy_item],
-          '.animateItem(' => %i[lazy_item], 'NavigationBarItem(' => %i[row]
+          '.animateItem(' => %i[lazy_item], 'JsonUITabBarItem(' => %i[row]
         }.freeze
 
         # The scope a container call's lambda provides. A call not listed is taken to provide any (as before).
         SCOPE_KIND_OF_CALL = {
-          'Column' => :column, 'Row' => :row, 'Box' => :box, 'VisibilityWrapper' => :box, 'BadgedBox' => :box,
+          'Column' => :column, 'Row' => :row, 'Box' => :box, 'VisibilityWrapper' => :box, 'JsonUIBadgedBox' => :box,
           'FlowRow' => :row, 'FlowColumn' => :column
         }.freeze
 
@@ -155,7 +155,7 @@ module KjuiTools
         # `.weight(` under `Column { CollectionReorderScope(...) { ... } }` is the Column's). Kept transparent like control
         # flow, both in the guard above and when the extractor looks for the receiver to give a lifted section.
         RECEIVER_TRANSPARENT_CALLS = %w[
-          CollectionReorderScope CollectionReorderRow CompositionLocalProvider Scaffold IconToggleButton
+          CollectionReorderScope CollectionReorderRow CompositionLocalProvider JsonUITabScaffold JsonUIIconToggleButton
         ].freeze
 
         # The call whose lambda opens at ``lines[idx]`` (stripped lines): its first word, or for a `) {` the first
@@ -309,8 +309,8 @@ module KjuiTools
         TRANSPARENT_MEMBER_CALLS = %w[let forEach forEachIndexed].freeze
 
         # Named lambda arguments kjui emits whose parameter is a @Composable
-        # slot (Tab `text` / `icon`, TextField `placeholder`, NavigationBar
-        # item `label` / BadgedBox `badge`, Scaffold `bottomBar`, the
+        # slot (Tab `text` / `icon`, TextField `placeholder`, JsonUITabBarItem
+        # `label`, JsonUITabScaffold `bottomBar`, the
         # Collection `lazyContent` / `eagerContent`). Every other named
         # lambda kjui emits is a callback or a value (`onClick`, `factory`,
         # `update`, `span`, `key`, `progress`, …).
@@ -504,15 +504,15 @@ module KjuiTools
         # 'constrainAs' and 'linkTo'. A chunk that holds the ConstraintLayout
         # call itself provides the scope and may still be lifted whole.
         #
-        # Scope-bound COMPOSABLE CALLS, not modifiers: material3's
-        # NavigationBarItem is `fun RowScope.NavigationBarItem(...)` — lifting
-        # a tab item out of its NavigationBar content lambda strands the call
-        # without a receiver ("Unresolved reference", first hit by the bound
-        # TabView fixture, whose per-tab chunks are exactly section-sized).
-        # The trailing paren keeps `NavigationBarItemDefaults.colors(` from
-        # matching.
+        # Scope-bound COMPOSABLE CALLS, not modifiers: KotlinJsonUI's
+        # JsonUITabBarItem is `fun RowScope.JsonUITabBarItem(...)`, as
+        # material3's NavigationBarItem it wraps is — lifting a tab item out of
+        # its JsonUITabBar content lambda strands the call without a receiver
+        # ("Unresolved reference", first hit by the bound TabView fixture,
+        # whose per-tab chunks are exactly section-sized). The trailing paren
+        # keeps a longer name from matching.
         SCOPE_BOUND_CALL_PREFIXES = %w[
-          NavigationBarItem(
+          JsonUITabBarItem(
           createRef(
         ].freeze
 

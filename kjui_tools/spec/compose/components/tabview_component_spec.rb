@@ -13,7 +13,7 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
   end
 
   describe '.generate' do
-    it 'generates NavigationBar with tabs array' do
+    it 'generates a JsonUITabBar with a JsonUITabBarItem per tab' do
       json_data = {
         'type' => 'TabView',
         'tabs' => [
@@ -22,12 +22,11 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
         ]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('NavigationBar(')
-      expect(result).to include('NavigationBarItem(')
+      expect(result).to include('JsonUITabBar(')
+      expect(result.scan('JsonUITabBarItem(').size).to eq(2)
       expect(result).to include('HomeView()')
       expect(result).to include('ProfileView()')
-      expect(required_imports).to include(:navigation_bar)
-      expect(required_imports).to include(:scaffold)
+      expect(required_imports).to include(:jsonui_tab_scaffold, :jsonui_tab_bar, :jsonui_icon)
     end
 
     it 'generates state variable for selected tab' do
@@ -114,13 +113,13 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
       expect(result).to include('Text("My Tab content")')
     end
 
-    it 'wraps in Scaffold container' do
+    it 'wraps in a JsonUITabScaffold container' do
       json_data = {
         'type' => 'TabView',
         'tabs' => [{ 'title' => 'Tab', 'icon' => 'circle' }]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('Scaffold(')
+      expect(result).to include('JsonUITabScaffold(')
       expect(result).to include('bottomBar = {')
     end
 
@@ -134,15 +133,18 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
       expect(result).to include('containerColor =')
     end
 
-    it 'applies tintColor to NavigationBarItem' do
+    it 'applies tintColor to JsonUITabBarItem as its own flat colour parameters' do
       json_data = {
         'type' => 'TabView',
         'tintColor' => 'blue',
         'tabs' => [{ 'title' => 'Tab', 'icon' => 'circle' }]
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('NavigationBarItemDefaults.colors(')
-      expect(result).to include('selectedIconColor =')
+      expect(result).not_to include('NavigationBarItemDefaults')
+      expect(result).not_to include('colors =')
+      %w[selectedIconColor selectedTextColor unselectedIconColor unselectedTextColor].each do |param|
+        expect(result).to match(/^ {16}#{param} = /)
+      end
     end
 
     it 'respects showLabels setting' do
@@ -161,8 +163,8 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
         'tabs' => []
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('NavigationBar(')
-      expect(result).not_to include('NavigationBarItem(')
+      expect(result).to include('JsonUITabBar(')
+      expect(result).not_to include('JsonUITabBarItem(')
     end
 
     it 'adds click handler to each tab' do

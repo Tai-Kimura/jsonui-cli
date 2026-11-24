@@ -46,13 +46,13 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
   end
 
   def items(result)
-    result.split('NavigationBarItem(').drop(1).map { |item| item.split("\n            )\n").first }
+    result.split('JsonUITabBarItem(').drop(1).map { |item| item.split("\n            )\n").first }
   end
 
   describe 'where the badge goes' do
     it 'wraps only its own tab and closes every brace it opens' do
       result = described_class.generate(tabs(:none, 3, :none), 0, required_imports)
-      expect(items(result).map { |i| i.scan('BadgedBox').size }).to eq([0, 1, 0])
+      expect(items(result).map { |i| i.scan('JsonUIBadgedBox(').size }).to eq([0, 1, 0])
       expect(result.count('{')).to eq(result.count('}'))
       expect(result.count('(')).to eq(result.count(')'))
     end
@@ -74,7 +74,7 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
     }.each do |badge, literal|
       it "shows #{badge.inspect} as #{literal}" do
         result = described_class.generate(tabs(badge), 0, required_imports)
-        expect(result).to include("BadgedBox(badge = { Badge { Text(#{literal}) } }) {")
+        expect(result).to include("JsonUIBadgedBox(badge = #{literal}) {")
         expect(result).to include("modifier = Modifier.semantics { stateDescription = #{literal} },")
       end
     end
@@ -93,7 +93,7 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
       expect(result).to include('is String -> v.ifEmpty { null }; else -> null }')
       expect(result).to include('modifier = if (badge1 != null) Modifier.semantics { stateDescription = badge1 } else Modifier,')
       expect(result).to include('if (badge1 != null) {')
-      expect(result).to include('BadgedBox(badge = { Badge { Text(badge1) } }) {')
+      expect(result).to include('JsonUIBadgedBox(badge = badge1) {')
     end
   end
 
@@ -105,7 +105,7 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
 
       unlabelled_imports = Set.new
       unlabelled = described_class.generate(tabs(3, show_labels: false), 0, unlabelled_imports)
-      expect(unlabelled).to include('BadgedBox')           # the badge still shows
+      expect(unlabelled).to include('JsonUIBadgedBox(')    # the badge still shows
       expect(unlabelled).not_to include('stateDescription') # and is already announced
       expect(unlabelled_imports).not_to include(:semantics_state_description)
     end

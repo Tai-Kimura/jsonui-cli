@@ -40,12 +40,12 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
     fun Text(text: String, color: Color = Color.Black, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
     // A Radio's selected colour: its own, else the tint a container handed
     // down (KotlinJsonUI's jsonUITintOr, InheritedTint).
-    class RadioButtonColors
-    object RadioButtonDefaults { fun colors(selectedColor: Color = Color.Black) = RadioButtonColors() }
     class ColorScheme { val primary = Color() }
     object MaterialTheme { val colorScheme = ColorScheme() }
     fun jsonUITintOr(fallback: Color): Color = fallback
-    fun RadioButton(selected: Boolean, onClick: () -> Unit, colors: RadioButtonColors = RadioButtonColors()) {}
+    // KotlinJsonUI's JsonUIRadioButton (>= 2.66.0): the colours flat, no material3 RadioButton declared.
+    fun JsonUIRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                          selectedColor: Color = Color.Black, unselectedColor: Color = Color.Black) {}
     fun Spacer(modifier: Modifier) {}
     class ViewModel { fun updateData(values: Map<String, Any?>) {} }
     class Data(val rows: List<Any> = listOf(), val sel: String = "")
@@ -83,7 +83,7 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
         collection = emit(with_items(base.merge('type' => 'Collection'), items))
         table = emit(with_items(base.merge('type' => 'Table'), items))
         expect(table).to eq(collection), "#{route} items #{label}"
-        expect(table).not_to include('HorizontalDivider'), "#{route} items #{label}: TableComponent's rows"
+        expect(table).not_to include('JsonUIDivider'), "#{route} items #{label}: TableComponent's rows"
       end
     end
   end
@@ -100,9 +100,9 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
   it 'draws a Radio with an items array as its options, and with a binding as the list the data holds; both compile' do
     array = emit('type' => 'Radio', 'id' => 'r', 'items' => %w[a b], 'selectedValue' => '@{sel}')
     bound = emit('type' => 'Radio', 'id' => 'r', 'items' => '@{rows}', 'selectedValue' => '@{sel}')
-    expect(array.scan('RadioButton(').size).to eq(2)
+    expect(array.scan('JsonUIRadioButton(').size).to eq(2)
     expect(bound).to include('data.rows.forEach { item ->').and include('selected = data.sel == item')
-    expect(bound.scan('RadioButton(').size).to eq(1) # one row, drawn for each item
+    expect(bound.scan('JsonUIRadioButton(').size).to eq(1) # one row, drawn for each item
     source = [array, bound].each_with_index.map { |code, i| "fun host#{i}(data: Data, viewModel: ViewModel) {\n#{code}\n}\n" }.join
     expect("#{RADIO_STUBS}\n#{source}").to compile_as_kotlin
   end

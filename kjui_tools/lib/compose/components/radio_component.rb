@@ -162,8 +162,12 @@ module KjuiTools
           # If icon is "circle" or selectedIcon is "checkmark.circle.fill", use default RadioButton
           if (json_data['icon'] == 'circle' || !json_data['icon']) && 
              (json_data['selectedIcon'] == 'checkmark.circle.fill' || !json_data['selectedIcon'])
-            # Use default RadioButton for standard radio appearance
-            code += "\n" + indent("    RadioButton(", depth)
+            # Use default RadioButton for standard radio appearance: KotlinJsonUI's JsonUIRadioButton, not
+            # material3's RadioButton, so generated code names no material3 type and a change of material3's API is
+            # absorbed in the library (>= 2.66.0, ticket kjui-wrap-material3-calls-next). The same holds for the
+            # JsonUICheckbox, JsonUIIconButton and JsonUIIcon below.
+            required_imports&.add(:jsonui_radio_button)
+            code += "\n" + indent("    JsonUIRadioButton(", depth)
             code += "\n" + indent("        selected = #{selected_expr},", depth)
             code += "\n" + indent("        onClick = #{select_lambda}", depth)
             code += ",\n" + indent("        enabled = #{enabled}", depth) if enabled
@@ -174,8 +178,8 @@ module KjuiTools
           elsif json_data['icon'] == 'square' && 
                 (json_data['selectedIcon'] == 'checkmark.square.fill' || !json_data['selectedIcon'])
             # Use default Checkbox for square appearance
-            required_imports&.add(:checkbox)
-            code += "\n" + indent("    Checkbox(", depth)
+            required_imports&.add(:jsonui_checkbox)
+            code += "\n" + indent("    JsonUICheckbox(", depth)
             code += "\n" + indent("        checked = #{selected_expr},", depth)
             code += "\n" + indent("        onCheckedChange = #{select_lambda}", depth)
             code += ",\n" + indent("        enabled = #{enabled}", depth) if enabled
@@ -184,19 +188,20 @@ module KjuiTools
             end
             code += "\n" + indent("    )", depth)
           elsif json_data['icon'] || json_data['selectedIcon']
-            # Use IconButton with custom icons only for non-standard icons
-            required_imports&.add(:icon_button)
+            # Use JsonUIIconButton with custom icons only for non-standard icons
+            required_imports&.add(:jsonui_icon_button)
+            required_imports&.add(:jsonui_icon)
             required_imports&.add(:icons)
             
             icon = map_icon_name(json_data['icon'] || 'star')
             selected_icon = map_icon_name(json_data['selectedIcon'] || 'star.fill')
             
             code += "\n" + indent("    val isSelected = #{selected_expr}", depth)
-            code += "\n" + indent("    IconButton(", depth)
+            code += "\n" + indent("    JsonUIIconButton(", depth)
             code += "\n" + indent("        onClick = #{select_lambda}", depth)
             code += ",\n" + indent("        enabled = #{enabled}", depth) if enabled
             code += "\n" + indent("    ) {", depth)
-            code += "\n" + indent("        Icon(", depth)
+            code += "\n" + indent("        JsonUIIcon(", depth)
             code += "\n" + indent("            imageVector = if (isSelected) #{selected_icon} else #{icon},", depth)
             code += "\n" + indent("            contentDescription = #{text_expr},", depth)
             
@@ -221,8 +226,9 @@ module KjuiTools
             code += "\n" + indent("        )", depth)
             code += "\n" + indent("    }", depth)
           else
-            # Default RadioButton
-            code += "\n" + indent("    RadioButton(", depth)
+            # Default RadioButton (JsonUIRadioButton, as above)
+            required_imports&.add(:jsonui_radio_button)
+            code += "\n" + indent("    JsonUIRadioButton(", depth)
             code += "\n" + indent("        selected = #{selected_expr},", depth)
             code += "\n" + indent("        onClick = #{select_lambda}", depth)
             code += ",\n" + indent("        enabled = #{enabled}", depth) if enabled
@@ -385,7 +391,9 @@ module KjuiTools
             end
             code += "\n" + indent("            }", depth)
             code += "\n" + indent("    ) {", depth)
-            code += "\n" + indent("        RadioButton(", depth)
+            # JsonUIRadioButton, as the single Radio draws it.
+            required_imports&.add(:jsonui_radio_button)
+            code += "\n" + indent("        JsonUIRadioButton(", depth)
             code += "\n" + indent("            selected = #{selected_var} == #{item_literal},", depth)
             code += "\n" + indent("            enabled = #{enabled},", depth) if enabled
             code += "\n" + indent("            onClick = {", depth)
@@ -407,12 +415,12 @@ module KjuiTools
             # The declared pair checkedColor / uncheckedColor, as the single
             # Radio reads them (icon_appearance_args); only the retired
             # `options` group read them for a group until 2.3.22
-            required_imports&.add(:radio_colors)
             checked = json_data['checkedColor'] && Helpers::ResourceResolver.process_color(json_data['checkedColor'], required_imports)
             unchecked = json_data['uncheckedColor'] && Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
             group_colors = ["selectedColor = #{checked || selected_accent(json_data, required_imports)}"]
             group_colors << "unselectedColor = #{unchecked}" if unchecked
-            code += "\n" + indent("            colors = RadioButtonDefaults.colors(#{group_colors.join(', ')})", depth)
+            # JsonUIRadioButton's own colour parameters, flat.
+            code += "\n" + indent("            #{group_colors.join(', ')}", depth)
             code += "\n" + indent("        )", depth)
             code += "\n" + indent("        Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # The option's label: fontColor, and fontSize / font as the single
@@ -490,16 +498,12 @@ module KjuiTools
             # a container handed down (selected_accent) — so the colours are
             # always emitted.
             selected ||= selected_accent(json_data, required_imports)
-            required_imports&.add(:radio_colors)
-            parts = []
-            parts << "selectedColor = #{selected}"
-            parts << "unselectedColor = #{unselected}" if unselected
-            args << "colors = RadioButtonDefaults.colors(#{parts.join(', ')})"
+            # JsonUIRadioButton's own colour parameters, one argument each.
+            args << "selectedColor = #{selected}"
+            args << "unselectedColor = #{unselected}" if unselected
           when :checkbox
-            if icon_color
-              required_imports&.add(:checkbox_colors)
-              args << "colors = CheckboxDefaults.colors(checkmarkColor = #{icon_color})"
-            end
+            # JsonUICheckbox's own checkmarkColor parameter.
+            args << "checkmarkColor = #{icon_color}" if icon_color
           end
           args
         end

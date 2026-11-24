@@ -77,9 +77,9 @@ RSpec.describe 'kjui Radio items: a tap calls onValueChange with the item' do
       interface Alignment { interface Vertical; companion object { val CenterVertically: Vertical = object : Vertical {} } }
       fun Column(modifier: Modifier = Modifier, content: () -> Unit) { content() }
       fun Row(verticalAlignment: Alignment.Vertical? = null, modifier: Modifier = Modifier, content: () -> Unit) { content() }
-      class RadioButtonColors
-      object RadioButtonDefaults { fun colors(selectedColor: Color = Color()) = RadioButtonColors() }
-      fun RadioButton(selected: Boolean, onClick: () -> Unit, colors: RadioButtonColors = RadioButtonColors()) { taps += onClick }
+      // KotlinJsonUI's JsonUIRadioButton (>= 2.66.0): the colours flat, no material3 RadioButton declared.
+      fun JsonUIRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                            selectedColor: Color = Color(), unselectedColor: Color = Color()) { if (onClick != null) taps += onClick }
       class ColorScheme { val primary = Color() }
       object MaterialTheme { val colorScheme = ColorScheme() }
       fun jsonUITintOr(fallback: Color): Color = fallback

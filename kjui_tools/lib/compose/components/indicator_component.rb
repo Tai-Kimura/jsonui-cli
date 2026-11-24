@@ -8,7 +8,7 @@ module KjuiTools
     module Components
       class IndicatorComponent
         # The spinner's size for each indicatorStyle that has one of its own;
-        # `medium` is CircularProgressIndicator's default and `linear` a bar.
+        # `medium` is JsonUICircularProgressIndicator's default and `linear` a bar.
         STYLE_SIZES = { 'small' => 16, 'large' => 48 }.freeze
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
@@ -40,13 +40,17 @@ module KjuiTools
             actual_depth = depth
           end
           
-          # Determine indicator type based on style
+          # Determine indicator type based on style. KotlinJsonUI's JsonUILinearProgressIndicator and
+          # JsonUICircularProgressIndicator, not material3's: generated code names no material3 control, so a change
+          # of material3's API is absorbed in the library (>= 2.66.0, ticket kjui-wrap-material3-calls-next).
           if style == 'linear'
+            required_imports&.add(:jsonui_linear_progress_indicator)
             code += "\n" if is_animating != nil
-            code += indent("LinearProgressIndicator(", actual_depth)
+            code += indent("JsonUILinearProgressIndicator(", actual_depth)
           else
+            required_imports&.add(:jsonui_circular_progress_indicator)
             code += "\n" if is_animating != nil
-            code += indent("CircularProgressIndicator(", actual_depth)
+            code += indent("JsonUICircularProgressIndicator(", actual_depth)
           end
           
           # Build modifiers

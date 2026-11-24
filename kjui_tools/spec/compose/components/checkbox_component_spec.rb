@@ -15,7 +15,8 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
     it 'generates basic Checkbox component' do
       json_data = { 'type' => 'Checkbox' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('Checkbox(')
+      expect(result).to include('JsonUICheckbox(')
+      expect(required_imports).to include(:jsonui_checkbox)
     end
 
     it 'generates Checkbox with checked state' do
@@ -36,10 +37,13 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
       expect(result).to include('onCheckedChange')
     end
 
-    it 'adds checkbox_colors import when checkColor specified' do
+    it 'passes checkColor as JsonUICheckbox\'s own flat checkedColor, with no material3 CheckboxDefaults' do
       json_data = { 'type' => 'Checkbox', 'checkColor' => '#007AFF' }
-      described_class.generate(json_data, 0, required_imports)
-      expect(required_imports).to include(:checkbox_colors)
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to match(/^\s+checkedColor = .+$/)
+      expect(result).not_to include('CheckboxDefaults')
+      expect(result).not_to include('colors =')
+      expect(required_imports).to include(:jsonui_checkbox)
     end
   end
 
@@ -177,8 +181,9 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
     # For a Material Checkbox the "icon" is the tick.
     it 'maps iconColor to checkmarkColor' do
       code = described_class.generate({ 'type' => 'CheckBox', 'iconColor' => '#FF0000' }, 0, Set.new)
-      expect(code).to include('CheckboxDefaults.colors(')
-      expect(code).to include('checkmarkColor = ')
+      expect(code).to include('JsonUICheckbox(')
+      expect(code).to match(/^\s+checkmarkColor = .+$/)
+      expect(code).not_to include('CheckboxDefaults')
     end
 
     # With no custom glyph there is nothing to size but the control itself.

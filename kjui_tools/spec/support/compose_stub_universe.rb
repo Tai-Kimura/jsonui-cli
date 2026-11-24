@@ -38,23 +38,23 @@ module ComposeStubUniverse
       object R { object drawable { #{drawables.map { |d| "const val #{d}: Int = 0" }.join('; ')} } }
       class ColorScheme { val primary = Color(); val onSurfaceVariant = Color() }
       object MaterialTheme { val colorScheme = ColorScheme() }
-      class NavigationBarItemColors
-      object NavigationBarItemDefaults {
-          fun colors(selectedIconColor: Color, selectedTextColor: Color,
-                     unselectedIconColor: Color, unselectedTextColor: Color) = NavigationBarItemColors()
-      }
       interface RowScope
-      fun Scaffold(bottomBar: () -> Unit = {}, content: (PaddingValues) -> Unit) {}
-      fun NavigationBar(containerColor: Color? = null, content: RowScope.() -> Unit) {}
-      fun RowScope.NavigationBarItem(selected: Boolean, onClick: () -> Unit, icon: () -> Unit,
-                                     modifier: Modifier = Modifier, label: (() -> Unit)? = null,
-                                     colors: NavigationBarItemColors = NavigationBarItemColors()) {}
+      interface BoxScope
+      // KotlinJsonUI's tab wrappers (com.kotlinjsonui.components, >= 2.66.0), with the parameters of
+      // JsonUIMaterialControls.kt. No material3 Scaffold / NavigationBar / NavigationBarItem / Icon / BadgedBox is
+      // declared, so an emit that went back to calling material3 directly does not resolve here (ticket
+      // kjui-wrap-material3-calls-next).
+      fun JsonUITabScaffold(modifier: Modifier = Modifier, bottomBar: () -> Unit = {}, content: (PaddingValues) -> Unit) {}
+      fun JsonUITabBar(modifier: Modifier = Modifier, containerColor: Color = Color(), content: RowScope.() -> Unit) {}
+      fun RowScope.JsonUITabBarItem(selected: Boolean, onClick: () -> Unit, icon: () -> Unit,
+                                    modifier: Modifier = Modifier, enabled: Boolean = true, label: (() -> Unit)? = null,
+                                    selectedIconColor: Color = Color(), selectedTextColor: Color = Color(),
+                                    unselectedIconColor: Color = Color(), unselectedTextColor: Color = Color()) {}
       object Icons { object Filled; object Outlined }
       #{icons.map { |i| "val Icons.Filled.#{i}: ImageVector get() = ImageVector()\nval Icons.Outlined.#{i}: ImageVector get() = ImageVector()" }.join("\n")}
-      fun Icon(imageVector: ImageVector, contentDescription: String?) {}
-      fun Icon(painter: Painter, contentDescription: String?) {}
-      fun BadgedBox(badge: () -> Unit, content: () -> Unit) {}
-      fun Badge(content: () -> Unit) {}
+      fun JsonUIIcon(imageVector: ImageVector, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = Color()) {}
+      fun JsonUIIcon(painter: Painter, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = Color()) {}
+      fun JsonUIBadgedBox(badge: String, modifier: Modifier = Modifier, content: BoxScope.() -> Unit) {}
       fun Text(text: String, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null, maxLines: Int = Int.MAX_VALUE, overflow: Any? = null) {}
       fun Box(modifier: Modifier = Modifier, content: () -> Unit) {}
       class ProvidedValue
@@ -219,11 +219,7 @@ module ComposeStubUniverse
           object : PaddingValues { override fun calculateBottomPadding() = vertical }
       fun Modifier.heightIn(min: Dp = 0.dp, max: Dp = Dp.Infinity): Modifier = this
       class BorderStroke(val width: Dp, val color: Color)
-      class ButtonColors
-      object ButtonDefaults {
-          fun buttonColors(containerColor: Color = Color(), contentColor: Color = Color(),
-                           disabledContainerColor: Color = Color(), disabledContentColor: Color = Color()) = ButtonColors()
-      }
+      class MutableInteractionSource
       object Configuration {
           object Button {
               val defaultTextColor = Color(); val defaultBackgroundColor = Color(); val defaultCornerRadius: Int = 0
@@ -231,21 +227,28 @@ module ComposeStubUniverse
           object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16; val defaultPlaceholderColor = Color() }
           object Font { fun resolve(spec: FontSpec) = ResolvedFont(null, null, null, null) }
       }
-      fun Button(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-                 shape: Shape = RectangleShape, colors: ButtonColors = ButtonColors(), border: BorderStroke? = null,
-                 contentPadding: PaddingValues = PaddingValues(0.dp), content: RowScope.() -> Unit) {}
+      // KotlinJsonUI's wrappers of the material3 controls (com.kotlinjsonui.components, >= 2.66.0), with the
+      // parameters of JsonUIMaterialControls.kt: the colours flat, no material3 *Colors type. No material3 Button,
+      // RadioButton, Switch, Checkbox, Icon, IconToggleButton, IconButton, progress indicator, divider, Scaffold or
+      // NavigationBar is declared, so an emit that went back to calling one directly does not resolve here (ticket
+      // kjui-wrap-material3-calls-next).
+      fun JsonUIButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+                       shape: Shape = RectangleShape, containerColor: Color = Color.Unspecified,
+                       contentColor: Color = Color.Unspecified, disabledContainerColor: Color = Color.Unspecified,
+                       disabledContentColor: Color = Color.Unspecified, border: BorderStroke? = null,
+                       contentPadding: PaddingValues = PaddingValues(0.dp), interactionSource: MutableInteractionSource? = null,
+                       content: RowScope.() -> Unit) {}
       fun Text(text: String, color: Color = Color(), fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
                fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier,
                style: TextStyle? = null, letterSpacing: Any? = null, lineHeight: Any? = null,
                maxLines: Int = Int.MAX_VALUE, overflow: Any? = null) {}
       fun Spacer(modifier: Modifier = Modifier) {}
-      class RadioButtonColors
-      object RadioButtonDefaults { fun colors(selectedColor: Color = Color(), unselectedColor: Color = Color()) = RadioButtonColors() }
-      fun RadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
-                      colors: RadioButtonColors = RadioButtonColors()) {}
-      fun IconToggleButton(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier,
-                           enabled: Boolean = true, content: () -> Unit) {}
-      fun Icon(painter: Painter, contentDescription: String?, tint: Color = Color()) {}
+      fun JsonUIRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                            selectedColor: Color = Color.Unspecified, unselectedColor: Color = Color.Unspecified) {}
+      fun JsonUIIconToggleButton(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier,
+                                 enabled: Boolean = true, content: () -> Unit) {}
+      fun JsonUIIconButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: () -> Unit) {}
+      fun JsonUIIcon(painter: Painter, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = Color()) {}
       fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) {}
       interface ColumnScope
       class LazyListState
@@ -281,19 +284,13 @@ module ComposeStubUniverse
                            placeholder: Int = 0, error: Int = 0, fallback: Int = 0,
                            loadingRenderer: String? = null, loadingDelayMillis: Int = 200, transitionMillis: Int = -1,
                            onLoadStateChange: ((String) -> Unit)? = null) {}
-      class SwitchColors
-      object SwitchDefaults {
-          fun colors(checkedTrackColor: Color = Color(), uncheckedTrackColor: Color = Color(),
-                     checkedThumbColor: Color = Color(), uncheckedThumbColor: Color = Color()) = SwitchColors()
-      }
-      fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
-                 colors: SwitchColors = SwitchColors()) {}
-      class CheckboxColors
-      object CheckboxDefaults {
-          fun colors(checkedColor: Color = Color(), uncheckedColor: Color = Color(), checkmarkColor: Color = Color()) = CheckboxColors()
-      }
-      fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
-                   colors: CheckboxColors = CheckboxColors()) {}
+      fun JsonUISwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                       checkedTrackColor: Color = Color.Unspecified, uncheckedTrackColor: Color = Color.Unspecified,
+                       checkedThumbColor: Color = Color.Unspecified, uncheckedThumbColor: Color = Color.Unspecified,
+                       checkedBorderColor: Color = Color.Unspecified, uncheckedBorderColor: Color = Color.Unspecified) {}
+      fun JsonUICheckbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                         checkedColor: Color = Color.Unspecified, uncheckedColor: Color = Color.Unspecified,
+                         checkmarkColor: Color = Color.Unspecified) {}
       class SliderColors
       object SliderDefaults {
           fun colors(thumbColor: Color = Color(), activeTrackColor: Color = Color(), inactiveTrackColor: Color = Color()) = SliderColors()
@@ -304,11 +301,11 @@ module ComposeStubUniverse
                        valueRange: ClosedFloatingPointRange<Float> = 0f..1f, steps: Int = 0,
                        onValueChangeFinished: (() -> Unit)? = null, thumbColor: Color = Color.Unspecified,
                        activeTrackColor: Color = Color.Unspecified, inactiveTrackColor: Color = Color.Unspecified) {}
-      fun LinearProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
-      // the determinate overload (Material3: `progress: () -> Float` first)
-      fun LinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
-      fun CircularProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color(),
-                                    strokeWidth: Dp = 0.dp) {}
+      // determinate with `progress`, indeterminate without it
+      fun JsonUILinearProgressIndicator(modifier: Modifier = Modifier, progress: (() -> Float)? = null, color: Color = Color(),
+                                        trackColor: Color = Color()) {}
+      fun JsonUICircularProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), strokeWidth: Dp = 0.dp) {}
+      fun JsonUIDivider(modifier: Modifier = Modifier, thickness: Dp = 1.dp, color: Color = Color()) {}
       fun SelectBox(value: String, onValueChange: (String) -> Unit, resolvedFont: Any? = null, options: List<String>, modifier: Modifier = Modifier,
                     enabled: Boolean = true, backgroundColor: Color? = null, borderColor: Color? = null,
                     cornerRadius: Int? = null, contentPadding: PaddingValues? = null, fontSize: Int = 16) {}
@@ -345,19 +342,16 @@ module ComposeStubUniverse
       class ImageVector
       object Icons { object Filled; object Outlined }
       #{icons.map { |i| "val Icons.Filled.#{i}: ImageVector get() = ImageVector()\nval Icons.Outlined.#{i}: ImageVector get() = ImageVector()" }.join("\n")}
-      fun Icon(imageVector: ImageVector, contentDescription: String?) {}
+      fun JsonUIIcon(imageVector: ImageVector, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = Color()) {}
       class ColorScheme { val primary = Color(); val onSurfaceVariant = Color() }
       object MaterialTheme { val colorScheme = ColorScheme() }
-      class NavigationBarItemColors
-      object NavigationBarItemDefaults {
-          fun colors(selectedIconColor: Color, selectedTextColor: Color,
-                     unselectedIconColor: Color, unselectedTextColor: Color) = NavigationBarItemColors()
-      }
-      fun Scaffold(modifier: Modifier = Modifier, bottomBar: () -> Unit = {}, content: (PaddingValues) -> Unit) {}
-      fun NavigationBar(content: RowScope.() -> Unit) {}
-      fun RowScope.NavigationBarItem(selected: Boolean, onClick: () -> Unit, icon: () -> Unit,
-                                     enabled: Boolean = true, label: (() -> Unit)? = null,
-                                     colors: NavigationBarItemColors = NavigationBarItemColors()) {}
+      fun JsonUITabScaffold(modifier: Modifier = Modifier, bottomBar: () -> Unit = {}, content: (PaddingValues) -> Unit) {}
+      fun JsonUITabBar(modifier: Modifier = Modifier, containerColor: Color = Color(), content: RowScope.() -> Unit) {}
+      fun RowScope.JsonUITabBarItem(selected: Boolean, onClick: () -> Unit, icon: () -> Unit,
+                                    modifier: Modifier = Modifier, enabled: Boolean = true, label: (() -> Unit)? = null,
+                                    selectedIconColor: Color = Color.Unspecified, selectedTextColor: Color = Color.Unspecified,
+                                    unselectedIconColor: Color = Color.Unspecified, unselectedTextColor: Color = Color.Unspecified) {}
+      fun JsonUIBadgedBox(badge: String, modifier: Modifier = Modifier, content: BoxScope.() -> Unit) {}
       class ProvidedValue
       class SafeAreaConfig(val ignoreBottom: Boolean = false, val ignoreTop: Boolean = false)
       object LocalSafeAreaConfig {
