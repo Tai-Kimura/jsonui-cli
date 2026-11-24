@@ -327,7 +327,11 @@ diff が意図どおりか確認 → 各ホストで実行 → visual なら bas
 1. `gh workflow run conformance-mobile.yml --ref <枝> -f only=<fixture id>,<fixture id> [-f swiftjsonui_ref=… -f kotlinjsonui_ref=…]`
    - 各面（ios・ios-codegen・android・android-codegen・web）が、名指した fixture とその control だけを描いて上げる
      （`.github/scripts/conformance_only.py`）。probe・android-library-tests・report（門）は動かない。絵を作るための run。
-   - id の誤りは、その job の最初の段で名指して止まる（何も描かずに緑にはならない）。
+   - 最初に **only_plan** の job が名指しを確かめ、面ごとの本数を出す（`conformance_only.py plan`）。id の誤りは
+     ここで名指して止まり、どの面も走らない（何も描かずに緑にはならない）。
+   - 名指した fixture が 1 本も無い面（Android だけの fixture なら web と iOS）は、その job と merge が skip になる（緑）。
+     以前は web の job が theme.css 無しで赤になり、iOS は撃つ物の無い shard を起こしていた
+     （ticket 2026-11-24-conformance-only-fails-a-face-with-no-fixtures）。
 2. その run の `results-<面>` を落として焼く。新しい fixture は
    `jui conformance baseline update --platform <p> --env ci --artifacts <落とした先> --only-new --fail-on-moved`、
    絵が変わった fixture は `jui conformance baseline update --platform <p> --env ci --artifacts <落とした先> --take <screenshot>.png --fail-on-moved`

@@ -348,7 +348,8 @@ class Workflow(unittest.TestCase):
     def test_the_merges_produce_what_the_report_reads(self):
         for job in ("ios", "ios-codegen"):
             merge = self.wf["jobs"][f"{job}-merge"]
-            self.assertEqual(merge["needs"], job)
+            needs = merge["needs"] if isinstance(merge["needs"], list) else [merge["needs"]]
+            self.assertIn(job, needs)   # and only_plan, which skips it when `only` names nothing on iOS
             self.assertIn("always()", merge["if"])
             names = [s.get("with", {}).get("name", "") for s in merge["steps"]]
             self.assertIn(f"results-{job}", names)
