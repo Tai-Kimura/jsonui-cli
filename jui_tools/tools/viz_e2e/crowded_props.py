@@ -29,7 +29,7 @@ import sys
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, desk_pins_js, new_page, ready
-from waits import read_until, settled, until
+from waits import read_until, settled, still, until
 
 SID = "e2e00000-0000-4000-8000-0000000003{:02x}"
 PROPS = "() => window.__dbg.props()"
@@ -61,6 +61,11 @@ NO_LOOKS = {"booth": False, "vend": False, "vac": False, "server": False}
 def check(failures, cond, text):
     if not cond:
         failures.append(f"crowded-props: {text}")
+
+
+FREE_TAG_JS = """(id) => { const t = window.__dbg.tags().find((x) => x.id === id); if (!t) return null;
+  const q = [Math.round((t.x0 + t.x1) / 2), Math.round((t.y0 + t.y1) / 2)], e = document.elementFromPoint(q[0], q[1]), o = e && e.closest('[data-robot]');
+  return { q, onTag: !!o && o.dataset.robot === id }; }"""
 
 
 async def wait(page, js, timeout=20000, label="", arg=None):
@@ -399,7 +404,14 @@ async def run_crowded_props(pw, out, failures):
         check(failures, res["freeBubble"] and not res["freeBubble"]["class"] and "wait-bubble" in (res["freeBubble"]["top"] or ""),
               f"a bubble over nothing to press is not let through and takes a press: {res['freeBubble']}")
         if free:
-            await page.mouse.click(*free[0]["q"])
+            # where its tag stands now, still on two frames: it was found before the bubbles above, and a tag follows its
+            # robot on the frames. Measured again just before the press, with the tag on top at that point checked, so a
+            # red here says where the tag was (ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides:
+            # the 20 s timeout of 11-18 did not come back on a slowed page or under load)
+            await settled(page, "the tags before the press on a tag over nothing", timeout=60000)
+            now = res["freeTagNow"] = await still(page, FREE_TAG_JS, "the tag over nothing to press", arg=free[0]["id"])
+            check(failures, now and now["onTag"], f"the tag over nothing to press is on the page, on top at its centre: {now}")
+            await page.mouse.click(*(now["q"] if now else free[0]["q"]))
             await wait(page, f"() => window.__dbg.view().card === '{free[0]['id']}'", label="a tag over nothing selects its robot")
             await page.keyboard.press("Escape")
             await wait(page, "() => !window.__dbg.view().card", label="the card closed")

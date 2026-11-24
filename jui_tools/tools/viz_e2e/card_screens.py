@@ -21,7 +21,7 @@ import time
 
 import data_server as DS
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
-from waits import until
+from waits import still, until
 
 VIEW = "() => window.__dbg.view()"
 # name: (how it opens, how it closes, whether the card stays open under it)
@@ -103,10 +103,11 @@ async def run_card_screens(pw, out, failures):
                         f"{name}: the card by a click on the robot", timeout=15000, why=VIEW)
             r = res[name] = {}
             if opener == "rack":
-                await page.wait_for_timeout(500)    # the rack's spot on the screen is taken a frame after the camera stops
-                # pressed for real when the camera (framing the robot) shows the rack bare; else the same call the
+                # the rack's spot on the screen is taken on a frame after the camera stops: read it once it stands on two
+                # frames, not a time after (ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides).
+                # Pressed for real when the camera (framing the robot) shows the rack bare; else the same call the
                 # press makes (where the robot sits decides whether the rack is in view at all)
-                spot = (await page.evaluate("() => window.__dbg.dataServer()"))["screen"]
+                spot = await still(page, "() => window.__dbg.dataServer().screen", f"{name}: the rack's spot")
                 bare = await page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); return !!e && e.tagName === 'CANVAS'; }", spot)
                 r["rack"] = "click" if bare else "hook"
                 if bare:

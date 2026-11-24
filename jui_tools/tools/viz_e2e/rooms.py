@@ -21,6 +21,7 @@ import time
 
 import hooks
 from common import DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, dump, new_page, ready
+from waits import RECTS_JS, still
 
 # A segment against the wall rectangles (each grown by PAD, the robot's half width): Liang–Barsky clipping.
 SEG_JS = """
@@ -312,7 +313,10 @@ async def run_rooms(pw, out, failures, RealServer):
             await phone.click("#room-back")
         await phone.evaluate("(id) => document.querySelector(`.tag.room[data-set-project='${id}']`).click()", room_id)
         await wait(phone, f"() => window.__dbg.solo() === '{room_id}'", label="phone one room")
-        await phone.wait_for_timeout(1500)
+        # the room's box is shown on a frame's pass (liveSoloSync): read it once it is up and stands on two frames, not a
+        # time after (a hidden box measured 0 wide and fitted; ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides)
+        await wait(phone, "() => !document.getElementById('room-solo').hidden", label="phone: the room's box shown")
+        await still(phone, RECTS_JS, "phone: the room's box", arg=["#room-solo"])
         res["phone"]["room"] = await phone.evaluate(NO_HSCROLL_JS)
         res["phone"]["backFits"] = await phone.evaluate("() => { const b = document.getElementById('room-solo').getBoundingClientRect(); return b.right <= window.innerWidth && b.left >= 0; }")
         await phone.screenshot(path=str(out / "phone-room.png"))

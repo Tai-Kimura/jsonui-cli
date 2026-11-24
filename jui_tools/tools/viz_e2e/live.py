@@ -14,6 +14,7 @@ import urllib.request
 import hooks
 import scenarios
 from common import DESKTOP, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready
+from waits import RECTS_JS, read_until, still, until
 
 ROOM_OF = """(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id); if (!R) return null;
   const p = R.robot.root.position; return { x: p.x, z: p.z, state: R.robot.state, room: R.def.room,
@@ -347,10 +348,20 @@ OVERLAP_JS = """() => { const vis = (el) => { if (!el || el.closest('[hidden]'))
     for (const o of others) { const b = o.getBoundingClientRect();
       if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) hits.push(`${m.id} x ${o.id || o.className || o.tagName}`); } }
   return { shown: mine.map((m) => m.id), hits }; }"""
+STAGE_TOP = ["#floor-nav", "#tower-legend", "#tower-weather", "#roster", "#room-solo"]   # what shares the top of the stage
+CAMERA_JS = "() => window.__dbg.camera.position.toArray().map((v) => +v.toFixed(2))"
+ROSTER_PLACE_MS = 300   # the room's list is placed at most every 250 ms (53-roster.js ROSTER.placeMs), with room
 FRAMES_JS = """(ms) => new Promise((done) => { const d = []; let last = performance.now(); const t0 = last;
   const tick = (now) => { d.push(now - last); last = now; if (now - t0 < ms) requestAnimationFrame(tick); else { d.sort((a, b) => a - b);
     done({ frames: d.length, median: +d[Math.floor(d.length / 2)].toFixed(1), p95: +d[Math.floor(d.length * 0.95)].toFixed(1) }); } };
   requestAnimationFrame(tick); })"""
+
+
+async def camera_landed(page, name):
+    """The camera's flight (50-panel.js camTween) over and the camera standing on two frames, not a time: what is read of
+    the 3D after a move is read where it landed (ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides)."""
+    await until(page, "() => !window.__dbg.view().tween", f"{name}: the flight over", timeout=20000)
+    await still(page, CAMERA_JS, name)
 
 
 async def scenario_floors(browser, srv, out, failures, res):
@@ -389,7 +400,7 @@ async def scenario_floors(browser, srv, out, failures, res):
     await page.click("#scope-top")
     await page.click(f'[data-pick-project="{target}"]')
     await wait(page, f"() => {{ const f = window.__dbg.floors(); return f.floor === 2 && !!window.__dbg.live3d().rooms['{target}']; }}", label="the picked room's floor")
-    await page.wait_for_timeout(1500)
+    await camera_landed(page, "the camera on the picked room")
     await page.screenshot(path=f"{out}/floors-picked.png")
     # the picked room fills most of the view (it showed the whole floor before)
     res["picked"] = await page.evaluate(f"""() => {{ const T = window.__dbg.THREE, cam = window.__dbg.camera, c = document.getElementById('scene-canvas').getBoundingClientRect();
@@ -399,7 +410,7 @@ async def scenario_floors(browser, srv, out, failures, res):
     # the building: from the button, then a floor pressed goes down to it
     await page.click("#floor-building")
     await wait(page, "() => window.__dbg.floors().tower", label="the building")
-    await page.wait_for_timeout(1200)
+    await camera_landed(page, "the camera on the building")
     res["building"] = {"render": await page.evaluate("() => window.__dbg.renderInfo()"), "frames": await page.evaluate(FRAMES_JS, 2000),
                        "tags": await page.evaluate("() => document.getElementById('tags').hidden")}
     await page.screenshot(path=f"{out}/floors-building.png")
@@ -409,7 +420,7 @@ async def scenario_floors(browser, srv, out, failures, res):
     await page.mouse.click(pt[0], pt[1])
     await wait(page, "() => { const f = window.__dbg.floors(); return !f.tower && f.floor === 0; }", label="down to 1F from the building")
     # the wheel past the farthest distance shows the building again: zoom out step by step, as a person would
-    await page.wait_for_timeout(1500)                        # the flight down has landed
+    await camera_landed(page, "the flight down to 1F")
     box = await page.evaluate("() => { const r = document.getElementById('scene-canvas').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }")
     await page.mouse.move(box[0], box[1])
     for _ in range(60):
@@ -428,10 +439,13 @@ async def scenario_floors(browser, srv, out, failures, res):
                 await page.click("#btn-side")
             for view in ("floor", "building"):
                 await page.evaluate("(on) => window.__dbg.tower(on)", view == "building")
-                # the view has come (a frame draws the legend), not a time: a page behind its frames read the floor before it
-                await wait(page, "(on) => window.__dbg.floors().tower === on && (!on || !document.getElementById('tower-legend').hidden)", arg=view == "building",
+                # the view has come (a frame's pass shows or hides the legend), not a time: a page behind its frames read the floor
+                # before it; and the top of the stage stands (the room's list is placed by a frame's pass every 250 ms, 53-roster.js):
+                # a page behind its frames had shown the list in the floor view with the building's legend and weather still up
+                # (ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides)
+                await wait(page, "(on) => window.__dbg.floors().tower === on && document.getElementById('tower-legend').hidden === !on", arg=view == "building",
                            label=f"the {view} view at {width}px")
-                await page.wait_for_timeout(500)
+                await still(page, RECTS_JS, f"the top of the stage in the {view} view at {width}px", arg=STAGE_TOP, after=ROSTER_PLACE_MS)
                 o = await page.evaluate(OVERLAP_JS)
                 res["overlap"][f"{width}-{side}-{view}"] = o
                 check(failures, o["hits"] == [] and "floor-nav" in o["shown"] and (view == "floor" or "tower-legend" in o["shown"]),
@@ -446,8 +460,8 @@ async def scenario_floors(browser, srv, out, failures, res):
     for opener, closer, name in (("#btn-specboard", "#wb-close", "spec board"), ("#btn-taskboard", "#tb-close", "task board"), ("#btn-log", None, "log")):
         await page.click(opener)
         await wait(page, f"() => {opened[name]}", label=f"the {name} open")
-        await page.wait_for_timeout(600)                     # the chrome refreshes every 250 ms
-        o = await page.evaluate(OVERLAP_JS)
+        # the chrome hides them on a frame's pass (every 250 ms): read until it has, or what it held at the end (stays red)
+        o = await read_until(page, OVERLAP_JS, lambda o: o["shown"] == [])
         res["overlap"][name] = o
         check(failures, o["shown"] == [], f"floors: the floor buttons are hidden while the {name} is open: {o}")
         if closer:

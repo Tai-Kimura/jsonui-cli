@@ -62,6 +62,40 @@ async def settled(page, name: str, ids=None, timeout: int = 30000):
 
 
 
+def still_js(read: str) -> str:
+    """The predicate still() waits on, with `read` written into it (no eval: the page's CSP has no unsafe-eval)."""
+    return ("([arg, key, frames, after]) => { const W = window.__stillReads || (window.__stillReads = {}), now = performance.now();\n"
+            f"  const s = W[key] || (W[key] = {{ t0: now, last: null, same: 0 }}), cur = JSON.stringify(({read})(arg));\n"
+            "  if (cur === s.last) s.same += 1; else { s.same = 0; s.last = cur; }\n"
+            "  if (now - s.t0 < after) s.same = 0;\n"
+            "  if (s.same < frames) return false;\n"
+            "  delete W[key]; return { got: JSON.parse(cur) }; }")
+
+
+_still_n = 0
+
+
+async def still(page, read: str, name: str, arg=None, frames: int = 2, after: int = 0, timeout: int = 30000):
+    """Wait until `read` (a JS function of `arg`, as text, giving something JSON) gives the same on `frames` frames in a
+    row after its first reading, those frames `after` ms or more after the wait began; return that reading. For what the
+    page moves on its frames (a rect placed by a frame's pass, a tag following its robot, a camera landing): read it
+    once it stands, not a fixed time after the move (ticket
+    2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides). `after` is for a pass the page makes
+    at most every so many ms (the room's list is placed every 250 ms, 53-roster.js ROSTER.placeMs): still frames before
+    such a pass ran say nothing."""
+    global _still_n
+    _still_n += 1
+    got = await until(page, still_js(read), f"{name} (still for {frames} frames)", arg=[arg, f"s{_still_n}", frames, after],
+                      timeout=timeout, why=f"([arg]) => ({read})(arg)")
+    return got["got"]
+
+
+# A reader for still(), its arg a list of selectors: each one's elements' rects (rounded px; null when hidden or not laid out).
+RECTS_JS = """(sel) => sel.map((q) => [...document.querySelectorAll(q)].map((e) => { if (e.closest('[hidden]')) return null;
+  const st = getComputedStyle(e); if (st.display === 'none' || st.visibility === 'hidden') return null;
+  const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? [r.left, r.top, r.right, r.bottom].map(Math.round) : null; }))"""
+
+
 async def read_until(page, read: str, ok, arg=None, timeout: int = 20000):
     """Read `read` (a JS function of `arg`) until the Python check `ok` holds, and return the last reading. For what the
     page gets to by itself a pass or two later, in place of a fixed wait before one read. It never raises on time: the

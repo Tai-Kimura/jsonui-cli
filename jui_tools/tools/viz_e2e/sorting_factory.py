@@ -43,6 +43,7 @@ import time
 import traceback
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, Watch, dump, new_page, ready, shot
+from waits import still
 
 BOT = "e2e00000-0000-4000-8000-0000000000f1"
 DEV = "e2e00000-0000-4000-8000-0000000000f2"
@@ -576,8 +577,10 @@ async def run_sorting_factory(pw, out, failures):
         check(steps == [("lane", []), ("full", []), ("", [])], f"Esc a step back each time: {steps}")
         back = await page.evaluate("() => ({ open: window.__dbg.sfState().open, full: document.getElementById('sf').dataset.board, zoom: document.getElementById('sf-wb').style.zoom })")
         check(back == {"open": True, "full": "", "zoom": ""}, f"Esc leaves the whole board, the room stays: {back}")
-        await page.wait_for_timeout(500)
-        tag_rects = res["tags"] = await page.evaluate("() => [...document.querySelectorAll('#sf-labels .sf-tag')].filter((e) => !e.hidden).map((e) => { const r = e.getBoundingClientRect(); return [e.textContent, Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; })")
+        # the bins' tags are placed on the room's frames (sfFrame): read them once they stand on two frames, not a time after
+        # (ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides)
+        tag_rects = res["tags"] = await still(page, "() => [...document.querySelectorAll('#sf-labels .sf-tag')].filter((e) => !e.hidden).map((e) => { const r = e.getBoundingClientRect(); return [e.textContent, Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; })",
+                                              "the bins' tags")
         overlap = len(tag_rects) >= 2 and any(a[1] < b[3] and b[1] < a[3] and a[2] < b[4] and b[2] < a[4] for i, a in enumerate(tag_rects) for b in tag_rects[i + 1:])
         check(len(tag_rects) >= 2 and not overlap, f"the bins' tags apart: {tag_rects}")
         await page.click('#sf-wb [data-sf-task="T-0001"] .sf-id')
