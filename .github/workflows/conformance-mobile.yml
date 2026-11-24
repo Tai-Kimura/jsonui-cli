@@ -149,12 +149,41 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------------ #
+  # `only`: the ids are checked and each face's count said once, before any
+  # face starts (.github/scripts/conformance_only.py plan). A face whose count
+  # is 0 is skipped by its own `if`, green, with its merge; an id the manifest
+  # does not have makes this job red and every face skips.
+  # ------------------------------------------------------------------ #
+  only_plan:
+    if: ${{ inputs.only != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.plan.outputs.web }}
+      ios: ${{ steps.plan.outputs.ios }}
+      android: ${{ steps.plan.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            conformance/manifest.json
+          sparse-checkout-cone-mode: false
+      - name: Plan the faces (only)
+        id: plan
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py plan conformance "$ONLY"
+
+  # ------------------------------------------------------------------ #
   # Web — rerun (not reuse a stale artifact) so all three results in the
   # report come from the same commit's fixtures. Same steps as ci.yml's
   # web-conformance job minus the per-platform gate (the report job gates).
   # ------------------------------------------------------------------ #
   web:
-    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    needs: only_plan
+    # off when only the tap repro or the device tests run; skipped, green, when `only` names nothing this face draws
+    if: ${{ !cancelled() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.web != '0') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -254,7 +283,9 @@ jobs:
   # simulator. Xcode is pinned so the simulator runtime is deterministic.
   # ------------------------------------------------------------------ #
   ios:
-    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    needs: only_plan
+    # off when only the tap repro or the device tests run; skipped, green, when `only` names nothing this face draws
+    if: ${{ !cancelled() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.ios != '0') }}
     runs-on: macos-15
     # 2026-08-07 (plan 51-H) re-measure — held, with the reading recorded so
     # the next resize starts from a number instead of re-deriving one.
@@ -450,7 +481,9 @@ jobs:
   # judged invariant instead of maintainer working memory (plan 25 A).
   # ------------------------------------------------------------------ #
   ios-codegen:
-    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    needs: only_plan
+    # off when only the tap repro or the device tests run; skipped, green, when `only` names nothing this face draws
+    if: ${{ !cancelled() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.ios != '0') }}
     runs-on: macos-15
     # 2026-10-07: measured 71 / 81 / 89 min (runs 37189084185 / 37368630695 /
     # 37422435382) and cancelled at 90 in 37480369210 (1.9.18, 1183
@@ -593,8 +626,8 @@ jobs:
   # without the shard record (a SwiftJsonUI that ignores CONFORMANCE_SHARD
   # ran everything in every shard). .github/scripts/ios_shards.py merge.
   ios-merge:
-    needs: ios
-    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    needs: [only_plan, ios]
+    if: ${{ always() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.ios != '0') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -670,8 +703,8 @@ jobs:
   # without the shard record (a SwiftJsonUI that ignores CONFORMANCE_SHARD
   # ran everything in every shard). .github/scripts/ios_shards.py merge.
   ios-codegen-merge:
-    needs: ios-codegen
-    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    needs: [only_plan, ios-codegen]
+    if: ${{ always() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.ios != '0') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -735,7 +768,9 @@ jobs:
           path: merged/xctests.txt
 
   android:
-    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    needs: only_plan
+    # off when only the tap repro or the device tests run; skipped, green, when `only` names nothing this face draws
+    if: ${{ !cancelled() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.android != '0') }}
     runs-on: ubuntu-latest
     # Suite duration (full 672-fixture set incl. interactive + screenshots;
     # 2026-07-24: +4 assertable Embed fixtures + 2 companion layouts — local
@@ -950,7 +985,9 @@ jobs:
   # arithmetic as the dynamic job.
   # ------------------------------------------------------------------ #
   android-codegen:
-    if: ${{ !inputs.tap_repro && !inputs.android_library_only }} # off when only the tap repro or the device tests run
+    needs: only_plan
+    # off when only the tap repro or the device tests run; skipped, green, when `only` names nothing this face draws
+    if: ${{ !cancelled() && needs.only_plan.result != 'failure' && !inputs.tap_repro && !inputs.android_library_only && (inputs.only == '' || needs.only_plan.outputs.android != '0') }}
     runs-on: ubuntu-latest
     timeout-minutes: 270
     env:

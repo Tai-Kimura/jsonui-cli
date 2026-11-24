@@ -51,6 +51,10 @@ def _python(expr: str) -> str:
     # equals '' (both read as 0): '' stands for it, so `inputs.only == ''`
     # holds on the schedule as it does on GitHub.
     out = re.sub(r"\binputs\.(\w+)", r"inputs.get('\1', '')", out)
+    # needs.<job>.outputs.<name> / needs.<job>.result: a job that did not run (skipped) has no outputs and
+    # result 'skipped'; '' and 'skipped' stand for them.
+    out = re.sub(r"\bneeds\.(\w+)\.outputs\.(\w+)", r"needs.get('\1', {}).get('outputs', {}).get('\2', '')", out)
+    out = re.sub(r"\bneeds\.(\w+)\.result\b", r"needs.get('\1', {}).get('result', 'skipped')", out)
     out = out.replace("github.event_name", "event_name")
     out = out.replace("cancelled()", "False").replace("always()", "True")
     out = out.replace("&&", " and ").replace("||", " or ")
@@ -64,8 +68,8 @@ def _python(expr: str) -> str:
     return "'".join(parts)
 
 
-def _eval(expr: str, event: str, inputs: dict) -> object:
-    return eval(_python(expr), {"__builtins__": {}}, {"inputs": inputs, "event_name": event})
+def _eval(expr: str, event: str, inputs: dict, needs: dict | None = None) -> object:
+    return eval(_python(expr), {"__builtins__": {}}, {"inputs": inputs, "event_name": event, "needs": needs or {}})
 
 
 def _on(value: object) -> bool:

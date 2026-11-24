@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Narrow a conformance directory to the fixtures a dispatch names, and their controls.
 
+    conformance_only.py plan CONFORMANCE_DIR "id1,id2"
     conformance_only.py narrow CONFORMANCE_DIR "id1,id2"
     conformance_only.py stage-cells CONFORMANCE_DIR
 
@@ -19,6 +20,16 @@ names). An id the manifest does not have is refused, naming it: a typo would
 otherwise draw nothing and look like a run. The full manifest is kept beside
 it (FULL_NAME) for `stage-cells`.
 
+`plan` is the run's first job (only_plan): it narrows without writing and says
+how many of the kept fixtures each face draws (web, ios, android; the codegen
+faces draw their platform's), as GITHUB_OUTPUT lines when that is set. A face
+with none is skipped by its job's `if`, green, with its merge: a run named
+with Android-only fixtures failed its web job (rjui emitted no theme.css for
+zero fixtures) and would have spent the iOS shards on nothing (ticket
+2026-11-24-conformance-only-fails-a-face-with-no-fixtures). An id the manifest
+does not have is refused here as in `narrow`, so the run is red before any face
+starts.
+
 `stage-cells` is the iOS codegen face's: its host compiles views that draw the
 Collection cells (ConformanceCellView, ...), and generate_codegen_host.rb
 stages a cell only from a manifest fixture that names it as a companion — a
@@ -31,6 +42,7 @@ companions cover every cell, for the staging alone.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -69,6 +81,20 @@ def narrowed(manifest: dict, ids: list[str]) -> dict:
         out["peerExpectedIdentical"] = [g for g in peers
                                         if isinstance(g, (list, tuple)) and g and all(m in keep for m in g)]
     return out
+
+
+FACES = ("web", "ios", "android")
+
+
+def face_counts(fixtures: list[dict]) -> dict[str, int]:
+    """How many of *fixtures* each face draws (a fixture names its platforms)."""
+    return {face: sum(1 for f in fixtures if face in (f.get("platforms") or [])) for face in FACES}
+
+
+def plan(conformance: Path, text: str) -> dict[str, int]:
+    """The faces' counts for a dispatch's ids; the manifest is not written."""
+    manifest = json.loads((conformance / "manifest.json").read_text(encoding="utf-8"))
+    return face_counts(narrowed(manifest, parse_ids(text))["fixtures"])
 
 
 FULL_NAME = "manifest.full.json"
@@ -117,6 +143,17 @@ def narrow(conformance: Path, text: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) == 3 and argv[0] == "plan":
+        counts = plan(Path(argv[1]), argv[2])
+        for face in FACES:
+            n = counts[face]
+            print(f"only: {face}: {n} fixture(s)" + ("" if n else " — nothing to draw, its jobs are skipped"))
+        out = os.environ.get("GITHUB_OUTPUT")
+        if out:
+            with open(out, "a", encoding="utf-8") as f:
+                for face in FACES:
+                    f.write(f"{face}={counts[face]}\n")
+        return 0
     if len(argv) == 3 and argv[0] == "narrow":
         kept = narrow(Path(argv[1]), argv[2])
         print(f"only: {len(kept)} fixture(s) — the named ones and their controls")
