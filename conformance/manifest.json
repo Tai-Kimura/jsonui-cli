@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "3b190212c308f555ac99c03f4140a52e972b1865e4f353df07bf1144ba06a43e",
   "counts": {
-    "fixtures": 1399,
+    "fixtures": 1401,
     "assertable": 57,
-    "visual": 1063,
+    "visual": 1064,
     "interactive": 41,
-    "control": 160,
+    "control": 161,
     "declarationOnly": 77,
     "skipped": 165,
     "promoted": {
@@ -33815,6 +33815,50 @@
       "test": "fixtures/View/emptyView__zero.test.json",
       "peerGroup": null,
       "control": "__control/View__empty-view-sized-8"
+    },
+    {
+      "class": "visual",
+      "host": "SelectBox",
+      "aliasOf": null,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "state": null,
+      "promotedFrom": null,
+      "id": "__control/SelectBox__date-sheet-open",
+      "component": "__control",
+      "attribute": null,
+      "case": "SelectBox__date-sheet-open",
+      "writtenKey": null,
+      "value": null,
+      "layout": "fixtures/__control/SelectBox__date-sheet-open.layout.json",
+      "test": "fixtures/__control/SelectBox__date-sheet-open.test.json",
+      "control": null,
+      "isControl": true
+    },
+    {
+      "class": "visual",
+      "host": "SelectBox",
+      "aliasOf": null,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "state": null,
+      "promotedFrom": null,
+      "id": "SelectBox/datePickerMode__date_year_list",
+      "component": "SelectBox",
+      "attribute": "datePickerMode",
+      "case": "datePickerMode__date_year_list",
+      "writtenKey": "datePickerMode",
+      "value": "date",
+      "layout": "fixtures/SelectBox/datePickerMode__date_year_list.layout.json",
+      "test": "fixtures/SelectBox/datePickerMode__date_year_list.test.json",
+      "peerGroup": null,
+      "control": "__control/SelectBox__date-sheet-open"
     },
     {
       "id": "TestBridge/initialState__applied",

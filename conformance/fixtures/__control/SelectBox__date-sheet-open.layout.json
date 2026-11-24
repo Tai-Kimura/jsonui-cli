@@ -1,0 +1,37 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "child": [
+    {
+      "type": "SelectBox",
+      "id": "target",
+      "width": 200,
+      "selectItemType": "Date",
+      "selectedDate": "@{pickedDate}",
+      "dateStringFormat": "yyyy-MM-dd",
+      "minimumDate": "2020-01-01",
+      "maximumDate": "2025-12-31"
+    }
+  ],
+  "data": [
+    {
+      "name": "pickedDate",
+      "class": "String",
+      "defaultValue": "2025-11-24"
+    },
+    {
+      "name": "onPickedDateChange",
+      "class": "(String) -> Void"
+    }
+  ]
+}

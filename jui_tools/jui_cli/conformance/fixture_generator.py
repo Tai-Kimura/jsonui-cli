@@ -1066,6 +1066,23 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     )
     summary.control_count += sum(1 for e in empty_entries if e.get("isControl"))
 
+    # The date SelectBox's sheet with its year pressed (Android only): the year
+    # list over the calendar — see date_year_list_fixtures.
+    from .date_year_list_fixtures import build_date_year_list_fixtures
+
+    year_files, year_entries = build_date_year_list_fixtures(source_label)
+    for rel_path, payload in year_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(year_entries)
+    summary.fixture_count += len(year_entries)
+    summary.visual_count += sum(
+        1 for e in year_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in year_entries if e.get("isControl"))
+
     # initialState delivered at launch and `state` read through the test
     # bridge (jsonui-test-runner spec section 10) — see test_bridge_fixtures.
     from .test_bridge_fixtures import build_test_bridge_fixtures

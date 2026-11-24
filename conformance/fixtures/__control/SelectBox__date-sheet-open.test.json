@@ -1,0 +1,44 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/SelectBox__date-sheet-open.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox__date-sheet-open",
+    "description": "Control for the year-list fixture: the same date SelectBox's sheet, open on the day grid, the year not pressed.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "SelectBox__date-sheet-open",
+      "description": "Control for the year-list fixture: the same date SelectBox's sheet, open on the day grid, the year not pressed.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "tap",
+          "id": "target"
+        },
+        {
+          "action": "waitFor",
+          "id": "kjui_x7q_done"
+        },
+        {
+          "action": "wait",
+          "ms": 1000
+        },
+        {
+          "action": "screenshot",
+          "name": "control_SelectBox__date-sheet-open"
+        }
+      ]
+    }
+  ]
+}
