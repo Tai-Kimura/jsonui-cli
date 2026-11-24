@@ -72,6 +72,43 @@ class Narrow(unittest.TestCase):
             self.assertEqual(json.loads((Path(d) / "manifest.json").read_text())["counts"]["fixtures"], len(want))
 
 
+class Plan(unittest.TestCase):
+    """Each face's count for the named ids (ticket 2026-11-24-conformance-only-fails-a-face-with-no-fixtures)."""
+    MANIFEST = {"fixtures": [
+        {"id": "__control/A", "platforms": ["android"]},
+        {"id": "SelectBox/a", "control": "__control/A", "platforms": ["android"]},
+        {"id": "common/b", "control": None, "platforms": ["ios", "android", "web"]},
+        {"id": "web/c", "control": None, "platforms": ["web"]},
+    ]}
+
+    def _dir(self, d):
+        (Path(d) / "manifest.json").write_text(json.dumps(self.MANIFEST), encoding="utf-8")
+        return Path(d)
+
+    def test_an_android_only_fixture_leaves_web_and_ios_nothing_to_draw(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(only.plan(self._dir(d), "SelectBox/a"), {"web": 0, "ios": 0, "android": 2})
+            self.assertEqual(only.plan(self._dir(d), "web/c"), {"web": 1, "ios": 0, "android": 0})
+            self.assertEqual(only.plan(self._dir(d), "common/b,SelectBox/a"), {"web": 1, "ios": 1, "android": 3})
+            # plan never writes the manifest
+            self.assertEqual(json.loads((Path(d) / "manifest.json").read_text()), self.MANIFEST)
+
+    def test_an_id_the_manifest_does_not_have_is_still_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(only.Refused) as cm:
+                only.plan(self._dir(d), "SelectBox/a,SelectBox/zz")
+            self.assertIn("SelectBox/zz", str(cm.exception))
+
+    def test_main_writes_the_counts_as_step_outputs(self):
+        import os
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "out"
+            with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(out)}):
+                self.assertEqual(only.main(["plan", str(self._dir(d)), "SelectBox/a"]), 0)
+            self.assertEqual(out.read_text().splitlines(), ["web=0", "ios=0", "android=2"])
+
+
 class StageCells(unittest.TestCase):
     """The iOS codegen host needs every Collection cell staged; a narrowed manifest names none."""
 
@@ -158,6 +195,36 @@ class TheWorkflow(unittest.TestCase):
             flag = re.search(r"\$\{\{(.*?)\}\}", merge["run"]).group(1)
             self.assertEqual(_eval(flag, *ONLY), "--fixtures-only", job)
             self.assertEqual(_eval(flag, *FULL), "", job)
+
+    def test_the_plan_runs_first_and_only_when_named(self):
+        job = self.jobs["only_plan"]
+        self.assertTrue(_eval(self._cond("only_plan"), *ONLY))
+        self.assertFalse(_eval(self._cond("only_plan"), *FULL))
+        self.assertFalse(_eval(self._cond("only_plan"), "schedule", {}))
+        step = [s for s in job["steps"] if "conformance_only.py plan conformance" in s.get("run", "")][0]
+        self.assertEqual(step["env"]["ONLY"], "${{ inputs.only }}")
+        self.assertEqual(set(job["outputs"]), {"web", "ios", "android"})
+
+    FACE_OF = {"web": "web", "ios": "ios", "ios-codegen": "ios", "android": "android", "android-codegen": "android",
+               "ios-merge": "ios", "ios-codegen-merge": "ios"}
+
+    def test_a_face_with_nothing_named_is_skipped_and_the_others_run(self):
+        for job, face in self.FACE_OF.items():
+            needs = self.jobs[job]["needs"]
+            self.assertIn("only_plan", needs if isinstance(needs, list) else [needs], job)
+            cond = self._cond(job)
+
+            def planned(**counts):
+                return {"only_plan": {"result": "success", "outputs": {f: str(counts.get(f, 0)) for f in ("web", "ios", "android")}}}
+            other = next(f for f in ("web", "ios", "android") if f != face)
+            self.assertFalse(_eval(cond, *ONLY, planned(**{other: 2})), job)   # only another face has fixtures
+            self.assertTrue(_eval(cond, *ONLY, planned(**{face: 1})), job)
+            self.assertFalse(_eval(cond, *ONLY, planned()), job)
+            # a refused id: the plan is red and no face starts
+            self.assertFalse(_eval(cond, *ONLY, {"only_plan": {"result": "failure", "outputs": {}}}), job)
+            # not named: the plan is skipped and every face runs as it always did
+            self.assertTrue(_eval(cond, *FULL, {"only_plan": {"result": "skipped", "outputs": {}}}), job)
+            self.assertTrue(_eval(cond, "schedule", {}, {"only_plan": {"result": "skipped", "outputs": {}}}), job)
 
     @staticmethod
     def _strings(node, where=()):
