@@ -342,30 +342,37 @@ def test_holds_from_the_page_keep_the_hook_waiting_for_the_answer(tmp_path):
 
 
 def test_a_window_longer_than_askmaxsec_keeps_the_hook_waiting_past_askmaxsec_plus_5(tmp_path):
-    """Ticket 2026-10-20 question-window-over-5-min, shrunk: askMaxSec 1 s and a 10 s window stand for 300 s and the
+    """Ticket 2026-10-20 question-window-over-5-min, shrunk: askMaxSec 1 s and a 30 s window stand for 300 s and the
     page's 10 min. forward.py --ask used to wait askMaxSec + 5 (6 s here, 305 s for real) and return nothing, so the
-    question went to the terminal while the card still waited; it now waits the server's own limit."""
+    question went to the terminal while the card still waited; it now waits the server's own limit.
+    The window was 10 s and the answer went at 8 s, but the server counts the window from the card and this test
+    counts its 8 s from finding the card: under a loaded full suite the answer came past the window's end and the
+    hook printed nothing (ticket viz-questions-window-arm-answers-at-the-edge-of-its-window, 2026-11-24). The arm is
+    about askMaxSec + 5, not the window's end, so the window is far past the answer."""
     async def run():
-        port, world, client = await _setup(tmp_path, wait_sec=10, max_sec=1)
+        port, world, client = await _setup(tmp_path, wait_sec=30, max_sec=1)
         try:
             ws = await _page(client, port)
             t0 = time.monotonic()
             proc = _hook(tmp_path, _pre())
             card = await _wait(lambda: next((c for c in world.questions.cards.values() if c["hookWaiting"]), None))
+            found = time.monotonic()
             await asyncio.sleep(4)
             await ws.send_json({"type": "presence", "visible": True})   # the page is still there
             await asyncio.sleep(4)                                     # 8 s: past askMaxSec + 5
             alive = proc.poll() is None and card["hookWaiting"]
             await ws.send_json({"type": "question.answer", "reqId": 4, "questionId": card["id"],
                                 "answers": {FRUIT["question"]: {"labels": ["みかん"]}, COLOR["question"]: {"labels": ["緑"]}}})
-            out = await _finish(proc)
-            took = time.monotonic() - t0
+            out = await _finish(proc, timeout=40)
+            ended = time.monotonic()
             await ws.close()
-            return alive, took, out
+            return alive, ended - t0, ended - found, out, card.get("waitEndReason")
         finally:
             await client.close()
-    alive, took, out = asyncio.run(run())
+    alive, took, since_card, out, reason = asyncio.run(run())
     assert alive, "forward.py --ask gave up at askMaxSec + 5 though the chosen window is longer"
+    assert out, (f"the hook printed nothing: the wait ended ({reason!r}) before the answer, {since_card:.1f} s after "
+                 f"the card was found")
     assert took >= 8 and json.loads(out)["hookSpecificOutput"]["updatedInput"]["answers"] == {FRUIT["question"]: "みかん", COLOR["question"]: "緑"}
 
 
