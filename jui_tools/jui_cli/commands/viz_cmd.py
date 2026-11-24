@@ -845,7 +845,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     ctx.state.set_slice("settings", settings_slice(ctx.config))
 
     def on_usage(payload: dict) -> None:
-        value = usage_mod.accept(payload, now_ms())
+        # the file is written in the executor: the loop never waits on the disk (ticket 2026-11-24-viz-talk-db-autocommit-floods-fsevents)
+        value = usage_mod.accept(payload, now_ms(), run=lambda fn: asyncio.get_running_loop().run_in_executor(None, fn))
         if value is not None:
             ctx.state.set_slice("usage", value)
 
@@ -955,8 +956,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         async def legacy_mirror_loop() -> None:
             while True:
                 await asyncio.sleep(LEGACY_MIRROR_SEC)
-                try:
-                    _legacy_mirror_write(info)
+                try:   # it reads (and when stale writes) a file: in the executor, so a slow disk never holds the loop
+                    await asyncio.get_running_loop().run_in_executor(None, _legacy_mirror_write, info)
                 except OSError:
                     pass
 
@@ -1106,7 +1107,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                         world.publish()
 
                     def rate_limits(self, rate_limits) -> None:
-                        value = usage_mod.accept_codex(rate_limits, now_ms())
+                        value = usage_mod.accept_codex(   # on the loop: the file is written in the executor
+                            rate_limits, now_ms(), run=lambda fn: asyncio.get_running_loop().run_in_executor(None, fn))
                         if value is not None:
                             ctx.state.set_slice("usageCodex", value)
 

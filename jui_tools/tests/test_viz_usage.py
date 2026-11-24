@@ -84,6 +84,23 @@ def test_the_windows_are_read_checked_and_kept(home):
     assert (usage.store_path().stat().st_mode & 0o777) == 0o600
 
 
+def test_the_same_windows_are_written_again_only_a_minute_later(home):
+    """Every terminal claude posts its status line every few seconds with the same numbers: one write a minute at most,
+    and at once when a number changes (ticket 2026-11-24-viz-talk-db-autocommit-floods-fsevents). The write goes
+    through what the server hands (its executor)."""
+    ran = []
+    run = lambda fn: (ran.append(1), fn())
+    limits = _status(42, 18)["rate_limits"]
+    first = usage.accept({"rate_limits": limits}, 10_000, run=run)
+    assert usage.load() == first and len(ran) == 1
+    usage.accept({"rate_limits": limits}, 10_000 + usage.KEEP_EVERY_MS - 1, run=run)
+    assert usage.load() == first and len(ran) == 1                               # the same numbers: not written
+    changed = usage.accept({"rate_limits": _status(43, 18)["rate_limits"]}, 20_000, run=run)
+    assert usage.load() == changed and len(ran) == 2                             # a number changed: at once
+    later = usage.accept({"rate_limits": _status(43, 18)["rate_limits"]}, 20_000 + usage.KEEP_EVERY_MS, run=run)
+    assert usage.load() == later and len(ran) == 3                               # a minute on: the new receivedAt
+
+
 # ---------------------------------------------------------------- the status line
 
 

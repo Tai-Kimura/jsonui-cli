@@ -17,6 +17,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 from . import paths
 
@@ -79,6 +80,31 @@ def make_slice(windows: dict | None, received_at: int | None) -> dict:
     return {"windows": windows, "receivedAt": received_at} if windows else {}
 
 
+#: usage.json is written again only when the windows changed, or this long after the last write: every terminal claude's
+#: status line posts here every few seconds with the same numbers, and each write was a temp file and a rename that
+#: fseventsd records (ticket 2026-11-24-viz-talk-db-autocommit-floods-fsevents, 34 renames a minute measured). A restart
+#: then shows a receivedAt at most this old; the header shows the age, so it reads a little older than it was.
+KEEP_EVERY_MS = 60_000
+_kept: dict[str, tuple[dict, int]] = {}          # the file -> (the windows last written, their receivedAt)
+
+
+def _keep(value: dict, which: str, run: Callable[[Callable[[], None]], Any] | None) -> None:
+    """Write value when due (see KEEP_EVERY_MS), through run (the server hands its executor, so the event loop never
+    touches the file), else here."""
+    key = str(store_path(which))
+    last = _kept.get(key)
+    if last is not None and last[0] == value["windows"] and value["receivedAt"] - last[1] < KEEP_EVERY_MS:
+        return
+    _kept[key] = (value["windows"], value["receivedAt"])
+
+    def write() -> None:
+        try:
+            save(value, which)
+        except OSError:
+            _kept.pop(key, None)   # shown anyway; the next value tries again
+    (run or (lambda fn: fn()))(write)
+
+
 def save(value: dict, which: str = "") -> None:
     path = store_path(which)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -104,29 +130,24 @@ def load(which: str = "") -> dict:
     return make_slice(windows or None, int(data["receivedAt"]))
 
 
-def accept(payload, now_ms: int | None = None) -> dict | None:
-    """A POST /usage body ({rate_limits}) → the new slice (kept on disk), or None when it carries nothing usable."""
+def accept(payload, now_ms: int | None = None, run: Callable[[Callable[[], None]], Any] | None = None) -> dict | None:
+    """A POST /usage body ({rate_limits}) → the new slice (kept on disk when due, through run), or None when it carries
+    nothing usable."""
     if not isinstance(payload, dict):
         return None
     windows = parse(payload.get("rate_limits"))
     if windows is None:
         return None
     value = make_slice(windows, int(now_ms if now_ms is not None else time.time() * 1000))
-    try:
-        save(value)
-    except OSError:
-        pass   # shown anyway; only the restart loses it
+    _keep(value, "", run)   # shown anyway; a write that fails only loses it for a restart
     return value
 
 
-def accept_codex(rate_limits, now_ms: int | None = None) -> dict | None:
+def accept_codex(rate_limits, now_ms: int | None = None, run: Callable[[Callable[[], None]], Any] | None = None) -> dict | None:
     """The daemon's rateLimits -> the new usageCodex slice (kept on disk), or None when it carries nothing usable."""
     windows = parse_codex(rate_limits)
     if windows is None:
         return None
     value = make_slice(windows, int(now_ms if now_ms is not None else time.time() * 1000))
-    try:
-        save(value, CODEX)
-    except OSError:
-        pass
+    _keep(value, CODEX, run)
     return value
