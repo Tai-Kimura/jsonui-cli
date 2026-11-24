@@ -74,7 +74,11 @@ module KjuiTools
             code += indent("val #{pressed_var} by #{interaction_var}.collectIsPressedAsState()", depth) + "\n"
           end
 
-          code += indent("Button(", depth)
+          # KotlinJsonUI's JsonUIButton, not material3's Button: the colours are its own flat parameters, so generated
+          # code names no material3 type and a change of material3's API is absorbed in the library (>= 2.66.0, ticket
+          # kjui-wrap-material3-calls-next). Every other argument keeps material3's name.
+          required_imports&.add(:jsonui_button)
+          code += indent("JsonUIButton(", depth)
           if highlight_bg || highlight_font
             code += "\n" + indent("interactionSource = #{interaction_var},", depth + 1)
           end
@@ -235,8 +239,7 @@ module KjuiTools
           
           # Button colors including normal, disabled, and pressed states
           # Always set to match dynamic defaults
-          required_imports&.add(:button_colors)
-          colors_code = "colors = ButtonDefaults.buttonColors("
+          # JsonUIButton's own colour parameters, one argument each (the four slots of ButtonDefaults.buttonColors).
           color_params = []
 
           base_bg = if json_data['background']
@@ -295,9 +298,7 @@ module KjuiTools
                           end
           color_params << "disabledContentColor = #{disabled_font}"
 
-          colors_code += "\n" + color_params.map { |param| indent(param, depth + 2) }.join(",\n")
-          colors_code += "\n" + indent(")", depth + 1)
-          code += ",\n" + indent(colors_code, depth + 1)
+          code += color_params.map { |param| ",\n" + indent(param, depth + 1) }.join
 
           # Handle border
           if json_data['borderColor']
@@ -398,8 +399,10 @@ module KjuiTools
 
         def self.build_icon_call(painter, content_desc, depth, json_data, required_imports)
           tint = json_data['tintColor'] || json_data['fontColor']
-          composable = tint ? 'Icon' : 'Image'
-          required_imports&.add(:image) unless tint
+          # A tinted image is KotlinJsonUI's JsonUIIcon, not material3's Icon (>= 2.66.0, ticket
+          # kjui-wrap-material3-calls-next); an untinted one is foundation's Image.
+          composable = tint ? 'JsonUIIcon' : 'Image'
+          required_imports&.add(tint ? :jsonui_icon : :image)
 
           lines = [indent("#{composable}(", depth),
                    indent("painter = #{painter},", depth + 1),
@@ -415,7 +418,7 @@ module KjuiTools
           lines.join("\n")
         end
 
-        # Apply text attributes if specified (fontColor handled in ButtonDefaults.buttonColors).
+        # Apply text attributes if specified (fontColor handled in JsonUIButton's contentColor).
         # All font attrs (fontFamily/font/fontWeight/fontSize) flow through the unified
         # Configuration.Font.resolve(FontSpec(...)) hook so the app's fontProvider sees
         # the full context.

@@ -27,7 +27,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('Column(')
-        expect(result).to include('RadioButton(')
+        expect(result).to include('JsonUIRadioButton(')
         expect(result).to include('Option 1')
         expect(result).to include('Option 2')
         expect(required_imports).to include(:clickable)
@@ -66,7 +66,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('Row(')
-        expect(result).to include('RadioButton(')
+        expect(result).to include('JsonUIRadioButton(')
         expect(result).to include('Option 1')
       end
 
@@ -76,7 +76,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
           'text' => 'Radio Label'
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('RadioButton(')
+        expect(result).to include('JsonUIRadioButton(')
         expect(result).to include('Radio Label')
       end
 
@@ -88,7 +88,8 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
           'selectedIcon' => 'checkmark.square.fill'
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('Checkbox(')
+        expect(result).to include('JsonUICheckbox(')
+        expect(required_imports).to include(:jsonui_checkbox)
       end
 
       it 'generates radio with custom icons' do
@@ -99,8 +100,8 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
           'selectedIcon' => 'star.fill'
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('IconButton(')
-        expect(required_imports).to include(:icon_button)
+        expect(result).to include('JsonUIIconButton(', 'JsonUIIcon(')
+        expect(required_imports).to include(:jsonui_icon_button, :jsonui_icon)
         expect(required_imports).to include(:icons)
       end
 
@@ -136,7 +137,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('Column(')
-        expect(result).to include('RadioButton(')
+        expect(result).to include('JsonUIRadioButton(')
         expect(result).to include('Red')
         expect(result).to include('Green')
         expect(result).to include('Blue')
@@ -185,10 +186,10 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
           'uncheckedColor' => '#CCCCCC'
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('RadioButtonDefaults.colors')
-        expect(result).to include('selectedColor')
-        expect(result).to include('unselectedColor')
-        expect(required_imports).to include(:radio_colors)
+        # JsonUIRadioButton's own flat colour parameters, no material3 RadioButtonDefaults.
+        expect(result).to match(/^\s+selectedColor = .+, unselectedColor = .+$/)
+        expect(result).not_to include('RadioButtonDefaults')
+        expect(required_imports).to include(:jsonui_radio_button)
       end
     end
   end
@@ -334,7 +335,9 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
     it 'sizes and tints the default RadioButton' do
       code = glyph({ 'iconSize' => 32, 'iconColor' => '#FF0000' })
       expect(code).to include('modifier = Modifier.size(32.dp)')
-      expect(code).to include('RadioButtonDefaults.colors(')
+      expect(code).to include('JsonUIRadioButton(')
+      expect(code).to match(/^\s+selectedColor = .+$/)
+      expect(code).not_to include('RadioButtonDefaults')
     end
 
     # iconColor is one tint for the whole glyph, unlike selectedColor which sets
@@ -362,7 +365,8 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
     it 'emits no size and only the handed-down tint when neither is declared' do
       code = glyph({})
       expect(code).not_to include('Modifier.size(')
-      expect(code).to include('colors = RadioButtonDefaults.colors(selectedColor = jsonUITintOr(MaterialTheme.colorScheme.primary))')
+      expect(code).to match(/^\s+selectedColor = jsonUITintOr\(MaterialTheme\.colorScheme\.primary\)$/)
+      expect(code).not_to include('colors =')
     end
   end
 end
@@ -453,9 +457,9 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         interface Alignment { interface Vertical; companion object { val CenterVertically: Vertical = object : Vertical {} } }
         fun Column(modifier: Modifier = Modifier, content: () -> Unit) {}
         fun Row(verticalAlignment: Alignment.Vertical? = null, modifier: Modifier = Modifier, content: () -> Unit) {}
-        class RadioButtonColors
-        object RadioButtonDefaults { fun colors(selectedColor: Color = Color(), unselectedColor: Color = Color()) = RadioButtonColors() }
-        fun RadioButton(selected: Boolean, onClick: () -> Unit, enabled: Boolean = true, colors: RadioButtonColors = RadioButtonColors()) {}
+        // KotlinJsonUI's JsonUIRadioButton (>= 2.66.0): the colours flat, no material3 RadioButton declared.
+        fun JsonUIRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true,
+                              selectedColor: Color = Color(), unselectedColor: Color = Color()) {}
         class ColorScheme { val primary = Color() }
         object MaterialTheme { val colorScheme = ColorScheme() }
         fun jsonUITintOr(fallback: Color): Color = fallback

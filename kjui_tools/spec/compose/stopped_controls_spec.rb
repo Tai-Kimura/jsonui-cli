@@ -50,7 +50,8 @@ RSpec.describe 'kjui a control a stop holds' do
   bound_semantics = '.then(if (!((data.u ?: false))) Modifier.semantics { disabled() } else Modifier)'
 
   # The nodes inside a control a user operates on their own (a Radio's rows
-  # and RadioButtons, a Segment's Tabs, a CheckBox's Checkbox): each chain
+  # and JsonUIRadioButtons, a Segment's Tabs, a CheckBox's JsonUICheckbox —
+  # KotlinJsonUI's wrappers of material3's RadioButton and Checkbox): each chain
   # `.clickable` / `.toggleable` / `.selectable`, and each inner composable
   # call with the disabled read it carries (its `modifier` argument, or the
   # element right in front of the chain call) — [what, carries it].
@@ -61,7 +62,7 @@ RSpec.describe 'kjui a control a stop holds' do
     # `modifier` argument, or — when the call has a `modifier = Modifier…`
     # of its own (a Segment Tab's `<id>_tab_<n>` testTag) — in front of
     # that chain.
-    calls = code.scan(/\b(RadioButton|Checkbox|SegmentTab|Tab)\((.*?)\n\s*\)/m).reject { |_, args| args.include?('testTagsAsResourceId') }.map do |what, args|
+    calls = code.scan(/\b(JsonUIRadioButton|JsonUICheckbox|SegmentTab|Tab)\((.*?)\n\s*\)/m).reject { |_, args| args.include?('testTagsAsResourceId') }.map do |what, args|
       [what, args.include?("modifier = #{element.delete_prefix('.then(').delete_suffix(')').sub(/\A\.semantics/, 'Modifier.semantics')}") ||
              args.include?("modifier = Modifier#{element}")]
     end
@@ -125,19 +126,19 @@ RSpec.describe 'kjui a control a stop holds' do
 
   it 'a CheckBox with a label: its Checkbox, a node of its own inside the row, reads disabled too' do
     code, = emit.call(stopping.call(false, node.call('CheckBox', 'isOn' => '@{on}', 'text' => 'cb')))
-    expect(inner_nodes.call(code, static_semantics)).to eq([['Checkbox', true]]), code
+    expect(inner_nodes.call(code, static_semantics)).to eq([['JsonUICheckbox', true]]), code
     code, = emit.call(stopping.call('@{u}', node.call('CheckBox', 'isOn' => '@{on}', 'text' => 'cb')))
-    expect(inner_nodes.call(code, bound_semantics)).to eq([['Checkbox', true]]), code
+    expect(inner_nodes.call(code, bound_semantics)).to eq([['JsonUICheckbox', true]]), code
   end
 
   it 'a Radio of its own (a group member): its RadioButton reads disabled too' do
     code, = emit.call(stopping.call(false, node.call('Radio', 'group' => 'g', 'text' => 'one', 'selectedValue' => '@{sel}')))
-    expect(inner_nodes.call(code, static_semantics)).to eq([['RadioButton', true]]), code
+    expect(inner_nodes.call(code, static_semantics)).to eq([['JsonUIRadioButton', true]]), code
   end
 
   it "an inner composable's own modifier takes the read in front" do
     code, = emit.call(stopping.call(false, node.call('Radio', 'group' => 'g', 'text' => 'one', 'iconSize' => 24, 'selectedValue' => '@{sel}')))
-    call = code[/RadioButton\(.*?\n\s*\)/m] or raise code
+    call = code[/JsonUIRadioButton\(.*?\n\s*\)/m] or raise code
     expect(call).to include('modifier = Modifier.semantics { disabled() }.size(24.dp)'), code
     expect(call.scan('modifier =').size).to eq(1), code
   end

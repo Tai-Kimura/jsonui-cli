@@ -86,7 +86,7 @@ RSpec.describe 'kjui codegen: layout boxes the frame-parity inventory found off'
     end
 
     it 'draws its RadioButton' do
-      expect(radio({})).to include('RadioButton(')
+      expect(radio({})).to include('JsonUIRadioButton(')
     end
 
     it 'stays a group when it lists options (control)' do

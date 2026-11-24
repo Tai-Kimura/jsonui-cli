@@ -206,7 +206,7 @@ module KjuiTools
             import androidx.compose.ui.unit.sp
             import #{package_name}.data.#{class_name}Data
             import #{package_name}.viewmodels.#{class_name}ViewModel
-            import androidx.compose.material3.CircularProgressIndicator
+            import com.kotlinjsonui.components.JsonUICircularProgressIndicator
             import androidx.compose.foundation.layout.Box
             import com.kotlinjsonui.core.DynamicModeManager
             import com.kotlinjsonui.components.SafeDynamicView
@@ -249,7 +249,7 @@ module KjuiTools
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator()
+                                JsonUICircularProgressIndicator()
                             }
                         }
                     ) { jsonContent ->

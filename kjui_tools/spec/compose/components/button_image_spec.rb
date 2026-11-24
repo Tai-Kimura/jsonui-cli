@@ -56,9 +56,9 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(result).not_to include('tint =')
     end
 
-    it 'draws a tinted icon as an Icon' do
+    it 'draws a tinted icon as a JsonUIIcon' do
       result = generate('image' => 'menu', 'fontColor' => '#FFFFFF')
-      expect(result).to include('Icon(')
+      expect(result).to include('JsonUIIcon(')
       expect(result).to match(/tint = .+#FFFFFF/)
     end
 

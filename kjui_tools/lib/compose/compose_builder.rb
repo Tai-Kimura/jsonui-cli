@@ -634,9 +634,12 @@ module KjuiTools
       end
 
       # The composables inside a control that are nodes of their own with a
-      # click action: a Radio's RadioButton, a CheckBox's Checkbox, a
-      # Segment's SegmentTab (Material's Tab until the ruling 2026-11-15). Each takes a `modifier`.
-      INNER_CONTROL_CALLS = %w[RadioButton Checkbox SegmentTab Tab].freeze
+      # click action: a Radio's JsonUIRadioButton, a CheckBox's (or a
+      # check-shaped Radio's) JsonUICheckbox — KotlinJsonUI's wrappers of
+      # material3's RadioButton and Checkbox (>= 2.66.0, ticket
+      # kjui-wrap-material3-calls-next) — a Segment's SegmentTab (Material's
+      # Tab until the ruling 2026-11-15). Each takes a `modifier`.
+      INNER_CONTROL_CALLS = %w[JsonUIRadioButton JsonUICheckbox SegmentTab Tab].freeze
 
       # The nodes inside a stopped control a user operates on their own — a
       # Radio's rows (`.clickable`) and RadioButtons, a Segment's Tabs, a
@@ -2402,7 +2405,7 @@ module KjuiTools
         code += "#{indent_str}                modifier = Modifier.fillMaxSize(),\n"
         code += "#{indent_str}                contentAlignment = Alignment.Center\n"
         code += "#{indent_str}            ) {\n"
-        code += "#{indent_str}                CircularProgressIndicator()\n"
+        code += "#{indent_str}                JsonUICircularProgressIndicator()\n"
         code += "#{indent_str}            }\n"
         code += "#{indent_str}        }\n"
         code += "#{indent_str}    ) { jsonContent ->\n"
@@ -2412,7 +2415,9 @@ module KjuiTools
 
         # Add required imports
         @required_imports.add(:safe_dynamic_view)
-        @required_imports.add(:circular_progress_indicator)
+        # KotlinJsonUI's JsonUICircularProgressIndicator, not material3's (>= 2.66.0, ticket
+        # kjui-wrap-material3-calls-next): generated code calls no material3 control.
+        @required_imports.add(:jsonui_circular_progress_indicator)
         @required_imports.add(:box)
 
         code

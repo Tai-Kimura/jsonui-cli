@@ -72,7 +72,10 @@ module KjuiTools
             # Divider after header
             if json_data['separatorStyle'] != 'none'
               code += "\n" + indent("item {", depth + 1)
-              code += "\n" + indent("HorizontalDivider(", depth + 2)
+              # KotlinJsonUI's JsonUIDivider, not material3's HorizontalDivider (>= 2.66.0, ticket
+              # kjui-wrap-material3-calls-next): generated code calls no material3 control.
+              required_imports&.add(:jsonui_divider)
+              code += "\n" + indent("JsonUIDivider(", depth + 2)
               code += "\n" + indent("color = Color.LightGray,", depth + 3)
               code += "\n" + indent("thickness = 1.dp", depth + 3)
               code += "\n" + indent(")", depth + 2)
@@ -95,7 +98,9 @@ module KjuiTools
           
           # Separator between rows
           if json_data['separatorStyle'] != 'none'
-            code += "\n" + indent("HorizontalDivider(", depth + 2)
+            # JsonUIDivider, as after the header.
+            required_imports&.add(:jsonui_divider)
+            code += "\n" + indent("JsonUIDivider(", depth + 2)
             
             # Separator inset
             if json_data['separatorInset']

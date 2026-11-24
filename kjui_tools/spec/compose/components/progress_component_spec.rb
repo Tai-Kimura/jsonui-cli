@@ -18,7 +18,7 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
       it 'generates linear indeterminate progress by default' do
         json_data = { 'type' => 'Progress' }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('LinearProgressIndicator(')
+        expect(result).to include('JsonUILinearProgressIndicator(')
       end
 
       # `style` is the style file's name (common.style), not a shape:
@@ -26,8 +26,9 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
       it 'draws a bar whatever style file the node names' do
         %w[circular large linear bar_primary].each do |style|
           result = described_class.generate({ 'type' => 'Progress', 'style' => style }, 0, required_imports)
-          expect(result).to include('LinearProgressIndicator('), style
+          expect(result).to include('JsonUILinearProgressIndicator('), style
           expect(result).not_to include('CircularProgressIndicator('), style
+          expect(required_imports).to include(:jsonui_linear_progress_indicator)
         end
       end
     end
@@ -36,7 +37,7 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
       it 'generates progress with value' do
         json_data = { 'type' => 'Progress', 'progress' => '0.5' }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('LinearProgressIndicator(')
+        expect(result).to include('JsonUILinearProgressIndicator(')
         expect(result).to include('progress = {')
       end
 

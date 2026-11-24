@@ -563,7 +563,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
 
       it 'generates Button component' do
         result = builder.send(:generate_component, { 'type' => 'Button', 'text' => 'Click' })
-        expect(result).to include('Button(')
+        expect(result).to include('JsonUIButton(')
       end
 
       it 'generates Image component' do

@@ -71,7 +71,8 @@ RSpec.describe KjuiTools::Compose::Components::TableComponent do
     it 'generates header with divider by default' do
       json_data = { 'type' => 'Table', 'header' => ['Column1'] }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('HorizontalDivider(')
+      expect(result).to include('JsonUIDivider(')
+      expect(required_imports).to include(:jsonui_divider)
     end
 
     it 'skips header divider when separatorStyle is none' do
@@ -79,7 +80,7 @@ RSpec.describe KjuiTools::Compose::Components::TableComponent do
       result = described_class.generate(json_data, 0, required_imports)
       # Should not have divider after header
       header_section = result.split('items(').first
-      expect(header_section.scan('HorizontalDivider(').count).to eq(0)
+      expect(header_section.scan('JsonUIDivider(').count).to eq(0)
     end
 
     it 'generates custom cell' do
@@ -111,14 +112,14 @@ RSpec.describe KjuiTools::Compose::Components::TableComponent do
     it 'generates row separator' do
       json_data = { 'type' => 'Table' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('HorizontalDivider(')
+      expect(result).to include('JsonUIDivider(')
       expect(result).to include('Color.LightGray')
     end
 
     it 'skips row separator when separatorStyle is none' do
       json_data = { 'type' => 'Table', 'separatorStyle' => 'none' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).not_to include('HorizontalDivider(')
+      expect(result).not_to include('JsonUIDivider(')
     end
 
     it 'applies separator inset with hash' do
