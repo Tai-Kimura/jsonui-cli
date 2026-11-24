@@ -65,7 +65,8 @@ def test_the_job_runs_on_a_schedule_only_and_waits_for_every_other_job():
     wf = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     job = wf["jobs"]["weekly-red"]
     assert "github.event_name == 'schedule'" in job["if"] and "always()" in job["if"]
-    others = set(wf["jobs"]) - {"weekly-red", "tap-repro"}       # tap-repro runs only when dispatched
+    # tap-repro and only_plan run only when dispatched
+    others = set(wf["jobs"]) - {"weekly-red", "tap-repro", "only_plan"}
     assert set(job["needs"]) == others
     run = job["steps"][-1]["run"]
     # a permissions block sets every scope it does not name to none: the run's own read (gh run view) needs actions
