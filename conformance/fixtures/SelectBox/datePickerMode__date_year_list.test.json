@@ -1,0 +1,49 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/datePickerMode__date_year_list.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox datePickerMode__date_year_list",
+    "description": "A date SelectBox's sheet with its year pressed: the year list stands over the calendar on the sheet's own colour, and no day of the month shows through it.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "SelectBox datePickerMode__date_year_list",
+      "description": "A date SelectBox's sheet with its year pressed: the year list stands over the calendar on the sheet's own colour, and no day of the month shows through it.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "tap",
+          "id": "target"
+        },
+        {
+          "action": "waitFor",
+          "id": "kjui_x7q_done"
+        },
+        {
+          "action": "tap",
+          "id": "kjui_x7q_calendar",
+          "text": "November 2025"
+        },
+        {
+          "action": "wait",
+          "ms": 1000
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_datePickerMode__date_year_list"
+        }
+      ]
+    }
+  ]
+}
