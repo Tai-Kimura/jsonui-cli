@@ -99,7 +99,10 @@ def find_jui_config(start_dir: Path) -> Path | None:
 
 def load_config_dict(config_path: Path) -> dict:
     with open(config_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError as exc:     # a config being edited: said, not a traceback
+            raise ProjectConfigError(f"{config_path}: not JSON (line {exc.lineno}, column {exc.colno})") from None
     if not isinstance(data, dict):
         raise ProjectConfigError(f"{config_path}: top level must be an object")
     return data

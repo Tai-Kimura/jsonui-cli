@@ -2588,20 +2588,26 @@ def cmd_check(args):
     )
     from .check.runner import EXIT_ERROR, run_checks
 
+    def refuse(reason: str, message: str) -> int:
+        # --json: stdout is still one JSON object (the checks' shape, none run, and why), so a reader of it can say
+        # what is wrong with the config instead of reading no JSON as a jsonui-doc it does not know
+        print(f"Error: {message}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"ok": False, "exit": EXIT_ERROR, "checks": [], "reason": reason, "message": message},
+                             ensure_ascii=False, indent=2))
+        return EXIT_ERROR
+
     start = Path(args.project).resolve() if args.project else Path.cwd()
     config_path = find_jui_config(start)
     if config_path is None:
-        print("Error: jui.config.json not found (checks are declared there).",
-              file=sys.stderr)
-        return EXIT_ERROR
+        return refuse("no_config", "jui.config.json not found (checks are declared there).")
     project_root = config_path.parent
     try:
         config = load_config_dict(config_path)
         decls = load_checks(config, project_root)
         databases = load_databases(config)
     except ProjectConfigError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return EXIT_ERROR
+        return refuse("bad_config", str(exc))
     return run_checks(
         decls,
         project_root,

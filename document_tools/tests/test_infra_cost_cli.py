@@ -102,3 +102,35 @@ def test_warnings_alone_are_0_and_still_counted(tmp_path):
     code, out = RUN.reply(root, env=NO_CACHE)
     assert code == 0 and out["problems"]["errors"] == 0 and out["problems"]["count"] >= 1
     assert {p["code"] for p in out["problems"]["first"]} == {"load.overlap"}
+
+
+def _unusable(tmp_path, bad: int):
+    """A room whose one model file fails the schema in ``bad`` places (every file left out: reason invalid)."""
+    import shutil
+    root = tmp_path / "room"
+    shutil.copytree(ROOM, root)
+    (root / "docs/infra/external.json").unlink()
+    path = root / "docs/infra/main.json"
+    m = json.loads(path.read_text(encoding="utf-8"))
+    m["nodes"][0]["spec"] = [{"key": f"K{i}", "value": "1"} for i in range(bad)]
+    path.write_text(json.dumps(m), encoding="utf-8")
+    return root
+
+
+def test_a_refusal_cuts_its_problem_list_not_its_counts(tmp_path):
+    # the list is the first 20, as it was; problemCount, problemErrors and problemByCode count them all (a reader of the cut list
+    # alone said 20)
+    root = _unusable(tmp_path, 25)
+    got = _cli(str(root), "--json")
+    out = json.loads(got.stdout)
+    assert got.returncode == 2 and out["reason"] == "invalid"
+    every = L.read(root)["problems"]
+    assert len(every) > 25 and len(out["problems"]) == RUN.FIRST == 20
+    assert out["problemCount"] == len(every) and out["problemErrors"] == sum(p["severity"] == "error" for p in every)
+    assert out["problemByCode"] == {"schema": len(every)}
+    assert {p["code"] for p in out["problems"]} == {"schema"}
+    plan = json.loads(_cli(str(root), "--migration", "nope", "--json").stdout)   # the plan's path reads the loads first
+    assert plan["reason"] == "invalid" and len(plan["problems"]) == 20 and plan["problemCount"] == len(every)
+    few_root = _unusable(tmp_path / "few", 2)
+    few = json.loads(_cli(str(few_root), "--json").stdout)
+    assert len(few["problems"]) == few["problemCount"] == len(L.read(few_root)["problems"]) < 20

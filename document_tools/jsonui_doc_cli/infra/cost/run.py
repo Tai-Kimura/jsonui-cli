@@ -33,6 +33,17 @@ def _problem(p: dict) -> dict:
     return {k: p.get(k) for k in ("file", "path", "code", "message", "short", "severity", "node")}
 
 
+def _refused_problems(found: list) -> dict:
+    """A refusal's problems: the first FIRST as written, and over them all how many there are (problemCount), how
+    many are errors (problemErrors; the rest are warnings) and how many of each code (problemByCode) — the list is
+    cut, the counts are not."""
+    by_code: dict = {}
+    for p in found:
+        by_code[p.get("code")] = by_code.get(p.get("code"), 0) + 1
+    return {"problems": [_problem(p) for p in found[:FIRST]], "problemCount": len(found),
+            "problemErrors": sum(1 for p in found if p.get("severity") == "error"), "problemByCode": by_code}
+
+
 def reply(root: Path | str, scenario: str | None = None, date: str | None = None, by: str = "provider",
           env: dict | None = None) -> tuple[int, dict]:
     """(exit code, reply). No date: {ok, dir, scenario, scenarios, month, topNodes, problems, prices}, the month as
@@ -51,7 +62,7 @@ def _reply(root: Path, scenario: str | None, date: str | None, by: str, env: dic
     loads = L.read(root)
     if not loads.get("ok"):
         return 2, {"ok": False, "reason": loads.get("reason", "invalid"), "message": loads.get("message", ""),
-                   "problems": [_problem(p) for p in loads.get("problems", [])[:FIRST]]}
+                   **_refused_problems(loads.get("problems", []))}
     scenarios = loads["scenarios"]
     if not scenarios:
         return _refuse("no_load", f"no usable load definition in {loads['dir']}")

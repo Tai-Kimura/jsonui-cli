@@ -21,7 +21,7 @@ from .. import migration as MG
 from .. import room as R
 from . import engine as E
 from . import pricebook as PB
-from .run import FIRST, _problem, _refuse
+from .run import FIRST, _problem, _refuse, _refused_problems
 
 MAX_STEPS = 200
 
@@ -99,7 +99,7 @@ def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env:
     if not loads.get("ok"):
         return 2, {"ok": False, "reason": loads.get("reason", "invalid"), "message": loads.get("message", ""),
                    **({"short": loads["short"]} if loads.get("short") else {}),
-                   "problems": [_problem(p) for p in loads.get("problems", [])[:FIRST]]}
+                   **_refused_problems(loads.get("problems", []))}
     scenarios = loads["scenarios"]
     if not scenarios:
         code, out = _refuse("no_load", f"no usable load definition in {loads['dir']}")
@@ -115,7 +115,7 @@ def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env:
         no = any(p["code"] == "migration.no_plan" for p in plan_problems)
         return 2, {"ok": False, "reason": "no_plan" if no else "bad_plan",
                    "message": f"no plan {plan_name!r}" if no else f"the plan {plan_name!r} has errors: jsonui-doc validate infra --migration {plan_name}",
-                   "problems": [_problem(p) for p in plan_problems[:FIRST]]}
+                   **_refused_problems(plan_problems)}
     book, warnings = PB.load(root, env, words=words)
     models = [old_model] + [plan.model_at(k)[0] for k in range(1, plan.last + 1)]
     old, new = _month(root, chosen, models[0], book), _month(root, chosen, models[-1], book)

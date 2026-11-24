@@ -51,3 +51,27 @@ def test_list_and_no_match_are_json_too(tmp_path):
     none = _check("nothing-like-this", "-p", str(root), "--json")
     out = json.loads(none.stdout)
     assert none.returncode == 2 and out["exit"] == 2 and out["checks"] == [] and len(out["declared"]) == 2
+
+
+def test_a_config_that_is_not_json_or_not_there_is_a_refusal_in_json_too(tmp_path):
+    # a reader of --json reads one object, even when no check could be read: why, and no traceback
+    (tmp_path / "broken").mkdir()
+    (tmp_path / "broken" / "jui.config.json").write_text("{", encoding="utf-8")
+    (tmp_path / "bad").mkdir()
+    (tmp_path / "bad" / "jui.config.json").write_text("[]", encoding="utf-8")
+    for name, reason in (("broken", "bad_config"), ("bad", "bad_config")):
+        for flags in ((), ("--json",)):
+            got = _check("infra", "-p", str(tmp_path / name), *flags)
+            assert got.returncode == 2 and "Traceback" not in got.stderr, (name, flags, got.stderr)
+            assert got.stderr.startswith("Error: ") and "jui.config.json" in got.stderr
+        out = json.loads(_check("infra", "-p", str(tmp_path / name), "--json").stdout)
+        assert out["ok"] is False and out["exit"] == 2 and out["checks"] == [] and out["reason"] == reason
+        assert "jui.config.json" in out["message"]
+    assert "not JSON (line 1, column 2)" in json.loads(
+        _check("-p", str(tmp_path / "broken"), "--json").stdout)["message"]
+    alone = tmp_path / "alone"
+    alone.mkdir()
+    got = _check("-p", str(alone), "--json")
+    out = json.loads(got.stdout)
+    assert got.returncode == 2 and out["reason"] == "no_config" and out["checks"] == []
+    assert _check("-p", str(alone)).stdout == ""                                 # without --json: stderr only, as before
