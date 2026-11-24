@@ -227,13 +227,20 @@ class TalkIndex:
         self._changed_convs: set[str] = set()
         self._removed: list[tuple[str, str, str, str]] = []   # (conv, a, b, dead sid)
         self._seen_alive: set[str] = set()           # sessions seen alive by this run (their end is "now")
-        for mid, encoded in self.db.execute('SELECT id,record FROM relays WHERE record IS NOT NULL').fetchall():
-            if not self._exists('m-jui-' + mid):
-                row = json.loads(encoded)
-                for member in (row['sender'], row['receiver']):
-                    self._session_part(member['id'], member['name'])
-                self._insert('m-jui-' + mid, row['sender']['id'], row['receiver']['id'], row['at'], row['text'], row['at'],
-                             state=row['result']['state'], seen_s=1)
+        self._names_kept: dict[tuple[str, str], str] | None = None   # the names table as written (read at the first step)
+        self.db.execute("BEGIN")                      # one journal for all of them, as a step (see step)
+        try:
+            for mid, encoded in self.db.execute('SELECT id,record FROM relays WHERE record IS NOT NULL').fetchall():
+                if not self._exists('m-jui-' + mid):
+                    row = json.loads(encoded)
+                    for member in (row['sender'], row['receiver']):
+                        self._session_part(member['id'], member['name'])
+                    self._insert('m-jui-' + mid, row['sender']['id'], row['receiver']['id'], row['at'], row['text'],
+                                 row['at'], state=row['result']['state'], seen_s=1)
+            self.db.execute("COMMIT")
+        except Exception:
+            self.db.execute("ROLLBACK")
+            raise
 
     # ------------------------------------------------------------------ one step
     def step(self, now: int, extra: list[dict] | None = None) -> dict:
@@ -246,30 +253,43 @@ class TalkIndex:
             rows = []
         self.reg = Registry([*rows, *(extra or [])])
         self.reg.history = self._history
-        self._names()
-        self._deaths(now)
-        self._seen_alive |= self.reg.alive
-        self._live = self.caught_up          # caught up before this step: what it reads is new
-        obs = self._read(now)
+        # The whole step is one transaction: talk.db keeps the default rollback journal, so every transaction makes and
+        # removes talk.db-journal, and a statement outside one is a transaction of its own. Written one by one, the names,
+        # the deaths and each file's offset made the journal tens of times a second, and fseventsd records every one of
+        # them (ticket 2026-11-24-viz-talk-db-autocommit-floods-fsevents). A step that writes nothing makes no journal.
+        kept = (set(self._skip), self.caught_up, self._live, dict(self._names_kept) if self._names_kept is not None else None)
         self.db.execute("BEGIN")
         try:
+            self._names()
+            self._deaths(now)
+            self._live = self.caught_up          # caught up before this step: what it reads is new
+            obs = self._read(now)
             self._apply(obs, now)
             self._settle(now)
             self._expire(now)
             self.db.execute("COMMIT")
         except Exception:
             self.db.execute("ROLLBACK")
+            # what was read is read again next step, from the offsets that were rolled back
+            self._skip, self.caught_up, self._live, self._names_kept = kept[0], kept[1], kept[2], kept[3]
             raise
+        self._seen_alive |= self.reg.alive
         return {"ops": self._ops(now), "badges": self.badges(), "caughtUp": self.caught_up}
 
     # ------------------------------------------------------------------ the living and the dead
     def _names(self) -> None:
         for sid, name in self.reg.names.items():
             self.db.execute("UPDATE parts SET name=? WHERE key=? AND name<>?", (name, sid, name))
-        # the names and sockets seen, so a send to a session that has ended since still finds it
-        self.db.executemany("INSERT OR REPLACE INTO names VALUES('name', ?, ?)", [(n, s) for n, s in self.reg.by_name.items()])
-        self.db.executemany("INSERT OR REPLACE INTO names VALUES('sock', ?, ?)", [(k, s) for k, s in self.reg.by_sock.items()])
-        self.db.executemany("INSERT OR REPLACE INTO names VALUES('bridge', ?, ?)", [(k, s) for k, s in self.reg.by_bridge.items()])
+        # the names and sockets seen, so a send to a session that has ended since still finds it; only what changed is
+        # written (the registry names the same sessions step after step)
+        if self._names_kept is None:
+            self._names_kept = {(k, v): s for k, v, s in self.db.execute("SELECT kind, value, sid FROM names")}
+        changed = [(kind, value, sid)
+                   for kind, seen in (("name", self.reg.by_name), ("sock", self.reg.by_sock), ("bridge", self.reg.by_bridge))
+                   for value, sid in seen.items() if self._names_kept.get((kind, value)) != sid]
+        if changed:
+            self.db.executemany("INSERT OR REPLACE INTO names VALUES(?, ?, ?)", changed)
+            self._names_kept.update(((k, v), s) for k, v, s in changed)
 
     def _history(self, kind: str, value: str) -> str | None:
         row = self.db.execute("SELECT sid FROM names WHERE kind=? AND value=?", (kind, value)).fetchone()
@@ -406,8 +426,8 @@ class TalkIndex:
         start, budget, behind = self.clock(), STEP_BYTES, False
         for path, sid, agent in self._files():
             key = str(path)
-            row = self.db.execute("SELECT off, ino FROM files WHERE path=?", (key,)).fetchone()
-            off, ino = (row if row else (0, None))
+            row = self.db.execute("SELECT off, ino, sid, agent FROM files WHERE path=?", (key,)).fetchone()
+            off, ino = (row[:2] if row else (0, None))
             fd = self._open(path)
             if fd is None:
                 continue
@@ -456,7 +476,8 @@ class TalkIndex:
                     off += end + 1
             finally:
                 os.close(fd)
-            self.db.execute("INSERT OR REPLACE INTO files VALUES(?, ?, ?, ?, ?)", (key, sid, agent, off, st.st_ino))
+            if row is None or tuple(row) != (off, st.st_ino, sid, agent):     # a file not read further: nothing to write
+                self.db.execute("INSERT OR REPLACE INTO files VALUES(?, ?, ?, ?, ?)", (key, sid, agent, off, st.st_ino))
             if behind:
                 break
         self.caught_up = not behind
