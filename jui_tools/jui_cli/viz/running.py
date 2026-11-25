@@ -22,9 +22,10 @@ What is read (measured 11-25 on 28 live sessions, every open task matched a live
 * ``agent-<id>.meta.json`` beside it: ``finished: true`` once the agent is done (702 of 727 had it; the 2 running
   ones did not).
 * the hooks the server already gets: SubagentStop ends that agent; SessionEnd ends all of its session's; Stop's ``background_tasks`` closes what it does not list — only when the key is there, and only for
-  the kinds it was seen to list (STOP_LISTED). Raw payload: not yet captured (claude 2.1.332's hook schema lists
-  shell, monitor, subagent and workflow; a live viz's snapshot showed a session with only a background Bash waiting
-  on its Stop's list, so shell is in it). A monitor is never closed by Stop (not yet seen in the list).
+  the kinds it was seen to list (STOP_LISTED). Raw payload measured 11-25 17:58 on a live viz (--record, 6 Stops,
+  every one with the key): a running Monitor is listed as {"id": <its taskId>, "type": "monitor", "status": "running",
+  "description": …}, a background Bash as type "shell", a session running nothing as []. So a monitor is closed by
+  Stop too (ticket 2026-11-25-viz-close-monitor-from-stop-background-tasks; 2.5.60 left it to the limits).
 * ps (the server's background loop): a Bash or Monitor still open when no shell-snapshot shell has been under the
   session's process for SHELL_GONE_MS is closed.
 
@@ -54,9 +55,10 @@ from datetime import datetime
 from pathlib import Path
 
 KINDS = ("bash", "agent", "monitor", "workflow")
-#: Stop's background_tasks ``type`` → our kind, for the kinds it was seen to list (see the module's note). Monitor is
-#: not here: if the list did not carry it, every running Monitor would be closed at each Stop.
-STOP_LISTED = {"shell": "bash", "bash": "bash", "subagent": "agent", "agent": "agent", "workflow": "workflow"}
+#: Stop's background_tasks ``type`` → our kind, for the kinds it was seen to list (see the module's note). A kind not
+#: here is never closed by Stop: if the list did not carry it, every running one would be closed at each Stop.
+STOP_LISTED = {"shell": "bash", "bash": "bash", "subagent": "agent", "agent": "agent", "workflow": "workflow",
+               "monitor": "monitor"}
 END_STATUSES = frozenset({"completed", "failed", "killed", "stopped", "error", "cancelled", "canceled", "timeout"})
 DONE_KEEP_MS = 60_000
 SHELL_GONE_MS = 120_000

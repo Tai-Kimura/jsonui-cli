@@ -3,8 +3,9 @@
 The transcripts here are written by the test in the shapes measured on a live machine (11-25): a tool's result record
 starts a task, a <task-notification> (a queue-operation record, then the user record) or TaskStop ends it.
 
-Stop's background_tasks, raw payload: not yet captured (shell seen indirectly in a live viz's snapshot); a monitor is
-never closed by Stop (not yet seen in the list).
+Stop's background_tasks, raw payload: measured on a live viz (11-25 17:58, --record): {"id", "type", "status",
+"description"} per task, type "shell" / "monitor" / "subagent" / "workflow", [] when nothing runs; a monitor is
+closed by Stop like the others (ticket 2026-11-25-viz-close-monitor-from-stop-background-tasks).
 """
 from __future__ import annotations
 
@@ -204,13 +205,33 @@ def test_stop_without_the_key_closes_nothing():
     assert states(b) == {"b1": "running", "a1": "running"}
 
 
-def test_stop_closes_what_it_does_not_list_but_never_a_monitor():
+def listed(tid: str, kind: str) -> dict:
+    """One entry of Stop's background_tasks in the measured shape (no command, no body)."""
+    return {"id": tid, "type": kind, "status": "running", "description": f"{kind} {tid}"}
+
+
+def test_stop_closes_what_it_does_not_list_a_monitor_too():
     b = book([*bash_start("b1", T0), *bash_start("b2", T0), *agent_start("a1", T0), *monitor_start("m1", T0),
-              *workflow_start("w1", T0)])
-    assert b.stop_listed(SID, [{"id": "b2", "type": "shell", "status": "running"}], T0 + 1) is True
-    assert states(b) == {"b1": "done", "b2": "running", "a1": "done", "m1": "running", "w1": "done"}
-    assert b.stop_listed(SID, [], T0 + 2) is True   # empty: nothing in flight (but the monitor)
-    assert states(b)["b2"] == "done" and states(b)["m1"] == "running"
+              *monitor_start("m2", T0), *workflow_start("w1", T0)])
+    assert b.stop_listed(SID, [listed("b2", "shell"), listed("m2", "monitor")], T0 + 1) is True
+    assert states(b) == {"b1": "done", "b2": "running", "a1": "done", "m1": "done", "m2": "running", "w1": "done"}
+    assert b.tasks[(SID, "m1")]["status"] == "ended"
+    assert b.stop_listed(SID, [], T0 + 2) is True   # empty: nothing in flight
+    assert states(b)["b2"] == "done" and states(b)["m2"] == "done"
+
+
+def test_a_monitor_stop_lists_by_its_task_id_stays():
+    b = book([*monitor_start("m1", T0), *bash_start("b1", T0)])
+    assert b.stop_listed(SID, [listed("m1", "monitor")], T0 + 1) is True   # b1 is not listed: closed
+    assert states(b) == {"m1": "running", "b1": "done"}
+
+
+def test_stop_without_the_key_still_leaves_a_monitor_to_its_limits():
+    b = book(monitor_start("m1", T0, timeout=60_000))
+    assert b.stop_listed(SID, None, T0 + 1) is False
+    assert states(b) == {"m1": "running"}
+    b.caps(T0 + 60_000 + running.MONITOR_GRACE_MS)
+    assert states(b) == {"m1": "done"}
 
 
 def test_stop_naming_none_of_ours_closes_nothing():
@@ -311,8 +332,11 @@ def test_world_stop_hook_and_session_end(tmp_path):
     world.apply_hook({"hook_event_name": "Stop", "session_id": SID, "cwd": CWD}, T0 + 1)   # no key
     assert {r[0] for r in _rows(world) if r[2] == "running"} == {"b1", "m1", "a1"}
     world.apply_hook({"hook_event_name": "Stop", "session_id": SID, "cwd": CWD,
-                      "background_tasks": [{"id": "b1", "type": "shell", "status": "running"}]}, T0 + 2)
+                      "background_tasks": [listed("b1", "shell"), listed("m1", "monitor")]}, T0 + 2)
     assert {r[0] for r in _rows(world) if r[2] == "running"} == {"b1", "m1"}
+    world.apply_hook({"hook_event_name": "Stop", "session_id": SID, "cwd": CWD,
+                      "background_tasks": [listed("b1", "shell")]}, T0 + 2)
+    assert {r[0] for r in _rows(world) if r[2] == "running"} == {"b1"}
     world.apply_hook({"hook_event_name": "SessionEnd", "session_id": SID, "cwd": CWD, "reason": "exit"}, T0 + 3)
     assert {r[0] for r in _rows(world) if r[2] == "running"} == set()
 
