@@ -62,3 +62,33 @@ nonisolated final class C_SilentGreen: XCTestCase {
     }
   }
 }
+
+/// tearDown under this target's shape (MainActor default isolation): a
+/// BaseBranchHarness subclass's override is the one called after the block,
+/// and a harness conforming itself without tearDown compiles and runs.
+final class CleaningHarness: BaseBranchHarness {
+  var log: [String] = []
+  override func tearDown() { log.append("tearDown") }
+}
+
+final class OwnHarness: BranchHarness {
+  let vm: AnyObject = PlainDeinitVM(tag: "own-1")
+  func readField(_ name: String) -> Any? { nil }
+  func setState(_ state: [String: Any]) {}
+  func invoke(_ name: String, args: [Any]) {}
+  func expectTransition(_ destination: String) {}
+  func resolveString(_ key: String) -> String { key }
+  func settle() {}
+}
+
+nonisolated final class D_TearDown: XCTestCase {
+  @MainActor func test_1_teardown() {
+    let cleaning = CleaningHarness(vm: SilentVM(tag: "teardown-1"))
+    runBranchTest(routes: routes, overrides: [:], harnessFactory: { cleaning }) { _, _ in
+      cleaning.log.append("block")
+    }
+    var ownRan = false
+    runBranchTest(routes: routes, overrides: [:], harnessFactory: { OwnHarness() }) { _, _ in ownRan = true }
+    print("PROBE teardown sub=\(cleaning.log.joined(separator: ",")) own=\(ownRan)")
+  }
+}

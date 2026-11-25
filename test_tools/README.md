@@ -838,6 +838,25 @@ requires nothing of it. An operationId that is already the screen's name for a
 different endpoint stops generation. An app without `apiOutcomeRules`
 generates what it did.
 
+### After each test: the harness's `tearDown`
+
+The harness has one more member, `tearDown()`, on all three platforms: called
+after every generated test, whether its block passed or failed, to put back
+what the test left in process-wide state — an `object`'s or a shared
+instance's flag, a cache — so the next test does not start from it. On
+Android this matters most: Robolectric keeps one class loader across test
+classes, so such state outlives the test that set it. The default does
+nothing; override it on `BaseBranchHarness` (Android, iOS) or add it to the
+object `createHarness` returns (web). A harness written without it compiles
+and runs as before.
+
+- It runs before the mock comes out (`MockWebServer` retired, `URLProtocol`
+  unregistered, the fetch mock restored), and is not called when the harness
+  factory itself failed.
+- A failure in it fails a test that passed. When the test had already failed,
+  the test's own failure is the one reported: attached as suppressed on
+  Android, printed on web; on iOS `tearDown` does not throw.
+
 ### Harness conditions (`harnessConditions`)
 
 When a view model's calls depend on something outside it — a signed-in
