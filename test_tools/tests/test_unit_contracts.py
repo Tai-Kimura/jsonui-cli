@@ -1374,6 +1374,113 @@ class TestCommentsAreNotImplementations:
         assert uc.check_unit_contracts(root).ok is True
 
 
+class TestWhatStandsBeforeATestDoesNotHideIt:
+    """Reported 2026-11-25: an implemented Kotlin test was reported MISSING.
+
+    Two `//` lines between `@Test` and the next annotation. The comments were
+    already blanked — the scan read `@Test`, then at most 200 characters, then
+    `fun`, and blanked comments keep their length. So the cause was the
+    distance, not the comment: a long block comment, a KDoc, a trailing
+    comment, five annotations or one long argument hid a test the same way.
+
+    Swift had the mirror image: method declarations were read from the raw
+    text, so a commented-out `func test_…` at the class level counted as an
+    implementation (its case was never MISSING), and a comment ending in the
+    word `class` right above a method — `// MARK: - Grouped by size class`
+    — was read as a `class` modifier, which made the method unreachable and
+    its case MISSING.
+    """
+
+    LONG = "x" * 180
+    CASE = [{"name": "case_a", "platforms": ["android"]}]
+    IOS_CASE = [{"name": "case_a", "platforms": ["ios"]}]
+
+    def _android_ok(self, tmp_path, body):
+        root = _web_project(
+            tmp_path, "import org.junit.Test\nclass T {\n" + body + "\n}\n",
+            self.CASE, platform="android")
+        rep = uc.check_unit_contracts(root)
+        assert rep.missing("android") == [], body
+        assert rep.undeclared("android") == [], body
+        assert rep.ok is True
+
+    def test_line_comments_between_annotations(self, tmp_path):
+        # The reported shape.
+        self._android_ok(tmp_path, (
+            f"    @Test\n    // {self.LONG}\n    // {self.LONG}\n"
+            "    @Config(sdk = [33])\n    fun `case_a`() { }"))
+
+    def test_a_block_comment_between_annotations(self, tmp_path):
+        self._android_ok(tmp_path, (
+            f"    @Test\n    /* {self.LONG}\n       {self.LONG} */\n"
+            "    @Config(sdk = [33])\n    fun `case_a`() { }"))
+
+    def test_a_kdoc_right_above_the_fun(self, tmp_path):
+        self._android_ok(tmp_path, (
+            f"    @Test\n    /** {self.LONG}\n     * {self.LONG} */\n"
+            "    fun `case_a`() { }"))
+
+    def test_a_trailing_comment_on_the_annotation(self, tmp_path):
+        self._android_ok(tmp_path, (
+            f"    @Test // {self.LONG} {self.LONG}\n    fun `case_a`() {{ }}"))
+
+    def test_many_annotations(self, tmp_path):
+        value = "y" * 30
+        self._android_ok(tmp_path, "    @Test\n" + "".join(
+            f'    @Marker{i}(value = "{value}")\n' for i in range(5))
+            + "    fun `case_a`() { }")
+
+    def test_one_long_argument_with_a_paren_in_a_string(self, tmp_path):
+        value = "z" * 220
+        self._android_ok(tmp_path, (
+            f'    @Test\n    @Named("a) {value}")\n'
+            "    @[Marker Other]\n    @get:Marker\n"
+            "    internal fun `case_a`() { }"))
+
+    def test_an_at_test_not_on_a_function_names_nothing(self, tmp_path):
+        """The walk stops at the first thing that is not an annotation or a
+        modifier. The 200-character window skipped over code instead, so a
+        test whose name it could not read was recorded under the NEXT `fun`
+        — a helper — which then showed as UNDECLARED."""
+        root = _web_project(tmp_path, (
+            "import org.junit.Test\nclass T {\n"
+            "    @Test\n    fun `case_a`() { }\n"
+            "    @Test\n    fun `a title with spaces`() {\n"
+            "        fun helperInside(): Int = 1\n    }\n"
+            '    val s = "@Test"\n    private fun helperAfter() { }\n}\n'),
+            self.CASE, platform="android")
+        rep = uc.check_unit_contracts(root)
+        assert rep.undeclared("android") == []
+        assert rep.ok is True
+
+    def _ios(self, tmp_path, body):
+        root = _web_project(
+            tmp_path,
+            "import XCTest\nfinal class T: XCTestCase {\n" + body + "\n}\n",
+            self.IOS_CASE, platform="ios", filename="T.swift")
+        return uc.check_unit_contracts(root)
+
+    def test_ios_a_commented_out_method_is_not_an_implementation(self, tmp_path):
+        rep = self._ios(tmp_path, (
+            "    // func test_case_a() { }\n"
+            "    /* func test_case_a() { } */\n"))
+        assert rep.missing("ios") == ["case_a"]
+
+    def test_ios_a_comment_ending_in_a_modifier_word(self, tmp_path):
+        rep = self._ios(tmp_path, (
+            "    // MARK: - Grouped by size class\n\n"
+            "    func test_case_a() { }"))
+        assert rep.missing("ios") == []
+        assert rep.ok is True
+
+    def test_ios_a_comment_between_attribute_and_func(self, tmp_path):
+        rep = self._ios(tmp_path, (
+            f"    @MainActor\n    // {self.LONG}\n"
+            f"    /* {self.LONG} */\n    func test_case_a() {{ }}"))
+        assert rep.missing("ios") == []
+        assert rep.ok is True
+
+
 class TestEveryExitHasTheSameShape:
     """The early return said three where the signature and the caller say four.
 

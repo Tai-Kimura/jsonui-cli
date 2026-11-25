@@ -505,9 +505,104 @@ PLATFORM_TEST_SUFFIX = {"ios": ".swift", "android": ".kt", "web": ".ts"}
 #: a line that is always wrong teaches the reader to skip it, and the next
 #: real finding on it is skipped too. Only functions inside an XCTestCase
 #: subclass can be test methods, so only those are scanned.
+#:
+#: android is where a test STARTS (`@Test`); `_kotlin_test_funs` walks from
+#: there over the annotations and modifiers to the `fun` they belong to.
+#: It used to be one regex, `@Test[\s\S]{0,200}?\bfun …`, and the 200 was
+#: a distance, not a grammar: a test whose annotation run was longer than
+#: 200 characters — a comment between `@Test` and the next annotation
+#: (comments are blanked to spaces of the same length, so they still
+#: count), five annotations, one long argument — was not seen at all, and
+#: `--check` reported its case as MISSING while Gradle ran it.
 _ALL_TESTS_PATTERNS = {
-    "android": re.compile(r"@Test[\s\S]{0,200}?\bfun\s+`?(?P<name>[^`(\s]+)`?\s*\("),
+    "android": re.compile(r"@Test"),
 }
+
+#: What may stand between `@Test` and `fun`, read by `_kotlin_test_funs`.
+_KOTLIN_ANNOTATION_NAME = re.compile(r"(?:[A-Za-z_]\w*\s*:\s*)?[A-Za-z_][\w.]*")
+_KOTLIN_FUN_MODIFIERS = re.compile(
+    r"(?:public|internal|private|protected|open|override|final|abstract|"
+    r"suspend|inline|tailrec|operator|infix|external|actual|expect)\b\s*"
+)
+_KOTLIN_FUN_HEAD = re.compile(r"fun\b\s*(?:<[^>{}()]*>\s*)?`?(?P<name>[^`(\s]+)`?\s*\(")
+
+
+def _kotlin_skip_group(text: str, i: int, open_: str, close: str) -> int:
+    """Index after the group opening at *i* (``text[i] == open_``), stepping
+    over string literals so a `)` inside `@DisplayName("a)")` does not close
+    it. *text* is already comment-blanked. Returns -1 when it never closes."""
+    depth, n = 0, len(text)
+    while i < n:
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            if end < 0:
+                return -1
+            i = end + 3
+            continue
+        ch = text[i]
+        if ch in "\"'":
+            i += 1
+            while i < n and text[i] != ch:
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+            continue
+        if ch == open_:
+            depth += 1
+        elif ch == close:
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return -1
+
+
+def _kotlin_test_funs(text: str) -> list[re.Match]:
+    """The `fun` head of every `@Test` in *text* (comment-blanked), as
+    `_KOTLIN_FUN_HEAD` matches carrying ``name``.
+
+    From each `@Test` the walk steps over annotations (`@A`, `@a.b.A`,
+    `@get:A`, `@A(args)`, `@[A B]`), whitespace and modifiers, and stops at
+    the first thing that is none of them: a `fun` there is the test, and
+    anything else means this `@Test` is not on a function. No distance
+    limit, so the length of what sits in between — blanked comments
+    included — no longer decides whether a test is seen; and no skipping
+    past code, so a `fun` that follows something else is never taken for
+    the test.
+    """
+    out: list[re.Match] = []
+    seen: set[int] = set()
+    n = len(text)
+    for head in _ALL_TESTS_PATTERNS["android"].finditer(text):
+        i = head.start()
+        while True:
+            while i < n and text[i].isspace():
+                i += 1
+            if i < n and text[i] == "@":
+                i += 1
+                if i < n and text[i] == "[":
+                    i = _kotlin_skip_group(text, i, "[", "]")
+                else:
+                    m = _KOTLIN_ANNOTATION_NAME.match(text, i)
+                    if not m:
+                        break
+                    i = m.end()
+                    if i < n and text[i] == "<":
+                        i = _kotlin_skip_group(text, i, "<", ">")
+                    if 0 <= i < n and text[i] == "(":
+                        i = _kotlin_skip_group(text, i, "(", ")")
+                if i < 0:
+                    break
+                continue
+            m = _KOTLIN_FUN_MODIFIERS.match(text, i)
+            if m and m.end() > i:
+                i = m.end()
+                continue
+            fun = _KOTLIN_FUN_HEAD.match(text, i)
+            if fun and fun.start() not in seen:
+                seen.add(fun.start())
+                out.append(fun)
+            break
+    return out
 
 #: Where a web test's title STARTS. The title itself is not matched here --
 #: `_web_test_names` reads the literal that follows, because a regex that
@@ -564,8 +659,9 @@ def _without_comments(text: str, *, nested_blocks: bool = False) -> str:
     positive into a false negative, which is the direction that goes green.
 
     Length and line breaks are preserved (comment bytes become spaces), so
-    the android pattern's bounded `[\s\S]{0,200}` window still spans what it
-    spanned before.
+    positions in the result are positions in the source. (The length of a
+    blanked comment once decided whether a Kotlin test was seen at all —
+    see `_kotlin_test_funs`.)
 
     `nested_blocks` is Kotlin's rule — `/* /* */ */` closes once, not twice.
     """
@@ -637,8 +733,8 @@ def _swift_code_only(text: str) -> str:
     rather than assumed — `_without_comments` steps over `#"…"#` as a plain
     `"` literal, which ends at the wrong quote.
 
-    Newlines survive so line numbers and the android pattern's bounded
-    window still line up.
+    Same length, newlines kept: `_swift_tests` reads the methods from this
+    text at the positions the brace count found in it.
     """
     out = list(text)
     i, n = 0, len(text)
@@ -817,10 +913,14 @@ def _swift_tests(text: str) -> list[tuple[str, str]]:
             continue
         if level_start is not None:
             spans.append((level_start, i))
+        # The methods are read from `code` too, not from *text*: read from
+        # the raw text, a commented-out `// func test_x()` at the class
+        # level was counted as an implemented test (so its case was never
+        # MISSING), and `private /* … */ func` lost its `private`.
         for span_start, span_end in spans:
             names.extend(
                 (match.group("cls"), m.group("name"))
-                for m in _SWIFT_FUNC_RE.finditer(text[span_start:span_end])
+                for m in _SWIFT_FUNC_RE.finditer(code[span_start:span_end])
                 if m.group("name") not in _XCTEST_LIFECYCLE
                 and _could_ever_run(m.group("mods"), m.group("empty") is not None)
             )
@@ -1587,7 +1687,7 @@ def _kotlin_tests(text: str) -> list[tuple[str | None, str]]:
     target's stub class, so it is placed by its file (`_owner`)."""
     classes = [(m.start(), m.group("cls")) for m in _KOTLIN_CLASS.finditer(text)]
     out: list[tuple[str | None, str]] = []
-    for m in _ALL_TESTS_PATTERNS["android"].finditer(text):
+    for m in _kotlin_test_funs(text):
         above = [name for start, name in classes if start < m.start()]
         out.append((above[-1] if above else None, m.group("name")))
     return out
