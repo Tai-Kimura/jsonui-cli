@@ -378,6 +378,20 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .subs { display: grid; gap: 3px; margin-left: 6px; padding-left: 10px; border-left: 2px solid var(--line); }
 .subs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; font-size: 12px; }
 .subs li .act { grid-column: 1 / -1; padding-left: 0.5em; }
+/* what the session runs in the background (viz/running.py): kind, what it is about, how long; ended ones fade */
+.runs { margin: 4px 0 2px 6px; padding-left: 10px; border-left: 2px solid var(--info); }
+.runs-head { margin: 0 0 2px; font-size: 11px; color: var(--ink-soft); }
+.runs ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.run { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 0 6px; font-size: 12px; }
+.run-kind { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--info-bg); color: var(--info); white-space: nowrap; }
+.run-agent .run-kind { background: var(--violet-bg); color: var(--violet); }
+.run-monitor .run-kind { background: var(--warn-bg); color: var(--warn); }
+.run-workflow .run-kind { background: var(--ok-bg); color: var(--ok); }
+.run-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.run-time { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run-note { grid-column: 2 / -1; font-size: 11px; color: var(--ink-soft); }
+.run-child { padding-left: 12px; }
+.run-done { opacity: 0.5; }
 .who-btn { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .who-btn > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .who-btn:hover > span:last-child { text-decoration: underline; text-underline-offset: 2px; }

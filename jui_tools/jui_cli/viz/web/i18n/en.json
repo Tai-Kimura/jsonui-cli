@@ -1465,6 +1465,14 @@
   "panel.owner.none": "Unassigned",
   "panel.task.none.scope": "No tasks in {scope}",
   "panel.since.elapsed": "Elapsed",
+  "run.head": "Running in the background: {n}",
+  "run.kind.bash": "Background command",
+  "run.kind.agent": "Background subagent",
+  "run.kind.monitor": "Monitor",
+  "run.kind.workflow": "Workflow",
+  "run.state.done": "Ended",
+  "run.state.waiting": "Waiting on its own background work",
+  "run.child": "Started by its subagent",
   "panel.chip.robots": {
     "one": "{n} robot",
     "other": "{n} robots"

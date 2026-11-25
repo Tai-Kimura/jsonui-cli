@@ -1059,6 +1059,15 @@ function rebuildRobots(initial) {
     SESSION_UUID[label] = s.id; CWD[label] = home(s.cwd); PROJECT_OF[label] = s.projectId;
   }
 }
+// A session's background work (viz/running.py): kind, what it is about, since when; ended ones a minute more.
+const RUN_KIND_KEYS = { bash: 'run.kind.bash', agent: 'run.kind.agent', monitor: 'run.kind.monitor', workflow: 'run.kind.workflow' };
+function runRows(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((r) => r && typeof r.id === 'string' && RUN_KIND_KEYS[r.kind]).map((r) => ({
+    id: r.id, kind: r.kind, desc: typeof r.desc === 'string' ? r.desc : '', state: r.state === 'running' ? 'running' : 'done',
+    // since, on the page's clock (seconds of the day, as model.t): before midnight is below 0
+    startedAt: Number.isFinite(r.startedAt) ? secOfDay(Date.now()) - (Date.now() - r.startedAt) / 1000 : 0, waiting: r.waiting === true, child: typeof r.parent === 'string' && r.parent !== '' }));
+}
 function rebuildSessions() {
   const sessions = Array.isArray(LIVE.slices.sessions) ? LIVE.slices.sessions : [];
   const next = [];
@@ -1081,6 +1090,7 @@ function rebuildSessions() {
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
       inputWaitAt: Number.isFinite(s.inputWaitAt) && s.inputWaitAt > 0 ? s.inputWaitAt : 0,   // 入力待ち since (53-waits.js)
       heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
+      running: runRows(s.running),   // what it runs in the background (viz/running.py)
       heavyInfo: s.heavyInfo && typeof s.heavyInfo === 'object' ? { tokensPerMin: Number(s.heavyInfo.tokensPerMin) || 0, toolSec: Number(s.heavyInfo.toolSec) || 0, subagents: Number(s.heavyInfo.subagents) || 0 } : null });   // the transcript's first record; none: not guessed
   }
   SESSIONS.splice(0, SESSIONS.length, ...next);

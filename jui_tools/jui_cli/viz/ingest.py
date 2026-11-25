@@ -17,6 +17,7 @@ from typing import Any
 from pathlib import Path
 
 from . import clockout, data_docs, gitbox, i18n, infra_docs, prices, robots
+from . import running as running_mod
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import TEXTS_SUFFIX, JsonUIProject, is_linked, read_spec_file, test_dirs
 from .attachments import Attachments
@@ -93,6 +94,8 @@ STOP_ANSWERED = frozenset({"PreToolUse", "PostToolUse"})
 # BACKGROUND_UNWATCHED_MS) does it go dark after BACKGROUND_CAP_MS.
 BACKGROUND_CAP_MS = 30 * 60_000
 BACKGROUND_UNWATCHED_MS = 60_000
+# How often an open background agent's meta file is read for its finished flag (running.py).
+RUNNING_META_MS = 30_000
 TEST_RUNS_KEPT = 50
 DEVICE_CMDS_KEPT = 200   # device ids named by Bash commands, newest kept (the デバイス pane's estimate)
 EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
@@ -248,6 +251,9 @@ class World:
         self.codex_end = None   # async session id -> (status, note or why): the Codex link's 退勤 (viz_cmd sets it)
         # a subagent that stopped moving: told to its main session and shown (subwatch.py; viz_cmd sets the minutes)
         self.subwatch = SubagentWatch()
+        # what each session runs in the background (running.py): read from the transcript tail below
+        self.running = running_mod.Running()
+        self._running_meta_at = 0
         # (title, text) -> shown: a desktop notification for a foreground subagent's stall (viz_cmd sets it)
         self.desktop_notify = None
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
@@ -482,6 +488,8 @@ class World:
         """The session has ended (SessionEnd, or 退勤 from the page): ended, and its robot walks out of the door."""
         sid = session["id"]
         self._background_off(session, at)
+        if self.running.session_ended(sid, at):
+            self._running_changed(sid)
         for aid in self.subwatch.drop_session(sid):
             if aid in self.agents:
                 self.agents[aid].pop("stall", None)
@@ -957,6 +965,12 @@ class World:
                 self._unstuck(agent)
         if kind in ("Stop", "StopFailure") and not aid and isinstance(payload.get("background_tasks"), list):
             self.subwatch.background([b for b in payload["background_tasks"] if isinstance(b, dict)])
+        if kind in ("Stop", "StopFailure") and not aid and "background_tasks" in payload:
+            # only when the key is there (running.stop_listed: a monitor is never closed by it)
+            if self.running.stop_listed(sid, payload.get("background_tasks"), at):
+                self._running_changed(sid)
+        if kind == "SubagentStop" and aid and self.running.agent_stopped(sid, aid, at):
+            self._running_changed(sid)
         if kind in ("PreToolUse", "PostToolUse") and tool_input:
             self._note_paths(sid, tool_input, at)
         cat = "tool" if kind in TOOL_EVENTS else "session"
@@ -1483,6 +1497,68 @@ class World:
                 session["title"] = _head(name, 120)
                 self._dirty.add("sessions")
 
+    # ---------------------------------------------------------------- what runs in the background (running.py)
+
+    def _running_changed(self, sid: str) -> None:
+        session = self.sessions.get(sid)
+        if session is None:
+            return
+        rows = self.running.slice_of(sid)
+        if (session.get("running") or []) != rows:
+            if rows:
+                session["running"] = rows
+            else:
+                session.pop("running", None)
+            self._dirty.add("sessions")
+
+    def _running_read(self, sid: str, tail, got: dict, at: int, parent: str | None = None) -> None:
+        """A transcript tail's read: what it found started or ended; at its first read, its past read once (in the
+        worker when the server runs one) up to where the tail began."""
+        if got.get("running") and self.running.tail(sid, got["running"], at, parent):
+            self._running_changed(sid)
+        end = getattr(tail, "first_end", None)
+        if not end:
+            return
+        tail.first_end = None
+        path = tail.path
+
+        def apply(records: list) -> None:
+            if sid in self.sessions and self.sessions[sid]["status"] != "ended" \
+                    and (parent is None or (sid, parent) in self.running.tasks) \
+                    and self.running.backscan_done(sid, records, self._now, parent):
+                self._running_changed(sid)
+        if self.off_loop:
+            self._files_submit(lambda: running_mod.backscan(path, end), lambda job: apply(job.result()))
+        else:
+            apply(running_mod.backscan(path, end))
+
+    def _running_tick(self, at: int) -> None:
+        """The limits (running.Running.caps), and every RUNNING_META_MS an open agent's meta file (finished: true)."""
+        def moved(sid: str, aid: str):
+            path = self._running_agent_path(sid, aid)
+            return running_mod.mtime_ms(path) if path is not None else None
+        for sid in self.running.caps(at, moved):
+            self._running_changed(sid)
+        if at - self._running_meta_at < RUNNING_META_MS:
+            return
+        self._running_meta_at = at
+        for (sid, tid), t in list(self.running.tasks.items()):
+            if t["state"] != "running" or t["kind"] != "agent":
+                continue
+            path = self._running_agent_path(sid, tid)
+            if path is not None and running_mod.agent_finished(path.with_name(path.stem + ".meta.json")) \
+                    and self.running.agent_stopped(sid, tid, at):
+                self._running_changed(sid)
+
+    def _running_agent_path(self, sid: str, aid: str):
+        if self.transcript_path is None:
+            return None
+        cwd, given = self._paths.get(sid, (None, None))
+        try:
+            return self.transcript_path(sid, cwd, given, aid, self._agent_paths.get(aid))
+        except TypeError:   # a finder that knows no subagents (a test's)
+            return None
+
     # ---------------------------------------------------------------- waiting on background work (10-18)
 
     def _background_off(self, session: dict, at: int, touch_agent: bool = True) -> None:
@@ -1498,7 +1574,7 @@ class World:
 
     def background_pids(self) -> dict[str, int]:
         """Sessions waiting on background work whose process is known: session id -> pid (the newest)."""
-        want = {sid for sid, s in self.sessions.items() if s.get("background")}
+        want = {sid for sid, s in self.sessions.items() if s.get("background")} | self.running.shell_sessions()
         return {sid: pid for pid, sid in self.pid_to_session.items() if sid in want}
 
     def check_background(self, rows: list | None, at: int) -> None:
@@ -1507,9 +1583,13 @@ class World:
         if rows is None:
             return
         for sid, pid in self.background_pids().items():
-            session = self.sessions[sid]
-            session["background"]["checkedAt"] = at
+            session = self.sessions.get(sid)
             shells = processes.background_shells(rows, pid)
+            if sid in self.running.shell_sessions() and self.running.shells(sid, shells, at):
+                self._running_changed(sid)   # a Bash or Monitor with no shell left under its session (running.py)
+            if session is None or not session.get("background"):
+                continue
+            session["background"]["checkedAt"] = at
             subs = any(a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a for a in self.agents.values())
             if not shells and not subs:
                 self._background_off(session, at)
@@ -2316,6 +2396,7 @@ class World:
                 for aid in [a for a, ag in self.agents.items() if ag["sessionId"] == sid]:
                     del self.agents[aid]
                 self.tasks.drop_session(sid)
+                self.running.forget(sid)
                 self._dirty |= {"sessions", "agents", "tasks"}
             elif session["status"] == "busy":
                 # Busy and quiet for a while: the model is thinking. Its own state, not idle with another act — the
@@ -2330,6 +2411,7 @@ class World:
                 if agent and agent["state"] == "thinking":
                     self._set(agent, at, "idle", i18n.tl("status.idle"))
         self._background_cap(at)
+        self._running_tick(at)
         self._subwatch_tick(at)
         self._heavy(at)
 
@@ -2501,6 +2583,7 @@ class World:
                     continue
                 tail = self._tails[sid] = UsageTail(path)
             got = tail.read()
+            self._running_read(sid, tail, got, at)
             for k in ("bytes", "assistant", "bad"):
                 total[k] += got[k]
             total["usage"] += len(got["usage"])
@@ -2554,6 +2637,8 @@ class World:
             from .sources.transcripts import UsageTail
             tail = self._tails[key] = UsageTail(path)
         got = tail.read()
+        if (agent["sessionId"], aid) in self.running.tasks:   # an agent sent to the background: what it starts itself
+            self._running_read(agent["sessionId"], tail, got, at, parent=aid)
         self._bill(aid, agent["sessionId"], got.get("bills"), at)
         self._denied_records(agent["sessionId"], aid, got.get("denials"), at)
         self._call_results(agent["sessionId"], aid, got.get("results"), at)

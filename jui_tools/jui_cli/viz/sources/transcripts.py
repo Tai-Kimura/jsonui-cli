@@ -207,14 +207,18 @@ class UsageTail:
         self.buf = b""
         self.skipping = False
         self.uses: dict[str, tuple[str, object]] = {}   # the last USES_KEPT tool calls: a denial names one of them
+        from ..running import Parser
+        self.running = Parser()   # background work started and ended (viz/running.py)
+        self.first_end: int | None = None   # where the file ended at the first read: running.backscan reads up to it
 
     def read(self) -> dict:
         """{'usage': [(id, tokens, at)], 'bills': [(id, model, usage, at)], 'calls': [(kind, sender name, at)],
         'denials': [(tool_use_id, tool, input, the result's text, at)] (auto mode denials: denial_of),
         'replies': [(at, text)] (what each assistant record says: reply_of),
         'results': [(tool_use_id, tool, input, is_error, the text's start, at)] (how each call ended: results_of),
+        'running': background work started / ended (viz/running.Parser),
         'bytes': n, 'assistant': n, 'bad': n} for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
-        out = {"usage": [], "bills": [], "calls": [], "denials": [], "replies": [], "results": [], "bytes": 0, "assistant": 0, "bad": 0}
+        out = {"usage": [], "bills": [], "calls": [], "denials": [], "replies": [], "results": [], "running": [], "bytes": 0, "assistant": 0, "bad": 0}
         try:
             fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
@@ -225,6 +229,7 @@ class UsageTail:
                 return out
             if self.offset is None or st.st_size < self.offset:       # first sight, or a new file in its place
                 self.offset, self.buf, self.skipping = st.st_size, b"", False
+                self.first_end = st.st_size
                 return out
             os.lseek(fd, self.offset, os.SEEK_SET)
             chunk = os.read(fd, READ_MAX)
@@ -258,6 +263,7 @@ class UsageTail:
                 b = bill_of(rec)
                 if b:
                     out["bills"].append(b)
+            out["running"].extend(self.running.feed_rec(rec))
             c = record_event(rec)
             if c:
                 out["calls"].append((c[0], c[1], _epoch_ms(rec.get("timestamp"))))

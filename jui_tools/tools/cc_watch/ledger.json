@@ -4,11 +4,12 @@
     {
       "id": "transcript",
       "name": "会話の記録（~/.claude/projects/<project>/<session>.jsonl）の形",
-      "relies_on": "record types user / assistant, message.content blocks (text, tool_use, tool_result, thinking, image), message.usage, timestamp, cwd, sessionId; the folder layout under the config folder",
+      "relies_on": "record types user / assistant, message.content blocks (text, tool_use, tool_result, thinking, image), message.usage, timestamp, cwd, sessionId; the folder layout under the config folder; background work (viz/running.py): toolUseResult's backgroundTaskId (Bash), status async_launched with agentId / taskId (Agent, Workflow), taskId with timeoutMs and persistent (Monitor), task_id (TaskStop), the queue-operation record and the <task-notification> (task-id, status, summary, event) it carries, a subagent's agent-<id>.meta.json finished flag",
       "probe": "transcript_shape",
       "impact": "viz: 応答の履歴が空になる、利用量（トークン）が数えられない、ロボットの状態がずれる",
       "files": [
         "jui_tools/jui_cli/viz/sources/transcripts.py",
+        "jui_tools/jui_cli/viz/running.py",
         "jui_tools/jui_cli/viz/sources/history.py",
         "jui_tools/jui_cli/viz/ingest.py",
         "jui_tools/jui_cli/viz/__init__.py",
@@ -31,7 +32,7 @@
     {
       "id": "hooks",
       "name": "hooks の入力の形とイベント名",
-      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / StopFailure (its error — rate_limit is the plan's usage limit, the robot dazed — and last_assistant_message) / SubagentStart / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason; a subagent's agent_id, agent_type and agent_transcript_path, and Stop's background_tasks — the subagent stall watch keys on them), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",
+      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / StopFailure (its error — rate_limit is the plan's usage limit, the robot dazed — and last_assistant_message) / SubagentStart / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason; a subagent's agent_id, agent_type and agent_transcript_path, and Stop's background_tasks — the subagent stall watch keys on them, and viz/running.py closes the shell / subagent / workflow tasks it does not list), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",
       "probe": "hook_input_shape",
       "impact": "viz: ロボットが出ない・状態が動かない、許可と質問の中継が止まる。session-recovery と agents の hook が記録を取れない",
       "files": [

@@ -1442,6 +1442,14 @@
   "panel.owner.none": "担当なし",
   "panel.task.none.scope": "{scope} にタスクはない",
   "panel.since.elapsed": "経過",
+  "run.head": "裏で走っている物 {n}",
+  "run.kind.bash": "裏のコマンド",
+  "run.kind.agent": "裏のサブエージェント",
+  "run.kind.monitor": "見張り",
+  "run.kind.workflow": "ワークフロー",
+  "run.state.done": "終わった",
+  "run.state.waiting": "自分の裏の作業を待っている",
+  "run.child": "サブエージェントが起こした物",
   "panel.chip.robots": {
     "other": "ロボット {n}"
   },

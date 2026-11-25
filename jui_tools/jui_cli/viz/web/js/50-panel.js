@@ -81,7 +81,9 @@ const scopeLabel = () => (UI.project === 'all' ? tl('panel.scope.all') : PROJECT
 function sessionBadge(s) {
   const kinds = new Set(s.robots.map(robotBadgeKind));
   // A session whose busy robots only think says 考え中, as its robot row does (they disagreed — 10-18 review).
-  return badgeOf(['waiting', 'asking', 'limited', 'busy', 'thinking', 'background'].find((k) => kinds.has(k)) || 'idle');
+  // idle with background work still running (viz/running.py): 裏で作業中, as a Stop that listed some says
+  const runs = Array.isArray(s.running) && s.running.some((r) => r.state === 'running');
+  return badgeOf(['waiting', 'asking', 'limited', 'busy', 'thinking', 'background'].find((k) => kinds.has(k)) || (runs ? 'background' : 'idle'));
 }
 /* A robot on the whiteboards (10-19): its mark, and its session's name when it has one. */
 const robotWho = (id) => `${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="who-name">${esc(DEF[id].title)}</span>` : ''}`;
@@ -161,17 +163,26 @@ $('sessions').addEventListener('click', (e) => {
   writePref('collapsed', JSON.stringify([...UI.collapsed]));
   renderSessions();
 });
+// The session's background work under its row (viz/running.py; the rows: runRows in 30-source-live.js).
+const runKindKey = (kind) => (typeof RUN_KIND_KEYS !== 'undefined' && RUN_KIND_KEYS[kind]) || 'run.kind.bash';
+function runsHTML(x) {
+  const rows = Array.isArray(x.running) ? x.running : [];
+  if (!rows.length) return '';
+  const live = rows.filter((r) => r.state === 'running').length;
+  return `<div class="runs" data-runs="${esc(x.id)}"><p class="runs-head">${esc(tl('run.head', { n: live }))}</p><ul>${rows.map((r) => `<li class="run run-${esc(r.kind)}${r.state === 'running' ? '' : ' run-done'}${r.child ? ' run-child' : ''}"><span class="run-kind">${esc(tl(runKindKey(r.kind)))}</span><span class="run-desc" title="${esc(r.desc)}">${esc(r.desc || tl(runKindKey(r.kind)))}</span>${r.state === 'running' ? `<span class="run-time" data-since="${Number(r.startedAt)}"></span>` : `<span class="run-time">${esc(tl('run.state.done'))}</span>`}${r.waiting ? `<span class="run-note">${esc(tl('run.state.waiting'))}</span>` : ''}${r.child ? `<span class="run-note">${esc(tl('run.child'))}</span>` : ''}</li>`).join('')}</ul></div>`;
+}
+const runsSig = (x) => (Array.isArray(x.running) ? x.running.map((r) => `${r.id}:${r.state}:${r.waiting ? 1 : 0}:${r.desc}`).join(',') : '');
 const SB_ORDER = { 'st-waiting': 0, 'st-asking': 1, 'st-limited': 2, 'st-busy': 3, 'st-bg': 4, 'st-idle': 5 };
 function renderSessions() {
   const el = $('sessions'), scoped = SESSIONS.filter((s) => inScope(s.project));
   [...sessFilterEl.children].forEach((b) => setText(b.lastElementChild, String(scoped.filter((s) => sessMatch(s, b.dataset.sf)).length)));
   // Sessions that need you come first: waiting for permission, then working, then idle.
   const groups = ROOMS.filter((r) => inScope(r.id)).map((r) => [r, scoped.filter((s) => s.project === r.id && sessMatch(s, UI.sessFilter)).sort((a, b) => SB_ORDER[sessionBadge(a)[0]] - SB_ORDER[sessionBadge(b)[0]] || a.id.localeCompare(b.id))]);
-  keyed(el, JSON.stringify([UI.project, UI.sessFilter, [...UI.collapsed], groups.map(([r, l]) => [r.id, l.map((x) => x.id)]), NAMES.rev]), () => groups.map(([r, list]) => {
+  keyed(el, JSON.stringify([UI.project, UI.sessFilter, [...UI.collapsed], groups.map(([r, l]) => [r.id, l.map((x) => [x.id, runsSig(x)])]), NAMES.rev]), () => groups.map(([r, list]) => {
     const folded = UI.collapsed.has(r.id), any = scoped.some((x) => x.project === r.id);
     const itemsHTML = list.map((x) => {
       const subsHTML = x.robots.filter((id) => id !== x.id).map((id) => `<li><button type="button" class="who-btn" data-robot-open="${esc(id)}" data-fk="ss-${esc(id)}">${pill(id, DEF[id].role)}<span>${esc(DEF[id].agent)}</span></button><span class="state" data-st="${esc(id)}"></span><p class="act" data-sact="${esc(id)}"></p></li>`).join('');
-      return `<li class="session"><div class="srow"><button type="button" class="who-btn" data-robot-open="${esc(x.id)}" data-fk="ss-${esc(x.id)}">${pill(x.id, 'main')}<span class="sname">${esc(DEF[x.id].agent)}</span><span class="cli-tag cli-${esc(cliOf(x.id))}" data-cli-name="${esc(CLI_NAME[cliOf(x.id)])}" title="${esc(CLI_NAME[cliOf(x.id)])}"></span></button><span class="state" data-sst="${esc(x.id)}"></span></div><p class="act" data-sact="${esc(x.id)}"></p>${subsHTML ? `<ul class="subs">${subsHTML}</ul>` : ''}</li>`;
+      return `<li class="session"><div class="srow"><button type="button" class="who-btn" data-robot-open="${esc(x.id)}" data-fk="ss-${esc(x.id)}">${pill(x.id, 'main')}<span class="sname">${esc(DEF[x.id].agent)}</span><span class="cli-tag cli-${esc(cliOf(x.id))}" data-cli-name="${esc(CLI_NAME[cliOf(x.id)])}" title="${esc(CLI_NAME[cliOf(x.id)])}"></span></button><span class="state" data-sst="${esc(x.id)}"></span></div><p class="act" data-sact="${esc(x.id)}"></p>${runsHTML(x)}${subsHTML ? `<ul class="subs">${subsHTML}</ul>` : ''}</li>`;
     }).join('');
     return `<section class="pgroup"><button type="button" class="pg-toggle" data-fold="${esc(r.id)}" data-fk="pg-${esc(r.id)}" aria-expanded="${!folded}"><span class="pg-caret" aria-hidden="true"></span><b title="${esc(r.name)}">${esc(r.name)}</b><small data-pgsum="${esc(r.id)}"></small></button>${folded ? '' : itemsHTML ? `<ul class="sessions">${itemsHTML}</ul>` : `<p class="empty-note">${any ? esc(tl('panel.sess.nomatch')) : esc(tl('panel.sess.none'))}</p>`}</section>`;
   }).join(''));
@@ -190,6 +201,7 @@ function renderSessions() {
 }
 function renderPanel(model) {
   renderSessions();
+  paintSince($('sessions'), model.t, tl('panel.since.elapsed'));   // the background work's time
 
   const scopedSpecs = model.specs.filter((x) => inScope(x.project)), counts = bucketCounts(scopedSpecs);
   [...specFilterEl.children].forEach((b) => setText(b.lastElementChild, String(b.dataset.f === 'all' ? scopedSpecs.length : counts[b.dataset.f])));

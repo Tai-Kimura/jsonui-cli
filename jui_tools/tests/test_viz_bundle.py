@@ -192,6 +192,7 @@ BUILDERS = {
         "foldLine", "countB",   # the board's strips folded: a card's line and a strip's count (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns)
         "rbMovedHTML",   # the card's mark when its robot moved and the view did not follow (ticket 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms)
         "coTag",   # a spec's checkout, its branch (ticket 2026-10-23-jui-viz-spec-board-shows-worktree-in-progress)
+        "runsHTML",   # a session's background work under its row (ticket 2026-11-25-viz-show-running-tasks-of-local-sessions)
     },
     "50-spec-diff.js": {"sdCountsHTML", "sdCardMarkHTML", "sdListHTML", "sdCellHTML", "sdSectionHTML", "sdGapBtnHTML", "sdGapHTML", "sdRowHTML"},   # a worktree's spec beside its base (ticket 2026-10-24-viz-worktree-spec-diff-against-base)
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
