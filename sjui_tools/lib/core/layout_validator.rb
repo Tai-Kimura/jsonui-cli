@@ -106,6 +106,12 @@ module JsonUIShared
     #: to keep in step. `string` in the declared types is the exemption that
     #: matters — a binding is a string, so `common.onclick`, `common.gravity`
     #: and four others legitimately take one and must not be reported.
+    #:
+    #: The same walk reports, at :warning, a binding on a closed value with
+    #: no binding declared (an enum, or number / integer / boolean only —
+    #: AttributeValidatorCore.binding_ignored_by_declaration?). Nothing
+    #: fails there: the generators read a literal, so the bound value fell
+    #: to the default or was dropped, and the author was not told.
     def check_undeclared_bindings(component, source_path:, extension_definitions: nil)
       component_type = component['type']
       return [] unless component_type.is_a?(String)
@@ -119,10 +125,24 @@ module JsonUIShared
         next unless stripped.start_with?('@{') && stripped.end_with?('}')
 
         definition = attribute_definition(component_type, name, extension_definitions)
+        component_id = component['id'] ? " (id=#{component['id']})" : ''
+        declared = Array(definition['type']).map(&:to_s).join(', ') if definition.is_a?(Hash)
+
+        if AttributeValidatorCore.binding_ignored_by_declaration?(definition)
+          kind = definition['enum'].is_a?(Array) ? 'an enum' : "type: #{declared}"
+          found << {
+            level: :warning,
+            message: "#{component_type}#{component_id}: '#{name}' is a binding (#{stripped}), but the " \
+                     "declaration is #{kind} with no binding — a face that reads only a literal here " \
+                     "falls to its default or drops the attribute. " \
+                     "Fix: pass a literal value, or declare the attribute binding-capable.",
+            location: source_path
+          }
+          next
+        end
+
         next unless AttributeValidatorCore.binding_disallowed_by_declaration?(definition)
 
-        component_id = component['id'] ? " (id=#{component['id']})" : ''
-        declared = Array(definition['type']).map(&:to_s).join(', ')
         found << {
           level: :error,
           message: "#{component_type}#{component_id}: '#{name}' is a binding, but the " \

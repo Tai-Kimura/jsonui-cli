@@ -1418,6 +1418,23 @@ module JsonUIShared
       types.include?('array') && !types.include?('binding') && !types.include?('string')
     end
 
+    # A binding where the declaration names a closed value — an enum string,
+    # or a number / integer / boolean only — and no binding. The generators
+    # read such an attribute as a literal: a bound value fell to the default
+    # (`.keyboardType(.default)`), was dropped (web), or was written into the
+    # code as-is (`newValue.count > @{n}`), and nothing said so. A plain
+    # `string` is not one of them: handlers (onTextChange) and text
+    # attributes are bound as a matter of course.
+    def self.binding_ignored_by_declaration?(definition)
+      return false unless definition.is_a?(Hash)
+
+      types = Array(definition['type']).map(&:to_s)
+      return false if types.empty? || types.include?('binding')
+      return true if types == ['string'] && definition['enum'].is_a?(Array)
+
+      (types - %w[number integer boolean]).empty?
+    end
+
     def check_binding_content(content, path, component_type)
       if content.strip.empty?
         add_warning("Attribute '#{path}' in '#{component_type}' is an empty binding '@{}' — it is emitted as the literal text '@{}', not as a value")
