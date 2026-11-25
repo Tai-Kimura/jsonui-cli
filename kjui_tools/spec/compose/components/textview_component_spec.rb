@@ -178,6 +178,15 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       expect(result).to include('ImeAction.Default')
     end
 
+    it 'looks a bound returnKeyType up at run time, Default for a value outside the table' do
+      result = described_class.generate({ 'type' => 'TextView', 'returnKeyType' => '@{returnKey}' }, 0, required_imports)
+      expect(result).to include('imeAction = when (data.returnKey')
+      expect(result).to include('"Done" -> ImeAction.Done')
+      expect(result).to include('"Next" -> ImeAction.Next')
+      expect(result).to include('else -> ImeAction.Default }')
+      expect(result).not_to include('"@{returnKey}"')
+    end
+
     it 'generates TextField with enabled true' do
       json_data = { 'type' => 'TextView', 'enabled' => true }
       result = described_class.generate(json_data, 0, required_imports)
