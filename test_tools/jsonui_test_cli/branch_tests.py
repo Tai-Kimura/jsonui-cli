@@ -2334,6 +2334,7 @@ def render_test_file(
                  + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
                  + "reportEarlierRowCalls, reportUnmatchedForeign, resolveString, seedState, "
+                 + "tearDownHarness, "
                  + ", ".join(sorted({WEB_HARNESS_WAIT, WEB_ROW_WAIT})) + ",\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
@@ -2433,6 +2434,11 @@ def _render_branch(
     # that differed per platform.
     out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides) if overrides else '{}'}, "
                f"apiOriginsOf(harnessModule), {_ts(_notice_row(screen, method_name, contract, row))});")
+    # The harness and whether the test got to its end, for tearDownHarness
+    # in the `finally`: it runs whatever happened, and never throws over the
+    # test's own failure.
+    out.append("    let harness: unknown;")
+    out.append("    let passed = false;")
     out.append("    try {")
     # Harness conditions (design v4.11, P2d): after the mock is in, before the
     # harness is built — every declared condition, the row's value or its
@@ -2440,6 +2446,7 @@ def _render_branch(
     for cname, cvalue in row.conditions:
         out.append(f"      await arrangeCondition({_ts(cname)}, {_ts(cvalue)});")
     out.append("      const h = createHarness();")
+    out.append("      harness = h;")
     out.append(f"      await {WEB_HARNESS_WAIT}();")
     if state:
         out.append(f"      h.setState({_ts(state)});")
@@ -2540,8 +2547,13 @@ def _render_branch(
                               f"      reportConditionWithoutEffect(holds, "
                               f"{_ts(_notice_row(screen, method_name, contract, row))}, "
                               f"{_ts(_control_label(row))});"])
+    out.append("      passed = true;")
     out.append("    } finally {")
-    out.append("      rec.restore();")
+    out.append("      try {")
+    out.append("        await tearDownHarness(harness, passed);")
+    out.append("      } finally {")
+    out.append("        rec.restore();")
+    out.append("      }")
     out.append("    }")
     out.append("  }, ROW_TIMEOUT_MS);")
     return out
@@ -3541,6 +3553,27 @@ export function applyDeclaredKeys(
   }
 }
 
+
+/** Run the harness's `tearDown` after a test, the test failed or not (every
+ * generated test calls this in its `finally`, before the fetch mock comes
+ * out). A harness without one — written before `tearDown` was a member — is
+ * left alone, so it is read as `unknown`. A failure in `tearDown` fails a
+ * test that passed; when the test had already failed, the test's failure is
+ * the one thrown and this one is printed, not thrown over it. */
+export async function tearDownHarness(harness: unknown, testPassed: boolean): Promise<void> {
+  const tearDown = (harness as { tearDown?: unknown } | null | undefined)?.tearDown;
+  if (typeof tearDown !== "function") return;
+  try {
+    await tearDown.call(harness);
+  } catch (e) {
+    if (testPassed) throw e;
+    console.error(
+      "jsonui-test branch test: tearDown failed after the test had already failed " +
+        "(the test's own failure is the one reported): " +
+        (e instanceof Error ? (e.stack ?? e.message) : String(e))
+    );
+  }
+}
 /** Press a callback the way the rendered Layout does.
  *
  * The Layout calls what `initializeEventHandlers` registered in the DATA
@@ -3775,6 +3808,12 @@ export interface BranchHarness {
    * as "this platform cannot do that" rather than "it is imported from
    * somewhere else on this platform". */
   settle(): Promise<void>;
+  /** Put back what the test left in module-level state (a singleton's flag,
+   * a cache) so the next test does not start from it. Called after every
+   * test, it failed or not, through `tearDownHarness` from the runtime; not
+   * called when createHarness threw. Leave it empty when there is nothing
+   * to put back. */
+  tearDown(): void | Promise<void>;
 }
 
 export function createHarness(): BranchHarness {
@@ -4276,6 +4315,15 @@ interface BranchHarness {
 //<<resolve-string harness doc>>
   fun resolveString(key: String): String
   fun settle()
+  /** Called after every case, the case's block failed or not: put back what
+   * the case left in process-wide state (an `object`'s flag, a singleton's
+   * cache) so the next case does not start from it. Robolectric keeps one
+   * class loader across test classes, so such state outlives the test. Not
+   * called when the harness factory itself failed — there is no harness. A
+   * failure here fails a case that passed; when the block failed too, the
+   * block's failure is the one thrown and this one is attached to it as
+   * suppressed. The default does nothing. */
+  fun tearDown() {}
 }
 
 //<<resolve-string quoter>>
@@ -4547,14 +4595,33 @@ fun runBranchTest(
     }
   }
   server.start()
+  var harness: BranchHarness? = null
+  var failure: Throwable? = null
   try {
-    block(harnessFactory(server.url("/").toString(), dispatcher), recorder)
+    harness = harnessFactory(server.url("/").toString(), dispatcher)
+    block(harness, recorder)
+  } catch (t: Throwable) {
+    failure = t
+    throw t
   } finally {
-    // Not shut down yet: kept answering through the next row, so a request
-    // this row's view model makes after the row ended is named there
-    // (BranchEndedRows) rather than failing unseen inside the view model.
-    BranchEndedRows.retire(server)
-    Dispatchers.resetMain()
+    try {
+      // The case's own clean-up (BranchHarness.tearDown), the block failed or
+      // not. Its failure never hides the block's: the block's is thrown, with
+      // this one attached as suppressed.
+      try {
+        harness?.tearDown()
+      } catch (t: Throwable) {
+        val primary = failure
+        if (primary == null) throw t
+        primary.addSuppressed(t)
+      }
+    } finally {
+      // Not shut down yet: kept answering through the next row, so a request
+      // this row's view model makes after the row ended is named there
+      // (BranchEndedRows) rather than failing unseen inside the view model.
+      BranchEndedRows.retire(server)
+      Dispatchers.resetMain()
+    }
   }
 }
 
@@ -4962,7 +5029,9 @@ fun create%(pascal)sBranchHarness(baseUrl: String, dispatcher: TestDispatcher): 
   //   Retrofit(baseUrl) -> ApiService -> RepositoryImpl(s) -> ViewModel
   // with ApplicationProvider.getApplicationContext() (Robolectric), then
   // return an object extending BaseBranchHarness(vm, dispatcher) that
-  // implements expectTransition (SCREEN_FLOWS) and resolveString.
+  // implements expectTransition (SCREEN_FLOWS) and resolveString — and
+  // tearDown, when a test leaves process-wide state behind (an `object`'s
+  // flag): it runs after every test, passed or failed.
   //
   // Build it with THIS baseUrl, per test — not a process-wide setting the
   // client reads per call. A call an earlier row's view model makes after
@@ -5564,10 +5633,16 @@ protocol BranchHarness {
   /// info unmatched_foreign rather than a failure. nil (the default) cannot
   /// tell hosts apart, so every unmatched request counts as the app's.
   var apiOrigin: URL? { get }
+  /// Called after every test, its block failed or not: put back what the
+  /// test left in process-wide state (a shared instance's flag, a cache) so
+  /// the next test does not start from it. Not called when the harness
+  /// factory never returned. The default does nothing.
+  func tearDown()
 }
 
 extension BranchHarness {
   var apiOrigin: URL? { nil }
+  func tearDown() {}
 }
 
 // 🔻 `nonisolated`, AND `nonisolated(unsafe)` ON THE THREE STATICS. A test
@@ -5863,6 +5938,11 @@ func runBranchTest(
       BranchOutlivedViewModels.watch(harness.vm)
     }
   }
+  // Declared last, so it runs first of the defers — before the protocol
+  // stops serving and the harness is kept or watched — whether the block
+  // returned or threw. It does not throw, so it cannot hide the block's
+  // failure.
+  defer { harness.tearDown() }
   try block(harness, recorder)
 }
 
@@ -6000,6 +6080,11 @@ class BaseBranchHarness: BranchHarness {
 
   /// Override with the app's API base URL (see BranchHarness.apiOrigin).
   var apiOrigin: URL? { nil }
+
+  /// Override to put back what a test left behind (see
+  /// BranchHarness.tearDown). Declared here, not only in the protocol's
+  /// extension, so a subclass's override is the one runBranchTest calls.
+  func tearDown() {}
 
   func readField(_ name: String) -> Any? {
     if let own = mirrorField(vm, name), !(own is NSNull) {
@@ -6380,6 +6465,8 @@ func create%(pascal)sBranchHarness() -> BranchHarness {
   //   invoke:   switch over declared method / handler names
   //   expectTransition: switch over the VM's navigation @Published flags
   //   resolveString: closed key -> StringManager accessor map
+  //   tearDown (optional): put back process-wide state a test left behind;
+  //             runs after every test, passed or failed
   fatalError("branch-harness for %(screen)s is not implemented yet")
 }
 '''

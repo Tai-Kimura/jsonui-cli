@@ -279,3 +279,36 @@ export const harness: { settle(): Promise<void> } = { settle };
         assert len(errors) == self._NUMERIC_CALLS, errors
         assert all("caller.ts" in e and "TS2345: Argument of type 'number' is not assignable" in e
                    for e in errors), errors
+
+
+
+def _tsc_generated(root: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [str(_tsc()), *_TSC_ARGS, "tests/unit/generated/summary.branches.test.ts"],
+        cwd=root, capture_output=True, text=True, timeout=300)
+
+
+class TestTheGeneratedTestTypeChecksWithAHarnessWithoutTearDown:
+    """`tearDown` joined the harness after consumers had written theirs: the
+    generated test hands the harness to `tearDownHarness` as `unknown`, so a
+    harness module whose object has no such member — and that declares no
+    BranchHarness of its own — is no type error. The arms that RUN it are in
+    test_branch_harness_teardown.py."""
+
+    @pytest.mark.parametrize("harness", ["without", "with"])
+    def test_the_generated_test_type_checks_with_either_harness(self, tmp_path, harness):
+        from tests.test_branch_harness_teardown import _CLEANING_HARNESS, _web_project
+        from tests.test_harness_conditions import _SUMMARY_HARNESS
+        root = _web_project(tmp_path / "p", _SUMMARY_HARNESS if harness == "without" else _CLEANING_HARNESS)
+        done = _tsc_generated(root)
+        assert done.returncode == 0, done.stdout + done.stderr
+
+    def test_control_the_type_check_reads_the_generated_test(self, tmp_path):
+        from tests.test_branch_harness_teardown import _web_project
+        from tests.test_harness_conditions import _SUMMARY_HARNESS
+        root = _web_project(tmp_path / "p", _SUMMARY_HARNESS)
+        test = root / "tests/unit/generated/summary.branches.test.ts"
+        test.write_text(test.read_text(encoding="utf-8") + '\nconst wrong: number = "x";\n',
+                        encoding="utf-8")
+        done = _tsc_generated(root)
+        assert done.returncode != 0 and "TS2322" in done.stdout + done.stderr, done.stdout

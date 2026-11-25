@@ -172,14 +172,14 @@ def test_from_26_a_row_expecting_a_call_only_an_earlier_view_model_would_make_is
     version, rc, log = runs["from26"]
     assert "calledRowHolds=false" in _probe(log, "silent"), version
     assert "settle: the row expects ping, never called within EXPECT_MS (10000 ms)" in log, version
-    assert rc != 0 and "Executed 8 tests, with 1 failure" in log, (version, log[-3000:])
+    assert rc != 0 and "Executed 9 tests, with 1 failure" in log, (version, log[-3000:])
 
 
 # ------------------------------------------------------------- below 26 ---
 
 def test_below_26_the_kept_harnesses_crash_nothing(runs):
     version, rc, log = runs["below"]
-    assert rc == 0 and "Executed 8 tests, with 0 failures" in log, (version, log[-3000:])
+    assert rc == 0 and "Executed 9 tests, with 0 failures" in log, (version, log[-3000:])
     assert CRASH not in log and "Restarting after unexpected exit" not in log, version
 
 
@@ -253,3 +253,15 @@ def test_below_26_the_kept_harnesses_are_named_instead(late_runs):
     assert _notices(log, "outlived_its_test") == [], version
     assert len(_notices(log, "retained_harnesses")) == 1, version
 
+
+
+# ------------------------------------------------------------- tearDown ---
+
+@pytest.mark.parametrize("key", ["from26", "below"])
+def test_the_harness_teardown_override_runs_under_xctest(runs, key):
+    """The target's shape (MainActor default isolation): a BaseBranchHarness
+    subclass's tearDown override runs after the block, and a harness that
+    conforms itself without tearDown compiles and runs
+    (test_branch_harness_teardown.py measures the rest)."""
+    version, rc, log = runs[key]
+    assert _probe(log, "teardown") == "PROBE teardown sub=block,tearDown own=true", version
