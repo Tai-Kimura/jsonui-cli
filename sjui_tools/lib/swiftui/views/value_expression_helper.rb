@@ -176,6 +176,20 @@ module SjuiTools
         # *exact*: *map* is keyed by the declared spellings themselves
         # (declared_vocabulary) and the bound value is looked up as it is — a
         # value is its declared spelling, case and all (the orchestrator's ruling, 1.9.0).
+        # A bound enum whose table is the SSoT's declared spellings of
+        # `attribute`, each turned into Swift by the block (the literal
+        # path's own mapping, so a bound value lands where the same literal
+        # would). A spelling the block maps to nil is left out and falls to
+        # `default`.
+        def bound_declared_enum(value, attribute, default:, type:)
+          return nil unless bound_value?(value)
+
+          section = @component && @component['type'] || 'View'
+          map = JsonUIShared::EnumSpelling.declared(section, attribute)
+                                         .map { |spelling| (literal = yield(spelling)) && [spelling, literal] }.compact.to_h
+          bound_enum(value, map, exact: true, default: default, type: type)
+        end
+
         def bound_enum(value, map, default:, type:, exact: false)
           return nil unless bound_value?(value)
           return nil if map.nil? || map.empty?

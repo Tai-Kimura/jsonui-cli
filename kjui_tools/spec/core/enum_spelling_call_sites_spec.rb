@@ -20,6 +20,7 @@ RSpec.describe 'EnumSpelling call sites' do
   computed_attribute = {
     'swiftui/scrolling_cell_index.rb' => "`key` is 'layout' or 'orientation', both Collection's",
     'swiftui/views/text_style_helper.rb' => '`attribute` is what its callers name (declared_vocabulary)',
+    'swiftui/views/value_expression_helper.rb' => '`attribute` is what its callers name (bound_declared_enum)',
     'compose/helpers/bound_value.rb' => 'declared_mapping: its callers name the pair (declared:)',
     'compose/components/textview_component.rb' => "keyboardType or input, both TextView's",
     'react/converters/base_converter.rb' => 'declared_table: its callers name the attribute',

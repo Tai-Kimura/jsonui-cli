@@ -63,6 +63,12 @@ module SjuiTools
           'phone' => '.phonePad',
           'url' => '.URL',
           'password' => '.default',
+          # UIKeyboardType has no member for the date family; the declaration
+          # names `.default` as iOS's answer. Written out so a bound `input`
+          # carries the rows instead of warning that they are missing.
+          'date' => '.default',
+          'time' => '.default',
+          'datetime' => '.default',
           'twitter' => '.twitter',
           'websearch' => '.webSearch',
           'namephonepad' => '.namePhonePad'

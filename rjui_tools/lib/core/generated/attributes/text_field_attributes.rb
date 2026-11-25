@@ -85,7 +85,7 @@ module JsonUI
         { name: 'leftViewMode', kind: :string }.freeze,
         # The largest size this component's text is drawn at, as a multiple of its declared fontSize (>= 1): drawn <= fontSize x maxFontScale on every face. Only with fontScaling (declared or the app default) true; absent: no cap beyond the OS one. iOS rounds it down to a Dynamic Type step (the largest step whose .body ratio is at most it); Android caps after its non-linear conversion; the web draws min(rem, px x maxFontScale).
         { name: 'maxFontScale', kind: :number }.freeze,
-        # Maximum input length. Binding supported ("@{name}", an Int): 0 or nil means no limit. The limit applies to the next edit - a value that shrinks below the current text does not cut the text by itself; the text is cut when it is next edited.
+        # Maximum input length. Binding supported ("@{name}", an Int): 0 or nil means no limit. The limit applies to the next edit - a value that shrinks below the current text does not cut the text by itself; the text is cut when it is next edited (iOS, Android). web: the browser's own maxlength stops further input and never cuts a value, so a longer text stays until it is deleted.
         { name: 'maxLength', kind: :number, bindable: true }.freeze,
         # The input's form name attribute (rjui text_field_converter).
         { name: 'name', kind: :string }.freeze,

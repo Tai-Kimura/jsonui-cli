@@ -283,10 +283,10 @@ module RjuiTools
           end
 
           # Max length
-          attrs << " maxLength={#{attributes['maxLength']}}" if attributes['maxLength']
+          (max_length = max_length_attr(attributes['maxLength'])) && attrs << max_length
 
           # Read only
-          attrs << ' readOnly' if attributes['editable'] == false
+          (read_only = read_only_attr(attributes['editable'])) && attrs << read_only
 
           # Auto focus
           attrs << ' autoFocus' if attributes['autoFocus']
@@ -294,11 +294,21 @@ module RjuiTools
           # Soft-keyboard hints — same UIKit-spelling vocabulary as TextField,
           # mapped by the shared base helpers. A textarea has no `type`, so
           # `input` only contributes the mobile keyboard mode here.
-          if attributes['input']
+          # One inputMode: with `keyboardType` set too, it is keyboardType's
+          # (written below). A second attribute of the same name does not
+          # type-check, and keyboardType is the one that wins on the other
+          # faces (Compose `keyboardType ?: input`, SwiftJsonUI's chain).
+          if attributes['keyboardType']
+            # nothing: keyboardType writes it
+          elsif (bound = bound_enum_attr('inputMode', attributes['input'], 'input') { |s| map_input_mode(s) })
+            attrs << bound
+          elsif attributes['input']
             inputmode = map_input_mode(attributes['input'])
             attrs << " inputMode=\"#{inputmode}\"" if inputmode
           end
-          if attributes['returnKeyType']
+          if (bound = bound_enum_attr('enterKeyHint', attributes['returnKeyType'], 'returnKeyType') { |s| map_return_key(s) })
+            attrs << bound
+          elsif attributes['returnKeyType']
             enter_key_hint = map_return_key(attributes['returnKeyType'])
             attrs << " enterKeyHint=\"#{enter_key_hint}\"" if enter_key_hint
           end
@@ -328,7 +338,9 @@ module RjuiTools
 
           # Soft keyboard. `input` is the TextField spelling of the same idea and
           # already maps through here; keyboardType is the UIKit one.
-          if attributes['keyboardType']
+          if (bound = bound_enum_attr('inputMode', attributes['keyboardType'], 'keyboardType') { |s| map_keyboard_type(s) })
+            attrs << bound
+          elsif attributes['keyboardType']
             inputmode = map_keyboard_type(attributes['keyboardType'])
             attrs << " inputMode=\"#{inputmode}\"" if inputmode
           end

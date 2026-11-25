@@ -195,7 +195,8 @@ module SjuiTools
 
           # input type (keyboard type)
           if @component['input']
-            keyboard_type = input_to_keyboard_type(@component['input'])
+            keyboard_type = bound_keyboard_type(@component['input']) ||
+                            input_to_keyboard_type(@component['input'])
             add_modifier_line ".keyboardType(#{keyboard_type})"
           end
 
@@ -211,7 +212,9 @@ module SjuiTools
 
           # returnKeyType (submit label)
           if @component['returnKeyType']
-            submit_label = return_key_to_submit_label(@component['returnKeyType'])
+            submit_label = bound_declared_enum(@component['returnKeyType'], 'returnKeyType',
+                                               default: '.done', type: 'SubmitLabel') { |s| return_key_to_submit_label(s) } ||
+                           return_key_to_submit_label(@component['returnKeyType'])
             add_modifier_line ".submitLabel(#{submit_label})"
           end
 
@@ -531,12 +534,11 @@ module SjuiTools
         # `.autocorrectionDisabled` are the SwiftUI spellings.
         def apply_text_input_traits
           if (cap = @component['autocapitalizationType'])
-            resolved = case JsonUIShared::EnumSpelling.lowered(cap, 'TextField', 'autocapitalizationType')
-                       when 'none' then '.never'
-                       when 'words' then '.words'
-                       when 'sentences' then '.sentences'
-                       when 'allcharacters', 'characters' then '.characters'
-                       end
+            # Bound: the same table in the Swift, Optional — a value it does
+            # not know leaves the platform's own default, as no modifier does.
+            resolved = bound_declared_enum(cap, 'autocapitalizationType', default: nil,
+                                           type: 'TextInputAutocapitalization') { |s| autocapitalization_literal(s) } ||
+                       autocapitalization_literal(cap)
             @modifier_bag.append(
               :component_specific, ".textInputAutocapitalization(#{resolved})"
             ) if resolved
@@ -548,7 +550,14 @@ module SjuiTools
           # text, so the attribute reacted to being PRESENT and not to its
           # value (`jui conformance codegen-effect` C2/presence-only on ios).
           # Not emitting is how "the platform decides" is spelled.
-          if (corr = @component['autocorrectionType'])
+          if (corr = @component['autocorrectionType']) && bound_value?(corr)
+            # Bound: `default` and every "yes" spelling leave correction on,
+            # which is what SwiftUI does with no modifier at all.
+            disabled = bound_declared_enum(corr, 'autocorrectionType', default: 'false', type: '') do |s|
+              %w[no none false off].include?(s.downcase) ? 'true' : 'false'
+            end
+            @modifier_bag.append(:component_specific, ".autocorrectionDisabled(#{disabled})")
+          elsif corr
             case JsonUIShared::EnumSpelling.lowered(corr, 'TextField', 'autocorrectionType')
             when 'default'
               # nothing: SwiftUI's own default stands
@@ -566,6 +575,15 @@ module SjuiTools
           apply_max_length
         end
 
+        def autocapitalization_literal(value)
+          case JsonUIShared::EnumSpelling.lowered(value, 'TextField', 'autocapitalizationType')
+          when 'none' then '.never'
+          when 'words' then '.words'
+          when 'sentences' then '.sentences'
+          when 'allcharacters', 'characters' then '.characters'
+          end
+        end
+
         # maxLength — SwiftUI's TextField has no length limit, so it is enforced
         # by truncating on change. Compose passes it to the value filter and web
         # sets the `maxLength` attribute; here it needs a binding to write back
@@ -573,6 +591,9 @@ module SjuiTools
         def apply_max_length
           max_length = @component['maxLength']
           return if max_length.nil?
+          # 0 is no limit (attribute_definitions): a written 0 cut every edit
+          # to the empty string here, while Compose already skipped it.
+          return if !bound_value?(max_length) && !max_length.to_i.positive?
 
           # (a lone `bind` arrives as `text`: JsonUIShared::BindFold at the dispatch)
           raw = @component['text'] || @component['value']
@@ -580,6 +601,23 @@ module SjuiTools
 
           prop = extract_binding_property(raw)
           indent_str = "    " * (@indent_level + 1)
+          if bound_value?(max_length)
+            # A bound limit is read on each edit: 0 (or an unset value, which
+            # resolves to 0) is no limit, and a limit that shrinks cuts the
+            # text when it is next edited, not by itself.
+            limit = bound_number(max_length, cast: 'Int')
+            @modifier_bag.append(
+              :on_text_change,
+              ".onChange(of: data.#{prop}) { _, newValue in\n" \
+              "#{indent_str}let limit = #{limit}\n" \
+              "#{indent_str}if limit > 0 && newValue.count > limit {\n" \
+              "#{indent_str}    data.#{prop} = String(newValue.prefix(limit))\n" \
+              "#{indent_str}}\n" \
+              "#{indent_str[0...-4]}}"
+            )
+            return
+          end
+
           @modifier_bag.append(
             :on_text_change,
             ".onChange(of: data.#{prop}) { _, newValue in\n" \

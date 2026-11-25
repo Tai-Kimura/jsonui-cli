@@ -166,9 +166,22 @@ module RjuiTools
 
           # Type based on input attribute
           input_type = determine_input_type
+          # A bound input picks the element type at run time, from the same
+          # table the literal path reads; a value it does not know is text.
+          input_expr = bound_value_expr(attributes['input'])
+          type_value = if input_expr
+                         lookup = js_object_literal(declared_lookup('input') { |s| input_type_for(s) })
+                         "((#{lookup})[String(#{input_expr})] ?? 'text')"
+                       end
           # A bound secure follows the data: as written, a binding is truthy.
           secure_expr = bound_value_expr(attributes['secure'])
-          attrs << (secure_expr ? " type={(#{secure_expr}) ? 'password' : '#{input_type}'}" : " type=\"#{input_type}\"")
+          attrs << if secure_expr
+                     " type={(#{secure_expr}) ? 'password' : #{type_value || "'#{input_type}'"}}"
+                   elsif type_value
+                     " type={#{type_value}}"
+                   else
+                     " type=\"#{input_type}\""
+                   end
 
           # Name attribute
           attrs << jsx_attr_text('name', attributes['name']) if attributes['name']
@@ -211,7 +224,7 @@ module RjuiTools
           end
 
           # Max length
-          attrs << " maxLength={#{attributes['maxLength']}}" if attributes['maxLength']
+          (max_length = max_length_attr(attributes['maxLength'])) && attrs << max_length
 
           # Auto complete / content type. A bound value matches no key, so the
           # attribute was dropped entirely — the same mapping happens at
@@ -227,13 +240,17 @@ module RjuiTools
           end
 
           # Input mode (for mobile keyboards)
-          if attributes['input']
+          if (bound = bound_enum_attr('inputMode', attributes['input'], 'input') { |s| map_input_mode(s) })
+            attrs << bound
+          elsif attributes['input']
             inputmode = map_input_mode(attributes['input'])
             attrs << " inputMode=\"#{inputmode}\"" if inputmode
           end
 
           # Return key type (for form submission)
-          if attributes['returnKeyType']
+          if (bound = bound_enum_attr('enterKeyHint', attributes['returnKeyType'], 'returnKeyType') { |s| map_return_key(s) })
+            attrs << bound
+          elsif attributes['returnKeyType']
             enter_key_hint = map_return_key(attributes['returnKeyType'])
             attrs << " enterKeyHint=\"#{enter_key_hint}\"" if enter_key_hint
           end
@@ -242,7 +259,7 @@ module RjuiTools
           attrs << ' autoFocus' if attributes['autoFocus']
 
           # Read only
-          attrs << ' readOnly' if attributes['editable'] == false
+          (read_only = read_only_attr(attributes['editable'])) && attrs << read_only
 
           # Native browser validation. Both are declared `platform: react`, i.e.
           # they exist FOR the web, so there is no other surface to defer to.
@@ -253,11 +270,19 @@ module RjuiTools
 
           # Soft-keyboard behaviour. The declared values are the UIKit spellings;
           # HTML has its own vocabulary for the same two ideas.
-          if attributes['autocapitalizationType']
+          if (bound = bound_enum_attr('autoCapitalize', attributes['autocapitalizationType'],
+                                      'autocapitalizationType') { |s| map_autocapitalization(s) })
+            attrs << bound
+          elsif attributes['autocapitalizationType']
             capitalize = map_autocapitalization(attributes['autocapitalizationType'])
             attrs << " autoCapitalize=\"#{capitalize}\"" if capitalize
           end
-          if attributes['autocorrectionType']
+          if (correct_expr = bound_value_expr(attributes['autocorrectionType']))
+            lookup = js_object_literal(declared_lookup('autocorrectionType') { |s| map_autocorrection(s) })
+            correct = "(#{lookup})[String(#{correct_expr})]"
+            # `default` (unmapped) leaves both to the browser, as the literal does.
+            attrs << " autoCorrect={#{correct}} spellCheck={((c) => (c === undefined ? undefined : c === 'on'))(#{correct})}"
+          elsif attributes['autocorrectionType']
             correct = map_autocorrection(attributes['autocorrectionType'])
             # spellCheck rides along: `no` means "stop correcting me", and a
             # browser that only honours one of the two should still obey.
@@ -289,9 +314,16 @@ module RjuiTools
 
         def determine_input_type
           # Secure field takes precedence
-          return 'password' if (attributes['secure'] && !has_binding?(attributes['secure'])) || JsonUIShared::EnumSpelling.lowered(attributes['input'], 'TextField', 'input') == 'password'
+          return 'password' if attributes['secure'] && !has_binding?(attributes['secure'])
 
-          case JsonUIShared::EnumSpelling.lowered(attributes['input'], 'TextField', 'input')
+          input_type_for(attributes['input'])
+        end
+
+        # The element type one `input` value asks for.
+        def input_type_for(input)
+          case JsonUIShared::EnumSpelling.lowered(input, 'TextField', 'input')
+          when 'password'
+            'password'
           when 'email'
             'email'
           # `signedDecimal` is a SIGNED decimal keyboard. HTML has no such

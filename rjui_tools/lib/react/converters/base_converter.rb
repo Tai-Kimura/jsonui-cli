@@ -2342,6 +2342,55 @@ module RjuiTools
                                     .compact.to_h
         end
 
+        # The declared spellings of `attribute`, each turned into its web
+        # value by the block — the literal path's own mapping, so a bound
+        # value lands where the same literal would. A spelling the block maps
+        # to nil is left out: the lookup yields undefined and React omits the
+        # attribute, as the literal path emits nothing for it.
+        def declared_lookup(attribute)
+          JsonUIShared::EnumSpelling.declared(enum_section, attribute)
+                                    .map { |spelling| (value = yield(spelling)) && [spelling, value] }.compact.to_h
+        end
+
+        # ` name={(lookup)[String(expr)]}` for a bound enum, else nil.
+        def bound_enum_attr(name, value, attribute, &mapping)
+          expr = bound_value_expr(value)
+          return nil unless expr
+
+          table = declared_lookup(attribute, &mapping)
+          lookup = js_object_literal(table)
+          # inputMode and enterKeyHint are unions of string literals in
+          # React's DOM types: an untyped table indexes to `string`, which a
+          # strict consumer rejects there. The values it can yield, named.
+          if typescript? && !table.empty?
+            lookup = "#{lookup} as Record<string, #{table.values.uniq.map { |v| "'#{v}'" }.join(' | ')}>"
+          end
+          " #{name}={(#{lookup})[String(#{expr})]}"
+        end
+
+        # maxLength: 0, unset or not a number is no limit, written or bound.
+        # A bound limit is read on each render; one that shrinks below the
+        # text stops further input and leaves the text (the browser's own
+        # maxlength, which never cuts a value).
+        def max_length_attr(value)
+          return nil if value.nil?
+
+          if (expr = bound_value_expr(value))
+            return " maxLength={((limit) => (limit > 0 ? limit : undefined))(Number(#{expr}))}"
+          end
+
+          value.to_i.positive? ? " maxLength={#{value.to_i}}" : nil
+        end
+
+        # readOnly from `editable`: a literal false, or a binding read as written.
+        def read_only_attr(value)
+          if (expr = bound_value_expr(value))
+            " readOnly={!(#{expr})}"
+          elsif value == false
+            ' readOnly'
+          end
+        end
+
         def js_object_literal(map)
           '{ ' + map.map { |k, v| "'#{k}': '#{v}'" }.join(', ') + ' }'
         end

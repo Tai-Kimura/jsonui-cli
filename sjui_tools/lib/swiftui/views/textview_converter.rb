@@ -285,7 +285,10 @@ module SjuiTools
 
           # returnKeyType — the soft-keyboard submit label, as on TextField.
           if @component['returnKeyType']
-            add_modifier_line ".submitLabel(#{return_key_to_submit_label(@component['returnKeyType'])})"
+            rk = @component['returnKeyType']
+            label = bound_declared_enum(rk, 'returnKeyType', default: '.return', type: 'SubmitLabel') { |s| return_key_to_submit_label(s) } ||
+                    return_key_to_submit_label(rk)
+            add_modifier_line ".submitLabel(#{label})"
           end
 
           # scrollEnabled: false pins the editor (iOS 16+ scrollDisabled;
@@ -311,7 +314,8 @@ module SjuiTools
           end
           if @component['input']
             @modifier_bag.append(:component_specific,
-                                 ".keyboardType(#{input_to_keyboard_type(@component['input'])})")
+                                 ".keyboardType(#{bound_keyboard_type(@component['input']) ||
+                                                  input_to_keyboard_type(@component['input'])})")
           end
 
           # TextViewWithPlaceholder handles background/cornerRadius internally
@@ -444,7 +448,8 @@ module SjuiTools
           end
 
           if (kb = @component['keyboardType'])
-            resolved = keyboard_type_to_swiftui(kb)
+            resolved = bound_declared_enum(kb, 'keyboardType', default: '.default', type: 'UIKeyboardType') { |s| keyboard_type_to_swiftui(s) } ||
+                       keyboard_type_to_swiftui(kb)
             @modifier_bag.append(:component_specific, ".keyboardType(#{resolved})") if resolved
           end
         end

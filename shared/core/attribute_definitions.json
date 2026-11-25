@@ -2095,7 +2095,7 @@
     },
     "maxLength": {
       "type": ["number", "binding"],
-      "description": "Maximum input length. Binding supported (\"@{name}\", an Int): 0 or nil means no limit. The limit applies to the next edit - a value that shrinks below the current text does not cut the text by itself; the text is cut when it is next edited."
+      "description": "Maximum input length. Binding supported (\"@{name}\", an Int): 0 or nil means no limit. The limit applies to the next edit - a value that shrinks below the current text does not cut the text by itself; the text is cut when it is next edited (iOS, Android). web: the browser's own maxlength stops further input and never cuts a value, so a longer text stays until it is deleted."
     },
     "pattern": {
       "type": "string",
@@ -2416,7 +2416,7 @@
     },
     "maxLength": {
       "type": ["number", "binding"],
-      "description": "Maximum input length. Binding supported (\"@{name}\", an Int): 0 or nil means no limit. The limit applies to the next edit - a value that shrinks below the current text does not cut the text by itself; the text is cut when it is next edited.",
+      "description": "Maximum input length. Binding supported (\"@{name}\", an Int): 0 or nil means no limit. The limit applies to the next edit - a value that shrinks below the current text does not cut the text by itself; the text is cut when it is next edited (iOS, Android). web: the browser's own maxlength stops further input and never cuts a value, so a longer text stays until it is deleted.",
       "platform": "react"
     },
     "pattern": {
