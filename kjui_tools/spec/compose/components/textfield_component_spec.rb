@@ -604,6 +604,52 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('ImeAction.Default')
     end
 
+    context 'keyboard attributes given a binding' do
+      it 'looks a bound returnKeyType up at run time, Default for a value outside the table' do
+        result = described_class.generate({ 'type' => 'TextField', 'returnKeyType' => '@{returnKey}' }, 0, required_imports)
+        expect(result).to include('imeAction = when (data.returnKey')
+        expect(result).to include('"Done" -> ImeAction.Done')
+        expect(result).to include('"Go" -> ImeAction.Go')
+        expect(result).to include('else -> ImeAction.Default }')
+        expect(result).not_to include('"@{returnKey}"')
+      end
+
+      it 'keeps a written returnKeyType outside the table at Default' do
+        result = described_class.generate({ 'type' => 'TextField', 'returnKeyType' => 'Return' }, 0, required_imports)
+        expect(result).to include('imeAction = ImeAction.Default')
+      end
+
+      it 'looks a bound autocapitalizationType up at run time, None for a value outside the table' do
+        result = described_class.generate({ 'type' => 'TextField', 'autocapitalizationType' => '@{capitalize}' }, 0, required_imports)
+        expect(result).to include('capitalization = when (data.capitalize')
+        expect(result).to include('"allCharacters" -> KeyboardCapitalization.Characters')
+        expect(result).to include('"characters" -> KeyboardCapitalization.Characters')
+        expect(result).to include('else -> KeyboardCapitalization.None }')
+      end
+
+      it 'keeps the written autocapitalizationType spellings' do
+        { 'words' => 'Words', 'sentences' => 'Sentences', 'allCharacters' => 'Characters', 'none' => 'None' }.each do |spelling, member|
+          result = described_class.generate({ 'type' => 'TextField', 'autocapitalizationType' => spelling }, 0, Set.new)
+          expect(result).to include("capitalization = KeyboardCapitalization.#{member}")
+        end
+      end
+
+      it 'looks a bound autocorrectionType up at run time, null (the platform) for default and unknown values' do
+        result = described_class.generate({ 'type' => 'TextField', 'autocorrectionType' => '@{correct}' }, 0, required_imports)
+        expect(result).to include('autoCorrectEnabled = when (data.correct')
+        expect(result).to include('"no" -> false')
+        expect(result).to include('"on" -> true')
+        expect(result).not_to include('"default" ->')
+        expect(result).to include('else -> null }')
+      end
+
+      it 'keeps a written autocorrectionType: default emits nothing, no and yes emit the flag' do
+        expect(described_class.generate({ 'type' => 'TextField', 'autocorrectionType' => 'default' }, 0, Set.new)).not_to include('autoCorrectEnabled')
+        expect(described_class.generate({ 'type' => 'TextField', 'autocorrectionType' => 'no' }, 0, Set.new)).to include('autoCorrectEnabled = false')
+        expect(described_class.generate({ 'type' => 'TextField', 'autocorrectionType' => 'yes' }, 0, Set.new)).to include('autoCorrectEnabled = true')
+      end
+    end
+
     it 'generates TextField with onTextChange handler' do
       json_data = { 'type' => 'TextField', 'onTextChange' => 'handleTextChange' }
       result = described_class.generate(json_data, 0, required_imports)

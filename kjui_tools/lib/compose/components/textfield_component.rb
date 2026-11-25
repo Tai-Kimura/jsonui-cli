@@ -112,6 +112,38 @@ module KjuiTools
           'datetime' => 'KeyboardType.DateTime'
         }.freeze
 
+        # returnKeyType's declared spellings that have an ImeAction of their
+        # own (keyed lowercase; BoundValue.enum keys it by the SSoT spelling).
+        # The rest (Return, Continue, Join, Route, Yahoo, Google) fall to
+        # ImeAction.Default, written or bound.
+        RETURN_KEY_IME_ACTION = {
+          'done' => 'ImeAction.Done',
+          'next' => 'ImeAction.Next',
+          'search' => 'ImeAction.Search',
+          'send' => 'ImeAction.Send',
+          'go' => 'ImeAction.Go'
+        }.freeze
+
+        # autocapitalizationType; a value outside it falls to None.
+        AUTOCAPITALIZATION = {
+          'none' => 'KeyboardCapitalization.None',
+          'words' => 'KeyboardCapitalization.Words',
+          'sentences' => 'KeyboardCapitalization.Sentences',
+          'allcharacters' => 'KeyboardCapitalization.Characters',
+          'characters' => 'KeyboardCapitalization.Characters'
+        }.freeze
+
+        # autocorrectionType. `default` has no entry on purpose: written, it
+        # emits nothing; bound, it reaches the `else -> null` arm.
+        AUTOCORRECTION = {
+          'no' => 'false',
+          'false' => 'false',
+          'off' => 'false',
+          'yes' => 'true',
+          'true' => 'true',
+          'on' => 'true'
+        }.freeze
+
         # The last four entries name Compose members that only exist from
         # ui-text 1.12.0. The generated Kotlin NAMES the member, so an older
         # Compose is a COMPILE error rather than a degraded keyboard -- which
@@ -856,22 +888,17 @@ module KjuiTools
             keyboard_options << "keyboardType = #{keyboard_type}"
           end
 
+          # returnKeyType, autocapitalizationType and autocorrectionType take a
+          # binding: a `case` could never match a `"@{...}"`, so a bound value
+          # froze to the static fallback. A bound value now reads through the
+          # same table as a written one, and a value outside it falls where an
+          # unknown written value falls.
           if json_data['returnKeyType']
             required_imports&.add(:ime_action)
-            ime_action = case json_data['returnKeyType']
-            when 'Done'
-              'ImeAction.Done'
-            when 'Next'
-              'ImeAction.Next'
-            when 'Search'
-              'ImeAction.Search'
-            when 'Send'
-              'ImeAction.Send'
-            when 'Go'
-              'ImeAction.Go'
-            else
-              'ImeAction.Default'
-            end
+            ime_action = Helpers::BoundValue.enum(
+              json_data['returnKeyType'], RETURN_KEY_IME_ACTION,
+              default: 'ImeAction.Default', declared: %w[TextField returnKeyType]
+            )
             keyboard_options << "imeAction = #{ime_action}"
           elsif next_focus_id && !json_data['returnKeyType']
             # Auto-set ImeAction.Next when nextFocus is specified
@@ -882,18 +909,10 @@ module KjuiTools
           # Auto-capitalization type
           if json_data['autocapitalizationType']
             required_imports&.add(:keyboard_capitalization)
-            capitalization = case JsonUIShared::EnumSpelling.lowered(json_data['autocapitalizationType'], 'TextField', 'autocapitalizationType')
-            when 'none'
-              'KeyboardCapitalization.None'
-            when 'words'
-              'KeyboardCapitalization.Words'
-            when 'sentences'
-              'KeyboardCapitalization.Sentences'
-            when 'allcharacters', 'characters'
-              'KeyboardCapitalization.Characters'
-            else
-              'KeyboardCapitalization.None'
-            end
+            capitalization = Helpers::BoundValue.enum(
+              json_data['autocapitalizationType'], AUTOCAPITALIZATION,
+              default: 'KeyboardCapitalization.None', declared: %w[TextField autocapitalizationType]
+            )
             keyboard_options << "capitalization = #{capitalization}"
           end
 
@@ -903,12 +922,12 @@ module KjuiTools
             # Folding it in with `yes` made those two spellings produce
             # identical output — measured as presence-only (plan 49 lane C:
             # TextField.autocorrectionType C2).
-            auto_correct = case JsonUIShared::EnumSpelling.lowered(json_data['autocorrectionType'], 'TextField', 'autocorrectionType')
-            when 'no', 'false', 'off'
-              'false'
-            when 'yes', 'true', 'on'
-              'true'
-            end
+            # A bound `default` (or a value outside the table) is `null`, the
+            # parameter's own "leave it to the platform".
+            auto_correct = Helpers::BoundValue.enum(
+              json_data['autocorrectionType'], AUTOCORRECTION,
+              bound_default: 'null', declared: %w[TextField autocorrectionType]
+            )
             keyboard_options << "autoCorrectEnabled = #{auto_correct}" if auto_correct
           end
 
