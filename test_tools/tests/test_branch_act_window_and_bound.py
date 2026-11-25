@@ -535,9 +535,9 @@ def test_control_without_the_first_settle_the_seed_is_overwritten(tmp_path):
     root = _project(tmp_path)
     test_file = _generate_web(root)
     text = test_file.read_text(encoding="utf-8")
-    first = "      const h = createHarness();\n      await settleHarness();\n"
+    first = "      const h = createHarness();\n      harness = h;\n      await settleHarness();\n"
     assert text.count(first) == 6
-    test_file.write_text(text.replace(first, "      const h = createHarness();\n"),
+    test_file.write_text(text.replace(first, "      const h = createHarness();\n      harness = h;\n"),
                          encoding="utf-8")
     rows = _run_web(root, test_file)
     passed, why = _row(rows, "submit", 1)

@@ -1286,7 +1286,8 @@ def test_web_generated_rows_wait_with_settle_quiet(tmp_path):
     text = _ticker(tmp_path / "p").read_text(encoding="utf-8")
     assert _waits(text) == ["settleHarness", "settleQuiet", "settleQuiet"], text
     assert "settleHarness, settleQuiet,\n  type RouteSpec," in text, text
-    assert text.count("      const h = createHarness();\n      await settleHarness();\n") == 1, text
+    assert text.count("      const h = createHarness();\n      harness = h;\n"
+                      "      await settleHarness();\n") == 1, text
     assert text.count("      await settleQuiet();\n") == 1, text
 
 
