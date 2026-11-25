@@ -17,6 +17,14 @@ module KjuiTools
       class TextViewComponent
         @counter ||= 0
 
+        # returnKeyType's spellings with an ImeAction of their own on a
+        # TextView (keyed lowercase; BoundValue.enum keys it by the SSoT
+        # spelling). Every other declared spelling is ImeAction.Default.
+        TEXT_VIEW_RETURN_KEY_IME_ACTION = {
+          'done' => 'ImeAction.Done',
+          'next' => 'ImeAction.Next'
+        }.freeze
+
         # Per-file determinism: compose_builder calls this before each layout
         # so resolved_* local names don't drift with process build history.
         def self.reset_counter!
@@ -550,16 +558,12 @@ module KjuiTools
 
           if json_data['returnKeyType']
             required_imports&.add(:ime_action)
-            ime_action = case json_data['returnKeyType']
-            when 'Done'
-              'ImeAction.Done'
-            when 'Next'
-              'ImeAction.Next'
-            when 'Default'
-              'ImeAction.Default'
-            else
-              'ImeAction.Default'
-            end
+            # A bound value reads through the same table as a written one; a
+            # value outside it is ImeAction.Default either way.
+            ime_action = Helpers::BoundValue.enum(
+              json_data['returnKeyType'], TEXT_VIEW_RETURN_KEY_IME_ACTION,
+              default: 'ImeAction.Default', declared: %w[TextView returnKeyType]
+            )
             keyboard_options << "imeAction = #{ime_action}"
           end
 
