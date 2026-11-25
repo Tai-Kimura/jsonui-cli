@@ -7,7 +7,8 @@ The real `jui viz serve` in a throwaway HOME: one session file (a stand-in proce
     subagent, a monitor — each with its kind, its description (never the command line) and its time;
   * one more started after (the tail): it shows; a notice ends the command: it shows as ended, faded;
   * the subagent "waiting on its own background work" stays, with that note;
-  * Stop without background_tasks closes nothing; with a list it closes the subagent it does not name, never the monitor;
+  * Stop without background_tasks closes nothing; with a list (the measured shape) it closes what it does not name,
+    the subagent and then the monitor;
   * stills: light and dark.
 No console error; nothing outside the server."""
 from __future__ import annotations
@@ -178,16 +179,23 @@ async def run_running_tasks(pw, out, failures):
         await panel.screenshot(path=str(out / "running-panel-dark.png"))
         await page.emulate_media(color_scheme="light")
 
-        # Stop: without the key nothing closes; with a list, the subagent it does not name closes, the monitor stays
+        # Stop: without the key nothing closes; with a list, what it does not name closes — the subagent, then the monitor
+        shell = {"id": "bnew0005", "type": "shell", "status": "running", "description": "Upload the screenshots"}
+        monitor = {"id": "mpast004", "type": "monitor", "status": "running", "description": "Watch the build log"}
         hook(hook_event_name="Stop")
         await page.wait_for_timeout(2500)
         rows = await page.evaluate(ROWS)
         check(failures, sum(1 for r in rows if not r["done"]) == 3, f"Stop without background_tasks closes nothing: {rows}")
-        hook(hook_event_name="Stop", background_tasks=[{"id": "bnew0005", "type": "shell", "status": "running", "description": "Upload the screenshots"}])
+        hook(hook_event_name="Stop", background_tasks=[shell, monitor])
         await wait(page, f"(rows) => {{ const r = ({ROWS})(); return r && r.filter((x) => !x.done).length === 2; }}", label="Stop's list closes the subagent")
         rows = res["after-stop"] = await page.evaluate(ROWS)
         check(failures, sorted(r["desc"] for r in rows if not r["done"]) == ["Upload the screenshots", "Watch the build log"],
-              f"the monitor and the listed command stay: {rows}")
+              f"the listed monitor and command stay: {rows}")
+        hook(hook_event_name="Stop", background_tasks=[shell])
+        await wait(page, f"(rows) => {{ const r = ({ROWS})(); return r && r.filter((x) => !x.done).length === 1; }}", label="Stop's list closes the monitor")
+        rows = res["after-stop-2"] = await page.evaluate(ROWS)
+        check(failures, [r["desc"] for r in rows if not r["done"]] == ["Upload the screenshots"],
+              f"the monitor it no longer lists closes: {rows}")
     finally:
         for p in stand_ins:
             p.kill()
