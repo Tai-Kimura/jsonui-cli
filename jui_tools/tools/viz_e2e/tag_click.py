@@ -24,7 +24,7 @@ import sys
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, T, Watch, new_page, ready
-from waits import settled, until
+from waits import settled, still, until
 
 CWD = "/work/click-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -44,6 +44,18 @@ PART_JS = """([id, sel]) => { const R = window.__dbg.robots.find((x) => x.def.id
   return { x, y, w: b.width, h: b.height, visible: b.width > 0 && getComputedStyle(el).display !== 'none' && (sel === '.bill' ? el : R.tag).style.visibility !== 'hidden',
     text: el.textContent, at: at ? (at.id || at.className || at.tagName) : null, owner: owner ? owner.dataset.robot : null,
     cursor: getComputedStyle(at || el).cursor, pe: getComputedStyle(el).pointerEvents }; }"""
+BODY_JS = """(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id); const T = window.__dbg.THREE;
+  const v = R.robot.root.position.clone().add(new T.Vector3(0, 1.0 * (R.robot.size || 1), 0)).project(window.__dbg.camera);
+  const r = document.getElementById('scene-canvas').getBoundingClientRect();
+  const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height, at = document.elementFromPoint(x, y);
+  return { x, y, at: at ? at.id || at.className : null }; }"""
+OVERLAP_JS = """([a, b]) => { const rs = window.__dbg.robots, cam = window.__dbg.camera.position;
+  const A = rs.find((x) => x.def.id === a), B = rs.find((x) => x.def.id === b);
+  const ra = A.tag.getBoundingClientRect(), rb = B.tag.getBoundingClientRect();
+  const x0 = Math.max(ra.left, rb.left), x1 = Math.min(ra.right, rb.right), y0 = Math.max(ra.top, rb.top), y1 = Math.min(ra.bottom, rb.bottom);
+  const x = (x0 + x1) / 2, y = (y0 + y1) / 2, at = document.elementFromPoint(x, y), o = at && at.closest('[data-robot]');
+  return { overlap: x1 - x0 > 4 && y1 - y0 > 4, x, y, owner: o ? o.dataset.robot : null,
+    nearer: A.robot.root.position.distanceTo(cam) < B.robot.root.position.distanceTo(cam), dom: [...A.tag.parentNode.children].indexOf(A.tag) < [...B.tag.parentNode.children].indexOf(B.tag) ? 'front first' : 'back first' }; }"""
 VIEW_MOVE_JS = """(k) => { const rs = window.__dbg.robots, a = rs[0].robot.root.position, c = window.__dbg.camera.position;
   let dx = c.x - a.x, dz = c.z - a.z; const n = Math.hypot(dx, dz) || 1; dx /= n; dz /= n;
   const R = rs[1]; R.path = []; R.robot.root.position.x = a.x + dx * k - dz * 0.1; R.robot.root.position.z = a.z + dz * k + dx * 0.1;
@@ -130,7 +142,14 @@ async def run_tag_click(pw, out, failures, jt=None):
             await settled(page, f"{label}: tags back")
 
         async def click_part(label, rid, sel):
-            p = await page.evaluate(PART_JS, [rid, sel])
+            # its tag on top at the part's centre, waited for and then read still: a check made once and the press right
+            # after pressed whatever stood there at that moment (ticket 2026-11-26-viz-e2e-crowded-props-free-tag-covered-at-the-press)
+            try:
+                await until(page, f"(a) => {{ const p = ({PART_JS})(a); return !!p && p.owner === a[0]; }}",
+                            f"{label}: {rid}'s tag on top at the part's centre", arg=[rid, sel], timeout=10000)
+            except Exception:  # noqa: BLE001 — the check below says what stood there
+                pass
+            p = await still(page, PART_JS, f"{label}: the part's centre", arg=[rid, sel])
             res["clicks"][label] = {"part": p}
             if not p or not p["visible"]:
                 check(failures, False, f"{label}: the part {sel!r} of {rid}'s tag is on the page: {p}")
@@ -149,11 +168,11 @@ async def run_tag_click(pw, out, failures, jt=None):
             return card
 
         # the same robot's body: the card a click on the tag must give
-        body = await page.evaluate("""(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id); const T = window.__dbg.THREE;
-          const v = R.robot.root.position.clone().add(new T.Vector3(0, 1.0 * (R.robot.size || 1), 0)).project(window.__dbg.camera);
-          const r = document.getElementById('scene-canvas').getBoundingClientRect();
-          const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height, at = document.elementFromPoint(x, y);
-          return { x, y, at: at ? at.id || at.className : null }; }""", lab[0])
+        try:   # bare canvas at the body, waited for and then read still (the same ticket as the tag's part above)
+            await until(page, f"(id) => ({BODY_JS})(id).at === 'scene-canvas'", "the first robot's body bare canvas", arg=lab[0], timeout=10000)
+        except Exception:  # noqa: BLE001 — the check below says what stood there
+            pass
+        body = await still(page, BODY_JS, "the first robot's body", arg=lab[0])
         check(failures, body["at"] == "scene-canvas", f"the first robot's body is bare canvas on the page: {body}")
         await page.mouse.click(body["x"], body["y"])
         body_card = await until(page, f"() => {{ const c = ({CARD_JS})(); return c.open && c.robot ? c : null; }}", "a click on the body opens the card")
@@ -263,14 +282,8 @@ async def run_tag_click(pw, out, failures, jt=None):
             # robot 1 put k m from robot 0 towards the camera (on the floor), a little to the side: the two tags on each other
             await page.evaluate(VIEW_MOVE_JS, k)
             await settled(page, label)
-            got = await page.evaluate("""([a, b]) => { const rs = window.__dbg.robots, cam = window.__dbg.camera.position;
-              const A = rs.find((x) => x.def.id === a), B = rs.find((x) => x.def.id === b);
-              const ra = A.tag.getBoundingClientRect(), rb = B.tag.getBoundingClientRect();
-              const x0 = Math.max(ra.left, rb.left), x1 = Math.min(ra.right, rb.right), y0 = Math.max(ra.top, rb.top), y1 = Math.min(ra.bottom, rb.bottom);
-              const x = (x0 + x1) / 2, y = (y0 + y1) / 2, at = document.elementFromPoint(x, y), o = at && at.closest('[data-robot]');
-              return { overlap: x1 - x0 > 4 && y1 - y0 > 4, x, y, owner: o ? o.dataset.robot : null,
-                nearer: A.robot.root.position.distanceTo(cam) < B.robot.root.position.distanceTo(cam), dom: [...A.tag.parentNode.children].indexOf(A.tag) < [...B.tag.parentNode.children].indexOf(B.tag) ? 'front first' : 'back first' }; }""",
-                                    [front, back])
+            # read still (the tags follow their robots on the frames); the z-order is what is judged, so it is not waited for
+            got = await still(page, OVERLAP_JS, f"{label}: the two tags", arg=[front, back])
             res[label] = got
             check(failures, got["overlap"] and got["nearer"], f"{label}: the two tags are on each other, {front} the nearer: {got}")
             check(failures, got["owner"] == front, f"{label}: the page has the nearer robot's tag on top: {got}")

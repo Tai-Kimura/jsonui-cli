@@ -65,7 +65,13 @@ def check(failures, cond, text):
 
 FREE_TAG_JS = """(id) => { const t = window.__dbg.tags().find((x) => x.id === id); if (!t) return null;
   const q = [Math.round((t.x0 + t.x1) / 2), Math.round((t.y0 + t.y1) / 2)], e = document.elementFromPoint(q[0], q[1]), o = e && e.closest('[data-robot]');
-  return { q, onTag: !!o && o.dataset.robot === id }; }"""
+  return { q, onTag: !!o && o.dataset.robot === id, top: o ? 'robot:' + o.dataset.robot : (e ? e.id || e.className || e.tagName : null) }; }"""
+# every tag not over a thing to press whose own centre is that tag on top (not another robot's tag or body there):
+# a tag chosen before the bubbles can be stood over by a robot that moved on their hooks, and stays so (ticket
+# 2026-11-26-viz-e2e-crowded-props-free-tag-covered-at-the-press)
+FREE_TAGS_JS = """(over) => window.__dbg.tags().filter((t) => !over.includes(t.id)).map((t) => {
+  const q = [Math.round((t.x0 + t.x1) / 2), Math.round((t.y0 + t.y1) / 2)], e = document.elementFromPoint(q[0], q[1]), o = e && e.closest('[data-robot]');
+  return { id: t.id, q, onTag: !!o && o.dataset.robot === t.id }; }).filter((t) => t.onTag)"""
 
 
 async def wait(page, js, timeout=20000, label="", arg=None):
@@ -375,9 +381,7 @@ async def run_crowded_props(pw, out, failures):
             hook(rid, hook_event_name="Stop")
             await wait(page, "(l) => { const o = window.__dbg.overFixture(l); return o && !o.waitBox; }", label="the bubble gone", arg=lab)
         over = {x["id"] for k in covers for x in covers[k]}
-        free = await page.evaluate("""(over) => window.__dbg.tags().filter((t) => !over.includes(t.id)).map((t) => {
-            const q = [Math.round((t.x0 + t.x1) / 2), Math.round((t.y0 + t.y1) / 2)], e = document.elementFromPoint(q[0], q[1]);
-            return { id: t.id, q, onTag: !!(e && e.closest('[data-robot]')) }; }).filter((t) => t.onTag)""", sorted(over))
+        free = await page.evaluate(FREE_TAGS_JS, sorted(over))
         res["freeTag"] = free[:1]
         check(failures, free, f"a tag over nothing to press, to press: {free}")
         # a wait's bubble that crosses nothing to press stays as it is (pressable, not faint): made on purpose here, so the
@@ -409,10 +413,16 @@ async def run_crowded_props(pw, out, failures):
             # red here says where the tag was (ticket 2026-11-18-jui-viz-e2e-live-floors-measured-before-the-building-legend-hides:
             # the 20 s timeout of 11-18 did not come back on a slowed page or under load)
             await settled(page, "the tags before the press on a tag over nothing", timeout=60000)
-            now = res["freeTagNow"] = await still(page, FREE_TAG_JS, "the tag over nothing to press", arg=free[0]["id"])
-            check(failures, now and now["onTag"], f"the tag over nothing to press is on the page, on top at its centre: {now}")
-            await page.mouse.click(*(now["q"] if now else free[0]["q"]))
-            await wait(page, f"() => window.__dbg.view().card === '{free[0]['id']}'", label="a tag over nothing selects its robot")
+            # the first one again, and if a robot now stands over its centre (it stays so: the reading is still), another
+            # free tag that is on top at its own centre — the arm is about pressing a tag over nothing, not that robot's
+            first = res["freeTagFirst"] = await still(page, FREE_TAG_JS, "the first tag over nothing to press", arg=free[0]["id"])
+            now = await still(page, FREE_TAGS_JS, "the tags over nothing to press, on top at their centres", arg=sorted(over))
+            pick = next((t for t in now if t["id"] == free[0]["id"]), now[0] if now else None)
+            res["freeTagNow"] = pick
+            check(failures, pick, f"a tag over nothing to press is on the page, on top at its centre: first {first}, now {now}")
+            if pick:
+                await page.mouse.click(*pick["q"])
+                await wait(page, f"() => window.__dbg.view().card === '{pick['id']}'", label="a tag over nothing selects its robot")
             await page.keyboard.press("Escape")
             await wait(page, "() => !window.__dbg.view().card", label="the card closed")
             await until(page, "() => !window.__dbg.view().tween && !window.__dbg.view().zoomed", "the camera back after the card", timeout=20000)
